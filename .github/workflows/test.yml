@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.test }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        test:
+          - hello_tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Rust toolchain version
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-test-1
+
+      - name: Run ${{ matrix.test }}
+        run: cargo test --test ${{ matrix.test }}
+
+  aggregate:
+    name: test:required
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: check result
+        if: ${{ needs.test.result != 'success' }}
+        run: exit 1

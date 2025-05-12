@@ -1,0 +1,22 @@
+name: Format
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  format:
+    name: fmt:required
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain from rust-toolchain.toml
+        run: rustup show
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+

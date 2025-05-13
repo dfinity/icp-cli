@@ -7,15 +7,22 @@ on:
   pull_request:
 
 jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: echo "matrix=$(python3 .github/scripts/test-matrix.py)" >> $GITHUB_OUTPUT
+
   test:
     name: ${{ matrix.test }} on ${{ matrix.os }}
+    needs: discover
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        test:
-          - hello_tests
+      matrix: ${{fromJson(needs.discover.outputs.matrix)}}
 
     steps:
       - uses: actions/checkout@v4

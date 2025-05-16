@@ -8,6 +8,8 @@ fn hello() {
     let testenv = TestEnv::new();
     testenv
         .icp()
+        .arg("network")
+        .arg("run")
         .assert()
         .success()
         .stdout(contains("Hello, world!"));

@@ -9,6 +9,9 @@ name = "icp"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.5.38", features = ["derive"] }
+directories = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = "2"

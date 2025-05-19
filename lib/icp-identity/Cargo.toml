@@ -4,3 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+directories.workspace = true
+ed25519-consensus.workspace = true
+elliptic-curve.workspace = true
+ic-agent.workspace = true
+itertools.workspace = true
+k256.workspace = true
+p256.workspace = true
+pem.workspace = true
+pkcs8.workspace = true
+rand.workspace = true
+scrypt = "0.11.0"
+sec1.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
+zeroize.workspace = true

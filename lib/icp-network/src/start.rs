@@ -4,21 +4,21 @@ use crate::structure::NetworkDirectoryStructure;
 use icp_support::fs::{RemoveFileError, remove_file};
 use icp_support::json::LoadJsonFileError;
 use icp_support::process::process_running;
-use thiserror::Error;
+use snafu::prelude::*;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum StartLocalNetworkError {
-    #[error(transparent)]
-    LoadJsonFile(#[from] LoadJsonFileError),
+    #[snafu(transparent)]
+    LoadJsonFile { source: LoadJsonFileError },
 
-    #[error("already running (this project)")]
+    #[snafu(display("already running (this project)"))]
     AlreadyRunningThisProject,
 
-    #[error("already running (other project)")]
+    #[snafu(display("already running (other project)"))]
     AlreadyRunningOtherProject,
 
-    #[error(transparent)]
-    RemoveFile(#[from] RemoveFileError),
+    #[snafu(transparent)]
+    RemoveFile { source: RemoveFileError },
 }
 
 pub fn start_local_network(

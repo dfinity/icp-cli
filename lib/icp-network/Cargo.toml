@@ -7,4 +7,4 @@ edition = "2024"
 serde = { workspace = true }
 uuid = { workspace = true }
 icp-support = { "path" = "../icp-support" }
-thiserror = { workspace = true }
+snafu = { workspace = true }

@@ -8,7 +8,8 @@ pub struct ReadFileError {
     pub source: std::io::Error,
 }
 
-pub fn read(path: &Path) -> Result<Vec<u8>, ReadFileError> {
+pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, ReadFileError> {
+    let path = path.as_ref();
     std::fs::read(path).context(ReadFileSnafu { path })
 }
 
@@ -19,6 +20,19 @@ pub struct RemoveFileError {
     pub source: std::io::Error,
 }
 
-pub fn remove_file(path: &Path) -> Result<(), RemoveFileError> {
+pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<(), RemoveFileError> {
+    let path = path.as_ref();
     std::fs::remove_file(path).context(RemoveFileSnafu { path })
+}
+
+#[derive(Snafu, Debug)]
+#[snafu(display("failed to read {}", path.display()))]
+pub struct WriteFileError {
+    pub path: PathBuf,
+    pub source: std::io::Error,
+}
+
+pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> Result<(), WriteFileError> {
+    let path = path.as_ref();
+    std::fs::write(path, contents).context(WriteFileSnafu { path })
 }

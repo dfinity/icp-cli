@@ -10,6 +10,10 @@ impl NetworkDirectoryStructure {
         Self { network_root }
     }
 
+    pub fn network_root(&self) -> &PathBuf {
+        &self.network_root
+    }
+
     pub fn project_descriptor_path(&self) -> PathBuf {
         self.network_root.join("descriptor.json")
     }

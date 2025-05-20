@@ -1,24 +1,30 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize, Default)]
 pub struct ManagedNetworkModel {
-    bind: BindModel,
+    pub bind: BindModel,
 }
 
 #[derive(Deserialize)]
 pub struct BindModel {
     #[serde(default = "default_host")]
     pub host: String,
-    #[serde(default = "default_port")]
-    pub port: Option<u16>,
+    #[serde(default = "default_port", deserialize_with = "deserialize_port")]
+    pub port: BindPort,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub enum BindPort {
+    Fixed(u16),
+    Dynamic,
 }
 
 fn default_host() -> String {
     "127.0.0.1".to_string()
 }
 
-fn default_port() -> Option<u16> {
-    Some(8000)
+fn default_port() -> BindPort {
+    BindPort::Fixed(8000)
 }
 
 impl Default for BindModel {
@@ -28,4 +34,16 @@ impl Default for BindModel {
             port: default_port(),
         }
     }
+}
+
+fn deserialize_port<'de, D>(deserializer: D) -> Result<BindPort, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = u16::deserialize(deserializer)?;
+    Ok(if raw == 0 {
+        BindPort::Dynamic
+    } else {
+        BindPort::Fixed(raw)
+    })
 }

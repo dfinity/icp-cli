@@ -1,6 +1,6 @@
-use serde::Deserialize;
 use crate::config::model::connected::ConnectedNetworkModel;
 use crate::config::model::managed::ManagedNetworkModel;
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case")]

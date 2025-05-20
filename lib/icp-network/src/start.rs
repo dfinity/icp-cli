@@ -1,6 +1,7 @@
+use crate::config::model::managed::{BindPort, ManagedNetworkModel};
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
 use crate::structure::NetworkDirectoryStructure;
-use icp_support::fs::{remove_file, RemoveFileError};
+use icp_support::fs::{RemoveFileError, remove_file};
 use icp_support::json::LoadJsonFileError;
 use icp_support::process::process_running;
 use thiserror::Error;
@@ -20,10 +21,14 @@ pub enum StartLocalNetworkError {
     RemoveFile(#[from] RemoveFileError),
 }
 
-pub fn start_local_network(nds: NetworkDirectoryStructure) -> Result<(), StartLocalNetworkError> {
-    if nds.project_descriptor_path().exists() {
-        let project_network_descriptor =
-            NetworkDescriptorModel::load(&nds.project_descriptor_path())?;
+pub fn start_local_network(
+    config: ManagedNetworkModel,
+    nds: NetworkDirectoryStructure,
+) -> Result<(), StartLocalNetworkError> {
+    let project_descriptor_path = nds.project_descriptor_path();
+    // first check the connected network
+    if project_descriptor_path.exists() {
+        let project_network_descriptor = NetworkDescriptorModel::load(&project_descriptor_path)?;
         if let Some(pid) = project_network_descriptor.pid {
             if process_running(pid) {
                 return Err(StartLocalNetworkError::AlreadyRunningThisProject);
@@ -45,9 +50,35 @@ pub fn start_local_network(nds: NetworkDirectoryStructure) -> Result<(), StartLo
     }
 
     // get port from network configuration
-    // if fixed port, try to load port network descriptor
-    // if found and pid still running, report already running (other project)
-    // otherwise delete port network descriptor
+    if let BindPort::Fixed(port) = config.bind.port {
+        let port_descriptor_path = NetworkDirectoryStructure::port_descriptor_path(port);
+        if port_descriptor_path.exists() {
+            let port_network_descriptor = NetworkDescriptorModel::load(&port_descriptor_path)?;
+            if let Some(pid) = port_network_descriptor.pid {
+                if process_running(pid) {
+                    return Err(StartLocalNetworkError::AlreadyRunningOtherProject);
+                }
+            }
+            remove_file(&port_descriptor_path)?;
+        }
+    }
+
+    // get my own pid
+
+    // we're going to have to start the process, then get the port (if dynamic),
+    // and the root key.
+
+    let network_descriptor = NetworkDescriptorModel {
+        id: uuid::Uuid::new_v4(),
+        pid: Some(std::process::id()),
+        port: None,
+        path: nds.network_root().to_path_buf(),
+        root_key: "".to_string(),
+    };
+
+    // write the project network descriptor
+
+    // write the port network descriptor (fixed port only)
 
     todo!()
 }

@@ -1,5 +1,6 @@
 pub mod config;
 mod start;
+pub mod status;
 pub mod structure;
 
 pub use config::model::managed::ManagedNetworkModel;

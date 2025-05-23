@@ -1,17 +1,25 @@
 use crate::config::model::managed::BindPort::Fixed;
 use crate::config::model::managed::{BindPort, ManagedNetworkModel};
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
+use crate::status;
 use crate::structure::NetworkDirectoryStructure;
+use candid::Principal;
 use fd_lock::RwLock;
-use icp_support::fs::{RemoveFileError, WriteFileError, create_dir_all, remove_file, write};
+use icp_support::fs::{
+    CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_file, write,
+};
 use icp_support::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
 use icp_support::process::process_running;
+use pocket_ic::common::rest::{
+    CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo,
+};
 use snafu::prelude::*;
 use std::fs::{OpenOptions, read_to_string};
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::Duration;
 use tokio::process::Child;
+use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::time::sleep;
 
@@ -83,7 +91,10 @@ pub async fn run_local_network(
         }
     }
 
-    run_pocketic(config, nds).await;
+    let pocketic_path =
+        PathBuf::from("/Users/ericswanson/.cache/dfinity/versions/0.26.1/pocket-ic");
+
+    run_pocketic(&pocketic_path, config, nds).await;
     Ok(())
 }
 
@@ -133,9 +144,26 @@ pub async fn read_network_descriptor(
 
     result
 }
-async fn run_pocketic(config: ManagedNetworkModel, nds: NetworkDirectoryStructure) {
-    let pocketic_path =
-        PathBuf::from("/Users/ericswanson/.cache/dfinity/versions/0.26.1/pocket-ic");
+
+#[derive(Debug, Snafu)]
+pub enum RunPocketIcError {
+    #[snafu(transparent)]
+    CreateDirAll { source: CreateDirAllError },
+
+    #[snafu(display("Failed to start PocketIC: {source}"))]
+    StartPocketIc { source: std::io::Error },
+
+    #[snafu(transparent)]
+    InitPocketIc { source: InitializePocketicError },
+
+    #[snafu(transparent)]
+    WaitForPort { source: WaitForPortError },
+}
+async fn run_pocketic(
+    pocketic_path: &Path,
+    config: ManagedNetworkModel,
+    nds: NetworkDirectoryStructure,
+) -> Result<(), RunPocketIcError> {
     eprintln!("PocketIC path: {}", pocketic_path.display());
 
     create_dir_all(&nds.pocketic_dir()).unwrap();
@@ -144,34 +172,40 @@ async fn run_pocketic(config: ManagedNetworkModel, nds: NetworkDirectoryStructur
         remove_file(&port_file).unwrap();
     }
     eprintln!("Port file: {}", port_file.display());
+    create_dir_all(&nds.state_dir())?;
     let mut child = spawn_pocketic(&pocketic_path, &config.bind.port, &port_file);
-    let port = wait_for_port(&port_file, &mut child).await.unwrap();
-    eprintln!("PocketIC started on port {port}");
-    // let mut pic = PocketIcBuilder::new_with_config(SubnetConfigSet {
-    //     application: 1,
-    //     bitcoin: true,
-    //     fiduciary: true,
-    //     ii: true,
-    //     nns: true,
-    //     sns: true,
-    //     system: 1,
-    //     verified_application: 1,
-    // })
-    //     .build_async()
-    //     .await;
-    // let instance = pic.instance_id;
-    // let config_port = pic.get_server_url().port().unwrap();
-    // let webserver_port = pic.make_live(None).await.port().unwrap();
-    //
-    // let network_descriptor = NetworkDescriptorModel {
-    //     id: uuid::Uuid::new_v4(),
-    //     pid: Some(std::process::id()),
-    //     path: network_directory_structure.network_root().to_path_buf(),
-    //     gateway_port: Some(webserver_port),
-    //     root_key: "".to_string(),
-    // };
-    //
-    // todo!()
+
+    let result = async {
+        let port = wait_for_port(&port_file, &mut child).await?;
+        eprintln!("PocketIC started on port {port}");
+        let _props = initialize_pocketic(port, &nds.state_dir()).await?;
+        // TODO: write network descriptor
+        let _ = wait_for_shutdown(&mut child).await;
+        Ok(())
+    }
+    .await;
+
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+
+    result
+}
+
+pub enum ShutdownReason {
+    CtrlC,
+    ChildExited,
+}
+async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
+    select!(
+        _ = ctrl_c() => {
+            eprintln!("Received Ctrl-C, shutting down PocketIC...");
+            ShutdownReason::CtrlC
+        }
+        res = notice_child_exit(child) => {
+            eprintln!("PocketIC exited with status: {:?}", res.status);
+            ShutdownReason::ChildExited
+        }
+    )
 }
 
 fn spawn_pocketic(
@@ -181,9 +215,9 @@ fn spawn_pocketic(
 ) -> tokio::process::Child {
     // form the pocket-ic command here similar to the ic-starter command
     let mut cmd = tokio::process::Command::new(pocketic_path);
-    if let Fixed(port) = port {
-        cmd.args(["--port", &port.to_string()]);
-    };
+    // if let Fixed(port) = port {
+    //    cmd.args(["--port", &port.to_string()]);
+    // };
     cmd.arg("--port-file");
     cmd.arg(&port_file.as_os_str());
     cmd.args(["--ttl", "2592000", "--log-levels", "error"]);
@@ -256,4 +290,162 @@ pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitFo
         _ = ctrl_c() => Err(WaitForPortError::Interrupted),
         err = notice_child_exit(child) => Err(WaitForPortError::ChildExited { source: err }),
     }
+}
+
+struct PocketIcInstanceProperties {
+    instance_id: usize,
+    effective_canister_id: Principal,
+    root_key: String,
+}
+
+#[derive(Debug, Snafu)]
+pub enum InitializePocketicError {
+    #[snafu(display("Failed to create PocketIC instance: {message}"))]
+    CreateInstance { message: String },
+
+    #[snafu(display("Failed to save effective config: {source}"))]
+    SaveEffectiveConfig { source: SaveJsonFileError },
+
+    #[snafu(transparent)]
+    PingAndWait { source: status::PingAndWaitError },
+
+    #[snafu(transparent)]
+    Reqwest { source: reqwest::Error },
+}
+
+async fn initialize_pocketic(
+    port: u16,
+    state_dir: &Path,
+    // bitcoind_addr: &Option<Vec<SocketAddr>>,
+    // bitcoin_integration_config: &Option<BitcoinIntegrationConfig>,
+    // replica_config: &ReplicaConfig,
+    // logger: Logger,
+) -> Result<PocketIcInstanceProperties, InitializePocketicError> {
+    eprintln!("Initializing PocketIC instance");
+    let artificial_delay = 600;
+    //use dfx_core::config::model::dfinity::ReplicaSubnetType;
+    use pocket_ic::common::rest::{
+        AutoProgressConfig, CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig,
+        RawTime, SubnetSpec,
+    };
+    use reqwest::Client;
+    use time::OffsetDateTime;
+    let init_client = Client::new();
+    // debug!(logger, "Configuring PocketIC server");
+    let mut subnet_config_set = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        sns: Some(SubnetSpec::default()),
+        ii: Some(SubnetSpec::default()),
+        fiduciary: Some(SubnetSpec::default()),
+        bitcoin: Some(SubnetSpec::default()),
+        system: vec![],
+        verified_application: vec![],
+        application: vec![<_>::default()],
+    };
+    // match replica_config.subnet_type {
+    //     ReplicaSubnetType::Application => subnet_config_set.application.push(<_>::default()),
+    //     ReplicaSubnetType::System => subnet_config_set.system.push(<_>::default()),
+    //     ReplicaSubnetType::VerifiedApplication => {
+    //         subnet_config_set.verified_application.push(<_>::default())
+    //     }
+    // }
+    eprintln!("Creating instance");
+    let resp = init_client
+        .post(format!("http://localhost:{port}/instances"))
+        .json(&InstanceConfig {
+            subnet_config_set,
+            state_dir: Some(state_dir.to_path_buf()),
+            nonmainnet_features: true,
+            log_level: Some("ERROR".to_string()),
+            bitcoind_addr: None, // bitcoind_addr.clone(),
+        })
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<CreateInstanceResponse>()
+        .await?;
+    let (instance_id, default_effective_canister_id) = match resp {
+        CreateInstanceResponse::Error { message } => {
+            return Err(InitializePocketicError::CreateInstance { message });
+        }
+        CreateInstanceResponse::Created {
+            instance_id,
+            topology,
+        } => {
+            let default_effective_canister_id: Principal =
+                topology.default_effective_canister_id.into();
+
+            (instance_id, default_effective_canister_id)
+        }
+    };
+    eprintln!("Created instance with id {}", instance_id);
+    eprintln!("Setting time");
+    init_client
+        .post(format!(
+            "http://localhost:{port}/instances/{instance_id}/update/set_time"
+        ))
+        .json(&RawTime {
+            nanos_since_epoch: OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .try_into()
+                .unwrap(),
+        })
+        .send()
+        .await?
+        .error_for_status()?;
+    eprintln!("Set auto-progress");
+    init_client
+        .post(format!(
+            "http://localhost:{port}/instances/{instance_id}/auto_progress"
+        ))
+        .json(&AutoProgressConfig {
+            artificial_delay_ms: Some(artificial_delay as u64),
+        })
+        .send()
+        .await?
+        .error_for_status()?;
+    let resp = init_client
+        .post(format!("http://localhost:{port}/http_gateway"))
+        .json(&HttpGatewayConfig {
+            ip_addr: None,
+            port: Some(8000),
+            forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
+            domains: None,
+            https_config: None,
+        })
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<CreateHttpGatewayResponse>()
+        .await?;
+
+    match resp {
+        CreateHttpGatewayResponse::Error { message } => {
+            return Err(InitializePocketicError::CreateInstance { message });
+        }
+        CreateHttpGatewayResponse::Created(HttpGatewayInfo { instance_id, port }) => {
+            eprintln!("Created HTTP gateway instance={instance_id} port={port}");
+        }
+    }
+
+    let agent_url = format!("http://localhost:{port}/instances/{instance_id}/");
+
+    eprintln!("Agent url is {}", agent_url);
+
+    // debug!(logger, "Waiting for replica to report healthy status");
+    status::ping_and_wait(&agent_url).await?;
+
+    // todo
+    // if let Some(bitcoin_integration_config) = bitcoin_integration_config {
+    //     let agent = create_integrations_agent(&agent_url, &logger).await?;
+    //     initialize_bitcoin_canister(&agent, &logger, bitcoin_integration_config.clone()).await?;
+    // }
+
+    // debug!(logger, "Initialized PocketIC.");
+    let props = PocketIcInstanceProperties {
+        instance_id,
+        effective_canister_id: default_effective_canister_id,
+        root_key: "".to_string(),
+    };
+    Ok(props)
 }

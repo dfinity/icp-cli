@@ -12,6 +12,7 @@ path = "src/main.rs"
 clap = { version = "4.5.38", features = ["derive"] }
 directories = { workspace = true }
 icp-network = { path = "../../lib/icp-network" }
+icp-support = { path = "../../lib/icp-support" }
 tokio = { workspace = true }
 
 [dev-dependencies]

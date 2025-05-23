@@ -23,6 +23,10 @@ impl PocketIcAdminInterface {
         Self { client, base_url }
     }
 
+    fn post(&self, path: &str) -> reqwest::RequestBuilder {
+        self.client.post(self.base_url.join(path).unwrap())
+    }
+
     pub async fn create_instance(&self, state_dir: &Path) -> Result<(InstanceId, Topology), CreateInstanceError> {
         let mut subnet_config_set = ExtendedSubnetConfigSet {
             nns: Some(SubnetSpec::default()),
@@ -42,8 +46,8 @@ impl PocketIcAdminInterface {
         //     }
         // }
         eprintln!("Creating instance");
-        let resp = self.client
-            .post(self.base_url.join("/instances").unwrap())
+        let resp = self
+            .post("/instances")
             .json(&InstanceConfig {
                 subnet_config_set,
                 state_dir: Some(state_dir.to_path_buf()),

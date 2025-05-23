@@ -2,6 +2,17 @@ use snafu::prelude::*;
 use std::path::{Path, PathBuf};
 
 #[derive(Snafu, Debug)]
+#[snafu(display("failed to create directory {} and parents", path.display()))]
+pub struct CreateDirAllError {
+    pub path: PathBuf,
+    pub source: std::io::Error,
+}
+
+pub fn create_dir_all(path: &Path) -> Result<(), CreateDirAllError> {
+    std::fs::create_dir_all(path).context(CreateDirAllSnafu { path })
+}
+
+#[derive(Snafu, Debug)]
 #[snafu(display("failed to read {}", path.display()))]
 pub struct ReadFileError {
     pub path: PathBuf,

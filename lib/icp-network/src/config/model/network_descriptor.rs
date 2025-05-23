@@ -8,7 +8,7 @@ use uuid::Uuid;
 pub struct NetworkDescriptorModel {
     pub id: Uuid,
     pub path: PathBuf,
-    pub port: Option<u16>,
+    pub gateway_port: Option<u16>,
     pub pid: Option<u32>,
     pub root_key: String,
 }

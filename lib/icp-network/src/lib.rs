@@ -1,3 +1,6 @@
 pub mod config;
-pub mod start;
+mod start;
 pub mod structure;
+
+pub use config::model::managed::ManagedNetworkModel;
+pub use start::run_local_network;

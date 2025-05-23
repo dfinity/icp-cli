@@ -25,6 +25,17 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, ReadFileError> {
 }
 
 #[derive(Snafu, Debug)]
+#[snafu(display("failed to remove directory {} and contents", path.display()))]
+pub struct RemoveDirAllError {
+    pub path: PathBuf,
+    pub source: std::io::Error,
+}
+
+pub fn remove_dir_all(path: &Path) -> Result<(), RemoveDirAllError> {
+    std::fs::remove_dir_all(path).context(RemoveDirAllSnafu { path })
+}
+
+#[derive(Snafu, Debug)]
 #[snafu(display("failed to remove file {}", path.display()))]
 pub struct RemoveFileError {
     pub path: PathBuf,

@@ -5,9 +5,7 @@ use crate::status;
 use crate::structure::NetworkDirectoryStructure;
 use candid::Principal;
 use fd_lock::RwLock;
-use icp_support::fs::{
-    CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_file, write,
-};
+use icp_support::fs::{CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_file, write, remove_dir_all};
 use icp_support::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
 use icp_support::process::process_running;
 use pocket_ic::common::rest::{
@@ -22,6 +20,7 @@ use tokio::process::Child;
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::time::sleep;
+use crate::pocketic::native::spawn_pocketic;
 
 #[derive(Debug, Snafu)]
 pub enum StartLocalNetworkError {
@@ -172,6 +171,7 @@ async fn run_pocketic(
         remove_file(&port_file).unwrap();
     }
     eprintln!("Port file: {}", port_file.display());
+    remove_dir_all(&nds.state_dir()).unwrap();
     create_dir_all(&nds.state_dir())?;
     let mut child = spawn_pocketic(&pocketic_path, &config.bind.port, &port_file);
 
@@ -208,32 +208,6 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     )
 }
 
-fn spawn_pocketic(
-    pocketic_path: &Path,
-    port: &BindPort,
-    port_file: &Path,
-) -> tokio::process::Child {
-    // form the pocket-ic command here similar to the ic-starter command
-    let mut cmd = tokio::process::Command::new(pocketic_path);
-    // if let Fixed(port) = port {
-    //    cmd.args(["--port", &port.to_string()]);
-    // };
-    cmd.arg("--port-file");
-    cmd.arg(&port_file.as_os_str());
-    cmd.args(["--ttl", "2592000", "--log-levels", "error"]);
-
-    cmd.stdout(std::process::Stdio::inherit());
-    cmd.stderr(std::process::Stdio::inherit());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-    let last_start = std::time::Instant::now();
-    eprintln!("Starting PocketIC...");
-    eprintln!("PocketIC command: {:?}", cmd);
-    cmd.spawn().expect("Could not start PocketIC.")
-}
 
 #[derive(Debug, Snafu)]
 #[snafu(display("timeout waiting for port file"))]

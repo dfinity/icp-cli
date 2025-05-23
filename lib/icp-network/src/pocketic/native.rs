@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::config::model::managed::BindPort;
+use std::path::Path;
 
 pub fn spawn_pocketic(
     pocketic_path: &Path,

@@ -1,10 +1,12 @@
 use crate::pocketic::admin::PocketIcAdminInterface;
 use candid::Principal;
+use pocket_ic::common::rest::InstanceId;
 use reqwest::Url;
 
 pub struct PocketIcInstance {
     pub admin: PocketIcAdminInterface,
-    pub gateway: Url,
-    pub instance_id: String,
+    pub gateway_port: u16,
+    pub instance_id: InstanceId,
     pub effective_canister_id: Principal,
+    pub root_key: String,
 }

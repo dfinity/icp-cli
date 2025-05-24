@@ -1,7 +1,8 @@
 use crate::config::model::managed::BindPort::Fixed;
 use crate::config::model::managed::{BindPort, ManagedNetworkModel};
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
-use crate::pocketic::admin::{CreateInstanceError, PocketIcAdminInterface};
+use crate::pocketic::admin::{CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface};
+use crate::pocketic::instance::PocketIcInstance;
 use crate::pocketic::native::spawn_pocketic;
 use crate::status;
 use crate::structure::NetworkDirectoryStructure;
@@ -16,12 +17,12 @@ use icp_support::process::process_running;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo,
 };
+use reqwest::Url;
 use snafu::prelude::*;
 use std::fs::{OpenOptions, read_to_string};
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::Duration;
-use reqwest::Url;
 use tokio::process::Child;
 use tokio::select;
 use tokio::signal::ctrl_c;
@@ -281,8 +282,10 @@ pub enum InitializePocketicError {
     #[snafu(transparent)]
     CreateInstance { source: CreateInstanceError },
 
-    #[snafu(display("Failed to create HTTP gateway: {message}"))]
-    CreateHttpGateway { message: String },
+    // #[snafu(display("Failed to create HTTP gateway: {message}"))]
+    // CreateHttpGateway { message: String },
+    #[snafu(transparent)]
+    CreateHttpGateway { source: CreateHttpGatewayError },
 
     #[snafu(display("Failed to save effective config: {source}"))]
     SaveEffectiveConfig { source: SaveJsonFileError },
@@ -301,96 +304,53 @@ async fn initialize_pocketic(
     // bitcoin_integration_config: &Option<BitcoinIntegrationConfig>,
     // replica_config: &ReplicaConfig,
     // logger: Logger,
-) -> Result<PocketIcInstanceProperties, InitializePocketicError> {
-    let pic = PocketIcAdminInterface::new(
-        format!("http://localhost:{port}")
-            .parse::<Url>()
-            .unwrap(),
-    );
+) -> Result<PocketIcInstance, InitializePocketicError> {
+    let pic =
+        PocketIcAdminInterface::new(format!("http://localhost:{port}").parse::<Url>().unwrap());
 
     eprintln!("Initializing PocketIC instance");
-    let artificial_delay = 600;
-    //use dfx_core::config::model::dfinity::ReplicaSubnetType;
-    use pocket_ic::common::rest::{
-        AutoProgressConfig, CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig,
-        RawTime, SubnetSpec,
-    };
-    use reqwest::Client;
-    use time::OffsetDateTime;
-    let init_client = Client::new();
-    let (instance_id, topology) = pic
-        .create_instance(state_dir)
-        .await?;
+
+    eprintln!("Creating instance");
+    let (instance_id, topology) = pic.create_instance(state_dir).await?;
     let default_effective_canister_id = topology.default_effective_canister_id;
-    // debug!(logger, "Configuring PocketIC server");
     eprintln!("Created instance with id {}", instance_id);
+
     eprintln!("Setting time");
-    init_client
-        .post(format!(
-            "http://localhost:{port}/instances/{instance_id}/update/set_time"
-        ))
-        .json(&RawTime {
-            nanos_since_epoch: OffsetDateTime::now_utc()
-                .unix_timestamp_nanos()
-                .try_into()
-                .unwrap(),
-        })
-        .send()
-        .await?
-        .error_for_status()?;
+    pic.set_time(instance_id).await?;
+
     eprintln!("Set auto-progress");
-    init_client
-        .post(format!(
-            "http://localhost:{port}/instances/{instance_id}/auto_progress"
-        ))
-        .json(&AutoProgressConfig {
-            artificial_delay_ms: Some(artificial_delay as u64),
-        })
-        .send()
-        .await?
-        .error_for_status()?;
-    let resp = init_client
-        .post(format!("http://localhost:{port}/http_gateway"))
-        .json(&HttpGatewayConfig {
-            ip_addr: None,
-            port: Some(8000),
-            forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
-            domains: None,
-            https_config: None,
-        })
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<CreateHttpGatewayResponse>()
+    let artificial_delay = 600;
+    pic.auto_progress(instance_id, artificial_delay).await?;
+
+    let gateway_info = pic
+        .create_http_gateway(
+            HttpGatewayBackend::PocketIcInstance(instance_id),
+            Some(8000),
+        )
         .await?;
+    eprintln!(
+        "Created HTTP gateway instance={} port={}",
+        gateway_info.instance_id, gateway_info.port
+    );
 
-    match resp {
-        CreateHttpGatewayResponse::Error { message } => {
-            return Err(InitializePocketicError::CreateHttpGateway { message });
-        }
-        CreateHttpGatewayResponse::Created(HttpGatewayInfo { instance_id, port }) => {
-            eprintln!("Created HTTP gateway instance={instance_id} port={port}");
-        }
-    }
-
-    let agent_url = format!("http://localhost:{port}/instances/{instance_id}/");
+    let _agent_url = format!("http://localhost:{port}/instances/{instance_id}/");
+    let agent_url = format!("http://localhost:{}", gateway_info.port);
 
     eprintln!("Agent url is {}", agent_url);
 
     // debug!(logger, "Waiting for replica to report healthy status");
-    status::ping_and_wait(&agent_url).await?;
+    let status = status::ping_and_wait(&agent_url).await?;
 
-    // todo
-    // if let Some(bitcoin_integration_config) = bitcoin_integration_config {
-    //     let agent = create_integrations_agent(&agent_url, &logger).await?;
-    //     initialize_bitcoin_canister(&agent, &logger, bitcoin_integration_config.clone()).await?;
-    // }
+    let root_key = status.root_key.unwrap_or(vec![0; 32]);
+    let root_key = hex::encode(root_key);
+    eprintln!("Root key: {root_key}");
 
-    // debug!(logger, "Initialized PocketIC.");
-    let props = PocketIcInstanceProperties {
+    let props = PocketIcInstance {
+        admin: pic,
+        gateway_port: gateway_info.port,
         instance_id,
         effective_canister_id: default_effective_canister_id.into(),
-        root_key: "".to_string(),
+        root_key,
     };
     Ok(props)
 }

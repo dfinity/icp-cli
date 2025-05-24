@@ -12,6 +12,7 @@ resolver = "3"
 candid = "0.10.14"
 directories = "6.0.0"
 fd-lock = "4.0.4"
+hex = "0.4.3"
 ic-agent = { version = "0.40.1" }
 pocket-ic = "9.0.0"
 reqwest = { version = "0.12.15", default-features = false, features = [

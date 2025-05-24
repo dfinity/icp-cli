@@ -1,3 +1,4 @@
+use ic_agent::agent::status::Status;
 use ic_agent::{Agent, AgentError};
 use reqwest::Url;
 use snafu::prelude::*;
@@ -16,7 +17,7 @@ pub enum PingAndWaitError {
     },
 }
 
-pub async fn ping_and_wait(url: &str) -> Result<(), PingAndWaitError> {
+pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {
     let agent = Agent::builder()
         .with_url(url)
         .build()
@@ -27,17 +28,16 @@ pub async fn ping_and_wait(url: &str) -> Result<(), PingAndWaitError> {
         match status {
             Ok(status) => {
                 if matches!(&status.replica_health_status, Some(status) if status == "healthy") {
-                    break;
+                    break Ok(status);
                 }
             }
             Err(e) => {
                 if retries >= 60 {
-                    return Err(PingAndWaitError::Timeout { source: e });
+                    break Err(PingAndWaitError::Timeout { source: e });
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 retries += 1;
             }
         }
     }
-    Ok(())
 }

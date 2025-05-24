@@ -1,7 +1,12 @@
-use std::path::Path;
-use pocket_ic::common::rest::{CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig, InstanceId, SubnetSpec, Topology};
+use pocket_ic::common::rest::{
+    AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet,
+    HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig, InstanceId, RawTime,
+    SubnetSpec, Topology,
+};
 use reqwest::Url;
 use snafu::prelude::*;
+use std::path::Path;
+use time::OffsetDateTime;
 
 pub struct PocketIcAdminInterface {
     client: reqwest::Client,
@@ -10,10 +15,25 @@ pub struct PocketIcAdminInterface {
 
 #[derive(Debug, Snafu)]
 pub enum CreateInstanceError {
-    #[snafu(display("failed to create PocketIC instance: {message}"))]
+    #[snafu(
+        display("failed to create PocketIC instance: {message}"),
+        context(suffix(InstanceSnafu))
+    )]
     Create { message: String },
 
-    #[snafu(display("failed to send request"))]
+    #[snafu(transparent)]
+    Reqwest { source: reqwest::Error },
+}
+
+#[derive(Debug, Snafu)]
+pub enum CreateHttpGatewayError {
+    #[snafu(
+        display("failed to create HTTP gateway: {message}"),
+        context(suffix(GatewaySnafu))
+    )]
+    Create { message: String },
+
+    #[snafu(transparent, context(false))]
     Reqwest { source: reqwest::Error },
 }
 
@@ -27,7 +47,10 @@ impl PocketIcAdminInterface {
         self.client.post(self.base_url.join(path).unwrap())
     }
 
-    pub async fn create_instance(&self, state_dir: &Path) -> Result<(InstanceId, Topology), CreateInstanceError> {
+    pub async fn create_instance(
+        &self,
+        state_dir: &Path,
+    ) -> Result<(InstanceId, Topology), CreateInstanceError> {
         let mut subnet_config_set = ExtendedSubnetConfigSet {
             nns: Some(SubnetSpec::default()),
             sns: Some(SubnetSpec::default()),
@@ -38,14 +61,6 @@ impl PocketIcAdminInterface {
             verified_application: vec![],
             application: vec![<_>::default()],
         };
-        // match replica_config.subnet_type {
-        //     ReplicaSubnetType::Application => subnet_config_set.application.push(<_>::default()),
-        //     ReplicaSubnetType::System => subnet_config_set.system.push(<_>::default()),
-        //     ReplicaSubnetType::VerifiedApplication => {
-        //         subnet_config_set.verified_application.push(<_>::default())
-        //     }
-        // }
-        eprintln!("Creating instance");
         let resp = self
             .post("/instances")
             .json(&InstanceConfig {
@@ -56,10 +71,10 @@ impl PocketIcAdminInterface {
                 bitcoind_addr: None, // bitcoind_addr.clone(),
             })
             .send()
-            .await.context(ReqwestSnafu)?
-            .error_for_status().context(ReqwestSnafu)?
+            .await?
+            .error_for_status()?
             .json::<CreateInstanceResponse>()
-            .await.context(ReqwestSnafu)?;
+            .await?;
         match resp {
             CreateInstanceResponse::Error { message } => {
                 return Err(CreateInstanceError::Create { message });
@@ -67,12 +82,64 @@ impl PocketIcAdminInterface {
             CreateInstanceResponse::Created {
                 instance_id,
                 topology,
-            } => {
-                // let default_effective_canister_id: Principal =
-                //     topology.default_effective_canister_id.into();
+            } => Ok((instance_id, topology)),
+        }
+    }
 
-                Ok((instance_id, topology))
+    pub(crate) async fn set_time(&self, instance_id: InstanceId) -> Result<(), reqwest::Error> {
+        self.post(&format!("/instances/{instance_id}/update/set_time"))
+            .json(&RawTime {
+                nanos_since_epoch: OffsetDateTime::now_utc()
+                    .unix_timestamp_nanos()
+                    .try_into()
+                    .unwrap(),
+            })
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    pub(crate) async fn auto_progress(
+        &self,
+        instance_id: InstanceId,
+        artificial_delay: i32,
+    ) -> Result<(), reqwest::Error> {
+        self.post(&format!("/instances/{instance_id}/auto_progress"))
+            .json(&AutoProgressConfig {
+                artificial_delay_ms: Some(artificial_delay as u64),
+            })
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    pub(crate) async fn create_http_gateway(
+        &self,
+        forward_to: HttpGatewayBackend,
+        port: Option<u16>,
+    ) -> Result<HttpGatewayInfo, CreateHttpGatewayError> {
+        let resp = self
+            .post("/http_gateway")
+            .json(&HttpGatewayConfig {
+                ip_addr: None,
+                port,
+                forward_to,
+                domains: None,
+                https_config: None,
+            })
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<CreateHttpGatewayResponse>()
+            .await?;
+
+        match resp {
+            CreateHttpGatewayResponse::Error { message } => {
+                Err(CreateHttpGatewayError::Create { message })
             }
+            CreateHttpGatewayResponse::Created(info) => Ok(info),
         }
     }
 }

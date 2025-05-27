@@ -11,10 +11,10 @@ use crate::status;
 use crate::structure::NetworkDirectoryStructure;
 use fd_lock::RwLock;
 use icp_fs::fs::{
-    CreateDirAllError, RemoveDirAllError, RemoveFileError, WriteFileError, create_dir_all,
+    CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all,
     remove_dir_all, remove_file,
 };
-use icp_fs::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
+use icp_fs::json::{SaveJsonFileError, save_json_file};
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
@@ -57,14 +57,8 @@ pub async fn run_network(
 
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
-    #[snafu(transparent)]
-    LoadJsonFile { source: LoadJsonFileError },
-
     #[snafu(display("already running (this project)"))]
     AlreadyRunningThisProject,
-
-    #[snafu(display("already running (other project)"))]
-    AlreadyRunningOtherProject,
 
     #[snafu(transparent)]
     CreateDirFailed { source: CreateDirAllError },
@@ -76,16 +70,7 @@ pub enum RunNetworkError {
     OpenLockFile { source: std::io::Error },
 
     #[snafu(transparent)]
-    RemoveFile { source: RemoveFileError },
-
-    #[snafu(transparent)]
     RunPocketIcError { source: RunPocketIcError },
-
-    #[snafu(transparent)]
-    SaveJsonFile { source: SaveJsonFileError },
-
-    #[snafu(transparent)]
-    WriteFile { source: WriteFileError },
 }
 
 async fn run_pocketic(

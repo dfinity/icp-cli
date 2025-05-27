@@ -1,11 +1,10 @@
 mod common;
 
-use std::env::current_dir;
-use std::path::PathBuf;
 use std::process::Command;
 
 use crate::common::TestEnv;
 use predicates::str::contains;
+use crate::common::guard::ChildGuard;
 
 #[test]
 fn hello() {
@@ -20,35 +19,14 @@ fn hello() {
     let mut cmd = Command::new(icp_path);
     cmd.env("HOME", testenv.home_path());
 
-    let mut child= cmd
+    let mut cmd= cmd
         .current_dir(icp_project_dir)
         .arg("network")
-        .arg("run")
-        .spawn()
+        .arg("run");
+    let _child_guard = ChildGuard::spawn(cmd)
         .expect("failed to spawn icp network");
 
-    struct ChildGuard {
-        child: std::process::Child,
-    }
-    impl ChildGuard {
-        fn new(child: std::process::Child) -> Self {
-            Self { child }
-        }
-    }
-    impl Drop for ChildGuard {
-        fn drop(&mut self) {
-            if let Err(e) = self.child.kill() {
-                eprintln!("Failed to kill child process: {}", e);
-            }
-            if let Some(code) = self.child.wait().ok().and_then(|status| status.code()) {
-                eprintln!("Child process exited with code: {}", code);
-            } else {
-                eprintln!("Child process terminated unexpectedly");
-            }
-        }
-    }
 
-    let _child_guard = ChildGuard::new(child);
 
     // configure the network for dfx
     testenv.configure_dfx_local_network();

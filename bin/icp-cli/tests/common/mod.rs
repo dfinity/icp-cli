@@ -1,4 +1,5 @@
 mod test_env;
-pub mod os;
+mod os;
+pub mod guard;
 
 pub use test_env::TestEnv;

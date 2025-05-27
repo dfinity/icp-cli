@@ -1,10 +1,15 @@
-use crate::commands::Cli;
+use crate::commands::{Cli, DispatchError};
 use clap::Parser;
 
 mod commands;
 mod project;
 
 #[tokio::main]
-async fn main() {
-    commands::dispatch(Cli::parse()).await.unwrap();
+async fn main() -> Result<(), DispatchError> {
+    if let Err(e) = commands::dispatch(Cli::parse()).await {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    } else {
+        Ok(())
+    }
 }

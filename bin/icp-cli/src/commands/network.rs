@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
 mod run;
-mod start;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {

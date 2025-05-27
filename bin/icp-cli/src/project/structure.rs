@@ -1,3 +1,5 @@
+use icp_network::structure::NetworkDirectoryStructure;
+use icp_support::fs::create_dir_all;
 use std::path::PathBuf;
 
 pub struct ProjectStructure {
@@ -26,7 +28,9 @@ impl ProjectStructure {
         self.root.join("networks").join(format!("{name}.yaml"))
     }
 
-    pub fn network_root(&self, name: &str) -> PathBuf {
-        self.root.join(".networks").join(name)
+    pub fn network(&self, network_name: &str) -> NetworkDirectoryStructure {
+        let network_root = self.root.join(".networks").join(network_name);
+
+        NetworkDirectoryStructure::new(&network_root)
     }
 }

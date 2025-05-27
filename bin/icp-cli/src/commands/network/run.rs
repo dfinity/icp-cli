@@ -20,18 +20,15 @@ pub enum RunNetworkError {
     NetworkExecutionFailed { source: StartLocalNetworkError },
 }
 
-pub async fn exec(cmd: Cmd) -> Result<(), RunNetworkError> {
-    println!("Running network command");
-
+pub async fn exec(_cmd: Cmd) -> Result<(), RunNetworkError> {
     let config = ManagedNetworkModel::default();
     let ps = ProjectStructure::find().ok_or(RunNetworkError::ProjectStructureNotFound)?;
-    eprintln!("Project structure root: {}", ps.root().display());
-    let network_root = ps.network_root("local");
-    create_dir_all(&network_root)?;
+    eprintln!("Project root: {}", ps.root().display());
 
-    eprintln!("Network root: {}", network_root.display());
+    let nds = ps.network("local");
+    eprintln!("Network root: {}", nds.network_root().display());
+    create_dir_all(nds.network_root())?;
 
-    let nds = NetworkDirectoryStructure::new(&network_root);
     run_local_network(config, nds).await?;
 
     Ok(())

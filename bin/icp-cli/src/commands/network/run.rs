@@ -10,10 +10,10 @@ pub struct Cmd {}
 
 pub async fn exec(_cmd: Cmd) -> Result<(), RunNetworkCommandError> {
     let config = ManagedNetworkModel::default();
-    let ps = ProjectDirectoryStructure::find().ok_or(ProjectStructureNotFound)?;
-    eprintln!("Project root: {}", ps.root().display());
+    let pds = ProjectDirectoryStructure::find().ok_or(ProjectStructureNotFound)?;
+    let nds = pds.network("local");
 
-    let nds = ps.network("local");
+    eprintln!("Project root: {}", pds.root().display());
     eprintln!("Network root: {}", nds.network_root().display());
 
     run_network(config, nds).await?;

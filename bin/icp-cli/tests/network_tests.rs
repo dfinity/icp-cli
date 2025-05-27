@@ -17,12 +17,13 @@ fn hello() {
 
     let icp_path = env!("CARGO_BIN_EXE_icp");
     let mut cmd = Command::new(icp_path);
-    cmd.env("HOME", testenv.home_path());
+    cmd.env("HOME", testenv.home_path())
+        .current_dir(icp_project_dir)
+        .arg("network")
+        .arg("run");
 
-    let mut cmd = cmd.current_dir(icp_project_dir).arg("network").arg("run");
-    let _child_guard = ChildGuard::spawn(cmd).expect("failed to spawn icp network");
+    let _child_guard = ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ");
 
-    // configure the network for dfx
     testenv.configure_dfx_local_network();
 
     testenv
@@ -32,7 +33,6 @@ fn hello() {
         .assert()
         .success();
 
-    eprintln!("***** call dfx new *****");
     testenv
         .dfx()
         .arg("new")
@@ -43,8 +43,6 @@ fn hello() {
         .arg("simple-assets")
         .assert()
         .success();
-
-    eprintln!("***** call dfx deploy *****");
 
     let project_dir = testenv.home_path().join("hello");
     testenv
@@ -87,12 +85,10 @@ fn hello() {
         "http://localhost:8000/sample-asset.txt?canisterId={}",
         frontend_canister_id
     );
-    eprintln!("***** call frontend URL: {} *****", url);
     let response = reqwest::blocking::get(&url)
         .expect("Failed to fetch static asset")
         .text()
         .expect("Failed to read response text");
-    eprintln!("***** response: {} *****", response);
     assert_eq!(
         response, "This is a sample asset!\n",
         "Static asset content mismatch"

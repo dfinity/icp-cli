@@ -90,7 +90,7 @@ impl TestEnv {
 
     fn build_os_path(bin_dir: &Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
-        let mut new_path = bin_dir.as_os_str().into_os_string();
+        let mut new_path = bin_dir.as_os_str().to_os_string();
         new_path.push(PATH_SEPARATOR.to_string());
         new_path.push(old_path);
         new_path

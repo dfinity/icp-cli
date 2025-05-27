@@ -60,7 +60,6 @@ pub async fn run_local_network(
     config: ManagedNetworkModel,
     nds: NetworkDirectoryStructure,
 ) -> Result<(), StartLocalNetworkError> {
-    eprintln!("Run local network");
     let project_descriptor_path = nds.project_descriptor_path();
 
     let mut file = RwLock::new(
@@ -296,8 +295,6 @@ pub enum InitializePocketicError {
     #[snafu(transparent)]
     CreateInstance { source: CreateInstanceError },
 
-    // #[snafu(display("Failed to create HTTP gateway: {message}"))]
-    // CreateHttpGateway { message: String },
     #[snafu(transparent)]
     CreateHttpGateway { source: CreateHttpGatewayError },
 
@@ -314,10 +311,6 @@ pub enum InitializePocketicError {
 async fn initialize_pocketic(
     port: u16,
     state_dir: &Path,
-    // bitcoind_addr: &Option<Vec<SocketAddr>>,
-    // bitcoin_integration_config: &Option<BitcoinIntegrationConfig>,
-    // replica_config: &ReplicaConfig,
-    // logger: Logger,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
     let pic =
         PocketIcAdminInterface::new(format!("http://localhost:{port}").parse::<Url>().unwrap());
@@ -347,7 +340,6 @@ async fn initialize_pocketic(
         gateway_info.instance_id, gateway_info.port
     );
 
-    let _agent_url = format!("http://localhost:{port}/instances/{instance_id}/");
     let agent_url = format!("http://localhost:{}", gateway_info.port);
 
     eprintln!("Agent url is {}", agent_url);

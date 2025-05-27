@@ -2,11 +2,11 @@ use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize, Default)]
 pub struct ManagedNetworkModel {
-    pub bind: BindModel,
+    pub gateway: GatewayModel,
 }
 
 #[derive(Deserialize)]
-pub struct BindModel {
+pub struct GatewayModel {
     #[serde(default = "default_host")]
     pub host: String,
     #[serde(default = "default_port", deserialize_with = "deserialize_port")]
@@ -27,7 +27,7 @@ fn default_port() -> BindPort {
     BindPort::Fixed(8000)
 }
 
-impl Default for BindModel {
+impl Default for GatewayModel {
     fn default() -> Self {
         Self {
             host: default_host(),

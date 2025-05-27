@@ -1,16 +1,8 @@
 use crate::config::model::managed::BindPort;
 use std::path::Path;
 
-pub fn spawn_pocketic(
-    pocketic_path: &Path,
-    port: &BindPort,
-    port_file: &Path,
-) -> tokio::process::Child {
-    // form the pocket-ic command here similar to the ic-starter command
+pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new(pocketic_path);
-    // if let Fixed(port) = port {
-    //    cmd.args(["--port", &port.to_string()]);
-    // };
     cmd.arg("--port-file");
     cmd.arg(&port_file.as_os_str());
     cmd.args(["--ttl", "2592000", "--log-levels", "error"]);

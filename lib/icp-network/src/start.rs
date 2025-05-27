@@ -83,7 +83,7 @@ pub async fn run_local_network(
     // project isn't running a network on the same port. But we can detect this when
     // starting the server.
 
-    if let Fixed(port) = config.bind.port {
+    if let Fixed(port) = config.gateway.port {
         eprintln!("Checking for existing network on port {}", port);
 
         let port_descriptor_path = NetworkDirectoryStructure::port_descriptor_path(port);
@@ -185,7 +185,7 @@ async fn run_pocketic(
         remove_dir_all(&nds.state_dir()).unwrap();
     }
     create_dir_all(&nds.state_dir())?;
-    let mut child = spawn_pocketic(&pocketic_path, &config.bind.port, &port_file);
+    let mut child = spawn_pocketic(&pocketic_path, &port_file);
 
     let result = async {
         let port = wait_for_port(&port_file, &mut child).await?;

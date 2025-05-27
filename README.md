@@ -21,6 +21,9 @@ dfx cache install
 # Export the path to the actual dfx binary (not the shim)
 export ICPTEST_DFX_PATH="$(dfx cache show)/dfx"
 
+# Export the path to the pocket-ic binary
+export ICP_POCKET_IC_PATH="$(dfx cache show)/pocket-ic"
+
 # Run tests
 cargo test
 ```

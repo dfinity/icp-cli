@@ -3,19 +3,6 @@ use ic_agent::{Agent, AgentError};
 use snafu::prelude::*;
 use std::time::Duration;
 
-#[derive(Debug, Snafu)]
-pub enum PingAndWaitError {
-    #[snafu(display("failed to build agent for url {}", url))]
-    BuildAgent {
-        source: AgentError,
-        url: String,
-    },
-
-    Timeout {
-        source: AgentError,
-    },
-}
-
 pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {
     let agent = Agent::builder()
         .with_url(url)
@@ -39,4 +26,17 @@ pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {
             }
         }
     }
+}
+
+#[derive(Debug, Snafu)]
+pub enum PingAndWaitError {
+    #[snafu(display("failed to build agent for url {}", url))]
+    BuildAgent {
+        source: AgentError,
+        url: String,
+    },
+
+    Timeout {
+        source: AgentError,
+    },
 }

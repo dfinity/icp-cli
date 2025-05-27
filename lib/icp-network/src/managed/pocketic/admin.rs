@@ -13,30 +13,6 @@ pub struct PocketIcAdminInterface {
     base_url: Url,
 }
 
-#[derive(Debug, Snafu)]
-pub enum CreateInstanceError {
-    #[snafu(
-        display("failed to create PocketIC instance: {message}"),
-        context(suffix(InstanceSnafu))
-    )]
-    Create { message: String },
-
-    #[snafu(transparent)]
-    Reqwest { source: reqwest::Error },
-}
-
-#[derive(Debug, Snafu)]
-pub enum CreateHttpGatewayError {
-    #[snafu(
-        display("failed to create HTTP gateway: {message}"),
-        context(suffix(GatewaySnafu))
-    )]
-    Create { message: String },
-
-    #[snafu(transparent, context(false))]
-    Reqwest { source: reqwest::Error },
-}
-
 impl PocketIcAdminInterface {
     pub fn new(base_url: Url) -> Self {
         let client = reqwest::Client::new();
@@ -142,4 +118,28 @@ impl PocketIcAdminInterface {
             CreateHttpGatewayResponse::Created(info) => Ok(info),
         }
     }
+}
+
+#[derive(Debug, Snafu)]
+pub enum CreateInstanceError {
+    #[snafu(
+        display("failed to create PocketIC instance: {message}"),
+        context(suffix(InstanceSnafu))
+    )]
+    Create { message: String },
+
+    #[snafu(transparent)]
+    Reqwest { source: reqwest::Error },
+}
+
+#[derive(Debug, Snafu)]
+pub enum CreateHttpGatewayError {
+    #[snafu(
+        display("failed to create HTTP gateway: {message}"),
+        context(suffix(GatewaySnafu))
+    )]
+    Create { message: String },
+
+    #[snafu(transparent, context(false))]
+    Reqwest { source: reqwest::Error },
 }

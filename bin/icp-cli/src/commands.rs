@@ -15,15 +15,15 @@ pub enum Subcmd {
     Network(network::Cmd),
 }
 
-#[derive(Debug, Snafu)]
-pub enum DispatchError {
-    #[snafu(transparent)]
-    Network { source: NetworkCommandError },
-}
-
 pub async fn dispatch(cli: Cli) -> Result<(), DispatchError> {
     match cli.subcommand {
         Subcmd::Network(opts) => network::dispatch(opts).await?,
     }
     Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum DispatchError {
+    #[snafu(transparent)]
+    Network { source: NetworkCommandError },
 }

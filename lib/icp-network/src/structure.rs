@@ -1,4 +1,3 @@
-use icp_fs::directories;
 use std::path::{Path, PathBuf};
 
 pub struct NetworkDirectoryStructure {
@@ -23,12 +22,6 @@ impl NetworkDirectoryStructure {
 
     pub fn lock_path(&self) -> PathBuf {
         self.network_root.join("lock")
-    }
-
-    pub fn port_descriptor_path(port: u16) -> PathBuf {
-        directories::cache_dir()
-            .join("local-network-descriptors-by-port")
-            .join(format!("{}.json", port))
     }
 
     pub fn state_dir(&self) -> PathBuf {

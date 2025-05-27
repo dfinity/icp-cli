@@ -1,4 +1,4 @@
-use crate::StartLocalNetworkError::NoPocketIcPath;
+use crate::RunNetworkError::NoPocketIcPath;
 use crate::config::model::managed::ManagedNetworkModel;
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
 use crate::managed::pocketic::admin::{
@@ -29,8 +29,34 @@ use tokio::signal::ctrl_c;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+pub async fn run_network(
+    config: ManagedNetworkModel,
+    nds: NetworkDirectoryStructure,
+) -> Result<(), RunNetworkError> {
+    let pocketic_path = PathBuf::from(var_os("ICP_POCKET_IC_PATH").ok_or(NoPocketIcPath)?);
+
+    create_dir_all(nds.network_root())?;
+
+    let mut file = RwLock::new(
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .truncate(true)
+            .open(nds.lock_path())
+            .map_err(|source| RunNetworkError::OpenLockFile { source })?,
+    );
+    let _guard = file
+        .try_write()
+        .map_err(|_| RunNetworkError::AlreadyRunningThisProject)?;
+    eprintln!("Holding lock on {}", nds.lock_path().display());
+
+    run_pocketic(&pocketic_path, config, nds).await?;
+    Ok(())
+}
+
 #[derive(Debug, Snafu)]
-pub enum StartLocalNetworkError {
+pub enum RunNetworkError {
     #[snafu(transparent)]
     LoadJsonFile { source: LoadJsonFileError },
 
@@ -62,52 +88,6 @@ pub enum StartLocalNetworkError {
     WriteFile { source: WriteFileError },
 }
 
-pub async fn run_network(
-    config: ManagedNetworkModel,
-    nds: NetworkDirectoryStructure,
-) -> Result<(), StartLocalNetworkError> {
-    let pocketic_path = PathBuf::from(var_os("ICP_POCKET_IC_PATH").ok_or(NoPocketIcPath)?);
-
-    create_dir_all(nds.network_root())?;
-
-    let mut file = RwLock::new(
-        OpenOptions::new()
-            .create(true)
-            .write(true)
-            .read(true)
-            .truncate(true)
-            .open(nds.lock_path())
-            .map_err(|source| StartLocalNetworkError::OpenLockFile { source })?,
-    );
-    let _guard = file
-        .try_write()
-        .map_err(|_| StartLocalNetworkError::AlreadyRunningThisProject)?;
-    eprintln!("Holding lock on {}", nds.lock_path().display());
-
-    run_pocketic(&pocketic_path, config, nds).await?;
-    Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum RunPocketIcError {
-    #[snafu(transparent)]
-    CreateDirAll { source: CreateDirAllError },
-
-    #[snafu(transparent)]
-    RemoveDirAll { source: RemoveDirAllError },
-
-    #[snafu(transparent)]
-    RemoveFile { source: RemoveFileError },
-
-    #[snafu(transparent)]
-    SaveJsonFile { source: SaveJsonFileError },
-
-    #[snafu(transparent)]
-    InitPocketIc { source: InitializePocketicError },
-
-    #[snafu(transparent)]
-    WaitForPort { source: WaitForPortError },
-}
 async fn run_pocketic(
     pocketic_path: &Path,
     _config: ManagedNetworkModel,
@@ -152,10 +132,32 @@ async fn run_pocketic(
     result
 }
 
+#[derive(Debug, Snafu)]
+pub enum RunPocketIcError {
+    #[snafu(transparent)]
+    CreateDirAll { source: CreateDirAllError },
+
+    #[snafu(transparent)]
+    RemoveDirAll { source: RemoveDirAllError },
+
+    #[snafu(transparent)]
+    RemoveFile { source: RemoveFileError },
+
+    #[snafu(transparent)]
+    SaveJsonFile { source: SaveJsonFileError },
+
+    #[snafu(transparent)]
+    InitPocketIc { source: InitializePocketicError },
+
+    #[snafu(transparent)]
+    WaitForPort { source: WaitForPortError },
+}
+
 pub enum ShutdownReason {
     CtrlC,
     ChildExited,
 }
+
 async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     select!(
         _ = ctrl_c() => {
@@ -168,10 +170,6 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
         }
     )
 }
-
-#[derive(Debug, Snafu)]
-#[snafu(display("timeout waiting for port file"))]
-pub struct WaitForPortTimeoutError;
 
 pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
     let mut retries = 0;
@@ -191,10 +189,8 @@ pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutEr
 }
 
 #[derive(Debug, Snafu)]
-#[snafu(display("Child process exited early with status {status}"))]
-pub struct ChildExitError {
-    pub status: ExitStatus,
-}
+#[snafu(display("timeout waiting for port file"))]
+pub struct WaitForPortTimeoutError;
 
 /// Yields immediately if the child exits.
 pub async fn notice_child_exit(child: &mut Child) -> ChildExitError {
@@ -207,13 +203,9 @@ pub async fn notice_child_exit(child: &mut Child) -> ChildExitError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum WaitForPortError {
-    #[snafu(display("Interrupted"))]
-    Interrupted,
-    #[snafu(transparent)]
-    PortFile { source: WaitForPortTimeoutError },
-    #[snafu(transparent)]
-    ChildExited { source: ChildExitError },
+#[snafu(display("Child process exited early with status {status}"))]
+pub struct ChildExitError {
+    pub status: ExitStatus,
 }
 
 /// Waits for the child to populate a port number.
@@ -227,21 +219,13 @@ pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitFo
 }
 
 #[derive(Debug, Snafu)]
-pub enum InitializePocketicError {
+pub enum WaitForPortError {
+    #[snafu(display("Interrupted"))]
+    Interrupted,
     #[snafu(transparent)]
-    CreateInstance { source: CreateInstanceError },
-
+    PortFile { source: WaitForPortTimeoutError },
     #[snafu(transparent)]
-    CreateHttpGateway { source: CreateHttpGatewayError },
-
-    #[snafu(display("no root key reported in status"))]
-    NoRootKey,
-
-    #[snafu(transparent)]
-    PingAndWait { source: status::PingAndWaitError },
-
-    #[snafu(transparent)]
-    Reqwest { source: reqwest::Error },
+    ChildExited { source: ChildExitError },
 }
 
 async fn initialize_pocketic(
@@ -293,4 +277,22 @@ async fn initialize_pocketic(
         root_key,
     };
     Ok(props)
+}
+
+#[derive(Debug, Snafu)]
+pub enum InitializePocketicError {
+    #[snafu(transparent)]
+    CreateInstance { source: CreateInstanceError },
+
+    #[snafu(transparent)]
+    CreateHttpGateway { source: CreateHttpGatewayError },
+
+    #[snafu(display("no root key reported in status"))]
+    NoRootKey,
+
+    #[snafu(transparent)]
+    PingAndWait { source: status::PingAndWaitError },
+
+    #[snafu(transparent)]
+    Reqwest { source: reqwest::Error },
 }

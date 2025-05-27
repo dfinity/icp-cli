@@ -177,7 +177,7 @@ pub fn write_identity_list(
     dirs: &IcpCliDirs,
     list: &IdentityList,
 ) -> Result<(), WriteIdentityError> {
-    let defaults_path = identity_defaults_path(dirs);
+    let defaults_path = identity_list_path(dirs);
     let parent = defaults_path.parent().unwrap();
     fs::create_dir_all(parent).context(CreateDirectorySnafu { path: parent })?;
     let json = serde_json::to_string(list).unwrap();

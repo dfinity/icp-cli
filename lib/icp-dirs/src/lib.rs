@@ -13,7 +13,7 @@ impl IcpCliDirs {
         if let Some(override_var) = std::env::var_os("ICP_CLI_HOME") {
             Self::Overridden(override_var.into())
         } else {
-            Self::Standard(ProjectDirs::from("org.dfinity", "DFINITY Stiftung", "icp-cli").unwrap())
+            Self::Standard(ProjectDirs::from("org.dfinity", "", "icp-cli").unwrap())
         }
     }
 

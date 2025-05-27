@@ -40,7 +40,7 @@ pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError>
         import_from_seed_phrase(env, &cmd.name, &phrase)?;
     } else if cmd.read_seed_phrase {
         let phrase = Password::new()
-            .with_prompt("Enter seed phrase: ")
+            .with_prompt("Enter seed phrase")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
         import_from_seed_phrase(env, &cmd.name, &phrase)?;
@@ -103,7 +103,7 @@ fn import_from_pem(env: &Env, name: &str, path: &Utf8Path) -> Result<(), LoadKey
                 let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
                     .context(BadPemContentSnafu { path })?;
                 let password = Password::new()
-                    .with_prompt(format!("Enter the password to decrypt {path}: "))
+                    .with_prompt(format!("Enter the password to decrypt {path}"))
                     .interact()
                     .context(PasswordReadSnafu)?;
                 decrypted_doc = epki

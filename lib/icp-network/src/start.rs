@@ -181,7 +181,9 @@ async fn run_pocketic(
         remove_file(&port_file).unwrap();
     }
     eprintln!("Port file: {}", port_file.display());
-    remove_dir_all(&nds.state_dir()).unwrap();
+    if nds.state_dir().exists() {
+        remove_dir_all(&nds.state_dir()).unwrap();
+    }
     create_dir_all(&nds.state_dir())?;
     let mut child = spawn_pocketic(&pocketic_path, &config.bind.port, &port_file);
 

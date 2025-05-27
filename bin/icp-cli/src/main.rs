@@ -1,4 +1,4 @@
-use crate::commands::{Cli, DispatchError};
+use crate::commands::Cli;
 use clap::Parser;
 
 mod commands;

@@ -4,7 +4,16 @@ on:
   push:
     branches:
       - main
+      - ens/sdk-2108-local-network
   pull_request:
+
+env:
+  # When getting Rust dependencies, retry on network error:
+  CARGO_NET_RETRY: 10
+  # Use the local .curlrc
+  CURL_HOME: .
+  # Disable DFX telemetry
+  DFX_TELEMETRY: 'off'
 
 jobs:
   test:

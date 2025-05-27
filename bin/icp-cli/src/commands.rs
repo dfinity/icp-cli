@@ -1,4 +1,6 @@
+use crate::commands::network::NetworkCommandError;
 use clap::{Parser, Subcommand};
+use snafu::Snafu;
 
 mod network;
 
@@ -13,8 +15,15 @@ pub enum Subcmd {
     Network(network::Cmd),
 }
 
-pub async fn exec(cli: Cli) {
+#[derive(Debug, Snafu)]
+pub enum DispatchError {
+    #[snafu(transparent)]
+    Network { source: NetworkCommandError },
+}
+
+pub async fn dispatch(cli: Cli) -> Result<(), DispatchError> {
     match cli.subcommand {
-        Subcmd::Network(opts) => network::exec(opts).await,
+        Subcmd::Network(opts) => network::dispatch(opts).await?,
     }
+    Ok(())
 }

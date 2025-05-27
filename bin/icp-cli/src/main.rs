@@ -11,5 +11,5 @@ async fn main() {
     println!("Hello, world!");
     let ps = ProjectStructure::find();
 
-    commands::exec(Cli::parse()).await;
+    commands::dispatch(Cli::parse()).await;
 }

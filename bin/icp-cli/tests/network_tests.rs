@@ -3,8 +3,8 @@ mod common;
 use std::process::Command;
 
 use crate::common::TestEnv;
-use predicates::str::contains;
 use crate::common::guard::ChildGuard;
+use predicates::str::contains;
 
 #[test]
 fn hello() {
@@ -19,26 +19,22 @@ fn hello() {
     let mut cmd = Command::new(icp_path);
     cmd.env("HOME", testenv.home_path());
 
-    let mut cmd= cmd
-        .current_dir(icp_project_dir)
-        .arg("network")
-        .arg("run");
-    let _child_guard = ChildGuard::spawn(cmd)
-        .expect("failed to spawn icp network");
-
-
+    let mut cmd = cmd.current_dir(icp_project_dir).arg("network").arg("run");
+    let _child_guard = ChildGuard::spawn(cmd).expect("failed to spawn icp network");
 
     // configure the network for dfx
     testenv.configure_dfx_local_network();
 
-    testenv.dfx()
+    testenv
+        .dfx()
         .arg("ping")
         .arg("--wait-healthy")
         .assert()
         .success();
 
     eprintln!("***** call dfx new *****");
-    testenv.dfx()
+    testenv
+        .dfx()
         .arg("new")
         .arg("hello")
         .arg("--type")
@@ -51,13 +47,15 @@ fn hello() {
     eprintln!("***** call dfx deploy *****");
 
     let project_dir = testenv.home_path().join("hello");
-    testenv.dfx_in_directory(&project_dir)
+    testenv
+        .dfx_in_directory(&project_dir)
         .arg("deploy")
         .arg("--no-wallet")
         .assert()
         .success();
 
-    testenv.dfx_in_directory(&project_dir)
+    testenv
+        .dfx_in_directory(&project_dir)
         .arg("canister")
         .arg("call")
         .arg("hello_backend")
@@ -67,25 +65,33 @@ fn hello() {
         .success()
         .stdout(contains(r#"("Hello, test!")"#));
 
-    let output = testenv.dfx_in_directory(&project_dir)
+    let output = testenv
+        .dfx_in_directory(&project_dir)
         .arg("canister")
         .arg("id")
         .arg("hello_frontend")
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let frontend_canister_id = std::str::from_utf8(&output)
         .expect("stdout was not valid UTF-8")
         .trim();
 
-    let url = format!("http://localhost:8000/sample-asset.txt?canisterId={}", frontend_canister_id);
+    let url = format!(
+        "http://localhost:8000/sample-asset.txt?canisterId={}",
+        frontend_canister_id
+    );
     eprintln!("***** call frontend URL: {} *****", url);
     let response = reqwest::blocking::get(&url)
         .expect("Failed to fetch static asset")
         .text()
         .expect("Failed to read response text");
     eprintln!("***** response: {} *****", response);
-    assert_eq!(response, "This is a sample asset!\n", "Static asset content mismatch");
+    assert_eq!(
+        response, "This is a sample asset!\n",
+        "Static asset content mismatch"
+    );
 }

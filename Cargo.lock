@@ -1227,6 +1227,7 @@ dependencies = [
  "icp-support",
  "predicates",
  "reqwest",
+ "snafu",
  "tempfile",
  "tokio",
 ]

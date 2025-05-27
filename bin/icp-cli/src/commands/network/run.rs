@@ -14,9 +14,6 @@ pub enum RunNetworkError {
     ProjectStructureNotFound,
 
     #[snafu(transparent)]
-    CreateDirFailed { source: CreateDirAllError },
-
-    #[snafu(transparent)]
     NetworkExecutionFailed { source: StartLocalNetworkError },
 }
 
@@ -27,7 +24,6 @@ pub async fn exec(_cmd: Cmd) -> Result<(), RunNetworkError> {
 
     let nds = ps.network("local");
     eprintln!("Network root: {}", nds.network_root().display());
-    create_dir_all(nds.network_root())?;
 
     run_network(config, nds).await?;
 

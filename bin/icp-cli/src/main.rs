@@ -6,5 +6,5 @@ mod project;
 
 #[tokio::main]
 async fn main() {
-    commands::dispatch(Cli::parse()).await;
+    commands::dispatch(Cli::parse()).await.unwrap();
 }

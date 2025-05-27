@@ -16,10 +16,7 @@ use icp_support::fs::{
     remove_file, write,
 };
 use icp_support::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
-use icp_support::process::process_running;
-use pocket_ic::common::rest::{
-    CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo,
-};
+use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
 use std::env::var_os;
@@ -44,14 +41,14 @@ pub enum StartLocalNetworkError {
     #[snafu(display("already running (other project)"))]
     AlreadyRunningOtherProject,
 
+    #[snafu(transparent)]
+    CreateDirFailed { source: CreateDirAllError },
+
     #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
     NoPocketIcPath,
 
     #[snafu(display("failed to open lock file"))]
     OpenLockFile { source: std::io::Error },
-
-    #[snafu(transparent)]
-    ReadNetworkDescriptor { source: ReadNetworkDescriptorError },
 
     #[snafu(transparent)]
     RemoveFile { source: RemoveFileError },
@@ -67,6 +64,10 @@ pub async fn run_network(
     config: ManagedNetworkModel,
     nds: NetworkDirectoryStructure,
 ) -> Result<(), StartLocalNetworkError> {
+    let pocketic_path = PathBuf::from(var_os("ICP_POCKET_IC_PATH").ok_or(NoPocketIcPath)?);
+
+    create_dir_all(nds.network_root())?;
+
     let mut file = RwLock::new(
         OpenOptions::new()
             .create(true)
@@ -79,79 +80,10 @@ pub async fn run_network(
     let _guard = file
         .try_write()
         .map_err(|_| StartLocalNetworkError::AlreadyRunningThisProject)?;
-    eprintln!("Got lock on {}", nds.lock_path().display());
-
-    // from here we know the project network is not running (it would hold the network lock)
-
-    // If we're going to use a fixed port, we could check to make sure another
-    // project isn't running a network on the same port. But we can detect this when
-    // starting the server.
-
-    if let Fixed(port) = config.gateway.port {
-        eprintln!("Checking for existing network on port {}", port);
-
-        let port_descriptor_path = NetworkDirectoryStructure::port_descriptor_path(port);
-        if let Some(port_des) = read_network_descriptor(&port_descriptor_path).await? {
-            if let Some(pid) = port_des.pid {
-                if process_running(pid) {
-                    return Err(StartLocalNetworkError::AlreadyRunningThisProject);
-                }
-            }
-            remove_file(&port_descriptor_path)?;
-        }
-    }
-
-    let pocketic_path = PathBuf::from(var_os("ICP_POCKET_IC_PATH").ok_or(NoPocketIcPath)?);
+    eprintln!("Holding lock on {}", nds.lock_path().display());
 
     run_pocketic(&pocketic_path, config, nds).await;
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum ReadNetworkDescriptorError {
-    #[snafu(display("Failed to open descriptor file: {source}"))]
-    Open {
-        source: std::io::Error,
-        path: PathBuf,
-    },
-
-    #[snafu(display("Failed to read descriptor file: {source}"))]
-    Read {
-        source: std::io::Error,
-        path: PathBuf,
-    },
-
-    #[snafu(display("Failed to parse descriptor JSON: {source}"))]
-    Parse {
-        source: serde_json::Error,
-        path: PathBuf,
-    },
-}
-
-pub async fn read_network_descriptor(
-    p: &Path,
-) -> Result<Option<NetworkDescriptorModel>, ReadNetworkDescriptorError> {
-    let path = p.to_owned();
-
-    let result = tokio::task::spawn_blocking(move || {
-        let file = match std::fs::File::open(&path) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(ReadNetworkDescriptorError::Open { source: e, path }),
-        };
-
-        let lock = RwLock::new(file);
-        let guard = lock.read().context(ReadSnafu { path: path.clone() })?;
-
-        let model: NetworkDescriptorModel =
-            serde_json::from_reader(&*guard).context(ParseSnafu { path })?;
-
-        Ok(Some(model))
-    })
-    .await
-    .unwrap(); // join error is not expected unless panicked
-
-    result
 }
 
 #[derive(Debug, Snafu)]
@@ -203,6 +135,7 @@ async fn run_pocketic(
             root_key: instance.root_key,
         };
         save_json_file(&nds.project_descriptor_path(), &nd)?;
+        eprintln!("Press Ctrl-C to exit.");
         let _ = wait_for_shutdown(&mut child).await;
         Ok(())
     }

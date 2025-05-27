@@ -3,7 +3,7 @@ import json
 
 TEST_DIR = "bin/icp-cli/tests"
 
-MACOS_TESTS = ["hello_tests"]
+MACOS_TESTS = ["network_tests"]
 
 def test_names():
     all_files = os.listdir(TEST_DIR)

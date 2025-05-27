@@ -51,7 +51,7 @@ impl PocketIcAdminInterface {
         &self,
         state_dir: &Path,
     ) -> Result<(InstanceId, Topology), CreateInstanceError> {
-        let mut subnet_config_set = ExtendedSubnetConfigSet {
+        let subnet_config_set = ExtendedSubnetConfigSet {
             nns: Some(SubnetSpec::default()),
             sns: Some(SubnetSpec::default()),
             ii: Some(SubnetSpec::default()),
@@ -77,7 +77,7 @@ impl PocketIcAdminInterface {
             .await?;
         match resp {
             CreateInstanceResponse::Error { message } => {
-                return Err(CreateInstanceError::Create { message });
+                Err(CreateInstanceError::Create { message })
             }
             CreateInstanceResponse::Created {
                 instance_id,

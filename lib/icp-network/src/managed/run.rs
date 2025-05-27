@@ -1,17 +1,19 @@
 use crate::StartLocalNetworkError::NoPocketIcPath;
-use crate::config::model::managed::BindPort::Fixed;
-use crate::config::model::managed::{BindPort, ManagedNetworkModel};
+use crate::config::model::managed::ManagedNetworkModel;
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
 use crate::managed::pocketic::admin::{
     CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
 };
 use crate::managed::pocketic::instance::PocketIcInstance;
 use crate::managed::pocketic::native::spawn_pocketic;
+use crate::managed::run::InitializePocketicError::NoRootKey;
 use crate::status;
 use crate::structure::NetworkDirectoryStructure;
-use candid::Principal;
 use fd_lock::RwLock;
-use icp_fs::fs::{CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_dir_all, remove_file, write, RemoveDirAllError};
+use icp_fs::fs::{
+    CreateDirAllError, RemoveDirAllError, RemoveFileError, WriteFileError, create_dir_all,
+    remove_dir_all, remove_file,
+};
 use icp_fs::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
@@ -26,7 +28,6 @@ use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::time::sleep;
 use uuid::Uuid;
-use crate::managed::run::InitializePocketicError::NoRootKey;
 
 #[derive(Debug, Snafu)]
 pub enum StartLocalNetworkError {
@@ -50,6 +51,9 @@ pub enum StartLocalNetworkError {
 
     #[snafu(transparent)]
     RemoveFile { source: RemoveFileError },
+
+    #[snafu(transparent)]
+    RunPocketIcError { source: RunPocketIcError },
 
     #[snafu(transparent)]
     SaveJsonFile { source: SaveJsonFileError },
@@ -80,7 +84,7 @@ pub async fn run_network(
         .map_err(|_| StartLocalNetworkError::AlreadyRunningThisProject)?;
     eprintln!("Holding lock on {}", nds.lock_path().display());
 
-    run_pocketic(&pocketic_path, config, nds).await;
+    run_pocketic(&pocketic_path, config, nds).await?;
     Ok(())
 }
 
@@ -98,9 +102,6 @@ pub enum RunPocketIcError {
     #[snafu(transparent)]
     SaveJsonFile { source: SaveJsonFileError },
 
-    #[snafu(display("Failed to start PocketIC: {source}"))]
-    StartPocketIc { source: std::io::Error },
-
     #[snafu(transparent)]
     InitPocketIc { source: InitializePocketicError },
 
@@ -109,7 +110,7 @@ pub enum RunPocketIcError {
 }
 async fn run_pocketic(
     pocketic_path: &Path,
-    config: ManagedNetworkModel,
+    _config: ManagedNetworkModel,
     nds: NetworkDirectoryStructure,
 ) -> Result<(), RunPocketIcError> {
     eprintln!("PocketIC path: {}", pocketic_path.display());
@@ -124,7 +125,7 @@ async fn run_pocketic(
         remove_dir_all(&nds.state_dir())?;
     }
     create_dir_all(&nds.state_dir())?;
-    let mut child = spawn_pocketic(&pocketic_path, &port_file);
+    let mut child = spawn_pocketic(pocketic_path, &port_file);
 
     let result = async {
         let port = wait_for_port(&port_file, &mut child).await?;
@@ -135,7 +136,7 @@ async fn run_pocketic(
             id: Uuid::new_v4(),
             path: nds.network_root().to_path_buf(),
             gateway_port: Some(instance.gateway_port),
-            pid: Some(child.id().unwrap().into()),
+            pid: Some(child.id().unwrap()),
             root_key: instance.root_key,
         };
         save_json_file(&nds.project_descriptor_path(), &nd)?;
@@ -225,12 +226,6 @@ pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitFo
     }
 }
 
-struct PocketIcInstanceProperties {
-    instance_id: usize,
-    effective_canister_id: Principal,
-    root_key: String,
-}
-
 #[derive(Debug, Snafu)]
 pub enum InitializePocketicError {
     #[snafu(transparent)]
@@ -241,9 +236,6 @@ pub enum InitializePocketicError {
 
     #[snafu(display("no root key reported in status"))]
     NoRootKey,
-
-    #[snafu(display("Failed to save effective config: {source}"))]
-    SaveEffectiveConfig { source: SaveJsonFileError },
 
     #[snafu(transparent)]
     PingAndWait { source: status::PingAndWaitError },
@@ -289,7 +281,7 @@ async fn initialize_pocketic(
     eprintln!("Agent url is {}", agent_url);
     let status = status::ping_and_wait(&agent_url).await?;
 
-    let root_key = status.root_key.ok_or(NoRootKey);
+    let root_key = status.root_key.ok_or(NoRootKey)?;
     let root_key = hex::encode(root_key);
     eprintln!("Root key: {root_key}");
 

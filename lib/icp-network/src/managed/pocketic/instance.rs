@@ -1,8 +1,8 @@
 use crate::managed::pocketic::admin::PocketIcAdminInterface;
 use candid::Principal;
 use pocket_ic::common::rest::InstanceId;
-use reqwest::Url;
 
+#[allow(dead_code)]
 pub struct PocketIcInstance {
     pub admin: PocketIcAdminInterface,
     pub gateway_port: u16,

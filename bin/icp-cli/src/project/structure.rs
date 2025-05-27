@@ -23,6 +23,7 @@ impl ProjectDirectoryStructure {
         &self.root
     }
 
+    #[allow(dead_code)]
     pub fn network_config_path(&self, name: &str) -> PathBuf {
         self.root.join("networks").join(format!("{name}.yaml"))
     }

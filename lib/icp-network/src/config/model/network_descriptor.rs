@@ -1,6 +1,5 @@
-use icp_fs::json::{LoadJsonFileError, load_json_file};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
@@ -11,10 +10,4 @@ pub struct NetworkDescriptorModel {
     pub gateway_port: Option<u16>,
     pub pid: Option<u32>,
     pub root_key: String,
-}
-
-impl NetworkDescriptorModel {
-    pub fn load(path: &Path) -> Result<Self, LoadJsonFileError> {
-        load_json_file(path)
-    }
 }

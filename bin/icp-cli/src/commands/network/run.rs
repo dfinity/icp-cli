@@ -1,7 +1,5 @@
 use crate::project::structure::ProjectDirectoryStructure;
 use clap::Parser;
-use icp_fs::fs::{CreateDirAllError, create_dir_all};
-use icp_network::structure::NetworkDirectoryStructure;
 use icp_network::{ManagedNetworkModel, StartLocalNetworkError, run_network};
 use snafu::Snafu;
 

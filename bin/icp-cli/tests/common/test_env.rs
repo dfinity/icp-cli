@@ -65,6 +65,7 @@ impl TestEnv {
         self.home_dir.path()
     }
 
+    #[allow(dead_code)]
     pub fn icp(&self) -> Command {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
         self.isolate(&mut cmd);
@@ -90,7 +91,7 @@ impl TestEnv {
     fn build_os_path(bin_dir: &Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
         let mut new_path = bin_dir.as_os_str().to_os_string();
-        new_path.push(PATH_SEPARATOR.to_string());
+        new_path.push(PATH_SEPARATOR);
         new_path.push(old_path);
         new_path
     }

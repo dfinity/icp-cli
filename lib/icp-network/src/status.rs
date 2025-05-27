@@ -1,6 +1,5 @@
 use ic_agent::agent::status::Status;
 use ic_agent::{Agent, AgentError};
-use reqwest::Url;
 use snafu::prelude::*;
 use std::time::Duration;
 

@@ -1,6 +1,7 @@
 use crate::common::os::PATH_SEPARATOR;
 use assert_cmd::Command;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
@@ -10,6 +11,7 @@ pub struct TestEnv {
     home_dir: TempDir,
     bin_dir: PathBuf,
     dfx_path: Option<PathBuf>,
+    os_path: OsString,
 }
 
 impl TestEnv {
@@ -17,11 +19,17 @@ impl TestEnv {
         let home_dir = tempfile::tempdir().expect("failed to create temp home dir");
         let bin_dir = home_dir.path().join("bin");
         fs::create_dir(&bin_dir).expect("failed to create bin dir");
+        let os_path = Self::build_os_path(&bin_dir);
+        eprintln!(
+            "Test environment home directory: {}",
+            home_dir.path().display()
+        );
 
         Self {
             home_dir,
             bin_dir,
             dfx_path: None,
+            os_path,
         }
     }
 
@@ -42,8 +50,10 @@ impl TestEnv {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dest).unwrap().permissions();
-            perms.set_mode(0o755);
+            let mut perms = fs::metadata(&dest)
+                .unwrap_or_else(|e| panic!("Failed to read metadata for {}: {}", dest.display(), e))
+                .permissions();
+            perms.set_mode(0o500);
             fs::set_permissions(&dest, perms).unwrap();
         }
 
@@ -57,35 +67,35 @@ impl TestEnv {
 
     pub fn icp(&self) -> Command {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
-        self.apply_env(&mut cmd);
+        self.isolate(&mut cmd);
         cmd
     }
 
     pub fn dfx(&self) -> Command {
-        self.dfx_in_directory(self.home_path())
-    }
-
-    pub fn dfx_in_directory(&self, dir: &Path) -> Command {
         let dfx_path = self
             .dfx_path
             .as_ref()
             .expect("dfx not configured in test env — call with_dfx() first");
-        let mut cmd = std::process::Command::new(dfx_path);
-        cmd.current_dir(dir);
-        let mut cmd = assert_cmd::Command::from(cmd);
-        self.apply_env(&mut cmd);
+        let mut cmd = Command::new(dfx_path);
+        self.isolate(&mut cmd);
         cmd
     }
 
-    fn apply_env(&self, cmd: &mut Command) {
+    fn isolate(&self, cmd: &mut Command) {
+        cmd.current_dir(self.home_path());
         cmd.env("HOME", self.home_path());
 
+        cmd.env("PATH", self.os_path.clone());
+    }
+
+    fn build_os_path(bin_dir: &Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
-        let mut new_path = self.bin_dir.clone().into_os_string();
+        let mut new_path = bin_dir.as_os_str().into_os_string();
         new_path.push(PATH_SEPARATOR.to_string());
         new_path.push(old_path);
-        cmd.env("PATH", new_path);
+        new_path
     }
+
     pub fn configure_dfx_local_network(&self) {
         let dfx_config_dir = self.home_path().join(".config").join("dfx");
         create_dir_all(&dfx_config_dir).expect("create .config directory");

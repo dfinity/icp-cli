@@ -48,14 +48,16 @@ fn hello() {
 
     let project_dir = testenv.home_path().join("hello");
     testenv
-        .dfx_in_directory(&project_dir)
+        .dfx()
+        .current_dir(&project_dir)
         .arg("deploy")
         .arg("--no-wallet")
         .assert()
         .success();
 
     testenv
-        .dfx_in_directory(&project_dir)
+        .dfx()
+        .current_dir(&project_dir)
         .arg("canister")
         .arg("call")
         .arg("hello_backend")
@@ -66,7 +68,8 @@ fn hello() {
         .stdout(contains(r#"("Hello, test!")"#));
 
     let output = testenv
-        .dfx_in_directory(&project_dir)
+        .dfx()
+        .current_dir(&project_dir)
         .arg("canister")
         .arg("id")
         .arg("hello_frontend")

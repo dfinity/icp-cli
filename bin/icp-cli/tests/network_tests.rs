@@ -12,8 +12,7 @@ fn hello() {
 
     let icp_project_dir = testenv.home_path().join("icp");
     std::fs::create_dir_all(&icp_project_dir).expect("Failed to create icp project directory");
-    std::fs::write(icp_project_dir.join("icp-project.yaml"), "")
-        .expect("Failed to write project file");
+    std::fs::write(icp_project_dir.join("icp.yaml"), "").expect("Failed to write project file");
 
     let icp_path = env!("CARGO_BIN_EXE_icp");
     let mut cmd = Command::new(icp_path);
@@ -81,10 +80,7 @@ fn hello() {
         .expect("stdout was not valid UTF-8")
         .trim();
 
-    let url = format!(
-        "http://localhost:8000/sample-asset.txt?canisterId={}",
-        frontend_canister_id
-    );
+    let url = format!("http://localhost:8000/sample-asset.txt?canisterId={frontend_canister_id}");
     let response = reqwest::blocking::get(&url)
         .expect("Failed to fetch static asset")
         .text()

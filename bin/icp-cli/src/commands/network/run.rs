@@ -1,16 +1,17 @@
 use crate::project::structure::ProjectDirectoryStructure;
 use clap::Parser;
+use icp_fs::fs::{CreateDirAllError, create_dir_all};
 use icp_network::structure::NetworkDirectoryStructure;
 use icp_network::{ManagedNetworkModel, StartLocalNetworkError, run_network};
-use icp_fs::fs::{CreateDirAllError, create_dir_all};
 use snafu::Snafu;
 
+/// Run the local network
 #[derive(Parser, Debug)]
 pub struct Cmd {}
 
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
-    #[snafu(display("Could not determine project structure"))]
+    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
     ProjectStructureNotFound,
 
     #[snafu(transparent)]

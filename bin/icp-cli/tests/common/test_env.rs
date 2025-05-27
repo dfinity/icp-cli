@@ -84,7 +84,6 @@ impl TestEnv {
     fn isolate(&self, cmd: &mut Command) {
         cmd.current_dir(self.home_path());
         cmd.env("HOME", self.home_path());
-
         cmd.env("PATH", self.os_path.clone());
     }
 

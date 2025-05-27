@@ -11,10 +11,7 @@ use crate::status;
 use crate::structure::NetworkDirectoryStructure;
 use candid::Principal;
 use fd_lock::RwLock;
-use icp_fs::fs::{
-    CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_dir_all,
-    remove_file, write,
-};
+use icp_fs::fs::{CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_dir_all, remove_file, write, RemoveDirAllError};
 use icp_fs::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
@@ -29,6 +26,7 @@ use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::time::sleep;
 use uuid::Uuid;
+use crate::managed::run::InitializePocketicError::NoRootKey;
 
 #[derive(Debug, Snafu)]
 pub enum StartLocalNetworkError {
@@ -92,6 +90,12 @@ pub enum RunPocketIcError {
     CreateDirAll { source: CreateDirAllError },
 
     #[snafu(transparent)]
+    RemoveDirAll { source: RemoveDirAllError },
+
+    #[snafu(transparent)]
+    RemoveFile { source: RemoveFileError },
+
+    #[snafu(transparent)]
     SaveJsonFile { source: SaveJsonFileError },
 
     #[snafu(display("Failed to start PocketIC: {source}"))]
@@ -110,14 +114,14 @@ async fn run_pocketic(
 ) -> Result<(), RunPocketIcError> {
     eprintln!("PocketIC path: {}", pocketic_path.display());
 
-    create_dir_all(&nds.pocketic_dir()).unwrap();
+    create_dir_all(&nds.pocketic_dir())?;
     let port_file = nds.pocketic_port_file();
     if port_file.exists() {
-        remove_file(&port_file).unwrap();
+        remove_file(&port_file)?;
     }
     eprintln!("Port file: {}", port_file.display());
     if nds.state_dir().exists() {
-        remove_dir_all(&nds.state_dir()).unwrap();
+        remove_dir_all(&nds.state_dir())?;
     }
     create_dir_all(&nds.state_dir())?;
     let mut child = spawn_pocketic(&pocketic_path, &port_file);
@@ -235,6 +239,9 @@ pub enum InitializePocketicError {
     #[snafu(transparent)]
     CreateHttpGateway { source: CreateHttpGatewayError },
 
+    #[snafu(display("no root key reported in status"))]
+    NoRootKey,
+
     #[snafu(display("Failed to save effective config: {source}"))]
     SaveEffectiveConfig { source: SaveJsonFileError },
 
@@ -280,11 +287,9 @@ async fn initialize_pocketic(
     let agent_url = format!("http://localhost:{}", gateway_info.port);
 
     eprintln!("Agent url is {}", agent_url);
-
-    // debug!(logger, "Waiting for replica to report healthy status");
     let status = status::ping_and_wait(&agent_url).await?;
 
-    let root_key = status.root_key.unwrap_or(vec![0; 32]);
+    let root_key = status.root_key.ok_or(NoRootKey);
     let root_key = hex::encode(root_key);
     eprintln!("Root key: {root_key}");
 

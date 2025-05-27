@@ -10,7 +10,7 @@ impl ProjectDirectoryStructure {
         let current_dir = std::env::current_dir().ok()?;
         let mut path = current_dir.clone();
         loop {
-            if path.join("icp-project.yaml").exists() {
+            if path.join("icp.yaml").exists() {
                 break Some(Self { root: path });
             }
             if !path.pop() {

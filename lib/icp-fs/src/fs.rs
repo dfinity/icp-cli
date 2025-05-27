@@ -48,7 +48,7 @@ pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<(), RemoveFileError> {
 }
 
 #[derive(Snafu, Debug)]
-#[snafu(display("failed to read {}", path.display()))]
+#[snafu(display("failed to write {}", path.display()))]
 pub struct WriteFileError {
     pub path: PathBuf,
     pub source: std::io::Error,

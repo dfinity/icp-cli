@@ -8,12 +8,12 @@ candid = { workspace = true }
 fd-lock = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
+icp-fs = { "path" = "../icp-fs" }
 pocket-ic = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
-icp-support = { "path" = "../icp-support" }
 snafu = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }

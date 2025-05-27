@@ -1,5 +1,5 @@
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
-use icp_support::directories;
+use icp_fs::directories;
 use std::path::{Path, PathBuf};
 
 pub struct NetworkDirectoryStructure {

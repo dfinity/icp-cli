@@ -1,12 +1,11 @@
 use icp_network::structure::NetworkDirectoryStructure;
-use icp_support::fs::create_dir_all;
 use std::path::PathBuf;
 
-pub struct ProjectStructure {
+pub struct ProjectDirectoryStructure {
     root: PathBuf,
 }
 
-impl ProjectStructure {
+impl ProjectDirectoryStructure {
     pub fn find() -> Option<Self> {
         let current_dir = std::env::current_dir().ok()?;
         let mut path = current_dir.clone();

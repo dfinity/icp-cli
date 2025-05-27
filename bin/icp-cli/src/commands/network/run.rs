@@ -1,8 +1,8 @@
-use crate::project::structure::ProjectStructure;
+use crate::project::structure::ProjectDirectoryStructure;
 use clap::Parser;
 use icp_network::structure::NetworkDirectoryStructure;
 use icp_network::{ManagedNetworkModel, StartLocalNetworkError, run_network};
-use icp_support::fs::{CreateDirAllError, create_dir_all};
+use icp_fs::fs::{CreateDirAllError, create_dir_all};
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]
@@ -19,7 +19,7 @@ pub enum RunNetworkError {
 
 pub async fn exec(_cmd: Cmd) -> Result<(), RunNetworkError> {
     let config = ManagedNetworkModel::default();
-    let ps = ProjectStructure::find().ok_or(RunNetworkError::ProjectStructureNotFound)?;
+    let ps = ProjectDirectoryStructure::find().ok_or(RunNetworkError::ProjectStructureNotFound)?;
     eprintln!("Project root: {}", ps.root().display());
 
     let nds = ps.network("local");

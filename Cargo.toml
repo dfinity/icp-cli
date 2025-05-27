@@ -3,7 +3,7 @@ members = [
     "bin/icp-cli",
     "lib/icp-identity",
     "lib/icp-network",
-    "lib/icp-support"
+    "lib/icp-fs"
 ]
 
 resolver = "3"

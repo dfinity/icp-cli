@@ -1223,13 +1223,24 @@ dependencies = [
  "assert_cmd",
  "clap",
  "directories",
+ "icp-fs",
  "icp-network",
- "icp-support",
  "predicates",
  "reqwest",
  "snafu",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "icp-fs"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "serde",
+ "serde_json",
+ "snafu",
+ "sysinfo",
 ]
 
 [[package]]
@@ -1244,7 +1255,7 @@ dependencies = [
  "fd-lock",
  "hex",
  "ic-agent",
- "icp-support",
+ "icp-fs",
  "pocket-ic",
  "reqwest",
  "serde",
@@ -1253,17 +1264,6 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
-]
-
-[[package]]
-name = "icp-support"
-version = "0.1.0"
-dependencies = [
- "directories",
- "serde",
- "serde_json",
- "snafu",
- "sysinfo",
 ]
 
 [[package]]

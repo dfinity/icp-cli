@@ -11,11 +11,11 @@ use crate::status;
 use crate::structure::NetworkDirectoryStructure;
 use candid::Principal;
 use fd_lock::RwLock;
-use icp_support::fs::{
+use icp_fs::fs::{
     CreateDirAllError, RemoveFileError, WriteFileError, create_dir_all, remove_dir_all,
     remove_file, write,
 };
-use icp_support::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
+use icp_fs::json::{LoadJsonFileError, SaveJsonFileError, save_json_file};
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;

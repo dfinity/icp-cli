@@ -1,4 +1,4 @@
-use icp_support::json::{LoadJsonFileError, load_json_file};
+use icp_fs::json::{LoadJsonFileError, load_json_file};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;

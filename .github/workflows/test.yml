@@ -53,7 +53,7 @@ jobs:
         run: |
           dfx cache install
           echo "ICPTEST_DFX_PATH=$(dfx cache show)/dfx" >> "$GITHUB_ENV"
-          echo "ICP_POCKETIC_PATH=$(dfx cache show)/pocket-ic" >> "$GITHUB_ENV"
+          echo "ICP_POCKET_IC_PATH=$(dfx cache show)/pocket-ic" >> "$GITHUB_ENV"
 
       - name: Run ${{ matrix.test }}
         run: cargo test --test ${{ matrix.test }}

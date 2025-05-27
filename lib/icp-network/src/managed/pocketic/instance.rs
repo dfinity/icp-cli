@@ -1,4 +1,4 @@
-use crate::pocketic::admin::PocketIcAdminInterface;
+use crate::managed::pocketic::admin::PocketIcAdminInterface;
 use candid::Principal;
 use pocket_ic::common::rest::InstanceId;
 use reqwest::Url;

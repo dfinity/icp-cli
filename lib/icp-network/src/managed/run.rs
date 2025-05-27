@@ -1,9 +1,12 @@
+use crate::StartLocalNetworkError::NoPocketIcPath;
 use crate::config::model::managed::BindPort::Fixed;
 use crate::config::model::managed::{BindPort, ManagedNetworkModel};
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
-use crate::pocketic::admin::{CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface};
-use crate::pocketic::instance::PocketIcInstance;
-use crate::pocketic::native::spawn_pocketic;
+use crate::managed::pocketic::admin::{
+    CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
+};
+use crate::managed::pocketic::instance::PocketIcInstance;
+use crate::managed::pocketic::native::spawn_pocketic;
 use crate::status;
 use crate::structure::NetworkDirectoryStructure;
 use candid::Principal;
@@ -19,6 +22,7 @@ use pocket_ic::common::rest::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
+use std::env::var_os;
 use std::fs::{OpenOptions, read_to_string};
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
@@ -40,6 +44,9 @@ pub enum StartLocalNetworkError {
     #[snafu(display("already running (other project)"))]
     AlreadyRunningOtherProject,
 
+    #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
+    NoPocketIcPath,
+
     #[snafu(display("failed to open lock file"))]
     OpenLockFile { source: std::io::Error },
 
@@ -56,12 +63,10 @@ pub enum StartLocalNetworkError {
     WriteFile { source: WriteFileError },
 }
 
-pub async fn run_local_network(
+pub async fn run_network(
     config: ManagedNetworkModel,
     nds: NetworkDirectoryStructure,
 ) -> Result<(), StartLocalNetworkError> {
-    let project_descriptor_path = nds.project_descriptor_path();
-
     let mut file = RwLock::new(
         OpenOptions::new()
             .create(true)
@@ -96,8 +101,7 @@ pub async fn run_local_network(
         }
     }
 
-    let pocketic_path =
-        PathBuf::from("/Users/ericswanson/.cache/dfinity/versions/0.26.1/pocket-ic");
+    let pocketic_path = PathBuf::from(var_os("ICP_POCKET_IC_PATH").ok_or(NoPocketIcPath)?);
 
     run_pocketic(&pocketic_path, config, nds).await;
     Ok(())

@@ -1,7 +1,7 @@
 use crate::project::structure::ProjectStructure;
 use clap::Parser;
 use icp_network::structure::NetworkDirectoryStructure;
-use icp_network::{ManagedNetworkModel, StartLocalNetworkError, run_local_network};
+use icp_network::{ManagedNetworkModel, StartLocalNetworkError, run_network};
 use icp_support::fs::{CreateDirAllError, create_dir_all};
 use snafu::Snafu;
 
@@ -29,7 +29,7 @@ pub async fn exec(_cmd: Cmd) -> Result<(), RunNetworkError> {
     eprintln!("Network root: {}", nds.network_root().display());
     create_dir_all(nds.network_root())?;
 
-    run_local_network(config, nds).await?;
+    run_network(config, nds).await?;
 
     Ok(())
 }

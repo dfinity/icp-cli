@@ -1,5 +1,10 @@
 # icp-cli
 
+## Running the local network
+
+The `ICP_POCKET_IC_PATH` environment variable should point to
+the path of the `pocket-ic` binary.
+
 ## Running Tests
 
 These tests use dfx to stand up and interact with a local Internet Computer instance.

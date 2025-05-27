@@ -42,10 +42,11 @@ jobs:
 
       - name: Install dfx
         uses: dfinity/setup-dfx@main
-      - name: Set up path to dfx for tests
+      - name: Set up path to dfx for tests and to pocketic for icp
         run: |
           dfx cache install
           echo "ICPTEST_DFX_PATH=$(dfx cache show)/dfx" >> "$GITHUB_ENV"
+          echo "ICP_POCKETIC_PATH=$(dfx cache show)/pocket-ic" >> "$GITHUB_ENV"
 
       - name: Run ${{ matrix.test }}
         run: cargo test --test ${{ matrix.test }}

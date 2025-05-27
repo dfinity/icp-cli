@@ -1,9 +1,8 @@
 pub mod config;
-pub mod pocketic;
-mod run;
+mod managed;
 pub mod status;
 pub mod structure;
 
 pub use config::model::managed::ManagedNetworkModel;
-pub use run::StartLocalNetworkError;
-pub use run::run_local_network;
+pub use managed::run::StartLocalNetworkError;
+pub use managed::run::run_network;

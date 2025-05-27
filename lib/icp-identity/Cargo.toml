@@ -8,6 +8,7 @@ directories.workspace = true
 ed25519-consensus.workspace = true
 elliptic-curve.workspace = true
 ic-agent.workspace = true
+icp-dirs.workspace = true
 itertools.workspace = true
 k256.workspace = true
 p256.workspace = true
@@ -20,3 +21,6 @@ serde.workspace = true
 serde_json.workspace = true
 snafu.workspace = true
 zeroize.workspace = true
+
+[lints]
+workspace = true

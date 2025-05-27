@@ -12,7 +12,8 @@ To ensure test isolation, they run in a temporary HOME directory and
 **cannot use the dfx shim from dfxvm**.
 
 To run the tests, it's necessary to set the ICPTEST_DFX_PATH environment variable
-to a valid dfx path. Here is one way to do this:
+to a valid dfx path, as well as the ICP_POCKET_IC_PATH environment variable.
+Here is one way to do that:
 
 ```
 # Ensure dfx is installed and the cache is populated

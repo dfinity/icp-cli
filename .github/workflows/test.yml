@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - ens/sdk-2108-local-network
   pull_request:
 
 env:

@@ -27,6 +27,7 @@ use tokio::process::Child;
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::time::sleep;
+use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
 pub enum StartLocalNetworkError {
@@ -155,6 +156,9 @@ pub enum RunPocketIcError {
     #[snafu(transparent)]
     CreateDirAll { source: CreateDirAllError },
 
+    #[snafu(transparent)]
+    SaveJsonFile { source: SaveJsonFileError },
+
     #[snafu(display("Failed to start PocketIC: {source}"))]
     StartPocketIc { source: std::io::Error },
 
@@ -184,8 +188,16 @@ async fn run_pocketic(
     let result = async {
         let port = wait_for_port(&port_file, &mut child).await?;
         eprintln!("PocketIC started on port {port}");
-        let _props = initialize_pocketic(port, &nds.state_dir()).await?;
-        // TODO: write network descriptor
+        let instance = initialize_pocketic(port, &nds.state_dir()).await?;
+
+        let nd = NetworkDescriptorModel {
+            id: Uuid::new_v4(),
+            path: nds.network_root().to_path_buf(),
+            gateway_port: Some(instance.gateway_port),
+            pid: Some(child.id().unwrap().into()),
+            root_key: instance.root_key,
+        };
+        save_json_file(&nds.project_descriptor_path(), &nd)?;
         let _ = wait_for_shutdown(&mut child).await;
         Ok(())
     }

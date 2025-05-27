@@ -1,9 +1,12 @@
+use crate::config::model::network_descriptor::NetworkDescriptorModel;
 use icp_support::directories;
 use std::path::{Path, PathBuf};
 
 pub struct NetworkDirectoryStructure {
     pub network_root: PathBuf,
 }
+
+impl NetworkDirectoryStructure {}
 
 impl NetworkDirectoryStructure {
     pub fn new(network_root: &Path) -> Self {

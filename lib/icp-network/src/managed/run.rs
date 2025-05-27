@@ -11,8 +11,8 @@ use crate::status;
 use crate::structure::NetworkDirectoryStructure;
 use fd_lock::RwLock;
 use icp_fs::fs::{
-    CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all,
-    remove_dir_all, remove_file,
+    CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
+    remove_file,
 };
 use icp_fs::json::{SaveJsonFileError, save_json_file};
 use pocket_ic::common::rest::HttpGatewayBackend;

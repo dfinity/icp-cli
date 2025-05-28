@@ -6,7 +6,7 @@ use snafu::Snafu;
 
 use crate::env::Env;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 pub struct ListCmd;
 
 pub fn exec(env: &Env, _cmd: ListCmd) -> Result<ListKeysMessage, ListKeysError> {

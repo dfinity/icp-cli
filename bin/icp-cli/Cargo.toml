@@ -18,6 +18,7 @@ elliptic-curve.workspace = true
 hex.workspace = true
 icp-dirs.workspace = true
 icp-identity.workspace = true
+icp-network.workspace = true
 itertools.workspace = true
 k256.workspace = true
 parse-display.workspace = true
@@ -28,10 +29,12 @@ serde.workspace = true
 serde_json.workspace = true
 snafu.workspace = true
 tiny-bip39.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
+reqwest = { workspace = true }
 tempfile = "3"
 
 [lints]

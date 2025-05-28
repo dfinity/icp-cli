@@ -59,13 +59,8 @@ fn identity_import_seed() {
 fn identity_import_pem() {
     let env = TestEnv::new();
     env.icp()
-        .args([
-            "identity",
-            "import",
-            "alice",
-            "--from-pem",
-            "tests/decrypted.pem",
-        ])
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(env.pkg_dir().join("tests/decrypted.pem"))
         .assert()
         .success();
     env.icp()
@@ -77,14 +72,9 @@ fn identity_import_pem() {
     file.write_all(b"swordfish").unwrap();
     let path = file.into_temp_path();
     env.icp()
-        .args([
-            "identity",
-            "import",
-            "bob",
-            "--from-pem",
-            "tests/encrypted.pem",
-            "--decryption-password-from-file",
-        ])
+        .args(["identity", "import", "bob", "--from-pem"])
+        .arg(env.pkg_dir().join("tests/encrypted.pem"))
+        .arg("--decryption-password-from-file")
         .arg(&path)
         .assert()
         .success();

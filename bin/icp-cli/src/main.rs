@@ -1,12 +1,12 @@
 use clap::{Parser, ValueEnum};
-use commands::Cmd;
+use commands::{Cmd, DispatchError};
 use env::Env;
-use error::AnyErrorCompat;
 use snafu::report;
 
 mod commands;
 mod env;
 mod error;
+mod project;
 
 #[derive(Parser)]
 struct Cli {
@@ -24,11 +24,12 @@ enum OutputFormat {
     Json,
 }
 
+#[tokio::main]
 #[report]
-fn main() -> Result<(), AnyErrorCompat> {
+async fn main() -> Result<(), DispatchError> {
     let cli = Cli::parse();
     let env = Env::new(cli.output_format, cli.identity);
-    commands::dispatch(&env, cli.command).map_err(AnyErrorCompat)?;
+    commands::dispatch(&env, cli.command).await?;
     Ok(())
 }
 

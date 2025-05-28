@@ -14,7 +14,7 @@ use crate::env::Env;
 
 use super::DEFAULT_DERIVATION_PATH;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 pub struct NewCmd {
     name: String,
     #[arg(long)]

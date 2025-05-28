@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
+use snafu::Snafu;
 
-use crate::{env::Env, error::AnyError};
+use crate::env::Env;
 
 mod default;
 mod import;
@@ -8,13 +9,13 @@ mod list;
 mod new;
 mod principal;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 pub struct IdentityCmd {
     #[command(subcommand)]
     subcmd: IdentitySubcmd,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum IdentitySubcmd {
     Import(import::ImportCmd),
     New(new::NewCmd),
@@ -23,7 +24,7 @@ pub enum IdentitySubcmd {
     Default(default::DefaultCmd),
 }
 
-pub fn dispatch(env: &Env, cmd: IdentityCmd) -> Result<(), AnyError> {
+pub async fn dispatch(env: &Env, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
     match cmd.subcmd {
         IdentitySubcmd::Import(subcmd) => env.print_result(import::exec(env, subcmd))?,
         IdentitySubcmd::New(subcmd) => env.print_result(new::exec(env, subcmd))?,
@@ -35,3 +36,19 @@ pub fn dispatch(env: &Env, cmd: IdentityCmd) -> Result<(), AnyError> {
 }
 
 const DEFAULT_DERIVATION_PATH: &str = "m/44'/223'/0'/0/0";
+
+#[derive(Debug, Snafu)]
+pub enum IdentityCommandError {
+    #[snafu(transparent)]
+    Import { source: import::ImportCmdError },
+    #[snafu(transparent)]
+    New { source: new::NewIdentityError },
+    #[snafu(transparent)]
+    Principal { source: principal::PrincipalError },
+    #[snafu(transparent)]
+    List { source: list::ListKeysError },
+    #[snafu(transparent)]
+    Default {
+        source: default::DefaultIdentityError,
+    },
+}

@@ -20,7 +20,7 @@ use crate::env::Env;
 
 use super::DEFAULT_DERIVATION_PATH;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
 pub struct ImportCmd {
     name: String,

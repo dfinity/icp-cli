@@ -1,11 +1,9 @@
-use std::{fmt::Display, sync::Arc};
-
+use crate::OutputFormat;
 use ic_agent::Identity;
 use icp_dirs::IcpCliDirs;
 use icp_identity::LoadIdentityError;
 use serde::Serialize;
-
-use crate::OutputFormat;
+use std::{fmt::Display, sync::Arc};
 
 pub struct Env {
     output_format: OutputFormat,

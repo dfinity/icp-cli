@@ -1,3 +1,4 @@
+use super::DEFAULT_DERIVATION_PATH;
 use crate::env::Env;
 use bip32::XPrv;
 use bip39::{Language, Mnemonic, Seed};
@@ -16,8 +17,6 @@ use sec1::{EcParameters, EcPrivateKey};
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use std::{fs, io};
-
-use super::DEFAULT_DERIVATION_PATH;
 
 #[derive(Debug, Parser)]
 #[command(group(ArgGroup::new("import-from").required(true)))]

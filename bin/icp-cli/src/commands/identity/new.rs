@@ -1,5 +1,5 @@
-use std::{fs, io};
-
+use super::DEFAULT_DERIVATION_PATH;
+use crate::env::Env;
 use bip32::XPrv;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use camino::Utf8PathBuf;
@@ -9,10 +9,7 @@ use k256::SecretKey;
 use parse_display::Display;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
-
-use crate::env::Env;
-
-use super::DEFAULT_DERIVATION_PATH;
+use std::{fs, io};
 
 #[derive(Debug, Parser)]
 pub struct NewCmd {

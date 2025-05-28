@@ -1,9 +1,8 @@
+use crate::env::Env;
 use clap::Parser;
 use parse_display::Display;
 use serde::Serialize;
 use snafu::{Snafu, ensure};
-
-use crate::env::Env;
 
 #[derive(Debug, Parser)]
 pub struct DefaultCmd {

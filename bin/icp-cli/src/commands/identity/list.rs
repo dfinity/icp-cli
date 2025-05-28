@@ -1,10 +1,8 @@
-use std::fmt::{self, Display, Formatter};
-
+use crate::env::Env;
 use clap::Parser;
 use serde::Serialize;
 use snafu::Snafu;
-
-use crate::env::Env;
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Parser)]
 pub struct ListCmd;

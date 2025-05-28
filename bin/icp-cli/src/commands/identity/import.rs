@@ -75,7 +75,7 @@ fn import_from_pem(
     env: &Env,
     name: &str,
     path: &Utf8Path,
-    password: Option<&Utf8Path>,
+    decryption_password_file: Option<&Utf8Path>,
 ) -> Result<(), LoadKeyError> {
     let pem = fs::read_to_string(path).context(ReadFileSnafu { path })?;
     let sections = pem::parse_many(&pem).context(BadPemFileSnafu { path })?;
@@ -114,7 +114,7 @@ fn import_from_pem(
             } else {
                 let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
                     .context(BadPemContentSnafu { path })?;
-                let password = if let Some(path) = password {
+                let password = if let Some(path) = decryption_password_file {
                     fs::read_to_string(path).context(PasswordFileReadSnafu { path })?
                 } else {
                     Password::new()

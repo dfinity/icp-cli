@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer};
 
+/// A "managed network" is a network that we start, configure, stop.
 #[derive(Deserialize, Default)]
 pub struct ManagedNetworkModel {
     pub gateway: GatewayModel,

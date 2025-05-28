@@ -29,7 +29,7 @@ impl NetworkDirectoryStructure {
     }
 
     pub fn pocketic_dir(&self) -> PathBuf {
-        self.network_root.join(".pocketic")
+        self.network_root.join("pocket-ic")
     }
 
     // pocketic expects this file not to exist when launching it.

@@ -28,8 +28,12 @@ impl ProjectDirectoryStructure {
         self.root.join("networks").join(format!("{name}.yaml"))
     }
 
+    fn work_dir(&self) -> PathBuf {
+        self.root.join(".icp")
+    }
+
     pub fn network(&self, network_name: &str) -> NetworkDirectoryStructure {
-        let network_root = self.root.join(".networks").join(network_name);
+        let network_root = self.work_dir().join("networks").join(network_name);
 
         NetworkDirectoryStructure::new(&network_root)
     }

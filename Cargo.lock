@@ -1196,6 +1196,7 @@ dependencies = [
  "clap",
  "dialoguer",
  "elliptic-curve",
+ "hex",
  "ic-agent",
  "icp-dirs",
  "icp-identity",

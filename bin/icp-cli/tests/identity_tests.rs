@@ -27,7 +27,7 @@ fn identity_anonymous() {
 }
 
 #[test]
-fn identity_import() {
+fn identity_import_seed() {
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(b"equip will roof matter pink blind book anxiety banner elbow sun young")
         .unwrap();
@@ -50,6 +50,46 @@ fn identity_import() {
         .success();
     env.icp()
         .args(["identity", "principal"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+}
+
+#[test]
+fn identity_import_pem() {
+    let env = TestEnv::new();
+    env.icp()
+        .args([
+            "identity",
+            "import",
+            "alice",
+            "--from-pem",
+            "tests/decrypted.pem",
+        ])
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal", "--identity", "alice"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(b"swordfish").unwrap();
+    let path = file.into_temp_path();
+    env.icp()
+        .args([
+            "identity",
+            "import",
+            "bob",
+            "--from-pem",
+            "tests/encrypted.pem",
+            "--decryption-password-from-file",
+        ])
+        .arg(&path)
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal", "--identity", "bob"])
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());

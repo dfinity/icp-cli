@@ -30,11 +30,18 @@ pub struct ImportCmd {
     read_seed_phrase: bool,
     #[arg(long, group = "import-from")]
     from_seed_file: Option<Utf8PathBuf>,
+    #[arg(long, requires = "from_pem")]
+    decryption_password_from_file: Option<Utf8PathBuf>,
 }
 
 pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError> {
     if let Some(from_pem) = cmd.from_pem {
-        import_from_pem(env, &cmd.name, &from_pem)?;
+        import_from_pem(
+            env,
+            &cmd.name,
+            &from_pem,
+            cmd.decryption_password_from_file.as_deref(),
+        )?;
     } else if let Some(path) = &cmd.from_seed_file {
         let phrase = fs::read_to_string(path).context(ReadSeedFileSnafu { path })?;
         import_from_seed_phrase(env, &cmd.name, &phrase)?;
@@ -64,7 +71,12 @@ pub enum ImportCmdError {
     SeedImport { source: DeriveKeyError },
 }
 
-fn import_from_pem(env: &Env, name: &str, path: &Utf8Path) -> Result<(), LoadKeyError> {
+fn import_from_pem(
+    env: &Env,
+    name: &str,
+    path: &Utf8Path,
+    password: Option<&Utf8Path>,
+) -> Result<(), LoadKeyError> {
     let pem = fs::read_to_string(path).context(ReadFileSnafu { path })?;
     let sections = pem::parse_many(&pem).context(BadPemFileSnafu { path })?;
     let section = match sections
@@ -102,10 +114,14 @@ fn import_from_pem(env: &Env, name: &str, path: &Utf8Path) -> Result<(), LoadKey
             } else {
                 let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
                     .context(BadPemContentSnafu { path })?;
-                let password = Password::new()
-                    .with_prompt(format!("Enter the password to decrypt {path}"))
-                    .interact()
-                    .context(PasswordReadSnafu)?;
+                let password = if let Some(path) = password {
+                    fs::read_to_string(path).context(PasswordFileReadSnafu { path })?
+                } else {
+                    Password::new()
+                        .with_prompt(format!("Enter the password to decrypt {path}"))
+                        .interact()
+                        .context(PasswordTermReadSnafu)?
+                };
                 decrypted_doc = epki
                     .decrypt(&password)
                     .context(DecryptionFailedSnafu { path })?;
@@ -132,7 +148,7 @@ fn import_from_pem(env: &Env, name: &str, path: &Utf8Path) -> Result<(), LoadKey
                 curve == Secp256k1::OID,
                 UnsupportedAlgorithmSnafu { found: curve, path }
             );
-            SecretKey::from_slice(pki.private_key).context(BadPemKeySnafu { path })?
+            SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?
         }
         EcPrivateKey::PEM_LABEL => {
             let epk =
@@ -225,7 +241,12 @@ pub enum LoadKeyError {
         source: elliptic_curve::Error,
     },
     #[snafu(display("failed to read password: {source}"))]
-    PasswordReadError { source: dialoguer::Error },
+    PasswordTermReadError { source: dialoguer::Error },
+    #[snafu(display("failed to read password from file `{path}`: {source}"))]
+    PasswordFileReadError {
+        source: io::Error,
+        path: Utf8PathBuf,
+    },
     #[snafu(display(
         "PEM file `{path}` uses unsupported algorithm {found}, expected {} (id-ecPublicKey)", // todo ed25519 support
         elliptic_curve::ALGORITHM_OID

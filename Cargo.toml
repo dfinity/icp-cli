@@ -11,6 +11,7 @@ dialoguer = "0.11.0"
 directories = "6.0.0"
 ed25519-consensus = "2.1.0"
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
+hex = "0.4.0"
 ic-agent = "0.40.0"
 icp-dirs = { path = "lib/icp-dirs" }
 icp-identity = { path = "lib/icp-identity" }

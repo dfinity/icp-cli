@@ -15,6 +15,7 @@ camino.workspace = true
 clap.workspace = true
 dialoguer.workspace = true
 elliptic-curve.workspace = true
+hex.workspace = true
 icp-dirs.workspace = true
 icp-identity.workspace = true
 itertools.workspace = true

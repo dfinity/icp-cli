@@ -277,21 +277,21 @@ pub fn load_identity_in_context(
 
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
-    #[snafu(display("failed to write configuration defaults: {source}"))]
+    #[snafu(display("failed to write configuration defaults"))]
     WriteDefaultsError { source: WriteIdentityError },
-    #[snafu(display("failed to read file `{}`: {source}", path.display()))]
+    #[snafu(display("failed to read file `{}`", path.display()))]
     ReadFileError { path: PathBuf, source: io::Error },
-    #[snafu(display("failed to parse json at `{}`: {source}", path.display()))]
+    #[snafu(display("failed to parse json at `{}`", path.display()))]
     ParseJsonError {
         path: PathBuf,
         source: serde_json::Error,
     },
-    #[snafu(display("failed to load PEM file `{}`: failed to parse: {source}", path.display()))]
+    #[snafu(display("failed to load PEM file `{}`: failed to parse", path.display()))]
     ParsePemError {
         path: PathBuf,
         source: pem::PemError,
     },
-    #[snafu(display("failed to load PEM file `{}`: failed to decipher key: {source}", path.display()))]
+    #[snafu(display("failed to load PEM file `{}`: failed to decipher key", path.display()))]
     ParseKeyError { path: PathBuf, source: pkcs8::Error },
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
@@ -301,9 +301,9 @@ pub enum LoadIdentityError {
 
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
-    #[snafu(display("failed to write to file `{}`: {source}", path.display()))]
+    #[snafu(display("failed to write to file `{}`", path.display()))]
     WriteFileError { path: PathBuf, source: io::Error },
-    #[snafu(display("failed to create directory `{}`: {source}", path.display()))]
+    #[snafu(display("failed to create directory `{}`", path.display()))]
     CreateDirectoryError { path: PathBuf, source: io::Error },
 }
 

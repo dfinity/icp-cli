@@ -48,12 +48,12 @@ pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityErr
 pub enum NewIdentityError {
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },
-    #[snafu(display("failed to write seed phrase to `{path}`: {source}"))]
+    #[snafu(display("failed to write seed phrase to `{path}`"))]
     WriteSeedFileError {
         path: Utf8PathBuf,
         source: io::Error,
     },
-    #[snafu(display("failed to derive IC key from wallet seed: {source}"))]
+    #[snafu(display("failed to derive IC key from wallet seed"))]
     DerivationError { source: bip32::Error },
 }
 

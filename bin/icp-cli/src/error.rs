@@ -57,6 +57,6 @@ impl Display for AnyErrorCompat {
 
 impl Error for AnyErrorCompat {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.0.source.as_ref().map(|x| &**x as &dyn Error)
+        self.0.source.as_ref().and_then(|x| x.source())
     }
 }

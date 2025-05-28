@@ -217,33 +217,33 @@ pub enum LoadKeyError {
         expected: Vec<&'static str>,
         found: Vec<String>,
     },
-    #[snafu(display("failed to read file `{path}`: {source}"))]
+    #[snafu(display("failed to read file `{path}`"))]
     ReadFileError {
         path: Utf8PathBuf,
         source: io::Error,
     },
     #[snafu(display("expected 1 key block in PEM file `{path}`, found {count}"))]
     TooManyKeyBlocks { path: Utf8PathBuf, count: usize },
-    #[snafu(display("corrupted PEM file `{path}`: {source}"))]
+    #[snafu(display("corrupted PEM file `{path}`"))]
     BadPemFile {
         path: Utf8PathBuf,
         source: pem::PemError,
     },
-    #[snafu(display("malformed key in PEM file `{path}`: {source}"))]
+    #[snafu(display("malformed key in PEM file `{path}`"))]
     BadPemContent {
         path: Utf8PathBuf,
         source: pkcs8::der::Error,
     },
     #[snafu(display("incomplete key in PEM file `{path}`: {info}"))]
     BadPemKeyStructure { path: Utf8PathBuf, info: String },
-    #[snafu(display("malformed key material in PEM file `{path}`: {source}"))]
+    #[snafu(display("malformed key material in PEM file `{path}`"))]
     BadPemKey {
         path: Utf8PathBuf,
         source: elliptic_curve::Error,
     },
-    #[snafu(display("failed to read password: {source}"))]
+    #[snafu(display("failed to read password"))]
     PasswordTermReadError { source: dialoguer::Error },
-    #[snafu(display("failed to read password from file `{path}`: {source}"))]
+    #[snafu(display("failed to read password from file `{path}`"))]
     PasswordFileReadError {
         source: io::Error,
         path: Utf8PathBuf,
@@ -256,7 +256,7 @@ pub enum LoadKeyError {
         path: Utf8PathBuf,
         found: ObjectIdentifier,
     },
-    #[snafu(display("failed to decrypt PEM file `{path}`: {source}"))]
+    #[snafu(display("failed to decrypt PEM file `{path}`"))]
     DecryptionFailed {
         path: Utf8PathBuf,
         source: pkcs8::Error,
@@ -267,16 +267,16 @@ pub enum LoadKeyError {
 
 #[derive(Debug, Snafu)]
 pub enum DeriveKeyError {
-    #[snafu(display("failed to read seed file `{path}`: {source}"))]
+    #[snafu(display("failed to read seed file `{path}`"))]
     ReadSeedFileError {
         path: Utf8PathBuf,
         source: io::Error,
     },
-    #[snafu(display("failed to read seed phrase from terminal: {source}"))]
+    #[snafu(display("failed to read seed phrase from terminal"))]
     ReadSeedPhraseFromTerminalError { source: dialoguer::Error },
-    #[snafu(display("failed to parse seed phrase: {source}"))]
+    #[snafu(display("failed to parse seed phrase"))]
     ParseMnemonicError { source: bip39::ErrorKind },
-    #[snafu(display("failed to derive IC key from wallet seed: {source}"))]
+    #[snafu(display("failed to derive IC key from wallet seed"))]
     DerivationError { source: bip32::Error },
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },

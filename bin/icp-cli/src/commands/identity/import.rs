@@ -134,6 +134,7 @@ fn import_from_pem(
                 pki.algorithm.oid == elliptic_curve::ALGORITHM_OID,
                 UnsupportedAlgorithmSnafu {
                     found: pki.algorithm.oid,
+                    expected: vec![elliptic_curve::ALGORITHM_OID],
                     path,
                 },
             );
@@ -147,7 +148,11 @@ fn import_from_pem(
                 })?;
             ensure!(
                 curve == Secp256k1::OID,
-                UnsupportedAlgorithmSnafu { found: curve, path }
+                UnsupportedAlgorithmSnafu {
+                    found: curve,
+                    expected: vec![Secp256k1::OID],
+                    path
+                }
             );
             SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?
         }
@@ -180,7 +185,11 @@ fn import_from_pem(
             };
             ensure!(
                 curve == Secp256k1::OID,
-                UnsupportedAlgorithmSnafu { found: curve, path },
+                UnsupportedAlgorithmSnafu {
+                    found: curve,
+                    expected: vec![Secp256k1::OID],
+                    path
+                },
             );
             SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?
         }
@@ -248,13 +257,11 @@ pub enum LoadKeyError {
         source: io::Error,
         path: Utf8PathBuf,
     },
-    #[snafu(display(
-        "PEM file `{path}` uses unsupported algorithm {found}, expected {} (id-ecPublicKey)", // todo ed25519 support
-        elliptic_curve::ALGORITHM_OID
-    ))]
+    #[snafu(display("PEM file `{path}` uses unsupported algorithm {found}, expected {}", expected.iter().format(", ")))]
     UnsupportedAlgorithm {
         path: Utf8PathBuf,
         found: ObjectIdentifier,
+        expected: Vec<ObjectIdentifier>,
     },
     #[snafu(display("failed to decrypt PEM file `{path}`"))]
     DecryptionFailed {

@@ -24,7 +24,11 @@ use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use zeroize::Zeroizing;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case", tag = "kind")]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum IdentitySpec {
     Pem {
         format: PemFormat,
@@ -34,25 +38,27 @@ pub enum IdentitySpec {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum IdentityKeyAlgorithm {
     Secp256k1,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum PemFormat {
     Plaintext,
     Pbes2,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct IdentityList {
     pub v: u32,
     pub identities: HashMap<String, IdentitySpec>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct IdentityDefaults {
     pub v: u32,
     pub default: String,

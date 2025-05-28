@@ -58,7 +58,11 @@ pub enum NewIdentityError {
 }
 
 #[derive(Serialize, Display)]
-#[serde(tag = "action", rename_all = "snake_case")]
+#[serde(
+    tag = "action",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum NewIdentityMessage {
     #[display("Seed phrase written to file {out_file}")]
     WrittenToFile { out_file: Utf8PathBuf },

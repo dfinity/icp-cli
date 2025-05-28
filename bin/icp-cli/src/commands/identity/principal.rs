@@ -28,6 +28,7 @@ pub enum PrincipalError {
 
 #[derive(Serialize, Display)]
 #[display("{principal}")]
+#[serde(rename_all = "kebab-case")]
 pub struct PrincipalMessage {
     principal: Principal,
 }

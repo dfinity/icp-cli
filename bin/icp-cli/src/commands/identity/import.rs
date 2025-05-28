@@ -58,6 +58,7 @@ pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError>
 }
 
 #[derive(Serialize, Display)]
+#[serde(rename_all = "kebab-case")]
 #[display("Identity \"{name}\" created")]
 pub struct LoadKeyMessage {
     name: String,

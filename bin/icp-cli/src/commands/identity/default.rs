@@ -39,6 +39,7 @@ pub enum UseIdentityError {
 }
 
 #[derive(Display, Serialize)]
+#[serde(rename_all = "kebab-case")]
 #[display("Set default identity to {default}")]
 pub struct UseIdentityMessage {
     default: String,

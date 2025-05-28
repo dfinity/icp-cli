@@ -21,6 +21,7 @@ pub fn exec(env: &Env, _cmd: ListCmd) -> Result<ListKeysMessage, ListKeysError> 
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ListKeysMessage {
     identities: Vec<String>,
     default: String,

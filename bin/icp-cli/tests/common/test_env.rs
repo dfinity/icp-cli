@@ -86,6 +86,7 @@ impl TestEnv {
         cmd.current_dir(self.home_path());
         cmd.env("HOME", self.home_path());
         cmd.env("PATH", self.os_path.clone());
+        cmd.env_remove("ICP_HOME");
     }
 
     fn build_os_path(bin_dir: &Path) -> OsString {

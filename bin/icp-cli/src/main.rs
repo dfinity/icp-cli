@@ -12,6 +12,8 @@ mod error;
 struct Cli {
     #[arg(long, value_enum, global = true, default_value_t = OutputFormat::Human)]
     output_format: OutputFormat,
+    #[arg(long, global = true)]
+    identity: Option<String>,
     #[command(flatten)]
     command: Cmd,
 }
@@ -25,7 +27,7 @@ enum OutputFormat {
 #[report]
 fn main() -> Result<(), AnyErrorCompat> {
     let cli = Cli::parse();
-    let env = Env::new(cli.output_format);
+    let env = Env::new(cli.output_format, cli.identity);
     commands::dispatch(&env, cli.command).map_err(AnyErrorCompat)?;
     Ok(())
 }

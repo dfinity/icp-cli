@@ -1,7 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
 use clap::Parser;
-use itertools::Itertools;
 use serde::Serialize;
 use snafu::Snafu;
 
@@ -14,17 +13,29 @@ pub fn exec(env: &Env, _cmd: ListCmd) -> Result<ListKeysMessage, ListKeysError> 
     let list = icp_identity::load_identity_list(env.dirs())?;
     let mut identities = icp_identity::special_identities();
     identities.extend(list.identities.into_keys());
-    Ok(ListKeysMessage { identities })
+    let defaults = icp_identity::load_identity_defaults(env.dirs())?;
+    Ok(ListKeysMessage {
+        identities,
+        default: defaults.default,
+    })
 }
 
 #[derive(Serialize)]
 pub struct ListKeysMessage {
     identities: Vec<String>,
+    default: String,
 }
 
 impl Display for ListKeysMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.identities.iter().format("\n"))
+        for id in &self.identities {
+            if *id == self.default {
+                writeln!(f, "* {id}")?;
+            } else {
+                writeln!(f, "  {id}")?;
+            }
+        }
+        Ok(())
     }
 }
 

@@ -8,18 +8,18 @@ use snafu::Snafu;
 use crate::env::Env;
 
 #[derive(Parser)]
-pub struct GetPrincipalCmd {}
+pub struct PrincipalCmd {}
 
-pub fn exec(env: &Env, _cmd: GetPrincipalCmd) -> Result<GetPrincipalMessage, GetPrincipalError> {
-    let identity = icp_identity::load_identity_in_context(env.dirs(), || todo!())?;
+pub fn exec(env: &Env, _cmd: PrincipalCmd) -> Result<PrincipalMessage, PrincipalError> {
+    let identity = env.load_identity()?;
     let principal = identity
         .sender()
-        .map_err(|message| GetPrincipalError::IdentityError { message })?;
-    Ok(GetPrincipalMessage { principal })
+        .map_err(|message| PrincipalError::IdentityError { message })?;
+    Ok(PrincipalMessage { principal })
 }
 
 #[derive(Debug, Snafu)]
-pub enum GetPrincipalError {
+pub enum PrincipalError {
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityError },
     #[snafu(display("failed to load identity principal: {message}"))]
@@ -28,6 +28,6 @@ pub enum GetPrincipalError {
 
 #[derive(Serialize, Display)]
 #[display("{principal}")]
-pub struct GetPrincipalMessage {
+pub struct PrincipalMessage {
     principal: Principal,
 }

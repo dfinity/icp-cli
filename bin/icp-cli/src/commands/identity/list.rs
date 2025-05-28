@@ -11,11 +11,9 @@ pub struct ListCmd;
 
 pub fn exec(env: &Env, _cmd: ListCmd) -> Result<ListKeysMessage, ListKeysError> {
     let list = icp_identity::load_identity_list(env.dirs())?;
-    let mut identities = icp_identity::special_identities();
-    identities.extend(list.identities.into_keys());
     let defaults = icp_identity::load_identity_defaults(env.dirs())?;
     Ok(ListKeysMessage {
-        identities,
+        identities: list.to_valid_identity_names(),
         default: defaults.default,
     })
 }

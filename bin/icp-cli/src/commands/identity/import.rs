@@ -1,3 +1,4 @@
+use crate::env::Env;
 use bip32::XPrv;
 use bip39::{Language, Mnemonic, Seed};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -16,20 +17,22 @@ use serde::Serialize;
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use std::{fs, io};
 
-use crate::env::Env;
-
 use super::DEFAULT_DERIVATION_PATH;
 
 #[derive(Debug, Parser)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
 pub struct ImportCmd {
     name: String,
+
     #[arg(long, group = "import-from")]
     from_pem: Option<Utf8PathBuf>,
+
     #[arg(long, group = "import-from")]
     read_seed_phrase: bool,
+
     #[arg(long, group = "import-from")]
     from_seed_file: Option<Utf8PathBuf>,
+
     #[arg(long, requires = "from_pem")]
     decryption_password_from_file: Option<Utf8PathBuf>,
 }

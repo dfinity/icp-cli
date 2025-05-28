@@ -11,6 +11,7 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use icp_dirs::IcpCliDirs;
+use itertools::Itertools;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo,
@@ -55,6 +56,14 @@ pub enum PemFormat {
 pub struct IdentityList {
     pub v: u32,
     pub identities: HashMap<String, IdentitySpec>,
+}
+
+impl IdentityList {
+    pub fn to_valid_identity_names(&self) -> Vec<String> {
+        let mut names = self.identities.keys().cloned().collect_vec();
+        names.extend(special_identities());
+        names
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

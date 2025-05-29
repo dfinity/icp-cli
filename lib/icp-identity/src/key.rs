@@ -7,6 +7,7 @@ use crate::{
     s_create::*,
     s_load::*,
 };
+use camino::{Utf8Path, Utf8PathBuf};
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
@@ -22,10 +23,7 @@ use rand::RngCore;
 use scrypt::Params;
 use sec1::{der::Decode, pem::PemLabel};
 use snafu::{OptionExt, ResultExt, ensure};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::sync::Arc;
 use zeroize::Zeroizing;
 
 pub fn load_identity(
@@ -69,7 +67,7 @@ fn load_pbes2_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
     password_func: impl FnOnce() -> Result<String, String>,
-    path: &Path,
+    path: &Utf8Path,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
@@ -89,7 +87,7 @@ fn load_pbes2_identity(
 fn load_plaintext_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
-    path: &Path,
+    path: &Utf8Path,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == PrivateKeyInfo::PEM_LABEL,
@@ -104,7 +102,7 @@ fn load_plaintext_identity(
     }
 }
 
-pub fn key_pem_path(dirs: &IcpCliDirs, name: &str) -> PathBuf {
+pub fn key_pem_path(dirs: &IcpCliDirs, name: &str) -> Utf8PathBuf {
     dirs.identity_dir().join(format!("keys/{name}.pem"))
 }
 

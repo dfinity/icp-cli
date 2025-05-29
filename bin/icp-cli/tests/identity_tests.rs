@@ -1,13 +1,13 @@
 use core::str;
 use std::io::Write;
 
+use camino_tempfile::NamedUtf8TempFile;
 use common::TestEnv;
 use ic_agent::export::Principal;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
 };
-use tempfile::NamedTempFile;
 
 mod common;
 
@@ -28,7 +28,7 @@ fn identity_anonymous() {
 
 #[test]
 fn identity_import_seed() {
-    let mut file = NamedTempFile::new().unwrap();
+    let mut file = NamedUtf8TempFile::new().unwrap();
     file.write_all(b"equip will roof matter pink blind book anxiety banner elbow sun young")
         .unwrap();
     let path = file.into_temp_path();
@@ -78,7 +78,7 @@ fn identity_import_pem() {
         .stderr(contains("missing field `parameters`"));
 
     // from encrypted
-    let mut file = NamedTempFile::new().unwrap();
+    let mut file = NamedUtf8TempFile::new().unwrap();
     file.write_all(b"swordfish").unwrap();
     let path = file.into_temp_path();
     env.icp()
@@ -118,7 +118,7 @@ fn identity_create() {
         .args(["identity", "principal", "--identity", "alice"])
         .assert()
         .success();
-    let mut file = NamedTempFile::new().unwrap();
+    let mut file = NamedUtf8TempFile::new().unwrap();
     file.write_all(seed.trim().as_bytes()).unwrap();
     let path = file.into_temp_path();
     env.icp()

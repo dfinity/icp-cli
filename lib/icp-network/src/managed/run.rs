@@ -80,7 +80,7 @@ async fn run_pocketic(
 ) -> Result<(), RunPocketIcError> {
     eprintln!("PocketIC path: {}", pocketic_path.display());
 
-    create_dir_all(&nds.pocketic_dir())?;
+    create_dir_all(nds.pocketic_dir())?;
     let port_file = nds.pocketic_port_file();
     if port_file.exists() {
         remove_file(&port_file)?;
@@ -89,7 +89,7 @@ async fn run_pocketic(
     if nds.state_dir().exists() {
         remove_dir_all(&nds.state_dir())?;
     }
-    create_dir_all(&nds.state_dir())?;
+    create_dir_all(nds.state_dir())?;
     let mut child = spawn_pocketic(pocketic_path, &port_file);
 
     let result = async {

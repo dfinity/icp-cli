@@ -379,6 +379,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino-tempfile"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64308c4c82a5c38679945ddf88738dc1483dcc563bbb5780755ae9f8497d2b20"
+dependencies = [
+ "camino",
+ "tempfile",
+]
+
+[[package]]
 name = "candid"
 version = "0.10.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1334,6 +1344,7 @@ dependencies = [
  "assert_cmd",
  "bip32",
  "camino",
+ "camino-tempfile",
  "clap",
  "dialoguer",
  "elliptic-curve",
@@ -1354,7 +1365,6 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
- "tempfile",
  "tiny-bip39",
  "tokio",
 ]
@@ -1363,7 +1373,9 @@ dependencies = [
 name = "icp-dirs"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "directories",
+ "snafu",
 ]
 
 [[package]]
@@ -1379,6 +1391,7 @@ dependencies = [
 name = "icp-identity"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "directories",
  "ed25519-consensus",
  "elliptic-curve",

@@ -12,10 +12,10 @@ pub struct Env {
 }
 
 impl Env {
-    pub fn new(output_format: OutputFormat, identity: Option<String>) -> Self {
+    pub fn new(output_format: OutputFormat, dirs: IcpCliDirs, identity: Option<String>) -> Self {
         Self {
             output_format,
-            dirs: IcpCliDirs::new(),
+            dirs,
             identity,
         }
     }

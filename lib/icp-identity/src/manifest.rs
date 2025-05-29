@@ -1,9 +1,10 @@
 use crate::{LoadIdentityError, WriteIdentityError, s_load::*};
+use camino::Utf8PathBuf;
 use icp_dirs::IcpCliDirs;
 use icp_fs::fs;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu, ensure};
-use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
+use std::{collections::HashMap, io::ErrorKind};
 
 pub fn write_identity_defaults(
     dirs: &IcpCliDirs,
@@ -92,11 +93,11 @@ pub enum ChangeDefaultsError {
     NoSuchIdentity { name: String },
 }
 
-pub fn identity_defaults_path(dirs: &IcpCliDirs) -> PathBuf {
+pub fn identity_defaults_path(dirs: &IcpCliDirs) -> Utf8PathBuf {
     dirs.identity_dir().join("identity_defaults.json")
 }
 
-pub fn identity_list_path(dirs: &IcpCliDirs) -> PathBuf {
+pub fn identity_list_path(dirs: &IcpCliDirs) -> Utf8PathBuf {
     dirs.identity_dir().join("identity_list.json")
 }
 

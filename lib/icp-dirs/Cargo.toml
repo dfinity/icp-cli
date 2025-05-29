@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+camino.workspace = true
 directories.workspace = true
+snafu.workspace = true
 
 [lints]
 workspace = true

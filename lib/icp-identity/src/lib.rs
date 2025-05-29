@@ -1,7 +1,7 @@
+use camino::Utf8PathBuf;
 use icp_fs::fs;
 
 use snafu::Snafu;
-use std::path::PathBuf;
 
 pub mod key;
 pub mod manifest;
@@ -15,20 +15,23 @@ pub enum LoadIdentityError {
     #[snafu(transparent)]
     ReadFileError { source: fs::ReadFileError },
 
-    #[snafu(display("failed to parse json at `{}`", path.display()))]
+    #[snafu(display("failed to parse json at `{path}`"))]
     ParseJsonError {
-        path: PathBuf,
+        path: Utf8PathBuf,
         source: serde_json::Error,
     },
 
-    #[snafu(display("failed to load PEM file `{}`: failed to parse", path.display()))]
+    #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
     ParsePemError {
-        path: PathBuf,
+        path: Utf8PathBuf,
         source: pem::PemError,
     },
 
-    #[snafu(display("failed to load PEM file `{}`: failed to decipher key", path.display()))]
-    ParseKeyError { path: PathBuf, source: pkcs8::Error },
+    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    ParseKeyError {
+        path: Utf8PathBuf,
+        source: pkcs8::Error,
+    },
 
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
@@ -36,8 +39,8 @@ pub enum LoadIdentityError {
     #[snafu(display("failed to read password: {message}"))]
     GetPasswordError { message: String },
 
-    #[snafu(display("file {} was modified by an incompatible new version of icp-cli", path.display()))]
-    BadVersion { path: PathBuf },
+    #[snafu(display("file `{path}` was modified by an incompatible new version of icp-cli"))]
+    BadVersion { path: Utf8PathBuf },
 }
 
 #[derive(Debug, Snafu)]

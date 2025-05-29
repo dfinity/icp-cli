@@ -8,7 +8,8 @@ pub struct CreateDirAllError {
     pub source: std::io::Error,
 }
 
-pub fn create_dir_all(path: &Path) -> Result<(), CreateDirAllError> {
+pub fn create_dir_all(path: impl AsRef<Path>) -> Result<(), CreateDirAllError> {
+    let path = path.as_ref();
     std::fs::create_dir_all(path).context(CreateDirAllSnafu { path })
 }
 

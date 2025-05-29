@@ -1,7 +1,8 @@
 use clap::{Parser, ValueEnum};
 use commands::{Cmd, DispatchError};
 use env::Env;
-use snafu::report;
+use icp_dirs::{DiscoverDirsError, IcpCliDirs};
+use snafu::{Snafu, report};
 
 mod commands;
 mod env;
@@ -26,11 +27,20 @@ enum OutputFormat {
 
 #[tokio::main]
 #[report]
-async fn main() -> Result<(), DispatchError> {
+async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
-    let env = Env::new(cli.output_format, cli.identity);
+    let dirs = IcpCliDirs::new()?;
+    let env = Env::new(cli.output_format, dirs, cli.identity);
     commands::dispatch(&env, cli.command).await?;
     Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum ProgramError {
+    #[snafu(transparent)]
+    Dispatch { source: DispatchError },
+    #[snafu(transparent)]
+    Dirs { source: DiscoverDirsError },
 }
 
 #[cfg(test)]

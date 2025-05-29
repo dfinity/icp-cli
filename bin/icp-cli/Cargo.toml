@@ -36,7 +36,7 @@ tokio.workspace = true
 assert_cmd = "2"
 predicates = "3"
 reqwest = { workspace = true }
-tempfile = "3"
+camino-tempfile = "1"
 
 [lints]
 workspace = true

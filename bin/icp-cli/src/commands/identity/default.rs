@@ -6,15 +6,22 @@ use snafu::Snafu;
 
 #[derive(Debug, Parser)]
 pub struct DefaultCmd {
-    name: String,
+    name: Option<String>,
 }
 
-pub fn exec(env: &Env, cmd: DefaultCmd) -> Result<DefaultIdentityMessage, DefaultIdentityError> {
-    let list = icp_identity::manifest::load_identity_list(env.dirs())?;
-    icp_identity::manifest::change_default_identity(env.dirs(), &list, &cmd.name)?;
-    Ok(DefaultIdentityMessage {
-        default: cmd.name.clone(),
-    })
+pub fn exec(env: &Env, cmd: DefaultCmd) -> Result<DefaultCmdMessage, DefaultIdentityError> {
+    if let Some(name) = cmd.name {
+        let list = icp_identity::manifest::load_identity_list(env.dirs())?;
+        icp_identity::manifest::change_default_identity(env.dirs(), &list, &name)?;
+        Ok(DefaultCmdMessage::Change(ChangeDefaultIdentityMessage {
+            default: name,
+        }))
+    } else {
+        let defaults = icp_identity::manifest::load_identity_defaults(env.dirs())?;
+        Ok(DefaultCmdMessage::Display(DisplayDefaultIdentityMessage {
+            default: defaults.default,
+        }))
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -33,6 +40,22 @@ pub enum DefaultIdentityError {
 #[derive(Display, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[display("Set default identity to {default}")]
-pub struct DefaultIdentityMessage {
+pub struct ChangeDefaultIdentityMessage {
     default: String,
+}
+
+#[derive(Display, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[display("{default}")]
+pub struct DisplayDefaultIdentityMessage {
+    default: String,
+}
+
+#[derive(Display, Serialize)]
+#[serde(untagged)]
+pub enum DefaultCmdMessage {
+    #[display("{0}")]
+    Change(ChangeDefaultIdentityMessage),
+    #[display("{0}")]
+    Display(DisplayDefaultIdentityMessage),
 }

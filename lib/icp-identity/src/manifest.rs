@@ -2,7 +2,7 @@ use crate::{LoadIdentityError, WriteIdentityError, s_load::*};
 use icp_dirs::IcpCliDirs;
 use icp_fs::fs;
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, ensure};
+use snafu::{ResultExt, Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
 
 pub fn write_identity_defaults(
@@ -65,6 +65,31 @@ pub fn load_identity_defaults(dirs: &IcpCliDirs) -> Result<IdentityDefaults, Loa
         }
     );
     Ok(defaults)
+}
+
+pub fn change_default_identity(
+    dirs: &IcpCliDirs,
+    list: &IdentityList,
+    name: &str,
+) -> Result<(), ChangeDefaultsError> {
+    ensure!(
+        list.identities.contains_key(name),
+        NoSuchIdentitySnafu { name }
+    );
+    let mut defaults = load_identity_defaults(dirs)?;
+    defaults.default = name.to_string();
+    write_identity_defaults(dirs, &defaults)?;
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum ChangeDefaultsError {
+    #[snafu(transparent)]
+    Load { source: LoadIdentityError },
+    #[snafu(transparent)]
+    Write { source: WriteIdentityError },
+    #[snafu(display("no identity found with name `{name}`"))]
+    NoSuchIdentity { name: String },
 }
 
 pub fn identity_defaults_path(dirs: &IcpCliDirs) -> PathBuf {

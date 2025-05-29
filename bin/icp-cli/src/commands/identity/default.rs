@@ -2,7 +2,7 @@ use crate::env::Env;
 use clap::Parser;
 use parse_display::Display;
 use serde::Serialize;
-use snafu::{Snafu, ensure};
+use snafu::Snafu;
 
 #[derive(Debug, Parser)]
 pub struct DefaultCmd {
@@ -11,13 +11,7 @@ pub struct DefaultCmd {
 
 pub fn exec(env: &Env, cmd: DefaultCmd) -> Result<DefaultIdentityMessage, DefaultIdentityError> {
     let list = icp_identity::manifest::load_identity_list(env.dirs())?;
-    ensure!(
-        list.identities.contains_key(&cmd.name),
-        NoSuchIdentitySnafu { name: &cmd.name }
-    );
-    let mut defaults = icp_identity::manifest::load_identity_defaults(env.dirs())?;
-    defaults.default = cmd.name.clone();
-    icp_identity::manifest::write_identity_defaults(env.dirs(), &defaults)?;
+    icp_identity::manifest::change_default_identity(env.dirs(), &list, &cmd.name)?;
     Ok(DefaultIdentityMessage {
         default: cmd.name.clone(),
     })
@@ -26,17 +20,14 @@ pub fn exec(env: &Env, cmd: DefaultCmd) -> Result<DefaultIdentityMessage, Defaul
 #[derive(Debug, Snafu)]
 pub enum DefaultIdentityError {
     #[snafu(transparent)]
-    WriteDefaults {
-        source: icp_identity::WriteIdentityError,
+    ChangeDefault {
+        source: icp_identity::manifest::ChangeDefaultsError,
     },
 
     #[snafu(transparent)]
     LoadList {
         source: icp_identity::LoadIdentityError,
     },
-
-    #[snafu(display("no identity found with name `{name}`"))]
-    NoSuchIdentity { name: String },
 }
 
 #[derive(Display, Serialize)]

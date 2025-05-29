@@ -35,11 +35,7 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
         Ok(id_list) => serde_json::from_str(&id_list).context(ParseJsonSnafu {
             path: &id_list_file,
         })?,
-        Err(e) if e.source.kind() == ErrorKind::NotFound => {
-            let empty_list = IdentityList::default();
-            write_identity_list(dirs, &empty_list).context(WriteDefaultsSnafu)?;
-            empty_list
-        }
+        Err(e) if e.source.kind() == ErrorKind::NotFound => IdentityList::default(),
         Err(e) => {
             return Err(e.into());
         }
@@ -59,14 +55,7 @@ pub fn load_identity_defaults(dirs: &IcpCliDirs) -> Result<IdentityDefaults, Loa
         Ok(id_defaults) => serde_json::from_str(&id_defaults).context(ParseJsonSnafu {
             path: &id_defaults_path,
         })?,
-        Err(e) if e.source.kind() == ErrorKind::NotFound => {
-            let empty_defaults = IdentityDefaults {
-                v: 1,
-                default: "anonymous".to_string(),
-            };
-            write_identity_defaults(dirs, &empty_defaults).context(WriteDefaultsSnafu)?;
-            empty_defaults
-        }
+        Err(e) if e.source.kind() == ErrorKind::NotFound => IdentityDefaults::default(),
         Err(e) => return Err(e.into()),
     };
     ensure!(
@@ -107,6 +96,15 @@ impl Default for IdentityList {
 pub struct IdentityDefaults {
     pub v: u32,
     pub default: String,
+}
+
+impl Default for IdentityDefaults {
+    fn default() -> Self {
+        Self {
+            v: 1,
+            default: "anonymous".to_string(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

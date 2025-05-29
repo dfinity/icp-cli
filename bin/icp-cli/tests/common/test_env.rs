@@ -1,29 +1,26 @@
 use crate::common::os::PATH_SEPARATOR;
 use assert_cmd::Command;
+use camino::{Utf8Path, Utf8PathBuf};
+use camino_tempfile::Utf8TempDir;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::fs::create_dir_all;
-use std::path::{Path, PathBuf};
-use tempfile::TempDir;
 
 pub struct TestEnv {
-    home_dir: TempDir,
-    bin_dir: PathBuf,
-    dfx_path: Option<PathBuf>,
+    home_dir: Utf8TempDir,
+    bin_dir: Utf8PathBuf,
+    dfx_path: Option<Utf8PathBuf>,
     os_path: OsString,
 }
 
 impl TestEnv {
     pub fn new() -> Self {
-        let home_dir = tempfile::tempdir().expect("failed to create temp home dir");
+        let home_dir = camino_tempfile::tempdir().expect("failed to create temp home dir");
         let bin_dir = home_dir.path().join("bin");
         fs::create_dir(&bin_dir).expect("failed to create bin dir");
         let os_path = Self::build_os_path(&bin_dir);
-        eprintln!(
-            "Test environment home directory: {}",
-            home_dir.path().display()
-        );
+        eprintln!("Test environment home directory: {}", home_dir.path());
 
         Self {
             home_dir,
@@ -35,13 +32,12 @@ impl TestEnv {
 
     /// Sets up `dfx` in the test environment by copying the binary from $ICPTEST_DFX_PATH
     pub fn with_dfx(mut self) -> Self {
-        let dfx_path = std::env::var_os("ICPTEST_DFX_PATH")
+        let dfx_path = std::env::var("ICPTEST_DFX_PATH")
             .expect("ICPTEST_DFX_PATH must be set to use with_dfx()");
-        let src = PathBuf::from(dfx_path);
+        let src = Utf8PathBuf::from(dfx_path);
         assert!(
             src.exists(),
-            "ICPTEST_DFX_PATH points to non-existent file: {}",
-            src.display()
+            "ICPTEST_DFX_PATH points to non-existent file: {src}",
         );
 
         let dest = self.bin_dir.join("dfx");
@@ -51,7 +47,7 @@ impl TestEnv {
         {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = fs::metadata(&dest)
-                .unwrap_or_else(|e| panic!("Failed to read metadata for {}: {}", dest.display(), e))
+                .unwrap_or_else(|e| panic!("Failed to read metadata for {dest}: {e}"))
                 .permissions();
             perms.set_mode(0o500);
             fs::set_permissions(&dest, perms).unwrap();
@@ -61,7 +57,7 @@ impl TestEnv {
         self
     }
 
-    pub fn home_path(&self) -> &Path {
+    pub fn home_path(&self) -> &Utf8Path {
         self.home_dir.path()
     }
 
@@ -88,7 +84,7 @@ impl TestEnv {
         cmd.env("PATH", self.os_path.clone());
     }
 
-    fn build_os_path(bin_dir: &Path) -> OsString {
+    fn build_os_path(bin_dir: &Utf8Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
         let mut new_path = bin_dir.as_os_str().to_os_string();
         new_path.push(PATH_SEPARATOR);

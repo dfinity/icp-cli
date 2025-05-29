@@ -1,18 +1,19 @@
 use crate::{LoadIdentityError, WriteIdentityError, s_load::*};
 use camino::Utf8PathBuf;
 use icp_dirs::IcpCliDirs;
-use icp_fs::fs;
+use icp_fs::{
+    fs::{self, CreateDirAllError},
+    json::{self, LoadJsonFileError},
+};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu, ensure};
+use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
 
 pub fn write_identity_defaults(
     dirs: &IcpCliDirs,
     defaults: &IdentityDefaults,
 ) -> Result<(), WriteIdentityError> {
-    let defaults_path = identity_defaults_path(dirs);
-    let parent = defaults_path.parent().unwrap();
-    fs::create_dir_all(parent)?;
+    let defaults_path = ensure_identity_defaults_path(dirs)?;
     let json = serde_json::to_string(defaults).unwrap();
     fs::write(&defaults_path, json.as_bytes())?;
     Ok(())
@@ -22,9 +23,7 @@ pub fn write_identity_list(
     dirs: &IcpCliDirs,
     list: &IdentityList,
 ) -> Result<(), WriteIdentityError> {
-    let defaults_path = identity_list_path(dirs);
-    let parent = defaults_path.parent().unwrap();
-    fs::create_dir_all(parent)?;
+    let defaults_path = ensure_identity_list_path(dirs)?;
     let json = serde_json::to_string(list).unwrap();
     fs::write(&defaults_path, json.as_bytes())?;
     Ok(())
@@ -32,11 +31,13 @@ pub fn write_identity_list(
 
 pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityError> {
     let id_list_file = identity_list_path(dirs);
-    let list = match fs::read_to_string(&id_list_file) {
-        Ok(id_list) => serde_json::from_str(&id_list).context(ParseJsonSnafu {
-            path: &id_list_file,
-        })?,
-        Err(e) if e.source.kind() == ErrorKind::NotFound => IdentityList::default(),
+    let list = match json::load_json_file(&id_list_file) {
+        Ok(id_list) => id_list,
+        Err(LoadJsonFileError::Read { source, .. })
+            if source.source.kind() == ErrorKind::NotFound =>
+        {
+            IdentityList::default()
+        }
         Err(e) => {
             return Err(e.into());
         }
@@ -52,11 +53,13 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
 
 pub fn load_identity_defaults(dirs: &IcpCliDirs) -> Result<IdentityDefaults, LoadIdentityError> {
     let id_defaults_path = identity_defaults_path(dirs);
-    let defaults = match fs::read_to_string(&id_defaults_path) {
-        Ok(id_defaults) => serde_json::from_str(&id_defaults).context(ParseJsonSnafu {
-            path: &id_defaults_path,
-        })?,
-        Err(e) if e.source.kind() == ErrorKind::NotFound => IdentityDefaults::default(),
+    let defaults = match json::load_json_file(&id_defaults_path) {
+        Ok(id_defaults) => id_defaults,
+        Err(LoadJsonFileError::Read { source, .. })
+            if source.source.kind() == ErrorKind::NotFound =>
+        {
+            IdentityDefaults::default()
+        }
         Err(e) => return Err(e.into()),
     };
     ensure!(
@@ -97,8 +100,20 @@ pub fn identity_defaults_path(dirs: &IcpCliDirs) -> Utf8PathBuf {
     dirs.identity_dir().join("identity_defaults.json")
 }
 
+pub fn ensure_identity_defaults_path(dirs: &IcpCliDirs) -> Result<Utf8PathBuf, CreateDirAllError> {
+    let path = identity_defaults_path(dirs);
+    fs::create_dir_all(path.parent().unwrap())?;
+    Ok(path)
+}
+
 pub fn identity_list_path(dirs: &IcpCliDirs) -> Utf8PathBuf {
     dirs.identity_dir().join("identity_list.json")
+}
+
+pub fn ensure_identity_list_path(dirs: &IcpCliDirs) -> Result<Utf8PathBuf, CreateDirAllError> {
+    let path = identity_list_path(dirs);
+    fs::create_dir_all(path.parent().unwrap())?;
+    Ok(path)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

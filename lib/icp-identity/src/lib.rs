@@ -15,10 +15,9 @@ pub enum LoadIdentityError {
     #[snafu(transparent)]
     ReadFileError { source: fs::ReadFileError },
 
-    #[snafu(display("failed to parse json at `{path}`"))]
-    ParseJsonError {
-        path: Utf8PathBuf,
-        source: serde_json::Error,
+    #[snafu(transparent)]
+    LoadJsonError {
+        source: icp_fs::json::LoadJsonFileError,
     },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]

@@ -16,8 +16,9 @@ pub enum LoadJsonFileError {
 }
 
 pub fn load_json_file<T: for<'a> serde::de::Deserialize<'a>>(
-    path: &Path,
+    path: impl AsRef<Path>,
 ) -> Result<T, LoadJsonFileError> {
+    let path = path.as_ref();
     let content = read(path)?;
 
     serde_json::from_slice(content.as_ref()).context(ParseSnafu { path })

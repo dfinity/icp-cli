@@ -13,7 +13,7 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use icp_dirs::IcpCliDirs;
-use icp_fs::fs;
+use icp_fs::fs::{self, CreateDirAllError};
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -106,6 +106,15 @@ pub fn key_pem_path(dirs: &IcpCliDirs, name: &str) -> Utf8PathBuf {
     dirs.identity_dir().join(format!("keys/{name}.pem"))
 }
 
+pub fn ensure_key_pem_path(
+    dirs: &IcpCliDirs,
+    name: &str,
+) -> Result<Utf8PathBuf, CreateDirAllError> {
+    let path = key_pem_path(dirs, name);
+    fs::create_dir_all(path.parent().unwrap())?;
+    Ok(path)
+}
+
 pub fn load_identity_in_context(
     dirs: &IcpCliDirs,
     password_func: impl FnOnce() -> Result<String, String>,
@@ -146,9 +155,7 @@ pub fn create_identity(
             .expect("infallible PKI encoding"),
         CreateFormat::Pbes2 { password } => make_pkcs5_encrypted_pem(&doc, &password),
     };
-    let pem_path = key_pem_path(dirs, name);
-    let parent = pem_path.parent().unwrap();
-    fs::create_dir_all(parent).map_err(WriteIdentityError::from)?;
+    let pem_path = ensure_key_pem_path(dirs, name).map_err(WriteIdentityError::from)?;
     fs::write(&pem_path, pem.as_bytes()).map_err(WriteIdentityError::from)?;
     identity_list.identities.insert(name.to_string(), spec);
     write_identity_list(dirs, &identity_list)?;

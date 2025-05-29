@@ -52,3 +52,6 @@ missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 enum_variant_names = "allow"
+
+[profile.dev.package.scrypt]
+opt-level = 3

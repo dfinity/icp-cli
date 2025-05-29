@@ -1,7 +1,7 @@
 use crate::commands::network::run::RunNetworkCommandError::ProjectStructureNotFound;
+use crate::project::structure::ProjectDirectoryStructure;
 use clap::Parser;
 use icp_network::{ManagedNetworkModel, RunNetworkError, run_network};
-use icp_project::ProjectDirectoryStructure;
 use snafu::Snafu;
 
 /// Run the local network

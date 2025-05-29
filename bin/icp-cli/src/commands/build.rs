@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-
 use clap::Parser;
 use icp_canister::{CanisterManifest, CanisterManifestError};
 use snafu::{ResultExt, Snafu};
 
 use icp_fs::fs::{ReadFileError, read};
-use icp_project::{ProjectDirectoryStructure, ProjectManifest, ProjectManifestError};
+use icp_project::{ProjectManifest, ProjectManifestError};
+
+use crate::project::structure::ProjectDirectoryStructure;
 
 #[derive(Parser, Debug)]
 pub struct Cmd;
@@ -21,8 +21,6 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
 
     let bs = read(mpath).context(ProjectLoadSnafu)?;
     let pm = ProjectManifest::from_bytes(&bs).context(ProjectParseSnafu)?;
-
-    println!("{pm:?}");
 
     // List canisters in project
     let mut cs = Vec::new();

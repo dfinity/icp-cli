@@ -1,32 +1,60 @@
 use serde::Deserialize;
 use snafu::{ResultExt, Snafu};
 
-/// Known adapter types that can be used to build a canister.
-/// These correspond to the values found in `build.adapter.type` in the YAML.
+/// Configuration for a Rust-based canister build adapter.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AdapterType {
-    /// A canister written in Rust.
-    Rust,
+pub struct RustAdapter {
+    /// The name of the Cargo package to build.
+    pub package: String,
+}
 
-    /// A canister written in Motoko.
-    Motoko,
+/// Configuration for a Motoko-based canister build adapter.
+#[derive(Debug, Deserialize)]
+pub struct MotokoAdapter {
+    /// Optional path to the main Motoko source file.
+    /// If omitted, a default like `main.mo` may be assumed.
+    #[serde(default)]
+    pub main: Option<String>,
+}
 
-    /// A canister built using custom instructions,
-    /// such as a shell script or other manual build process.
-    Custom,
+/// Configuration for a custom canister build adapter.
+#[derive(Debug, Deserialize)]
+pub struct CustomAdapter {
+    /// Path to a script or executable used to build the canister.
+    pub script: String,
+}
 
-    /// An assets canister used to serve front-end applications
-    /// or static assets on the Internet Computer.
-    Assets,
+/// Configuration for an asset canister used to serve static content.
+#[derive(Debug, Deserialize)]
+pub struct AssetsAdapter {
+    /// Directory containing the static assets to include in the canister.
+    pub source: String,
 }
 
 /// Identifies the type of adapter used to build the canister,
-/// e.g. "motoko", "rust", or "custom".
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: rust
+/// package: my_canister
+/// ```
 #[derive(Debug, Deserialize)]
-pub struct Adapter {
-    #[serde(rename = "type")]
-    pub typ: AdapterType,
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum Adapter {
+    /// A canister written in Rust.
+    Rust(RustAdapter),
+
+    /// A canister written in Motoko.
+    Motoko(MotokoAdapter),
+
+    /// A canister built using a custom script or command.
+    Custom(CustomAdapter),
+
+    /// A static asset canister.
+    Assets(AssetsAdapter),
 }
 
 /// Describes how the canister should be built into WebAssembly,
@@ -59,7 +87,4 @@ impl CanisterManifest {
 pub enum CanisterManifestError {
     #[snafu(display("failed to parse canister manifest: {}", source))]
     Parse { source: serde_yaml::Error },
-
-    #[snafu(display("invalid UTF-8 in canister path"))]
-    InvalidPathUtf8,
 }

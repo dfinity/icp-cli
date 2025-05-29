@@ -19,8 +19,8 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
         return Err(BuildCommandError::ProjectNotFound);
     }
 
-    let bs = read(mpath).context(ProjectLoadSnafu)?;
-    let pm = ProjectManifest::from_bytes(&bs).context(ProjectParseSnafu)?;
+    let bs = read(mpath)?;
+    let pm = ProjectManifest::from_bytes(&bs)?;
 
     // List canisters in project
     let mut cs = Vec::new();
@@ -33,13 +33,14 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
             });
         }
 
-        let bs = read(mpath).context(CanisterLoadSnafu)?;
-        let cm = CanisterManifest::from_bytes(&bs).context(CanisterParseSnafu)?;
+        let bs = read(mpath)?;
+        let cm = CanisterManifest::from_bytes(&bs)?;
 
         cs.push(cm);
     }
 
     // Build canisters
+    println!("{cs:?}");
 
     Ok(())
 }
@@ -49,18 +50,15 @@ pub enum BuildCommandError {
     #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
     ProjectNotFound,
 
-    #[snafu(display("failed to load project manifest: {source}"))]
-    ProjectLoad { source: ReadFileError },
-
-    #[snafu(display("failed to parse project manifest: {source}"))]
+    #[snafu(transparent)]
     ProjectParse { source: ProjectManifestError },
 
     #[snafu(display("canister manifest not found: {path}"))]
     CanisterNotFound { path: String },
 
-    #[snafu(display("failed to load canister manifest: {source}"))]
-    CanisterLoad { source: ReadFileError },
-
-    #[snafu(display("failed to parse canister manifest: {source}"))]
+    #[snafu(transparent)]
     CanisterParse { source: CanisterManifestError },
+
+    #[snafu(transparent)]
+    ReadFile { source: ReadFileError },
 }

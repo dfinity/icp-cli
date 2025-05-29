@@ -1,4 +1,9 @@
-use std::{collections::HashMap, io::ErrorKind, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use ic_agent::{
     Identity,
@@ -9,7 +14,7 @@ use icp_fs::fs::{self, CreateDirAllError, WriteFileError};
 use itertools::Itertools;
 use pem::Pem;
 use pkcs8::{
-    DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo,
+    DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
     der::pem::PemLabel, pkcs5::pbes2::Parameters,
 };
 use rand::RngCore;
@@ -105,44 +110,64 @@ pub fn load_identity(
         .context(NoSuchIdentitySnafu { name })?;
     match identity {
         IdentitySpec::Pem { format, algorithm } => {
-            let pem_path = key_pem_path(dirs, name);
-            let pem = fs::read_to_string(&pem_path)?;
-            let doc = pem
-                .parse::<Pem>()
-                .context(ParsePemSnafu { path: &pem_path })?;
-            match format {
-                PemFormat::Pbes2 => {
-                    assert!(
-                        doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
-                        "internal error: wrong identity format found"
-                    );
-                    let password = password_func()
-                        .map_err(|message| LoadIdentityError::GetPasswordError { message })?;
-                    match algorithm {
-                        IdentityKeyAlgorithm::Secp256k1 => {
-                            let key = k256::SecretKey::from_pkcs8_encrypted_der(
-                                doc.contents(),
-                                &password,
-                            )
-                            .context(ParseKeySnafu { path: &pem_path })?;
-                            Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
-                        }
-                    }
-                }
-                PemFormat::Plaintext => {
-                    assert!(
-                        doc.tag() == PrivateKeyInfo::PEM_LABEL,
-                        "internal error: wrong identity format found"
-                    );
-                    match algorithm {
-                        IdentityKeyAlgorithm::Secp256k1 => {
-                            let key = k256::SecretKey::from_pkcs8_der(doc.contents())
-                                .context(ParseKeySnafu { path: &pem_path })?;
-                            Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
-                        }
-                    }
-                }
-            }
+            load_pem_identity(dirs, name, format, algorithm, password_func)
+        }
+    }
+}
+
+fn load_pem_identity(
+    dirs: &IcpCliDirs,
+    name: &str,
+    format: &PemFormat,
+    algorithm: &IdentityKeyAlgorithm,
+    password_func: impl FnOnce() -> Result<String, String>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let pem_path = key_pem_path(dirs, name);
+    let pem = fs::read_to_string(&pem_path)?;
+    let doc = pem
+        .parse::<Pem>()
+        .context(ParsePemSnafu { path: &pem_path })?;
+    match format {
+        PemFormat::Pbes2 => load_pbes2_identity(&doc, algorithm, password_func, &pem_path),
+        PemFormat::Plaintext => load_plaintext_identity(&doc, algorithm, &pem_path),
+    }
+}
+
+fn load_pbes2_identity(
+    doc: &Pem,
+    algorithm: &IdentityKeyAlgorithm,
+    password_func: impl FnOnce() -> Result<String, String>,
+    path: &Path,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    assert!(
+        doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
+        "internal error: wrong identity format found"
+    );
+    let password =
+        password_func().map_err(|message| LoadIdentityError::GetPasswordError { message })?;
+    match algorithm {
+        IdentityKeyAlgorithm::Secp256k1 => {
+            let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &password)
+                .context(ParseKeySnafu { path })?;
+            Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
+        }
+    }
+}
+
+fn load_plaintext_identity(
+    doc: &Pem,
+    algorithm: &IdentityKeyAlgorithm,
+    path: &Path,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    assert!(
+        doc.tag() == PrivateKeyInfo::PEM_LABEL,
+        "internal error: wrong identity format found"
+    );
+    match algorithm {
+        IdentityKeyAlgorithm::Secp256k1 => {
+            let key =
+                k256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
+            Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
     }
 }
@@ -230,26 +255,7 @@ pub fn create_identity(
         CreateFormat::Plaintext => doc
             .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
             .expect("infallible PKI encoding"),
-        CreateFormat::Pbes2 { password } => {
-            let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
-            let mut salt = [0; 16];
-            let mut iv = [0; 16];
-            let mut rng = rand::rng();
-            rng.fill_bytes(&mut salt);
-            rng.fill_bytes(&mut iv);
-            pki.encrypt_with_params(
-                Parameters::scrypt_aes256cbc(
-                    Params::new(17, 8, 1, 32).expect("valid scrypt params"),
-                    &salt,
-                    &iv,
-                )
-                .expect("valid pbes2 params"),
-                password,
-            )
-            .expect("infallible PKI encryption")
-            .to_pem(EncryptedPrivateKeyInfo::PEM_LABEL, Default::default())
-            .expect("infallible EPKI encoding")
-        }
+        CreateFormat::Pbes2 { password } => make_pkcs5_encrypted_pem(&doc, &password),
     };
     let pem_path = key_pem_path(dirs, name);
     let parent = pem_path.parent().unwrap();
@@ -258,6 +264,29 @@ pub fn create_identity(
     identity_list.identities.insert(name.to_string(), spec);
     write_identity_list(dirs, &identity_list)?;
     Ok(())
+}
+
+fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
+    let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
+    let mut salt = [0; 16];
+    let mut iv = [0; 16];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut salt);
+    rng.fill_bytes(&mut iv);
+    let encrypted_doc = pki
+        .encrypt_with_params(
+            Parameters::scrypt_aes256cbc(
+                Params::new(17, 8, 1, 32).expect("valid scrypt params"),
+                &salt,
+                &iv,
+            )
+            .expect("valid pbes2 params"),
+            password,
+        )
+        .expect("infallible PKI encryption");
+    encrypted_doc
+        .to_pem(EncryptedPrivateKeyInfo::PEM_LABEL, Default::default())
+        .expect("infallible EPKI encoding")
 }
 
 pub fn load_identity_in_context(

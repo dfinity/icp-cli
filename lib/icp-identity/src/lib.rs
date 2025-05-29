@@ -35,6 +35,9 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to read password: {message}"))]
     GetPasswordError { message: String },
+
+    #[snafu(display("file {} was modified by an incompatible new version of icp-cli", path.display()))]
+    BadVersion { path: PathBuf },
 }
 
 #[derive(Debug, Snafu)]

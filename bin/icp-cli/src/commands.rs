@@ -14,8 +14,8 @@ pub struct Cmd {
 
 #[derive(Subcommand, Debug)]
 pub enum Subcmd {
-    Network(network::NetworkCmd),
     Identity(identity::IdentityCmd),
+    Network(network::NetworkCmd),
 }
 
 pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
@@ -29,7 +29,7 @@ pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
 #[derive(Debug, Snafu)]
 pub enum DispatchError {
     #[snafu(transparent)]
-    Network { source: NetworkCommandError },
-    #[snafu(transparent)]
     Identity { source: IdentityCommandError },
+    #[snafu(transparent)]
+    Network { source: NetworkCommandError },
 }

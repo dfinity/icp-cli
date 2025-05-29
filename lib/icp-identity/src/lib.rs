@@ -11,7 +11,6 @@ use ic_agent::{
 };
 use icp_dirs::IcpCliDirs;
 use icp_fs::fs::{self, CreateDirAllError, WriteFileError};
-use itertools::Itertools;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -35,6 +34,7 @@ pub enum IdentitySpec {
         format: PemFormat,
         algorithm: IdentityKeyAlgorithm,
     },
+    Anonymous,
     // Keyring,
 }
 
@@ -58,11 +58,12 @@ pub struct IdentityList {
     pub identities: HashMap<String, IdentitySpec>,
 }
 
-impl IdentityList {
-    pub fn to_valid_identity_names(&self) -> Vec<String> {
-        let mut names = self.identities.keys().cloned().collect_vec();
-        names.extend(special_identities());
-        names
+impl Default for IdentityList {
+    fn default() -> Self {
+        Self {
+            v: 1,
+            identities: HashMap::from([("anonymous".to_string(), IdentitySpec::Anonymous)]),
+        }
     }
 }
 
@@ -80,10 +81,7 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
             path: &id_list_file,
         })?,
         Err(e) if e.source.kind() == ErrorKind::NotFound => {
-            let empty_list = IdentityList {
-                v: 1,
-                identities: HashMap::new(),
-            };
+            let empty_list = IdentityList::default();
             write_identity_list(dirs, &empty_list).context(WriteDefaultsSnafu)?;
             empty_list
         }
@@ -101,9 +99,6 @@ pub fn load_identity(
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     // todo support p256, ed25519
-    if name == "anonymous" {
-        return Ok(Arc::new(AnonymousIdentity));
-    }
     let identity = list
         .identities
         .get(name)
@@ -112,6 +107,7 @@ pub fn load_identity(
         IdentitySpec::Pem { format, algorithm } => {
             load_pem_identity(dirs, name, format, algorithm, password_func)
         }
+        IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
 }
 
@@ -359,8 +355,4 @@ pub fn identity_list_path(dirs: &IcpCliDirs) -> PathBuf {
 
 pub fn key_pem_path(dirs: &IcpCliDirs, name: &str) -> PathBuf {
     dirs.identity_dir().join(format!("keys/{name}.pem"))
-}
-
-pub fn special_identities() -> Vec<String> {
-    vec!["anonymous".to_string()]
 }

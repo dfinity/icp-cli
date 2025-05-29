@@ -10,6 +10,7 @@ use tempfile::TempDir;
 pub struct TestEnv {
     home_dir: TempDir,
     bin_dir: PathBuf,
+    asset_dir: PathBuf,
     dfx_path: Option<PathBuf>,
     os_path: OsString,
 }
@@ -18,7 +19,9 @@ impl TestEnv {
     pub fn new() -> Self {
         let home_dir = tempfile::tempdir().expect("failed to create temp home dir");
         let bin_dir = home_dir.path().join("bin");
+        let asset_dir = home_dir.path().join("share");
         fs::create_dir(&bin_dir).expect("failed to create bin dir");
+        fs::create_dir(&asset_dir).expect("failed to create asset dir");
         let os_path = Self::build_os_path(&bin_dir);
         eprintln!(
             "Test environment home directory: {}",
@@ -28,6 +31,7 @@ impl TestEnv {
         Self {
             home_dir,
             bin_dir,
+            asset_dir,
             dfx_path: None,
             os_path,
         }
@@ -109,5 +113,12 @@ impl TestEnv {
 
     pub fn pkg_dir(&self) -> PathBuf {
         env!("CARGO_MANIFEST_DIR").into()
+    }
+
+    pub fn make_asset(&self, name: &str) -> PathBuf {
+        let target = self.asset_dir.join(name);
+        fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
+            .expect("failed to copy asset");
+        target
     }
 }

@@ -57,10 +57,11 @@ fn identity_import_seed() {
 
 #[test]
 fn identity_import_pem() {
+    // from plaintext
     let env = TestEnv::new();
     env.icp()
         .args(["identity", "import", "alice", "--from-pem"])
-        .arg(env.pkg_dir().join("tests/decrypted.pem"))
+        .arg(env.make_asset("decrypted.pem"))
         .assert()
         .success();
     env.icp()
@@ -68,18 +69,27 @@ fn identity_import_pem() {
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+
+    env.icp()
+        .args(["identity", "import", "bob", "--from-pem"])
+        .arg(env.make_asset("missing_params.pem"))
+        .assert()
+        .failure()
+        .stderr(contains("missing field `parameters`"));
+
+    // from encrypted
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(b"swordfish").unwrap();
     let path = file.into_temp_path();
     env.icp()
-        .args(["identity", "import", "bob", "--from-pem"])
-        .arg(env.pkg_dir().join("tests/encrypted.pem"))
+        .args(["identity", "import", "chlöe", "--from-pem"])
+        .arg(env.make_asset("encrypted.pem"))
         .arg("--decryption-password-from-file")
         .arg(&path)
         .assert()
         .success();
     env.icp()
-        .args(["identity", "principal", "--identity", "bob"])
+        .args(["identity", "principal", "--identity", "chlöe"])
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());

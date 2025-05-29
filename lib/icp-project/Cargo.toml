@@ -1,0 +1,11 @@
+[package]
+name = "icp-project"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+icp-canister = { path = "../icp-canister" }
+icp-network = { path = "../icp-network" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+snafu = { workspace = true }

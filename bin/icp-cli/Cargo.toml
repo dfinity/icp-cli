@@ -10,8 +10,10 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.35", features = ["derive"] }
-icp-network = { path = "../../lib/icp-network" }
+icp-canister = { path = "../../lib/icp-canister" }
 icp-fs = { path = "../../lib/icp-fs" }
+icp-network = { path = "../../lib/icp-network" }
+icp-project = { path = "../../lib/icp-project" }
 snafu = { workspace = true }
 tokio = { workspace = true }
 

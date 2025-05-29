@@ -1,9 +1,11 @@
 [workspace]
 members = [
     "bin/icp-cli",
+    "lib/icp-canister",
+    "lib/icp-fs",
     "lib/icp-identity",
     "lib/icp-network",
-    "lib/icp-fs"
+    "lib/icp-project",
 ]
 
 resolver = "3"

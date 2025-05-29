@@ -1196,13 +1196,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp-canister"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "snafu",
+]
+
+[[package]]
 name = "icp-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "clap",
+ "icp-canister",
  "icp-fs",
  "icp-network",
+ "icp-project",
  "predicates",
  "reqwest",
  "snafu",
@@ -1240,6 +1251,17 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "icp-project"
+version = "0.1.0"
+dependencies = [
+ "icp-canister",
+ "icp-network",
+ "serde",
+ "serde_json",
+ "snafu",
 ]
 
 [[package]]

@@ -1,0 +1,3 @@
+struct Manifest {
+    name: String,
+}

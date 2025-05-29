@@ -50,6 +50,7 @@ pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError>
     } else if cmd.read_seed_phrase {
         let phrase = Password::new()
             .with_prompt("Enter seed phrase")
+            .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
         import_from_seed_phrase(env, &cmd.name, &phrase)?;

@@ -1,15 +1,15 @@
 use crate::RunNetworkError::NoPocketIcPath;
 use crate::config::model::managed::ManagedNetworkModel;
 use crate::config::model::network_descriptor::NetworkDescriptorModel;
+use crate::directory::OpenLockFileError;
 use crate::managed::pocketic::admin::{
     CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
 };
 use crate::managed::pocketic::instance::PocketIcInstance;
 use crate::managed::pocketic::native::spawn_pocketic;
 use crate::managed::run::InitializePocketicError::NoRootKey;
-use crate::status;
 use crate::structure::NetworkDirectoryStructure;
-use fd_lock::RwLock;
+use crate::{NetworkDirectory, status};
 use icp_fs::fs::{
     CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
     remove_file,
@@ -19,7 +19,7 @@ use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
 use std::env::var_os;
-use std::fs::{OpenOptions, read_to_string};
+use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::Duration;
@@ -31,27 +31,18 @@ use uuid::Uuid;
 
 pub async fn run_network(
     config: ManagedNetworkModel,
-    nds: NetworkDirectoryStructure,
+    nd: NetworkDirectory,
 ) -> Result<(), RunNetworkError> {
     let pocketic_path = PathBuf::from(var_os("ICP_POCKET_IC_PATH").ok_or(NoPocketIcPath)?);
 
-    create_dir_all(nds.network_root())?;
+    nd.ensure_exists()?;
 
-    let mut file = RwLock::new(
-        OpenOptions::new()
-            .create(true)
-            .write(true)
-            .read(true)
-            .truncate(true)
-            .open(nds.lock_path())
-            .map_err(|source| RunNetworkError::OpenLockFile { source })?,
-    );
+    let mut file = nd.open_lock_file()?;
     let _guard = file
         .try_write()
         .map_err(|_| RunNetworkError::AlreadyRunningThisProject)?;
-    eprintln!("Holding lock on {}", nds.lock_path().display());
 
-    run_pocketic(&pocketic_path, config, nds).await?;
+    run_pocketic(&pocketic_path, config, nd.structure()).await?;
     Ok(())
 }
 
@@ -66,17 +57,17 @@ pub enum RunNetworkError {
     #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
     NoPocketIcPath,
 
-    #[snafu(display("failed to open lock file"))]
-    OpenLockFile { source: std::io::Error },
+    #[snafu(transparent)]
+    OpenLockFile { source: OpenLockFileError },
 
     #[snafu(transparent)]
-    RunPocketIcError { source: RunPocketIcError },
+    RunPocketIc { source: RunPocketIcError },
 }
 
 async fn run_pocketic(
     pocketic_path: &Path,
     _config: ManagedNetworkModel,
-    nds: NetworkDirectoryStructure,
+    nds: &NetworkDirectoryStructure,
 ) -> Result<(), RunPocketIcError> {
     eprintln!("PocketIC path: {}", pocketic_path.display());
 

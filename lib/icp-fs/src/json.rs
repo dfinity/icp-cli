@@ -36,7 +36,11 @@ pub enum SaveJsonFileError {
     Write { source: WriteFileError },
 }
 
-pub fn save_json_file<T: Serialize>(path: &Path, value: &T) -> Result<(), SaveJsonFileError> {
+pub fn save_json_file<T: Serialize>(
+    path: impl AsRef<Path>,
+    value: &T,
+) -> Result<(), SaveJsonFileError> {
+    let path = path.as_ref();
     let content = serde_json::to_string_pretty(&value).context(SerializeSnafu { path })?;
     crate::fs::write(path, content)?;
     Ok(())

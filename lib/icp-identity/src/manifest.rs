@@ -14,8 +14,7 @@ pub fn write_identity_defaults(
     defaults: &IdentityDefaults,
 ) -> Result<(), WriteIdentityError> {
     let defaults_path = ensure_identity_defaults_path(dirs)?;
-    let json = serde_json::to_string(defaults).unwrap();
-    fs::write(&defaults_path, json.as_bytes())?;
+    json::save_json_file(&defaults_path, defaults)?;
     Ok(())
 }
 
@@ -24,8 +23,7 @@ pub fn write_identity_list(
     list: &IdentityList,
 ) -> Result<(), WriteIdentityError> {
     let defaults_path = ensure_identity_list_path(dirs)?;
-    let json = serde_json::to_string(list).unwrap();
-    fs::write(&defaults_path, json.as_bytes())?;
+    json::save_json_file(&defaults_path, list)?;
     Ok(())
 }
 

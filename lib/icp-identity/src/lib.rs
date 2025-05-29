@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use icp_fs::fs;
+use icp_fs::{fs, json};
 
 use snafu::Snafu;
 
@@ -47,6 +47,9 @@ pub enum LoadIdentityError {
 pub enum WriteIdentityError {
     #[snafu(transparent)]
     WriteFileError { source: fs::WriteFileError },
+
+    #[snafu(transparent)]
+    WriteJsonError { source: json::SaveJsonFileError },
 
     #[snafu(transparent)]
     CreateDirectoryError { source: fs::CreateDirAllError },

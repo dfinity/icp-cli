@@ -26,10 +26,10 @@ impl ProjectManifest {
 
         for pattern in pm.canisters {
             let pattern = pattern.to_str().context(InvalidPathUtf8Snafu)?;
-            let matches = glob::glob(pattern).context(GlobPatternSnafu)?;
+            let matches = glob::glob(pattern)?;
 
-            for c in matches {
-                let path = c.context(GlobWalkSnafu)?;
+            for path in matches {
+                let path = path?;
 
                 // Skip non-canister directories
                 if !path.join("canister.yaml").exists() {
@@ -54,9 +54,9 @@ pub enum ProjectManifestError {
     #[snafu(display("invalid UTF-8 in canister path"))]
     InvalidPathUtf8,
 
-    #[snafu(display("invalid glob pattern in manifest: {}", source))]
+    #[snafu(transparent)]
     GlobPattern { source: glob::PatternError },
 
-    #[snafu(display("failed while reading glob matches: {}", source))]
+    #[snafu(transparent)]
     GlobWalk { source: glob::GlobError },
 }

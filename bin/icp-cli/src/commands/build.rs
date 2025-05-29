@@ -1,6 +1,6 @@
 use clap::Parser;
 use icp_canister::{CanisterManifest, CanisterManifestError};
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 
 use icp_fs::fs::{ReadFileError, read};
 use icp_project::{ProjectManifest, ProjectManifestError};

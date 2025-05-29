@@ -1,6 +1,9 @@
+use std::path::{Path, PathBuf};
+
 use serde::Deserialize;
-use snafu::{OptionExt, ResultExt, Snafu};
-use std::path::PathBuf;
+use snafu::{OptionExt, Snafu, ensure};
+
+use icp_fs::fs::{ReadFileError, read};
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
@@ -18,8 +21,17 @@ pub struct ProjectManifest {
 }
 
 impl ProjectManifest {
-    pub fn from_bytes<B: AsRef<[u8]>>(bytes: B) -> Result<Self, ProjectManifestError> {
-        let mut pm: ProjectManifest = serde_yaml::from_slice(bytes.as_ref()).context(ParseSnafu)?;
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ProjectManifestError> {
+        let path = path.as_ref();
+
+        // Check existence
+        ensure!(path.exists(), NotFoundSnafu { path });
+
+        // Load
+        let bytes = read(path)?;
+
+        // Parse
+        let mut pm: ProjectManifest = serde_yaml::from_slice(bytes.as_ref())?;
 
         // Project canisters
         let mut cs = Vec::new();
@@ -48,7 +60,10 @@ impl ProjectManifest {
 
 #[derive(Debug, Snafu)]
 pub enum ProjectManifestError {
-    #[snafu(display("failed to parse project manifest: {}", source))]
+    #[snafu(display("project manifest not found: {path:?}"))]
+    NotFound { path: PathBuf },
+
+    #[snafu(transparent)]
     Parse { source: serde_yaml::Error },
 
     #[snafu(display("invalid UTF-8 in canister path"))]
@@ -59,4 +74,7 @@ pub enum ProjectManifestError {
 
     #[snafu(transparent)]
     GlobWalk { source: glob::GlobError },
+
+    #[snafu(transparent)]
+    ReadFile { source: ReadFileError },
 }

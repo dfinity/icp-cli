@@ -24,16 +24,16 @@ use snafu::{OptionExt, ResultExt, Snafu, ensure};
 pub struct ImportCmd {
     name: String,
 
-    #[arg(long, group = "import-from")]
+    #[arg(long, value_name = "FILE", group = "import-from")]
     from_pem: Option<Utf8PathBuf>,
 
     #[arg(long, group = "import-from")]
     read_seed_phrase: bool,
 
-    #[arg(long, group = "import-from")]
+    #[arg(long, value_name = "FILE", group = "import-from")]
     from_seed_file: Option<Utf8PathBuf>,
 
-    #[arg(long, requires = "from_pem")]
+    #[arg(long, value_name = "FILE", requires = "from_pem")]
     decryption_password_from_file: Option<Utf8PathBuf>,
 }
 

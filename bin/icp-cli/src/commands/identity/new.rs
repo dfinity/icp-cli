@@ -14,7 +14,7 @@ use snafu::{ResultExt, Snafu};
 #[derive(Debug, Parser)]
 pub struct NewCmd {
     name: String,
-    #[arg(long)]
+    #[arg(long, value_name = "FILE")]
     output_seed: Option<Utf8PathBuf>,
 }
 

@@ -10,6 +10,7 @@ use icp_identity::{CreateFormat, CreateIdentityError, IdentityKey};
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
 use parse_display::Display;
+use pem::Pem;
 use pkcs8::{
     AssociatedOid, EncryptedPrivateKeyInfo, ObjectIdentifier, PrivateKeyInfo, SecretDocument,
     der::{Decode, pem::PemLabel},
@@ -110,92 +111,15 @@ fn import_from_pem(
             }
         }
     };
-    let decrypted_doc: SecretDocument;
     let key = match section.tag() {
         PrivateKeyInfo::PEM_LABEL | EncryptedPrivateKeyInfo::PEM_LABEL => {
-            let pki = if section.tag() == PrivateKeyInfo::PEM_LABEL {
-                PrivateKeyInfo::from_der(section.contents()).context(BadPemContentSnafu { path })?
-            } else {
-                let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
-                    .context(BadPemContentSnafu { path })?;
-                let password = if let Some(path) = decryption_password_file {
-                    fs::read_to_string(path)?
-                } else {
-                    Password::new()
-                        .with_prompt(format!("Enter the password to decrypt {path}"))
-                        .interact()
-                        .context(PasswordTermReadSnafu)?
-                };
-                decrypted_doc = epki
-                    .decrypt(&password)
-                    .context(DecryptionFailedSnafu { path })?;
-                decrypted_doc
-                    .decode_msg::<PrivateKeyInfo>()
-                    .context(BadPemContentSnafu { path })?
-            };
-            ensure!(
-                pki.algorithm.oid == elliptic_curve::ALGORITHM_OID,
-                UnsupportedAlgorithmSnafu {
-                    found: pki.algorithm.oid,
-                    expected: vec![elliptic_curve::ALGORITHM_OID],
-                    path,
-                },
-            );
-            let curve = pki
-                .algorithm
-                .parameters_oid()
-                .ok()
-                .context(BadPemKeyStructureSnafu {
-                    info: "missing field `parameters`",
-                    path,
-                })?;
-            ensure!(
-                curve == Secp256k1::OID,
-                UnsupportedAlgorithmSnafu {
-                    found: curve,
-                    expected: vec![Secp256k1::OID],
-                    path
-                }
-            );
-            SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?
+            import_pkcs8(section, path, decryption_password_file)?
         }
-        EcPrivateKey::PEM_LABEL => {
-            let epk =
-                EcPrivateKey::from_der(section.contents()).context(BadPemContentSnafu { path })?;
-            let params = match epk.parameters {
-                Some(params) => params,
-                None => {
-                    if let Some(param_section) =
-                        sections.iter().find(|s| s.tag() == "EC PARAMETERS")
-                    {
-                        EcParameters::from_der(param_section.contents())
-                            .context(BadPemContentSnafu { path })?
-                    } else {
-                        BadPemKeyStructureSnafu {
-                            info: "missing field `parameters`",
-                            path,
-                        }
-                        .fail()?
-                    }
-                }
-            };
-            let Some(curve) = params.named_curve() else {
-                return BadPemKeyStructureSnafu {
-                    info: "missing field `namedCurve`",
-                    path,
-                }
-                .fail();
-            };
-            ensure!(
-                curve == Secp256k1::OID,
-                UnsupportedAlgorithmSnafu {
-                    found: curve,
-                    expected: vec![Secp256k1::OID],
-                    path
-                },
-            );
-            SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?
-        }
+        EcPrivateKey::PEM_LABEL => import_sec1(
+            section,
+            sections.iter().find(|s| s.tag() == "EC PARAMETERS"),
+            path,
+        )?,
         _ => unreachable!(),
     };
     icp_identity::create_identity(
@@ -205,6 +129,98 @@ fn import_from_pem(
         CreateFormat::Plaintext,
     )?;
     Ok(())
+}
+
+fn import_pkcs8(
+    section: &Pem,
+    path: &Utf8Path,
+    decryption_password_file: Option<&Utf8Path>,
+) -> Result<SecretKey, LoadKeyError> {
+    let decrypted_doc: SecretDocument;
+    let pki = if section.tag() == PrivateKeyInfo::PEM_LABEL {
+        PrivateKeyInfo::from_der(section.contents()).context(BadPemContentSnafu { path })?
+    } else {
+        let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
+            .context(BadPemContentSnafu { path })?;
+        let password = if let Some(path) = decryption_password_file {
+            fs::read_to_string(path)?
+        } else {
+            Password::new()
+                .with_prompt(format!("Enter the password to decrypt {path}"))
+                .interact()
+                .context(PasswordTermReadSnafu)?
+        };
+        decrypted_doc = epki
+            .decrypt(&password)
+            .context(DecryptionFailedSnafu { path })?;
+        decrypted_doc
+            .decode_msg::<PrivateKeyInfo>()
+            .context(BadPemContentSnafu { path })?
+    };
+    ensure!(
+        pki.algorithm.oid == elliptic_curve::ALGORITHM_OID,
+        UnsupportedAlgorithmSnafu {
+            found: pki.algorithm.oid,
+            expected: vec![elliptic_curve::ALGORITHM_OID],
+            path,
+        },
+    );
+    let curve = pki
+        .algorithm
+        .parameters_oid()
+        .ok()
+        .context(BadPemKeyStructureSnafu {
+            info: "missing field `parameters`",
+            path,
+        })?;
+    ensure!(
+        curve == Secp256k1::OID,
+        UnsupportedAlgorithmSnafu {
+            found: curve,
+            expected: vec![Secp256k1::OID],
+            path
+        }
+    );
+    SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })
+}
+
+fn import_sec1(
+    section: &Pem,
+    param_section: Option<&Pem>,
+    path: &Utf8Path,
+) -> Result<SecretKey, LoadKeyError> {
+    let epk = EcPrivateKey::from_der(section.contents()).context(BadPemContentSnafu { path })?;
+    let params = match epk.parameters {
+        Some(params) => params,
+        None => {
+            if let Some(param_section) = param_section {
+                EcParameters::from_der(param_section.contents())
+                    .context(BadPemContentSnafu { path })?
+            } else {
+                BadPemKeyStructureSnafu {
+                    info: "missing field `parameters`",
+                    path,
+                }
+                .fail()?
+            }
+        }
+    };
+    let Some(curve) = params.named_curve() else {
+        return BadPemKeyStructureSnafu {
+            info: "missing field `namedCurve`",
+            path,
+        }
+        .fail();
+    };
+    ensure!(
+        curve == Secp256k1::OID,
+        UnsupportedAlgorithmSnafu {
+            found: curve,
+            expected: vec![Secp256k1::OID],
+            path
+        },
+    );
+    SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })
 }
 
 fn import_from_seed_phrase(env: &Env, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {

@@ -1,16 +1,11 @@
-use std::{
-    collections::HashMap,
-    fs,
-    io::{self, ErrorKind},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, io::ErrorKind, path::PathBuf, sync::Arc};
 
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use icp_dirs::IcpCliDirs;
+use icp_fs::fs::{self, CreateDirAllError, WriteFileError};
 use itertools::Itertools;
 use pem::Pem;
 use pkcs8::{
@@ -79,7 +74,7 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
         Ok(id_list) => serde_json::from_str(&id_list).context(ParseJsonSnafu {
             path: &id_list_file,
         })?,
-        Err(e) if e.kind() == ErrorKind::NotFound => {
+        Err(e) if e.source.kind() == ErrorKind::NotFound => {
             let empty_list = IdentityList {
                 v: 1,
                 identities: HashMap::new(),
@@ -88,9 +83,7 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
             empty_list
         }
         Err(e) => {
-            return Err(e).context(ReadFileSnafu {
-                path: &id_list_file,
-            });
+            return Err(e.into());
         }
     };
     Ok(list)
@@ -113,7 +106,7 @@ pub fn load_identity(
     match identity {
         IdentitySpec::Pem { format, algorithm } => {
             let pem_path = key_pem_path(dirs, name);
-            let pem = fs::read_to_string(&pem_path).context(ReadFileSnafu { path: &pem_path })?;
+            let pem = fs::read_to_string(&pem_path)?;
             let doc = pem
                 .parse::<Pem>()
                 .context(ParsePemSnafu { path: &pem_path })?;
@@ -160,7 +153,7 @@ pub fn load_identity_defaults(dirs: &IcpCliDirs) -> Result<IdentityDefaults, Loa
         Ok(id_defaults) => Ok(serde_json::from_str(&id_defaults).context(ParseJsonSnafu {
             path: &id_defaults_path,
         })?),
-        Err(e) if e.kind() == ErrorKind::NotFound => {
+        Err(e) if e.source.kind() == ErrorKind::NotFound => {
             let empty_defaults = IdentityDefaults {
                 v: 1,
                 default: "anonymous".to_string(),
@@ -168,9 +161,7 @@ pub fn load_identity_defaults(dirs: &IcpCliDirs) -> Result<IdentityDefaults, Loa
             write_identity_defaults(dirs, &empty_defaults).context(WriteDefaultsSnafu)?;
             Ok(empty_defaults)
         }
-        Err(e) => Err(e).context(ReadFileSnafu {
-            path: id_defaults_path,
-        }),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -180,11 +171,9 @@ pub fn write_identity_defaults(
 ) -> Result<(), WriteIdentityError> {
     let defaults_path = identity_defaults_path(dirs);
     let parent = defaults_path.parent().unwrap();
-    fs::create_dir_all(parent).context(CreateDirectorySnafu { path: parent })?;
+    fs::create_dir_all(parent)?;
     let json = serde_json::to_string(defaults).unwrap();
-    fs::write(&defaults_path, json.as_bytes()).context(WriteFileSnafu {
-        path: &defaults_path,
-    })?;
+    fs::write(&defaults_path, json.as_bytes())?;
     Ok(())
 }
 
@@ -194,11 +183,9 @@ pub fn write_identity_list(
 ) -> Result<(), WriteIdentityError> {
     let defaults_path = identity_list_path(dirs);
     let parent = defaults_path.parent().unwrap();
-    fs::create_dir_all(parent).context(CreateDirectorySnafu { path: parent })?;
+    fs::create_dir_all(parent)?;
     let json = serde_json::to_string(list).unwrap();
-    fs::write(&defaults_path, json.as_bytes()).context(WriteFileSnafu {
-        path: &defaults_path,
-    })?;
+    fs::write(&defaults_path, json.as_bytes())?;
     Ok(())
 }
 
@@ -223,15 +210,13 @@ pub fn create_identity(
     let algorithm = match key {
         IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
     };
-    let spec = match format {
-        CreateFormat::Plaintext => IdentitySpec::Pem {
-            format: PemFormat::Plaintext,
-            algorithm,
-        },
-        CreateFormat::Pbes2 { .. } => IdentitySpec::Pem {
-            format: PemFormat::Pbes2,
-            algorithm,
-        },
+    let pem_format = match format {
+        CreateFormat::Plaintext => PemFormat::Plaintext,
+        CreateFormat::Pbes2 { .. } => PemFormat::Pbes2,
+    };
+    let spec = IdentitySpec::Pem {
+        format: pem_format,
+        algorithm,
     };
     let mut identity_list = load_identity_list(dirs)?;
     ensure!(
@@ -268,8 +253,8 @@ pub fn create_identity(
     };
     let pem_path = key_pem_path(dirs, name);
     let parent = pem_path.parent().unwrap();
-    fs::create_dir_all(parent).context(CreateDirectorySnafu { path: parent })?;
-    fs::write(&pem_path, pem.as_bytes()).context(WriteFileSnafu { path: parent })?;
+    fs::create_dir_all(parent).map_err(WriteIdentityError::from)?;
+    fs::write(&pem_path, pem.as_bytes()).map_err(WriteIdentityError::from)?;
     identity_list.identities.insert(name.to_string(), spec);
     write_identity_list(dirs, &identity_list)?;
     Ok(())
@@ -288,40 +273,49 @@ pub fn load_identity_in_context(
 pub enum LoadIdentityError {
     #[snafu(display("failed to write configuration defaults"))]
     WriteDefaultsError { source: WriteIdentityError },
-    #[snafu(display("failed to read file `{}`", path.display()))]
-    ReadFileError { path: PathBuf, source: io::Error },
+
+    #[snafu(transparent)]
+    ReadFileError { source: fs::ReadFileError },
+
     #[snafu(display("failed to parse json at `{}`", path.display()))]
     ParseJsonError {
         path: PathBuf,
         source: serde_json::Error,
     },
+
     #[snafu(display("failed to load PEM file `{}`: failed to parse", path.display()))]
     ParsePemError {
         path: PathBuf,
         source: pem::PemError,
     },
+
     #[snafu(display("failed to load PEM file `{}`: failed to decipher key", path.display()))]
     ParseKeyError { path: PathBuf, source: pkcs8::Error },
+
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
+
     #[snafu(display("failed to read password: {message}"))]
     GetPasswordError { message: String },
 }
 
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
-    #[snafu(display("failed to write to file `{}`", path.display()))]
-    WriteFileError { path: PathBuf, source: io::Error },
-    #[snafu(display("failed to create directory `{}`", path.display()))]
-    CreateDirectoryError { path: PathBuf, source: io::Error },
+    #[snafu(transparent)]
+    WriteFileError { source: WriteFileError },
+
+    #[snafu(transparent)]
+    CreateDirectoryError { source: CreateDirAllError },
 }
 
 #[derive(Debug, Snafu)]
 pub enum CreateIdentityError {
     #[snafu(transparent)]
     Load { source: LoadIdentityError },
+
     #[snafu(transparent)]
     Write { source: WriteIdentityError },
+
     #[snafu(display("identity `{name}` already exists"))]
     IdentityAlreadyExists { name: String },
 }

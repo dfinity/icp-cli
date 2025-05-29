@@ -9,6 +9,7 @@ ed25519-consensus.workspace = true
 elliptic-curve.workspace = true
 ic-agent.workspace = true
 icp-dirs.workspace = true
+icp-fs.workspace = true
 itertools.workspace = true
 k256.workspace = true
 p256.workspace = true

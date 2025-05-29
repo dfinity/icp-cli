@@ -4,12 +4,12 @@ use bip32::XPrv;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use camino::Utf8PathBuf;
 use clap::Parser;
+use icp_fs::fs;
 use icp_identity::{CreateFormat, CreateIdentityError, IdentityKey};
 use k256::SecretKey;
 use parse_display::Display;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
-use std::{fs, io};
 
 #[derive(Debug, Parser)]
 pub struct NewCmd {
@@ -31,8 +31,7 @@ pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityErr
         CreateFormat::Plaintext,
     )?;
     if let Some(out_file) = cmd.output_seed {
-        fs::write(&out_file, mnemonic.to_string().as_bytes())
-            .context(WriteSeedFileSnafu { path: &out_file })?;
+        fs::write(&out_file, mnemonic.to_string().as_bytes())?;
         Ok(NewIdentityMessage::WrittenToFile { out_file })
     } else {
         Ok(NewIdentityMessage::Created {
@@ -45,11 +44,8 @@ pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityErr
 pub enum NewIdentityError {
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },
-    #[snafu(display("failed to write seed phrase to `{path}`"))]
-    WriteSeedFileError {
-        path: Utf8PathBuf,
-        source: io::Error,
-    },
+    #[snafu(transparent)]
+    WriteSeedFileError { source: fs::WriteFileError },
     #[snafu(display("failed to derive IC key from wallet seed"))]
     DerivationError { source: bip32::Error },
 }

@@ -29,10 +29,12 @@ pub enum DefaultIdentityError {
     WriteDefaults {
         source: icp_identity::WriteIdentityError,
     },
+
     #[snafu(transparent)]
     LoadList {
         source: icp_identity::LoadIdentityError,
     },
+
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
 }

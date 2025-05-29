@@ -24,6 +24,11 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, ReadFileError> {
     std::fs::read(path).context(ReadFileSnafu { path })
 }
 
+pub fn read_to_string<P: AsRef<Path>>(path: P) -> Result<String, ReadFileError> {
+    let path = path.as_ref();
+    std::fs::read_to_string(path).context(ReadFileSnafu { path })
+}
+
 #[derive(Snafu, Debug)]
 #[snafu(display("failed to remove directory {} and contents", path.display()))]
 pub struct RemoveDirAllError {

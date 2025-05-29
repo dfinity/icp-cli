@@ -1,4 +1,5 @@
 use icp_network::structure::NetworkDirectoryStructure;
+use serde::Deserialize;
 use std::path::PathBuf;
 
 pub struct ProjectDirectoryStructure {
@@ -37,4 +38,17 @@ impl ProjectDirectoryStructure {
 
         NetworkDirectoryStructure::new(&network_root)
     }
+}
+
+/// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
+/// A project is a repository or directory grouping related canisters and network definitions.
+#[derive(Debug, Deserialize)]
+pub struct ProjectManifest {
+    /// List of canister manifests belonging to this project.
+    /// Supports glob patterns to specify multiple canister YAML files.
+    pub canisters: Vec<PathBuf>,
+
+    /// List of network definition files relevant to the project.
+    /// Supports glob patterns to reference multiple network config files.
+    pub networks: Vec<PathBuf>,
 }

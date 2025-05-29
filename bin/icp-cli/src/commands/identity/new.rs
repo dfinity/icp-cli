@@ -5,7 +5,10 @@ use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use icp_fs::fs;
-use icp_identity::{CreateFormat, CreateIdentityError, IdentityKey};
+use icp_identity::{
+    CreateIdentityError,
+    key::{CreateFormat, IdentityKey},
+};
 use k256::SecretKey;
 use parse_display::Display;
 use serde::Serialize;
@@ -24,7 +27,7 @@ pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityErr
     let seed = Seed::new(&mnemonic, "");
     let pk = XPrv::derive_from_path(seed.as_bytes(), &path).context(DerivationSnafu)?;
     let key = SecretKey::from(pk.private_key());
-    icp_identity::create_identity(
+    icp_identity::key::create_identity(
         env.dirs(),
         &cmd.name,
         IdentityKey::Secp256k1(key),

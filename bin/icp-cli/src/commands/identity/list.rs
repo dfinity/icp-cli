@@ -9,8 +9,8 @@ use std::fmt::{self, Display, Formatter};
 pub struct ListCmd;
 
 pub fn exec(env: &Env, _cmd: ListCmd) -> Result<ListKeysMessage, ListKeysError> {
-    let list = icp_identity::load_identity_list(env.dirs())?;
-    let defaults = icp_identity::load_identity_defaults(env.dirs())?;
+    let list = icp_identity::manifest::load_identity_list(env.dirs())?;
+    let defaults = icp_identity::manifest::load_identity_defaults(env.dirs())?;
     Ok(ListKeysMessage {
         identities: list.identities.into_keys().collect_vec(),
         default: defaults.default,

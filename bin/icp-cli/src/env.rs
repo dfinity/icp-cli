@@ -39,14 +39,14 @@ impl Env {
     }
     pub fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityError> {
         if let Some(identity) = &self.identity {
-            icp_identity::load_identity(
+            icp_identity::key::load_identity(
                 &self.dirs,
-                &icp_identity::load_identity_list(&self.dirs)?,
+                &icp_identity::manifest::load_identity_list(&self.dirs)?,
                 identity,
                 || todo!(),
             )
         } else {
-            icp_identity::load_identity_in_context(&self.dirs, || todo!())
+            icp_identity::key::load_identity_in_context(&self.dirs, || todo!())
         }
     }
     pub fn dirs(&self) -> &IcpCliDirs {

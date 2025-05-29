@@ -6,7 +6,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::{ArgGroup, Parser};
 use dialoguer::Password;
 use icp_fs::fs;
-use icp_identity::{CreateFormat, CreateIdentityError, IdentityKey};
+use icp_identity::{
+    CreateIdentityError,
+    key::{CreateFormat, IdentityKey},
+};
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
 use parse_display::Display;
@@ -122,7 +125,7 @@ fn import_from_pem(
         )?,
         _ => unreachable!(),
     };
-    icp_identity::create_identity(
+    icp_identity::key::create_identity(
         env.dirs(),
         name,
         IdentityKey::Secp256k1(key),
@@ -229,7 +232,7 @@ fn import_from_seed_phrase(env: &Env, name: &str, phrase: &str) -> Result<(), De
     let seed = Seed::new(&mnemonic, "");
     let pk = XPrv::derive_from_path(seed.as_bytes(), &path).context(DerivationSnafu)?;
     let key = SecretKey::from(pk.private_key());
-    icp_identity::create_identity(
+    icp_identity::key::create_identity(
         env.dirs(),
         name,
         IdentityKey::Secp256k1(key),

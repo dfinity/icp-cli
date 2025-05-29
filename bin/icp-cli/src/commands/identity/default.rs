@@ -10,14 +10,14 @@ pub struct DefaultCmd {
 }
 
 pub fn exec(env: &Env, cmd: DefaultCmd) -> Result<DefaultIdentityMessage, DefaultIdentityError> {
-    let list = icp_identity::load_identity_list(env.dirs())?;
+    let list = icp_identity::manifest::load_identity_list(env.dirs())?;
     ensure!(
         list.identities.contains_key(&cmd.name),
         NoSuchIdentitySnafu { name: &cmd.name }
     );
-    let mut defaults = icp_identity::load_identity_defaults(env.dirs())?;
+    let mut defaults = icp_identity::manifest::load_identity_defaults(env.dirs())?;
     defaults.default = cmd.name.clone();
-    icp_identity::write_identity_defaults(env.dirs(), &defaults)?;
+    icp_identity::manifest::write_identity_defaults(env.dirs(), &defaults)?;
     Ok(DefaultIdentityMessage {
         default: cmd.name.clone(),
     })

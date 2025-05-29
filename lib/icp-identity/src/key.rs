@@ -1,0 +1,193 @@
+use crate::{
+    CreateIdentityError, LoadIdentityError, WriteIdentityError,
+    manifest::{
+        IdentityKeyAlgorithm, IdentityList, IdentitySpec, PemFormat, load_identity_defaults,
+        load_identity_list, write_identity_list,
+    },
+    s_create::*,
+    s_load::*,
+};
+use ic_agent::{
+    Identity,
+    identity::{AnonymousIdentity, Secp256k1Identity},
+};
+use icp_dirs::IcpCliDirs;
+use icp_fs::fs;
+use pem::Pem;
+use pkcs8::{
+    DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
+    pkcs5::pbes2::Parameters,
+};
+use rand::RngCore;
+use scrypt::Params;
+use sec1::{der::Decode, pem::PemLabel};
+use snafu::{OptionExt, ResultExt, ensure};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use zeroize::Zeroizing;
+
+pub fn load_identity(
+    dirs: &IcpCliDirs,
+    list: &IdentityList,
+    name: &str,
+    password_func: impl FnOnce() -> Result<String, String>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    // todo support p256, ed25519
+    let identity = list
+        .identities
+        .get(name)
+        .context(NoSuchIdentitySnafu { name })?;
+    match identity {
+        IdentitySpec::Pem { format, algorithm } => {
+            load_pem_identity(dirs, name, format, algorithm, password_func)
+        }
+        IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
+    }
+}
+
+fn load_pem_identity(
+    dirs: &IcpCliDirs,
+    name: &str,
+    format: &PemFormat,
+    algorithm: &IdentityKeyAlgorithm,
+    password_func: impl FnOnce() -> Result<String, String>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let pem_path = key_pem_path(dirs, name);
+    let pem = fs::read_to_string(&pem_path)?;
+    let doc = pem
+        .parse::<Pem>()
+        .context(ParsePemSnafu { path: &pem_path })?;
+    match format {
+        PemFormat::Pbes2 => load_pbes2_identity(&doc, algorithm, password_func, &pem_path),
+        PemFormat::Plaintext => load_plaintext_identity(&doc, algorithm, &pem_path),
+    }
+}
+
+fn load_pbes2_identity(
+    doc: &Pem,
+    algorithm: &IdentityKeyAlgorithm,
+    password_func: impl FnOnce() -> Result<String, String>,
+    path: &Path,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    assert!(
+        doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
+        "internal error: wrong identity format found"
+    );
+    let password =
+        password_func().map_err(|message| LoadIdentityError::GetPasswordError { message })?;
+    match algorithm {
+        IdentityKeyAlgorithm::Secp256k1 => {
+            let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &password)
+                .context(ParseKeySnafu { path })?;
+            Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
+        }
+    }
+}
+
+fn load_plaintext_identity(
+    doc: &Pem,
+    algorithm: &IdentityKeyAlgorithm,
+    path: &Path,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    assert!(
+        doc.tag() == PrivateKeyInfo::PEM_LABEL,
+        "internal error: wrong identity format found"
+    );
+    match algorithm {
+        IdentityKeyAlgorithm::Secp256k1 => {
+            let key =
+                k256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
+            Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
+        }
+    }
+}
+
+pub fn key_pem_path(dirs: &IcpCliDirs, name: &str) -> PathBuf {
+    dirs.identity_dir().join(format!("keys/{name}.pem"))
+}
+
+pub fn load_identity_in_context(
+    dirs: &IcpCliDirs,
+    password_func: impl FnOnce() -> Result<String, String>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let defaults = load_identity_defaults(dirs)?;
+    let list = load_identity_list(dirs)?;
+    load_identity(dirs, &list, &defaults.default, password_func)
+}
+
+pub fn create_identity(
+    dirs: &IcpCliDirs,
+    name: &str,
+    key: IdentityKey,
+    format: CreateFormat,
+) -> Result<(), CreateIdentityError> {
+    let algorithm = match key {
+        IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
+    };
+    let pem_format = match format {
+        CreateFormat::Plaintext => PemFormat::Plaintext,
+        CreateFormat::Pbes2 { .. } => PemFormat::Pbes2,
+    };
+    let spec = IdentitySpec::Pem {
+        format: pem_format,
+        algorithm,
+    };
+    let mut identity_list = load_identity_list(dirs)?;
+    ensure!(
+        !identity_list.identities.contains_key(name),
+        IdentityAlreadyExistsSnafu { name }
+    );
+    let doc = match key {
+        IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
+    };
+    let pem = match format {
+        CreateFormat::Plaintext => doc
+            .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+            .expect("infallible PKI encoding"),
+        CreateFormat::Pbes2 { password } => make_pkcs5_encrypted_pem(&doc, &password),
+    };
+    let pem_path = key_pem_path(dirs, name);
+    let parent = pem_path.parent().unwrap();
+    fs::create_dir_all(parent).map_err(WriteIdentityError::from)?;
+    fs::write(&pem_path, pem.as_bytes()).map_err(WriteIdentityError::from)?;
+    identity_list.identities.insert(name.to_string(), spec);
+    write_identity_list(dirs, &identity_list)?;
+    Ok(())
+}
+
+fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
+    let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
+    let mut salt = [0; 16];
+    let mut iv = [0; 16];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut salt);
+    rng.fill_bytes(&mut iv);
+    let encrypted_doc = pki
+        .encrypt_with_params(
+            Parameters::scrypt_aes256cbc(
+                Params::new(17, 8, 1, 32).expect("valid scrypt params"),
+                &salt,
+                &iv,
+            )
+            .expect("valid pbes2 params"),
+            password,
+        )
+        .expect("infallible PKI encryption");
+    encrypted_doc
+        .to_pem(EncryptedPrivateKeyInfo::PEM_LABEL, Default::default())
+        .expect("infallible EPKI encoding")
+}
+
+#[derive(Debug, Clone)]
+pub enum IdentityKey {
+    Secp256k1(k256::SecretKey),
+}
+
+#[derive(Debug, Clone)]
+pub enum CreateFormat {
+    Plaintext,
+    Pbes2 { password: Zeroizing<String> },
+    // Keyring,
+}

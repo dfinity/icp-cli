@@ -104,7 +104,7 @@ async fn run_pocketic(
             pid: Some(child.id().unwrap()),
             root_key: instance.root_key,
         };
-        save_json_file(&nds.project_descriptor_path(), &nd)?;
+        save_json_file(nds.project_descriptor_path(), &nd)?;
         eprintln!("Press Ctrl-C to exit.");
         let _ = wait_for_shutdown(&mut child).await;
         Ok(())

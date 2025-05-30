@@ -5,18 +5,30 @@ use snafu::{OptionExt, ResultExt, Snafu, ensure};
 
 use icp_fs::fs::{ReadFileError, read};
 
+/// Provides the default glob pattern for locating canister manifests
+/// when the `canisters` field is not explicitly specified in the YAML.
+fn default_canisters() -> Vec<PathBuf> {
+    ["canisters/*"].iter().map(PathBuf::from).collect()
+}
+
+/// Provides the default glob pattern for locating network definition files
+/// when the `networks` field is not explicitly specified in the YAML.
+fn default_networks() -> Vec<PathBuf> {
+    ["networks/*"].iter().map(PathBuf::from).collect()
+}
+
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
 #[derive(Debug, Deserialize)]
 pub struct ProjectManifest {
     /// List of canister manifests belonging to this project.
     /// Supports glob patterns to specify multiple canister YAML files.
-    #[serde(default)]
+    #[serde(default = "default_canisters")]
     pub canisters: Vec<PathBuf>,
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    #[serde(default)]
+    #[serde(default = "default_networks")]
     pub networks: Vec<PathBuf>,
 }
 

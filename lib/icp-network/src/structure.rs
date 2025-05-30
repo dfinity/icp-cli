@@ -4,8 +4,6 @@ pub struct NetworkDirectoryStructure {
     pub network_root: PathBuf,
 }
 
-impl NetworkDirectoryStructure {}
-
 impl NetworkDirectoryStructure {
     pub fn new(network_root: &Path) -> Self {
         let network_root = network_root.to_path_buf();

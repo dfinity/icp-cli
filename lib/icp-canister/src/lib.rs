@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use snafu::{Snafu, ensure};
+use snafu::{ResultExt, Snafu, ensure};
 
 use icp_fs::fs::{ReadFileError, read};
 
@@ -90,7 +90,8 @@ impl CanisterManifest {
         let bytes = read(path)?;
 
         // Parse
-        let cm: CanisterManifest = serde_yaml::from_slice(bytes.as_ref())?;
+        let cm: CanisterManifest =
+            serde_yaml::from_slice(bytes.as_ref()).context(ParseSnafu { path })?;
 
         Ok(cm)
     }
@@ -98,11 +99,14 @@ impl CanisterManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadCanisterManifestError {
-    #[snafu(display("canister manifest not found: {path:?}"))]
+    #[snafu(display("canister manifest not found: {}", path.display()))]
     NotFound { path: PathBuf },
 
-    #[snafu(transparent)]
-    Parse { source: serde_yaml::Error },
+    #[snafu(display("failed to parse {}", path.display()))]
+    Parse {
+        source: serde_yaml::Error,
+        path: PathBuf,
+    },
 
     #[snafu(transparent)]
     ReadFile { source: ReadFileError },

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use snafu::{OptionExt, Snafu, ensure};
+use snafu::{OptionExt, ResultExt, Snafu, ensure};
 
 use icp_fs::fs::{ReadFileError, read};
 
@@ -31,14 +31,20 @@ impl ProjectManifest {
         let bytes = read(path)?;
 
         // Parse
-        let mut pm: ProjectManifest = serde_yaml::from_slice(bytes.as_ref())?;
+        let mut pm: ProjectManifest =
+            serde_yaml::from_slice(bytes.as_ref()).context(ParseSnafu { path })?;
 
         // Project canisters
         let mut cs = Vec::new();
 
         for pattern in pm.canisters {
-            let pattern = pattern.to_str().context(InvalidPathUtf8Snafu)?;
-            let matches = glob::glob(pattern)?;
+            let patcpy = pattern.clone();
+
+            let pattern = pattern
+                .to_str()
+                .context(InvalidPathUtf8Snafu { pattern: patcpy })?;
+
+            let matches = glob::glob(pattern).context(GlobPatternSnafu { pattern })?;
 
             for path in matches {
                 let path = path?;
@@ -60,18 +66,25 @@ impl ProjectManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
-    #[snafu(display("project manifest not found: {path:?}"))]
+    #[snafu(display("project manifest not found: {}", path.display()))]
     NotFound { path: PathBuf },
 
-    #[snafu(transparent)]
-    Parse { source: serde_yaml::Error },
+    #[snafu(display("failed to parse {}", path.display()))]
+    Parse {
+        source: serde_yaml::Error,
+        path: PathBuf,
+    },
 
-    #[snafu(display("invalid UTF-8 in canister path"))]
-    InvalidPathUtf8,
+    #[snafu(display("invalid UTF-8 in canister path pattern {}", pattern.display()))]
+    InvalidPathUtf8 { pattern: PathBuf },
 
-    #[snafu(transparent)]
-    GlobPattern { source: glob::PatternError },
+    #[snafu(display("failed to glob pattern {pattern}"))]
+    GlobPattern {
+        source: glob::PatternError,
+        pattern: String,
+    },
 
+    /// GlobWalk is transparent because `glob::GlobError` already contains the path.
     #[snafu(transparent)]
     GlobWalk { source: glob::GlobError },
 

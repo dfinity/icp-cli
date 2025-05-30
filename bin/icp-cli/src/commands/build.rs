@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use snafu::{ResultExt, Snafu};
 
-use icp_canister::{CanisterManifest, CanisterManifestError};
-use icp_project::{ProjectManifest, ProjectManifestError};
+use icp_canister::{CanisterManifest, LoadCanisterManifestError};
+use icp_project::{LoadProjectManifestError, ProjectManifest};
 
 use crate::project::structure::ProjectDirectoryStructure;
 
@@ -43,13 +43,13 @@ pub enum BuildCommandError {
 
     #[snafu(display("failed to load project manifest: {path:?}"))]
     ProjectLoad {
-        source: ProjectManifestError,
+        source: LoadProjectManifestError,
         path: PathBuf,
     },
 
     #[snafu(display("failed to load canister manifest: {path:?}"))]
     CanisterLoad {
-        source: CanisterManifestError,
+        source: LoadCanisterManifestError,
         path: PathBuf,
     },
 }

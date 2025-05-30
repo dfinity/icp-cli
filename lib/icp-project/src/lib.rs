@@ -21,7 +21,7 @@ pub struct ProjectManifest {
 }
 
 impl ProjectManifest {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ProjectManifestError> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, LoadProjectManifestError> {
         let path = path.as_ref();
 
         // Check existence
@@ -59,7 +59,7 @@ impl ProjectManifest {
 }
 
 #[derive(Debug, Snafu)]
-pub enum ProjectManifestError {
+pub enum LoadProjectManifestError {
     #[snafu(display("project manifest not found: {path:?}"))]
     NotFound { path: PathBuf },
 

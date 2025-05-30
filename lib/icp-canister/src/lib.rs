@@ -80,7 +80,7 @@ pub struct CanisterManifest {
 }
 
 impl CanisterManifest {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, CanisterManifestError> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
         let path = path.as_ref();
 
         // Check existence
@@ -97,7 +97,7 @@ impl CanisterManifest {
 }
 
 #[derive(Debug, Snafu)]
-pub enum CanisterManifestError {
+pub enum LoadCanisterManifestError {
     #[snafu(display("canister manifest not found: {path:?}"))]
     NotFound { path: PathBuf },
 

@@ -1,11 +1,10 @@
 [package]
-name = "icp-canister"
+name = "icp-adapter"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+async-trait = { workspace = true }
 camino = { workspace = true }
-icp-adapter = { "path" = "../icp-adapter" }
-icp-fs = { "path" = "../icp-fs" }
 serde = { workspace = true }
 snafu = { workspace = true }

@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 camino = { workspace = true }
 clap = { version = "4.5.35", features = ["derive"] }
+icp-adapter = { path = "../../lib/icp-adapter" }
 icp-canister = { path = "../../lib/icp-canister" }
 icp-fs = { path = "../../lib/icp-fs" }
 icp-network = { path = "../../lib/icp-network" }

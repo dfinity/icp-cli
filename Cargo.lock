@@ -1221,10 +1221,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp-adapter"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "camino",
+ "serde",
+ "snafu",
+]
+
+[[package]]
 name = "icp-canister"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "icp-adapter",
  "icp-fs",
  "serde",
  "snafu",
@@ -1238,6 +1249,7 @@ dependencies = [
  "camino",
  "camino-tempfile",
  "clap",
+ "icp-adapter",
  "icp-canister",
  "icp-fs",
  "icp-network",

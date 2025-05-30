@@ -1,6 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
-use snafu::{ResultExt, Snafu};
+use snafu::{OptionExt, ResultExt, Snafu};
 
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 
@@ -42,7 +42,12 @@ impl ProjectManifest {
         let mut cs = Vec::new();
 
         for pattern in pm.canisters {
-            let matches = glob::glob(pattern.as_str()).context(GlobPatternSnafu { pattern })?;
+            let mdir = mpath
+                .parent()
+                .context(ProjectDirectorySnafu { path: mpath })?;
+
+            let matches =
+                glob::glob(mdir.join(&pattern).as_str()).context(GlobPatternSnafu { pattern })?;
 
             for cpath in matches {
                 let cpath = cpath.context(GlobWalkSnafu { path: mpath })?;
@@ -66,6 +71,9 @@ impl ProjectManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
+    #[snafu(display("failed to find project directory for project manifest {path}"))]
+    ProjectDirectory { path: Utf8PathBuf },
+
     #[snafu(transparent)]
     Parse { source: LoadYamlFileError },
 

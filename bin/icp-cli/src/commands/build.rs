@@ -17,7 +17,7 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
         .structure()
         .project_yaml_path();
 
-    let pm = ProjectManifest::from_file(&path).context(ProjectLoadSnafu { path })?;
+    let pm = ProjectManifest::from_file(&path)?;
 
     // List canisters in project
     let mut cs = Vec::new();
@@ -25,7 +25,7 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
     for c in pm.canisters {
         let path = c.join("canister.yaml");
 
-        let cm = CanisterManifest::from_file(&path).context(CanisterLoadSnafu { path })?;
+        let cm = CanisterManifest::from_file(&path)?;
 
         cs.push(cm);
     }
@@ -41,15 +41,9 @@ pub enum BuildCommandError {
     #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
     ProjectNotFound,
 
-    #[snafu(display("failed to load project manifest: {}", path.display()))]
-    ProjectLoad {
-        source: LoadProjectManifestError,
-        path: PathBuf,
-    },
+    #[snafu(transparent)]
+    ProjectLoad { source: LoadProjectManifestError },
 
-    #[snafu(display("failed to load canister manifest: {}", path.display()))]
-    CanisterLoad {
-        source: LoadCanisterManifestError,
-        path: PathBuf,
-    },
+    #[snafu(transparent)]
+    CanisterLoad { source: LoadCanisterManifestError },
 }

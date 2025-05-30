@@ -1,40 +1,33 @@
-use icp_network::structure::NetworkDirectoryStructure;
-use std::path::PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 pub struct ProjectDirectoryStructure {
-    root: PathBuf,
+    root: Utf8PathBuf,
 }
 
 impl ProjectDirectoryStructure {
-    pub fn find() -> Option<Self> {
-        let current_dir = std::env::current_dir().ok()?;
-        let mut path = current_dir.clone();
-        loop {
-            if path.join("icp.yaml").exists() {
-                break Some(Self { root: path });
-            }
-            if !path.pop() {
-                break None;
-            }
-        }
+    pub fn new(root: &Utf8Path) -> Self {
+        let root = root.to_path_buf();
+        Self { root }
     }
 
-    pub fn root(&self) -> &PathBuf {
+    pub fn root(&self) -> &Utf8PathBuf {
         &self.root
     }
 
+    pub fn project_yaml_path(&self) -> Utf8PathBuf {
+        self.root.join("icp.yaml")
+    }
+
     #[allow(dead_code)]
-    pub fn network_config_path(&self, name: &str) -> PathBuf {
+    pub fn network_config_path(&self, name: &str) -> Utf8PathBuf {
         self.root.join("networks").join(format!("{name}.yaml"))
     }
 
-    fn work_dir(&self) -> PathBuf {
+    fn work_dir(&self) -> Utf8PathBuf {
         self.root.join(".icp")
     }
 
-    pub fn network(&self, network_name: &str) -> NetworkDirectoryStructure {
-        let network_root = self.work_dir().join("networks").join(network_name);
-
-        NetworkDirectoryStructure::new(&network_root)
+    pub fn network_root(&self, network_name: &str) -> Utf8PathBuf {
+        self.work_dir().join("networks").join(network_name)
     }
 }

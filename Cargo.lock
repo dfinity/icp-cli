@@ -1382,6 +1382,7 @@ dependencies = [
 name = "icp-fs"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "serde",
  "serde_json",
  "snafu",
@@ -1416,6 +1417,7 @@ dependencies = [
 name = "icp-network"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "candid",
  "fd-lock",
  "hex",

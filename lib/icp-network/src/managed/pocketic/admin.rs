@@ -1,3 +1,4 @@
+use camino::Utf8Path;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet,
     HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig, InstanceId, RawTime,
@@ -5,7 +6,6 @@ use pocket_ic::common::rest::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
-use std::path::Path;
 use time::OffsetDateTime;
 
 pub struct PocketIcAdminInterface {
@@ -25,7 +25,7 @@ impl PocketIcAdminInterface {
 
     pub async fn create_instance(
         &self,
-        state_dir: &Path,
+        state_dir: &Utf8Path,
     ) -> Result<(InstanceId, Topology), CreateInstanceError> {
         let subnet_config_set = ExtendedSubnetConfigSet {
             nns: Some(SubnetSpec::default()),
@@ -41,7 +41,7 @@ impl PocketIcAdminInterface {
             .post("/instances")
             .json(&InstanceConfig {
                 subnet_config_set,
-                state_dir: Some(state_dir.to_path_buf()),
+                state_dir: Some(state_dir.to_path_buf().into()),
                 nonmainnet_features: true,
                 log_level: Some("ERROR".to_string()),
                 bitcoind_addr: None, // bitcoind_addr.clone(),

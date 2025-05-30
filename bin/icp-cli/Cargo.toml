@@ -9,13 +9,13 @@ name = "icp"
 path = "src/main.rs"
 
 [dependencies]
-ic-agent.workspace = true
 bip32.workspace = true
 camino.workspace = true
 clap.workspace = true
 dialoguer.workspace = true
 elliptic-curve.workspace = true
 hex.workspace = true
+ic-agent.workspace = true
 icp-dirs.workspace = true
 icp-fs.workspace = true
 icp-identity.workspace = true

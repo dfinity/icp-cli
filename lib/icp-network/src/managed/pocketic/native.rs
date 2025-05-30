@@ -1,6 +1,6 @@
-use std::path::Path;
+use camino::Utf8Path;
 
-pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process::Child {
+pub fn spawn_pocketic(pocketic_path: &Utf8Path, port_file: &Utf8Path) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new(pocketic_path);
     cmd.arg("--port-file");
     cmd.arg(port_file.as_os_str());

@@ -1,18 +1,16 @@
-use std::path::PathBuf;
-
 use clap::Parser;
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 
 use icp_canister::{CanisterManifest, LoadCanisterManifestError};
 use icp_project::{LoadProjectManifestError, ProjectManifest};
 
-use crate::project::directory::ProjectDirectory;
+use crate::project::directory::{FindProjectError, ProjectDirectory};
 
 #[derive(Parser, Debug)]
 pub struct Cmd;
 
 pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
-    let path = ProjectDirectory::find()
+    let path = ProjectDirectory::find()?
         .ok_or(BuildCommandError::ProjectNotFound)?
         .structure()
         .project_yaml_path();
@@ -38,6 +36,9 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
 
 #[derive(Debug, Snafu)]
 pub enum BuildCommandError {
+    #[snafu(transparent)]
+    FindProjectError { source: FindProjectError },
+
     #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
     ProjectNotFound,
 

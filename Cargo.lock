@@ -1224,6 +1224,7 @@ dependencies = [
 name = "icp-canister"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "icp-fs",
  "serde",
  "snafu",
@@ -1286,6 +1287,7 @@ dependencies = [
 name = "icp-project"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "glob",
  "icp-canister",
  "icp-fs",

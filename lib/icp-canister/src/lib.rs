@@ -1,5 +1,4 @@
-use std::path::Path;
-
+use camino::Utf8Path;
 use serde::Deserialize;
 use snafu::Snafu;
 
@@ -50,7 +49,7 @@ pub struct CanisterManifest {
 }
 
 impl CanisterManifest {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
+    pub fn from_file<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
         let path = path.as_ref();
 
         // Load

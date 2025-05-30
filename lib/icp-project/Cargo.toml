@@ -9,6 +9,4 @@ icp-canister = { path = "../icp-canister" }
 icp-fs = { "path" = "../icp-fs" }
 icp-network = { path = "../icp-network" }
 serde = { workspace = true }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true }
 snafu = { workspace = true }

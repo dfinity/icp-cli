@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use icp_fs::fs::{ReadFileError, read};
+use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 
 /// Provides the default glob pattern for locating canister manifests
 /// when the `canisters` field is not explicitly specified in the YAML.
@@ -37,11 +37,7 @@ impl ProjectManifest {
         let path = path.as_ref();
 
         // Load
-        let bytes = read(path)?;
-
-        // Parse
-        let mut pm: ProjectManifest =
-            serde_yaml::from_slice(bytes.as_ref()).context(ParseSnafu { path })?;
+        let mut pm: ProjectManifest = load_yaml_file(path)?;
 
         // Project canisters
         let mut cs = Vec::new();
@@ -75,11 +71,8 @@ impl ProjectManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
-    #[snafu(display("failed to parse {}", path.display()))]
-    Parse {
-        source: serde_yaml::Error,
-        path: PathBuf,
-    },
+    #[snafu(transparent)]
+    Parse { source: LoadYamlFileError },
 
     #[snafu(display("invalid UTF-8 in canister path pattern {}", pattern.display()))]
     InvalidPathUtf8 { pattern: PathBuf },
@@ -93,7 +86,4 @@ pub enum LoadProjectManifestError {
     /// GlobWalk is transparent because `glob::GlobError` already contains the path.
     #[snafu(transparent)]
     GlobWalk { source: glob::GlobError },
-
-    #[snafu(transparent)]
-    ReadFile { source: ReadFileError },
 }

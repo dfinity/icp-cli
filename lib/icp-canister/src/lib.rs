@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Deserialize;
-use snafu::{ResultExt, Snafu, ensure};
+use snafu::Snafu;
 
-use icp_fs::fs::{ReadFileError, read};
+use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 
 /// Configuration for a Rust-based canister build adapter.
 #[derive(Debug, Deserialize)]
@@ -73,15 +73,8 @@ impl CanisterManifest {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
         let path = path.as_ref();
 
-        // Check existence
-        ensure!(path.exists(), NotFoundSnafu { path });
-
-        // Read
-        let bytes = read(path)?;
-
-        // Parse
-        let cm: CanisterManifest =
-            serde_yaml::from_slice(bytes.as_ref()).context(ParseSnafu { path })?;
+        // Load
+        let cm: CanisterManifest = load_yaml_file(path)?;
 
         Ok(cm)
     }
@@ -89,15 +82,6 @@ impl CanisterManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadCanisterManifestError {
-    #[snafu(display("canister manifest not found: {}", path.display()))]
-    NotFound { path: PathBuf },
-
-    #[snafu(display("failed to parse {}", path.display()))]
-    Parse {
-        source: serde_yaml::Error,
-        path: PathBuf,
-    },
-
     #[snafu(transparent)]
-    ReadFile { source: ReadFileError },
+    Parse { source: LoadYamlFileError },
 }

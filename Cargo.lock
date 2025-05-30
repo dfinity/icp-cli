@@ -1207,8 +1207,6 @@ version = "0.1.0"
 dependencies = [
  "icp-fs",
  "serde",
- "serde_json",
- "serde_yaml",
  "snafu",
 ]
 
@@ -1235,6 +1233,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "serde_yaml",
  "snafu",
 ]
 
@@ -1270,8 +1269,6 @@ dependencies = [
  "icp-fs",
  "icp-network",
  "serde",
- "serde_json",
- "serde_yaml",
  "snafu",
 ]
 

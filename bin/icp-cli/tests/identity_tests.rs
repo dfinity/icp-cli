@@ -57,7 +57,7 @@ fn identity_import_seed() {
 
 #[test]
 fn identity_import_pem() {
-    // from plaintext
+    // from plaintext sec1
     let env = TestEnv::new();
     env.icp()
         .args(["identity", "import", "alice", "--from-pem"])
@@ -76,8 +76,25 @@ fn identity_import_pem() {
         .assert()
         .failure()
         .stderr(contains("missing field `parameters`"));
+    env.icp()
+        .args(["identity", "import", "bob", "--from-pem"])
+        .arg(env.make_asset("unsupported_curve.pem"))
+        .assert()
+        .failure()
+        .stderr(contains("unsupported algorithm"));
 
-    // from encrypted
+    env.icp()
+        .args(["identity", "import", "bob", "--from-pem"])
+        .arg(env.make_asset("separate_params.pem"))
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal", "--identity", "bob"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+
+    // from encrypted pkcs8
     let mut file = NamedUtf8TempFile::new().unwrap();
     file.write_all(b"swordfish").unwrap();
     let path = file.into_temp_path();
@@ -90,6 +107,18 @@ fn identity_import_pem() {
         .success();
     env.icp()
         .args(["identity", "principal", "--identity", "chlöe"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+
+    // from plaintext pkcs8
+    env.icp()
+        .args(["identity", "import", "d'artagnan", "--from-pem"])
+        .arg(env.make_asset("pkcs8.pem"))
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal", "--identity", "d'artagnan"])
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
@@ -142,4 +171,42 @@ fn identity_create() {
         .parse::<Principal>()
         .unwrap();
     assert_eq!(principal1, principal2);
+}
+
+#[test]
+fn identity_use() {
+    let env = TestEnv::new();
+    env.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(env.make_asset("decrypted.pem"))
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "default", "alice"])
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+    env.icp()
+        .args(["identity", "principal", "--identity", "anonymous"])
+        .assert()
+        .success()
+        .stdout(eq("2vxsx-fae").trim());
+    env.icp()
+        .args(["identity", "default", "anonymous"])
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal"])
+        .assert()
+        .success()
+        .stdout(eq("2vxsx-fae").trim());
+    env.icp()
+        .args(["identity", "principal", "--identity", "alice"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
 }

@@ -9,6 +9,7 @@ name = "icp"
 path = "src/main.rs"
 
 [dependencies]
+camino = { workspace = true }
 clap = { version = "4.5.35", features = ["derive"] }
 icp-canister = { path = "../../lib/icp-canister" }
 icp-fs = { path = "../../lib/icp-fs" }
@@ -21,4 +22,4 @@ tokio = { workspace = true }
 assert_cmd = "2"
 predicates = "3"
 reqwest = { workspace = true }
-tempfile = "3"
+camino-tempfile = "1"

@@ -6,14 +6,15 @@ use snafu::{ResultExt, Snafu};
 use icp_canister::{CanisterManifest, LoadCanisterManifestError};
 use icp_project::{LoadProjectManifestError, ProjectManifest};
 
-use crate::project::structure::ProjectDirectoryStructure;
+use crate::project::directory::ProjectDirectory;
 
 #[derive(Parser, Debug)]
 pub struct Cmd;
 
 pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
-    let path = ProjectDirectoryStructure::find()
+    let path = ProjectDirectory::find()
         .ok_or(BuildCommandError::ProjectNotFound)?
+        .structure()
         .root()
         .join("icp.yaml");
 

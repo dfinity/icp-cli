@@ -15,8 +15,7 @@ pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
     let path = ProjectDirectory::find()
         .ok_or(BuildCommandError::ProjectNotFound)?
         .structure()
-        .root()
-        .join("icp.yaml");
+        .project_yaml_path();
 
     let pm = ProjectManifest::from_file(&path).context(ProjectLoadSnafu { path })?;
 

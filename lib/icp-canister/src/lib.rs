@@ -28,13 +28,6 @@ pub struct CustomAdapter {
     pub script: String,
 }
 
-/// Configuration for an asset canister used to serve static content.
-#[derive(Debug, Deserialize)]
-pub struct AssetsAdapter {
-    /// Directory containing the static assets to include in the canister.
-    pub source: String,
-}
-
 /// Identifies the type of adapter used to build the canister,
 /// along with its configuration.
 ///
@@ -56,9 +49,6 @@ pub enum Adapter {
 
     /// A canister built using a custom script or command.
     Custom(CustomAdapter),
-
-    /// A static asset canister.
-    Assets(AssetsAdapter),
 }
 
 /// Describes how the canister should be built into WebAssembly,

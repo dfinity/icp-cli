@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use snafu::{OptionExt, ResultExt, Snafu, ensure};
+use snafu::{OptionExt, ResultExt, Snafu};
 
 use icp_fs::fs::{ReadFileError, read};
 
@@ -35,9 +35,6 @@ pub struct ProjectManifest {
 impl ProjectManifest {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, LoadProjectManifestError> {
         let path = path.as_ref();
-
-        // Check existence
-        ensure!(path.exists(), NotFoundSnafu { path });
 
         // Load
         let bytes = read(path)?;
@@ -78,9 +75,6 @@ impl ProjectManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
-    #[snafu(display("project manifest not found: {}", path.display()))]
-    NotFound { path: PathBuf },
-
     #[snafu(display("failed to parse {}", path.display()))]
     Parse {
         source: serde_yaml::Error,

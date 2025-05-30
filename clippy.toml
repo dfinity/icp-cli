@@ -1,0 +1,4 @@
+disallowed-types = [
+    { path = "std::path::PathBuf", replacement = "camino::Utf8PathBuf" },
+    { path = "std::path::Path", replacement = "camino::Utf8Path" },
+]

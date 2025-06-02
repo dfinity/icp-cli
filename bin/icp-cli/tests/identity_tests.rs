@@ -94,6 +94,18 @@ fn identity_import_pem() {
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
 
+    env.icp()
+        .args(["identity", "import", "carol", "--from-pem"])
+        .arg(env.make_asset("missing_params.pem"))
+        .args(["--assert-key-type", "secp256k1"])
+        .assert()
+        .success();
+    env.icp()
+        .args(["identity", "principal", "--identity", "carol"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+
     // from encrypted pkcs8
     let mut file = NamedUtf8TempFile::new().unwrap();
     file.write_all(b"swordfish").unwrap();

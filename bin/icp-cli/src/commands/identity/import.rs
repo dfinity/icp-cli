@@ -7,6 +7,7 @@ use icp_fs::fs;
 use icp_identity::{
     CreateIdentityError,
     key::{CreateFormat, IdentityKey},
+    manifest::IdentityKeyAlgorithm,
 };
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
@@ -18,7 +19,7 @@ use pkcs8::{
 };
 use sec1::{EcParameters, EcPrivateKey};
 use serde::Serialize;
-use snafu::{OptionExt, ResultExt, Snafu, ensure};
+use snafu::{OptionExt, ResultExt, Snafu};
 
 #[derive(Debug, Parser)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
@@ -36,6 +37,9 @@ pub struct ImportCmd {
 
     #[arg(long, value_name = "FILE", requires = "from_pem")]
     decryption_password_from_file: Option<Utf8PathBuf>,
+
+    #[arg(long, value_enum)]
+    assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
 pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError> {
@@ -45,6 +49,7 @@ pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError>
             &cmd.name,
             &from_pem,
             cmd.decryption_password_from_file.as_deref(),
+            cmd.assert_key_type,
         )?;
     } else if let Some(path) = &cmd.from_seed_file {
         let phrase = fs::read_to_string(path).map_err(DeriveKeyError::from)?;
@@ -82,6 +87,7 @@ fn import_from_pem(
     name: &str,
     path: &Utf8Path,
     decryption_password_file: Option<&Utf8Path>,
+    known_key_type: Option<IdentityKeyAlgorithm>,
 ) -> Result<(), LoadKeyError> {
     let pem = fs::read_to_string(path)?;
     let sections = pem::parse_many(&pem).context(BadPemFileSnafu { path })?;
@@ -114,21 +120,17 @@ fn import_from_pem(
     };
     let key = match section.tag() {
         PrivateKeyInfo::PEM_LABEL | EncryptedPrivateKeyInfo::PEM_LABEL => {
-            import_pkcs8(section, path, decryption_password_file)?
+            import_pkcs8(section, path, decryption_password_file, known_key_type)?
         }
         EcPrivateKey::PEM_LABEL => import_sec1(
             section,
             sections.iter().find(|s| s.tag() == "EC PARAMETERS"),
             path,
+            known_key_type,
         )?,
         _ => unreachable!(),
     };
-    icp_identity::key::create_identity(
-        env.dirs(),
-        name,
-        IdentityKey::Secp256k1(key),
-        CreateFormat::Plaintext,
-    )?;
+    icp_identity::key::create_identity(env.dirs(), name, key, CreateFormat::Plaintext)?;
     Ok(())
 }
 
@@ -136,7 +138,8 @@ fn import_pkcs8(
     section: &Pem,
     path: &Utf8Path,
     decryption_password_file: Option<&Utf8Path>,
-) -> Result<SecretKey, LoadKeyError> {
+    known_key_type: Option<IdentityKeyAlgorithm>,
+) -> Result<IdentityKey, LoadKeyError> {
     let decrypted_doc: SecretDocument;
     let pki = if section.tag() == PrivateKeyInfo::PEM_LABEL {
         PrivateKeyInfo::from_der(section.contents()).context(BadPemContentSnafu { path })?
@@ -158,70 +161,95 @@ fn import_pkcs8(
             .decode_msg::<PrivateKeyInfo>()
             .context(BadPemContentSnafu { path })?
     };
-    ensure!(
-        pki.algorithm.oid == elliptic_curve::ALGORITHM_OID,
-        UnsupportedAlgorithmSnafu {
-            found: pki.algorithm.oid,
-            expected: vec![elliptic_curve::ALGORITHM_OID],
-            path,
-        },
-    );
-    let curve = pki
-        .algorithm
-        .parameters_oid()
-        .ok()
-        .context(IncompletePemKeySnafu {
-            field: "parameters",
-            path,
-        })?;
-    ensure!(
-        curve == Secp256k1::OID,
-        UnsupportedAlgorithmSnafu {
-            found: curve,
-            expected: vec![Secp256k1::OID],
-            path
+    if let Some(known_key_type) = known_key_type {
+        match known_key_type {
+            IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
+                SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?,
+            )),
+            // todo p256, ed25519
         }
-    );
-    SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })
+    } else {
+        match pki.algorithm.oid {
+            elliptic_curve::ALGORITHM_OID => {
+                let curve = pki
+                    .algorithm
+                    .parameters_oid()
+                    .ok()
+                    .context(IncompletePemKeySnafu {
+                        field: "parameters",
+                        path,
+                    })?;
+                match curve {
+                    Secp256k1::OID => Ok(IdentityKey::Secp256k1(
+                        SecretKey::from_sec1_der(pki.private_key)
+                            .context(BadPemKeySnafu { path })?,
+                    )),
+                    // todo p256
+                    _ => UnsupportedAlgorithmSnafu {
+                        found: curve,
+                        expected: vec![Secp256k1::OID],
+                        path,
+                    }
+                    .fail(),
+                }
+            }
+            // todo ed25519
+            _ => UnsupportedAlgorithmSnafu {
+                found: pki.algorithm.oid,
+                expected: vec![elliptic_curve::ALGORITHM_OID],
+                path,
+            }
+            .fail(),
+        }
+    }
 }
 
 fn import_sec1(
     section: &Pem,
     param_section: Option<&Pem>,
     path: &Utf8Path,
-) -> Result<SecretKey, LoadKeyError> {
+    known_key_type: Option<IdentityKeyAlgorithm>,
+) -> Result<IdentityKey, LoadKeyError> {
     let epk = EcPrivateKey::from_der(section.contents()).context(BadPemContentSnafu { path })?;
-    let params = match epk.parameters {
-        Some(params) => params,
-        None => {
-            if let Some(param_section) = param_section {
-                EcParameters::from_der(param_section.contents())
-                    .context(BadPemContentSnafu { path })?
-            } else {
-                IncompletePemKeySnafu {
-                    field: "parameters",
-                    path,
-                }
-                .fail()?
+    if let Some(known_key_type) = known_key_type {
+        match known_key_type {
+            IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
+                SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+            )),
+            // todo p256
+        }
+    } else {
+        let params = if let Some(params) = epk.parameters {
+            params
+        } else if let Some(param_section) = param_section {
+            EcParameters::from_der(param_section.contents()).context(BadPemContentSnafu { path })?
+        } else {
+            IncompletePemKeySnafu {
+                field: "parameters",
+                path,
             }
+            .fail()?
+        };
+        let Some(curve) = params.named_curve() else {
+            return IncompletePemKeySnafu {
+                field: "namedCurve",
+                path,
+            }
+            .fail();
+        };
+        match curve {
+            Secp256k1::OID => Ok(IdentityKey::Secp256k1(
+                SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+            )),
+            //todo p256
+            _ => UnsupportedAlgorithmSnafu {
+                found: curve,
+                expected: vec![Secp256k1::OID],
+                path,
+            }
+            .fail(),
         }
-    };
-    let Some(curve) = params.named_curve() else {
-        return IncompletePemKeySnafu {
-            field: "namedCurve",
-            path,
-        }
-        .fail();
-    };
-    ensure!(
-        curve == Secp256k1::OID,
-        UnsupportedAlgorithmSnafu {
-            found: curve,
-            expected: vec![Secp256k1::OID],
-            path
-        },
-    );
-    SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })
+    }
 }
 
 fn import_from_seed_phrase(env: &Env, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {

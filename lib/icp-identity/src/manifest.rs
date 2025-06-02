@@ -8,6 +8,7 @@ use icp_fs::{
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
+use strum::{Display, EnumString};
 
 pub fn write_identity_defaults(
     dirs: &IcpCliDirs,
@@ -168,8 +169,11 @@ pub enum PemFormat {
     Pbes2,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Deserialize, Serialize, Clone, Debug, EnumString, Display)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum IdentityKeyAlgorithm {
+    #[serde(rename = "secp256k1", alias = "k256")]
+    #[strum(serialize = "secp256k1", serialize = "k256")]
+    #[cfg_attr(feature = "clap", value(alias = "k256"))]
     Secp256k1,
 }

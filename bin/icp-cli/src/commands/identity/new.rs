@@ -41,6 +41,7 @@ pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityErr
 pub enum NewIdentityError {
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },
+
     #[snafu(transparent)]
     WriteSeedFileError { source: fs::WriteFileError },
 }
@@ -54,6 +55,7 @@ pub enum NewIdentityError {
 pub enum NewIdentityMessage {
     #[display("Seed phrase written to file {out_file}")]
     WrittenToFile { out_file: Utf8PathBuf },
+
     #[display("Your seed phrase: {seed_phrase}")]
     Created { seed_phrase: String },
 }

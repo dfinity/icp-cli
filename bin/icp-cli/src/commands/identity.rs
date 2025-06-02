@@ -40,12 +40,16 @@ pub enum IdentityCommandError {
     Default {
         source: default::DefaultIdentityError,
     },
+
     #[snafu(transparent)]
     List { source: list::ListKeysError },
+
     #[snafu(transparent)]
     Import { source: import::ImportCmdError },
+
     #[snafu(transparent)]
     New { source: new::NewIdentityError },
+
     #[snafu(transparent)]
     Principal { source: principal::PrincipalError },
 }

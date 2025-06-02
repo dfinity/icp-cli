@@ -56,6 +56,7 @@ pub struct DisplayDefaultIdentityMessage {
 pub enum DefaultCmdMessage {
     #[display("{0}")]
     Change(ChangeDefaultIdentityMessage),
+
     #[display("{0}")]
     Display(DisplayDefaultIdentityMessage),
 }

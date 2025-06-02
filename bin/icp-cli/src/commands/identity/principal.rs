@@ -21,6 +21,7 @@ pub fn exec(env: &Env, _cmd: PrincipalCmd) -> Result<PrincipalMessage, Principal
 pub enum PrincipalError {
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityError },
+
     #[snafu(display("failed to load identity principal: {message}"))]
     IdentityError { message: String },
 }

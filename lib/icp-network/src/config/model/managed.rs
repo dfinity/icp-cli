@@ -10,6 +10,7 @@ pub struct ManagedNetworkModel {
 pub struct GatewayModel {
     #[serde(default = "default_host")]
     pub host: String,
+
     #[serde(default = "default_port", deserialize_with = "deserialize_port")]
     pub port: BindPort,
 }

@@ -117,4 +117,10 @@ impl TestEnv {
             .expect("failed to copy asset");
         target
     }
+    pub fn create_project_dir(&self, name: &str) -> Utf8PathBuf {
+        let project_dir = self.home_path().join(name);
+        std::fs::create_dir_all(&project_dir).expect("Failed to create icp project directory");
+        std::fs::write(project_dir.join("icp.yaml"), "").expect("Failed to write project file");
+        project_dir
+    }
 }

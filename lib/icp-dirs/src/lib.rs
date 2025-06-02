@@ -23,9 +23,24 @@ impl IcpCliDirs {
     }
 
     pub fn identity_dir(&self) -> Utf8PathBuf {
+        self.data_dir().join("identity")
+    }
+
+    pub fn port_descriptor_dir(&self) -> Utf8PathBuf {
+        self.cache_dir().join("port-descriptors")
+    }
+
+    fn data_dir(&self) -> Utf8PathBuf {
         match self {
-            Self::Standard(dirs) => dirs.data_dir.join("identity"),
-            Self::Overridden(path) => path.join("identity"),
+            Self::Standard(dirs) => dirs.data_dir.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+
+    fn cache_dir(&self) -> Utf8PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.cache_dir.clone(),
+            Self::Overridden(path) => path.clone(),
         }
     }
 }

@@ -25,11 +25,11 @@ pub enum IdentitySubcmd {
 
 pub async fn dispatch(env: &Env, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
     match cmd.subcmd {
-        IdentitySubcmd::Default(subcmd) => env.print_result(default::exec(env, subcmd))?,
-        IdentitySubcmd::Import(subcmd) => env.print_result(import::exec(env, subcmd))?,
-        IdentitySubcmd::List(subcmd) => env.print_result(list::exec(env, subcmd))?,
-        IdentitySubcmd::New(subcmd) => env.print_result(new::exec(env, subcmd))?,
-        IdentitySubcmd::Principal(subcmd) => env.print_result(principal::exec(env, subcmd))?,
+        IdentitySubcmd::Default(subcmd) => default::exec(env, subcmd)?,
+        IdentitySubcmd::Import(subcmd) => import::exec(env, subcmd)?,
+        IdentitySubcmd::List(subcmd) => list::exec(env, subcmd)?,
+        IdentitySubcmd::New(subcmd) => new::exec(env, subcmd)?,
+        IdentitySubcmd::Principal(subcmd) => principal::exec(env, subcmd)?,
     }
     Ok(())
 }

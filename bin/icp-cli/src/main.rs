@@ -1,4 +1,4 @@
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use commands::{Cmd, DispatchError};
 use env::Env;
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
@@ -11,18 +11,10 @@ mod project;
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, value_enum, global = true, default_value_t = OutputFormat::Human)]
-    output_format: OutputFormat,
     #[arg(long, global = true)]
     identity: Option<String>,
     #[command(flatten)]
     command: Cmd,
-}
-
-#[derive(ValueEnum, Debug, Copy, Clone, Eq, PartialEq)]
-enum OutputFormat {
-    Human,
-    Json,
 }
 
 #[tokio::main]
@@ -30,7 +22,7 @@ enum OutputFormat {
 async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
     let dirs = IcpCliDirs::new()?;
-    let env = Env::new(cli.output_format, dirs, cli.identity);
+    let env = Env::new(dirs, cli.identity);
     commands::dispatch(&env, cli.command).await?;
     Ok(())
 }

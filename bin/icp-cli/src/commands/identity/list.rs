@@ -1,40 +1,21 @@
 use crate::env::Env;
 use clap::Parser;
-use itertools::Itertools;
-use serde::Serialize;
 use snafu::Snafu;
-use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Parser)]
 pub struct ListCmd;
 
-pub fn exec(env: &Env, _cmd: ListCmd) -> Result<ListKeysMessage, ListKeysError> {
+pub fn exec(env: &Env, _cmd: ListCmd) -> Result<(), ListKeysError> {
     let list = icp_identity::manifest::load_identity_list(env.dirs())?;
     let defaults = icp_identity::manifest::load_identity_defaults(env.dirs())?;
-    Ok(ListKeysMessage {
-        identities: list.identities.into_keys().collect_vec(),
-        default: defaults.default,
-    })
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct ListKeysMessage {
-    identities: Vec<String>,
-    default: String,
-}
-
-impl Display for ListKeysMessage {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for id in &self.identities {
-            if *id == self.default {
-                writeln!(f, "* {id}")?;
-            } else {
-                writeln!(f, "  {id}")?;
-            }
+    for id in list.identities.keys() {
+        if *id == defaults.default {
+            println!("* {id}");
+        } else {
+            println!("  {id}");
         }
-        Ok(())
     }
+    Ok(())
 }
 
 #[derive(Debug, Snafu)]

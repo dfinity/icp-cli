@@ -11,14 +11,12 @@ use icp_identity::{
 };
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
-use parse_display::Display;
 use pem::Pem;
 use pkcs8::{
     AssociatedOid, EncryptedPrivateKeyInfo, ObjectIdentifier, PrivateKeyInfo, SecretDocument,
     der::{Decode, pem::PemLabel},
 };
 use sec1::{EcParameters, EcPrivateKey};
-use serde::Serialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 #[derive(Debug, Parser)]
@@ -42,7 +40,7 @@ pub struct ImportCmd {
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
-pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError> {
+pub fn exec(env: &Env, cmd: ImportCmd) -> Result<(), ImportCmdError> {
     if let Some(from_pem) = cmd.from_pem {
         import_from_pem(
             env,
@@ -64,14 +62,8 @@ pub fn exec(env: &Env, cmd: ImportCmd) -> Result<LoadKeyMessage, ImportCmdError>
     } else {
         unreachable!();
     }
-    Ok(LoadKeyMessage { name: cmd.name })
-}
-
-#[derive(Serialize, Display)]
-#[serde(rename_all = "kebab-case")]
-#[display("Identity \"{name}\" created")]
-pub struct LoadKeyMessage {
-    name: String,
+    println!("Identity \"{}\" created", cmd.name);
+    Ok(())
 }
 
 #[derive(Snafu, Debug)]

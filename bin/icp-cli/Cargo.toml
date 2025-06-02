@@ -22,7 +22,6 @@ icp-identity.workspace = true
 icp-network.workspace = true
 itertools.workspace = true
 k256.workspace = true
-parse-display.workspace = true
 pem.workspace = true
 pkcs8.workspace = true
 sec1.workspace = true

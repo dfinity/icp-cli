@@ -7,8 +7,6 @@ use icp_identity::{
     CreateIdentityError,
     key::{CreateFormat, IdentityKey},
 };
-use parse_display::Display;
-use serde::Serialize;
 use snafu::Snafu;
 
 #[derive(Debug, Parser)]
@@ -18,7 +16,7 @@ pub struct NewCmd {
     output_seed: Option<Utf8PathBuf>,
 }
 
-pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityError> {
+pub fn exec(env: &Env, cmd: NewCmd) -> Result<(), NewIdentityError> {
     let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
     let key = icp_identity::seed::derive_default_key_from_seed(&mnemonic);
     icp_identity::key::create_identity(
@@ -29,11 +27,11 @@ pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityErr
     )?;
     if let Some(out_file) = cmd.output_seed {
         fs::write(&out_file, mnemonic.to_string().as_bytes())?;
-        Ok(NewIdentityMessage::WrittenToFile { out_file })
+        println!("Seed phrase written to file {out_file}");
+        Ok(())
     } else {
-        Ok(NewIdentityMessage::Created {
-            seed_phrase: mnemonic.to_string(),
-        })
+        println!("Your seed phrase: {mnemonic}");
+        Ok(())
     }
 }
 
@@ -44,18 +42,4 @@ pub enum NewIdentityError {
 
     #[snafu(transparent)]
     WriteSeedFileError { source: fs::WriteFileError },
-}
-
-#[derive(Serialize, Display)]
-#[serde(
-    tag = "action",
-    rename_all = "kebab-case",
-    rename_all_fields = "kebab-case"
-)]
-pub enum NewIdentityMessage {
-    #[display("Seed phrase written to file {out_file}")]
-    WrittenToFile { out_file: Utf8PathBuf },
-
-    #[display("Your seed phrase: {seed_phrase}")]
-    Created { seed_phrase: String },
 }

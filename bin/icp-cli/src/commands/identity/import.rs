@@ -170,8 +170,8 @@ fn import_pkcs8(
         .algorithm
         .parameters_oid()
         .ok()
-        .context(BadPemKeyStructureSnafu {
-            info: "missing field `parameters`",
+        .context(IncompletePemKeySnafu {
+            field: "parameters",
             path,
         })?;
     ensure!(
@@ -198,8 +198,8 @@ fn import_sec1(
                 EcParameters::from_der(param_section.contents())
                     .context(BadPemContentSnafu { path })?
             } else {
-                BadPemKeyStructureSnafu {
-                    info: "missing field `parameters`",
+                IncompletePemKeySnafu {
+                    field: "parameters",
                     path,
                 }
                 .fail()?
@@ -207,8 +207,8 @@ fn import_sec1(
         }
     };
     let Some(curve) = params.named_curve() else {
-        return BadPemKeyStructureSnafu {
-            info: "missing field `namedCurve`",
+        return IncompletePemKeySnafu {
+            field: "namedCurve",
             path,
         }
         .fail();
@@ -262,8 +262,8 @@ pub enum LoadKeyError {
         source: pkcs8::der::Error,
     },
 
-    #[snafu(display("incomplete key in PEM file `{path}`: {info}"))]
-    BadPemKeyStructure { path: Utf8PathBuf, info: String },
+    #[snafu(display("incomplete key in PEM file `{path}`: missing field `{field}`"))]
+    IncompletePemKey { path: Utf8PathBuf, field: String },
 
     #[snafu(display("malformed key material in PEM file `{path}`"))]
     BadPemKey {

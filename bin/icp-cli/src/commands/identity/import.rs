@@ -6,8 +6,9 @@ use dialoguer::Password;
 use icp_fs::fs;
 use icp_identity::{
     CreateIdentityError,
-    key::{CreateFormat, IdentityKey},
+    key::{CreateFormat, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
+    seed::derive_default_key_from_seed,
 };
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
@@ -122,7 +123,7 @@ fn import_from_pem(
         )?,
         _ => unreachable!(),
     };
-    icp_identity::key::create_identity(env.dirs(), name, key, CreateFormat::Plaintext)?;
+    create_identity(env.dirs(), name, key, CreateFormat::Plaintext)?;
     Ok(())
 }
 
@@ -246,8 +247,8 @@ fn import_sec1(
 
 fn import_from_seed_phrase(env: &Env, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
-    let key = icp_identity::seed::derive_default_key_from_seed(&mnemonic);
-    icp_identity::key::create_identity(
+    let key = derive_default_key_from_seed(&mnemonic);
+    create_identity(
         env.dirs(),
         name,
         IdentityKey::Secp256k1(key),

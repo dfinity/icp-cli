@@ -5,7 +5,8 @@ use clap::Parser;
 use icp_fs::fs;
 use icp_identity::{
     CreateIdentityError,
-    key::{CreateFormat, IdentityKey},
+    key::{CreateFormat, IdentityKey, create_identity},
+    seed::derive_default_key_from_seed,
 };
 use snafu::Snafu;
 
@@ -18,8 +19,8 @@ pub struct NewCmd {
 
 pub fn exec(env: &Env, cmd: NewCmd) -> Result<(), NewIdentityError> {
     let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
-    let key = icp_identity::seed::derive_default_key_from_seed(&mnemonic);
-    icp_identity::key::create_identity(
+    let key = derive_default_key_from_seed(&mnemonic);
+    create_identity(
         env.dirs(),
         &cmd.name,
         IdentityKey::Secp256k1(key),

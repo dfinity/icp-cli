@@ -3,6 +3,7 @@ use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
+use structure::ProjectDirectoryStructure;
 
 pub mod directory;
 pub mod structure;
@@ -38,6 +39,9 @@ impl ProjectManifest {
     pub fn from_file<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadProjectManifestError> {
         let mpath = path.as_ref();
 
+        // Project
+        let pds = ProjectDirectoryStructure::new(mpath);
+
         // Load
         let mut pm: ProjectManifest = load_yaml_file(mpath)?;
 
@@ -58,7 +62,7 @@ impl ProjectManifest {
                 let path: Utf8PathBuf = cpath.try_into()?;
 
                 // Skip non-canister directories
-                if !path.join("canister.yaml").exists() {
+                if !pds.canister_yaml_path(&path).exists() {
                     continue;
                 }
 

@@ -4,6 +4,9 @@ use snafu::{OptionExt, ResultExt, Snafu};
 
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 
+pub mod directory;
+pub mod structure;
+
 /// Provides the default glob pattern for locating canister manifests
 /// when the `canisters` field is not explicitly specified in the YAML.
 fn default_canisters() -> Vec<Utf8PathBuf> {

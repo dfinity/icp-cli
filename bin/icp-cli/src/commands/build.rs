@@ -4,7 +4,7 @@ use snafu::Snafu;
 use icp_canister::{CanisterManifest, LoadCanisterManifestError};
 use icp_project::{LoadProjectManifestError, ProjectManifest};
 
-use crate::project::directory::{FindProjectError, ProjectDirectory};
+use icp_project::directory::{FindProjectError, ProjectDirectory};
 
 #[derive(Parser, Debug)]
 pub struct Cmd;

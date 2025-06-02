@@ -1392,6 +1392,7 @@ dependencies = [
 name = "icp-identity"
 version = "0.1.0"
 dependencies = [
+ "bip32",
  "camino",
  "directories",
  "ed25519-consensus",
@@ -1410,6 +1411,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
+ "tiny-bip39",
  "zeroize",
 ]
 

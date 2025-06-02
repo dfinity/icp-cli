@@ -1,7 +1,5 @@
-use super::DEFAULT_DERIVATION_PATH;
 use crate::env::Env;
-use bip32::XPrv;
-use bip39::{Language, Mnemonic, Seed};
+use bip39::{Language, Mnemonic};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{ArgGroup, Parser};
 use dialoguer::Password;
@@ -228,10 +226,7 @@ fn import_sec1(
 
 fn import_from_seed_phrase(env: &Env, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
-    let path = DEFAULT_DERIVATION_PATH.parse().unwrap();
-    let seed = Seed::new(&mnemonic, "");
-    let pk = XPrv::derive_from_path(seed.as_bytes(), &path).context(DerivationSnafu)?;
-    let key = SecretKey::from(pk.private_key());
+    let key = icp_identity::seed::derive_default_key_from_seed(&mnemonic);
     icp_identity::key::create_identity(
         env.dirs(),
         name,
@@ -306,9 +301,6 @@ pub enum DeriveKeyError {
 
     #[snafu(display("failed to parse seed phrase"))]
     ParseMnemonicError { source: bip39::ErrorKind },
-
-    #[snafu(display("failed to derive IC key from wallet seed"))]
-    DerivationError { source: bip32::Error },
 
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },

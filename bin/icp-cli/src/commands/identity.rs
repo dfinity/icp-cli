@@ -34,8 +34,6 @@ pub async fn dispatch(env: &Env, cmd: IdentityCmd) -> Result<(), IdentityCommand
     Ok(())
 }
 
-const DEFAULT_DERIVATION_PATH: &str = "m/44'/223'/0'/0/0";
-
 #[derive(Debug, Snafu)]
 pub enum IdentityCommandError {
     #[snafu(transparent)]

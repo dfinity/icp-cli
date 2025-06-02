@@ -1,7 +1,5 @@
-use super::DEFAULT_DERIVATION_PATH;
 use crate::env::Env;
-use bip32::XPrv;
-use bip39::{Language, Mnemonic, MnemonicType, Seed};
+use bip39::{Language, Mnemonic, MnemonicType};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use icp_fs::fs;
@@ -9,10 +7,9 @@ use icp_identity::{
     CreateIdentityError,
     key::{CreateFormat, IdentityKey},
 };
-use k256::SecretKey;
 use parse_display::Display;
 use serde::Serialize;
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 
 #[derive(Debug, Parser)]
 pub struct NewCmd {
@@ -23,10 +20,7 @@ pub struct NewCmd {
 
 pub fn exec(env: &Env, cmd: NewCmd) -> Result<NewIdentityMessage, NewIdentityError> {
     let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
-    let path = DEFAULT_DERIVATION_PATH.parse().unwrap();
-    let seed = Seed::new(&mnemonic, "");
-    let pk = XPrv::derive_from_path(seed.as_bytes(), &path).context(DerivationSnafu)?;
-    let key = SecretKey::from(pk.private_key());
+    let key = icp_identity::seed::derive_default_key_from_seed(&mnemonic);
     icp_identity::key::create_identity(
         env.dirs(),
         &cmd.name,
@@ -49,8 +43,6 @@ pub enum NewIdentityError {
     CreateIdentityError { source: CreateIdentityError },
     #[snafu(transparent)]
     WriteSeedFileError { source: fs::WriteFileError },
-    #[snafu(display("failed to derive IC key from wallet seed"))]
-    DerivationError { source: bip32::Error },
 }
 
 #[derive(Serialize, Display)]

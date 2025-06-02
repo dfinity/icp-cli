@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bip32.workspace = true
 camino.workspace = true
 directories.workspace = true
 ed25519-consensus.workspace = true
@@ -22,6 +23,7 @@ sec1.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 snafu.workspace = true
+tiny-bip39.workspace = true
 zeroize.workspace = true
 
 [lints]

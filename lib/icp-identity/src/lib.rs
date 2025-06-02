@@ -5,6 +5,7 @@ use snafu::Snafu;
 
 pub mod key;
 pub mod manifest;
+pub mod seed;
 
 #[derive(Debug, Snafu)]
 #[snafu(module(s_load))]

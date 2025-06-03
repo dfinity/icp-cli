@@ -1,10 +1,8 @@
-use std::io;
-
-use camino::Utf8PathBuf;
-use snafu::{ResultExt, Snafu};
-
 use crate::structure::ProjectDirectoryStructure;
+use camino::Utf8PathBuf;
 use icp_network::NetworkDirectory;
+use snafu::{ResultExt, Snafu};
+use std::io;
 
 pub struct ProjectDirectory {
     structure: ProjectDirectoryStructure,

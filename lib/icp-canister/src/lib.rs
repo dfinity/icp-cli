@@ -1,11 +1,10 @@
 use camino::Utf8Path;
+use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
+use model::{CustomAdapter, MotokoAdapter, RustAdapter};
 use serde::Deserialize;
 use snafu::Snafu;
 
-use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
-
 mod model;
-use model::{CustomAdapter, MotokoAdapter, RustAdapter};
 
 /// Identifies the type of adapter used to build the canister,
 /// along with its configuration.

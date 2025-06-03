@@ -1,8 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
+use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
-
-use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use structure::ProjectDirectoryStructure;
 
 pub mod directory;

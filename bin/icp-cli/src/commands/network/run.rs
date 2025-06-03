@@ -1,9 +1,8 @@
-use clap::Parser;
-use snafu::Snafu;
-
 use crate::commands::network::run::RunNetworkCommandError::ProjectNotFound;
+use clap::Parser;
 use icp_network::{ManagedNetworkModel, RunNetworkError, run_network};
 use icp_project::directory::{FindProjectError, ProjectDirectory};
+use snafu::Snafu;
 
 /// Run the local network
 #[derive(Parser, Debug)]

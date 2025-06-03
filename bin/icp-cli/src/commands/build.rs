@@ -8,21 +8,19 @@ use snafu::Snafu;
 pub struct Cmd;
 
 pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
-    let path = ProjectDirectory::find()?
-        .ok_or(BuildCommandError::ProjectNotFound)?
-        .structure()
-        .project_yaml_path();
+    // Project
+    let pd = ProjectDirectory::find()?.ok_or(BuildCommandError::ProjectNotFound)?;
 
-    let pm = ProjectManifest::from_file(&path)?;
+    let pds = pd.structure();
+
+    // Load
+    let pm = ProjectManifest::from_file(pds.project_yaml_path())?;
 
     // List canisters in project
     let mut cs = Vec::new();
 
     for c in pm.canisters {
-        let path = c.join("canister.yaml");
-
-        let cm = CanisterManifest::from_file(&path)?;
-
+        let cm = CanisterManifest::from_file(pds.canister_yaml_path(&c))?;
         cs.push(cm);
     }
 

@@ -7,10 +7,11 @@ use snafu::Snafu;
 #[derive(Parser, Debug)]
 pub struct Cmd;
 
-pub async fn dispatch(_cmd: Cmd) -> Result<(), BuildCommandError> {
+pub async fn exec(_cmd: Cmd) -> Result<(), BuildCommandError> {
     // Project
     let pd = ProjectDirectory::find()?.ok_or(BuildCommandError::ProjectNotFound)?;
 
+    // Project Structure (paths, etc)
     let pds = pd.structure();
 
     // Load

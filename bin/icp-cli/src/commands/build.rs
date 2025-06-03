@@ -1,5 +1,5 @@
 use clap::Parser;
-use icp_canister::{CanisterManifest, LoadCanisterManifestError};
+use icp_canister::model::{CanisterManifest, LoadCanisterManifestError};
 use icp_project::directory::{FindProjectError, ProjectDirectory};
 use icp_project::{LoadProjectManifestError, ProjectManifest};
 use snafu::Snafu;

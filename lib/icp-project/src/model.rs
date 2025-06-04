@@ -2,7 +2,7 @@ use crate::structure::ProjectDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use serde::Deserialize;
-use snafu::{OptionExt, ResultExt, Snafu};
+use snafu::{ResultExt, Snafu};
 
 /// Provides the default glob pattern for locating canister manifests
 /// when the `canisters` field is not explicitly specified in the YAML.

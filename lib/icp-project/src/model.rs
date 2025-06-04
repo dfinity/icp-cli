@@ -45,12 +45,8 @@ impl TryFrom<&ProjectDirectoryStructure> for ProjectManifest {
         let mut cs = Vec::new();
 
         for pattern in pm.canisters {
-            let mdir = mpath
-                .parent()
-                .context(ProjectDirectorySnafu { path: mpath })?;
-
-            let matches =
-                glob::glob(mdir.join(&pattern).as_str()).context(GlobPatternSnafu { pattern })?;
+            let matches = glob::glob(pds.root().join(&pattern).as_str())
+                .context(GlobPatternSnafu { pattern })?;
 
             for cpath in matches {
                 let cpath = cpath.context(GlobWalkSnafu { path: mpath })?;

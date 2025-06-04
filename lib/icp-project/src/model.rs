@@ -32,6 +32,30 @@ pub struct ProjectManifest {
 }
 
 impl ProjectManifest {
+    /// Loads the project manifest (`project.yaml`) and resolves canister paths.
+    ///
+    /// This function utilizes the provided [`ProjectDirectoryStructure`] to locate
+    /// the `project.yaml` file and then identify all canister directories
+    /// referenced within it.
+    ///
+    /// # Canister Path Resolution
+    ///
+    /// Currently, all paths specified in the `canisters` field of the manifest
+    /// are treated as glob patterns. This means that even if a direct path to a
+    /// canister directory is provided (e.g., `canisters/my_canister`), it will
+    /// be processed as a glob.
+    ///
+    /// A consequence of this glob-based approach is that if an explicitly
+    /// specified canister path does not contain a `canister.yaml` file (thus,
+    /// not being a valid canister directory according to `ProjectDirectoryStructure`),
+    /// it will be silently ignored rather than causing an error.
+    ///
+    /// **Future Improvement:** This behavior should be changed. In a future
+    /// version, if a path in the `canisters` list is *not* a glob pattern (i.e.,
+    /// it's an explicit path), and that path does not point to a valid canister
+    /// directory (i.e., it's missing a `canister.yaml` or is not a directory),
+    /// the loading process should raise an error. This will provide clearer
+    /// feedback for misconfigured manifests.
     pub fn load(pds: &ProjectDirectoryStructure) -> Result<Self, LoadProjectManifestError> {
         let mpath = pds.project_yaml_path();
         let mpath: &Utf8Path = mpath.as_ref();

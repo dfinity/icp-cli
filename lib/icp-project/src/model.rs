@@ -31,10 +31,8 @@ pub struct ProjectManifest {
     pub networks: Vec<Utf8PathBuf>,
 }
 
-impl TryFrom<&ProjectDirectoryStructure> for ProjectManifest {
-    type Error = LoadProjectManifestError;
-
-    fn try_from(pds: &ProjectDirectoryStructure) -> Result<Self, Self::Error> {
+impl ProjectManifest {
+    pub fn load(pds: &ProjectDirectoryStructure) -> Result<Self, LoadProjectManifestError> {
         let mpath = pds.project_yaml_path();
         let mpath: &Utf8Path = mpath.as_ref();
 

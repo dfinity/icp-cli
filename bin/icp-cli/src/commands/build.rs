@@ -15,7 +15,7 @@ pub async fn exec(_cmd: Cmd) -> Result<(), BuildCommandError> {
     let pds = pd.structure();
 
     // Load
-    let pm = ProjectManifest::try_from(pds)?;
+    let pm = ProjectManifest::load(pds)?;
 
     // List canisters in project
     let mut cs = Vec::new();

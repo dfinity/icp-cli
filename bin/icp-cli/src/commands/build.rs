@@ -1,7 +1,7 @@
 use clap::Parser;
 use icp_canister::model::{CanisterManifest, LoadCanisterManifestError};
 use icp_project::directory::{FindProjectError, ProjectDirectory};
-use icp_project::{LoadProjectManifestError, ProjectManifest};
+use icp_project::model::{LoadProjectManifestError, ProjectManifest};
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]

@@ -10,7 +10,7 @@ use snafu::Snafu;
 #[derive(Parser, Debug)]
 pub struct Cmd;
 
-pub async fn exec(_cmd: Cmd) -> Result<(), BuildCommandError> {
+pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
     // Project
     let pd = ProjectDirectory::find()?.ok_or(BuildCommandError::ProjectNotFound)?;
 
@@ -24,9 +24,9 @@ pub async fn exec(_cmd: Cmd) -> Result<(), BuildCommandError> {
     let mut cs = Vec::new();
 
     for c in pm.canisters {
-        let path = pds.canister_yaml_path(&c);
-        let cm = CanisterManifest::from_file(&path)?;
-        cs.push((path, cm));
+        let mpath = pds.canister_yaml_path(&c);
+        let cm = CanisterManifest::from_file(&mpath)?;
+        cs.push((c, cm));
     }
 
     // Build canisters

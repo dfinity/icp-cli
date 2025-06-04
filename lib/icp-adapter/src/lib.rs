@@ -8,6 +8,7 @@ use snafu::Snafu;
 pub mod motoko;
 pub mod rust;
 pub mod script;
+pub mod shell;
 
 #[async_trait]
 pub trait Adapter {

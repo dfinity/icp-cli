@@ -68,9 +68,6 @@ impl ProjectManifest {
 
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
-    #[snafu(display("failed to find project directory for project manifest {path}"))]
-    ProjectDirectory { path: Utf8PathBuf },
-
     #[snafu(transparent)]
     Parse { source: LoadYamlFileError },
 

@@ -31,17 +31,17 @@ pub struct ProjectManifest {
     pub networks: Vec<Utf8PathBuf>,
 }
 
-impl ProjectManifest {
-    pub fn from_file<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadProjectManifestError> {
-        let mpath = path.as_ref();
+impl TryFrom<&ProjectDirectoryStructure> for ProjectManifest {
+    type Error = LoadProjectManifestError;
 
-        // Project
-        let pds = ProjectDirectoryStructure::new(mpath);
+    fn try_from(pds: &ProjectDirectoryStructure) -> Result<Self, Self::Error> {
+        let mpath = pds.project_yaml_path();
+        let mpath: &Utf8Path = mpath.as_ref();
 
         // Load
         let mut pm: ProjectManifest = load_yaml_file(mpath)?;
 
-        // Project canisters
+        // Canisters
         let mut cs = Vec::new();
 
         for pattern in pm.canisters {

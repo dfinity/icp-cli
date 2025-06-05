@@ -7,4 +7,5 @@ edition = "2024"
 async-trait = { workspace = true }
 camino = { workspace = true }
 serde = { workspace = true }
+shellwords = { workspace = true }
 snafu = { workspace = true }

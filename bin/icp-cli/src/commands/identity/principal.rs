@@ -1,6 +1,6 @@
 use crate::env::Env;
 use clap::Parser;
-use icp_identity::LoadIdentityError;
+use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
 #[derive(Debug, Parser)]
@@ -18,7 +18,7 @@ pub fn exec(env: &Env, _cmd: PrincipalCmd) -> Result<(), PrincipalError> {
 #[derive(Debug, Snafu)]
 pub enum PrincipalError {
     #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityError },
+    LoadIdentity { source: LoadIdentityInContextError },
 
     #[snafu(display("failed to load identity principal: {message}"))]
     IdentityError { message: String },

@@ -24,6 +24,6 @@ pub fn exec(env: &Env, _cmd: ListCmd) -> Result<(), ListKeysError> {
 pub enum ListKeysError {
     #[snafu(transparent)]
     LoadIdentity {
-        source: icp_identity::LoadIdentityError,
+        source: icp_identity::manifest::LoadIdentityManifestError,
     },
 }

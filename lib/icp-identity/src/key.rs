@@ -1,14 +1,12 @@
 use crate::{
-    CreateIdentityError, LoadIdentityError, WriteIdentityError,
     manifest::{
-        IdentityKeyAlgorithm, IdentityList, IdentitySpec, PemFormat, load_identity_defaults,
-        load_identity_list, write_identity_list,
+        IdentityKeyAlgorithm, IdentityList, IdentitySpec, LoadIdentityManifestError, PemFormat,
+        WriteIdentityManifestError, load_identity_defaults, load_identity_list,
+        write_identity_list,
     },
     paths::{ensure_key_pem_path, key_pem_path},
-    s_create::*,
-    s_load::*,
 };
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
@@ -23,7 +21,7 @@ use pkcs8::{
 use rand::RngCore;
 use scrypt::Params;
 use sec1::{der::Decode, pem::PemLabel};
-use snafu::{OptionExt, ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
@@ -44,6 +42,30 @@ pub fn load_identity(
         }
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadIdentityError {
+    #[snafu(transparent)]
+    ReadFileError { source: fs::ReadToStringError },
+
+    #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
+    ParsePemError {
+        path: Utf8PathBuf,
+        source: pem::PemError,
+    },
+
+    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    ParseKeyError {
+        path: Utf8PathBuf,
+        source: pkcs8::Error,
+    },
+
+    #[snafu(display("no identity found with name `{name}`"))]
+    NoSuchIdentity { name: String },
+
+    #[snafu(display("failed to read password: {message}"))]
+    GetPasswordError { message: String },
 }
 
 fn load_pem_identity(
@@ -106,10 +128,20 @@ fn load_plaintext_identity(
 pub fn load_identity_in_context(
     dirs: &IcpCliDirs,
     password_func: impl FnOnce() -> Result<String, String>,
-) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
     let defaults = load_identity_defaults(dirs)?;
     let list = load_identity_list(dirs)?;
-    load_identity(dirs, &list, &defaults.default, password_func)
+    let identity = load_identity(dirs, &list, &defaults.default, password_func)?;
+    Ok(identity)
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadIdentityInContextError {
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityError },
+
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
 }
 
 pub fn create_identity(
@@ -143,11 +175,43 @@ pub fn create_identity(
             .expect("infallible PKI encoding"),
         CreateFormat::Pbes2 { password } => make_pkcs5_encrypted_pem(&doc, &password),
     };
-    let pem_path = ensure_key_pem_path(dirs, name).map_err(WriteIdentityError::from)?;
-    fs::write(&pem_path, pem.as_bytes()).map_err(WriteIdentityError::from)?;
+    write_identity(dirs, name, &pem)?;
     identity_list.identities.insert(name.to_string(), spec);
     write_identity_list(dirs, &identity_list)?;
     Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum CreateIdentityError {
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityError },
+
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentityManifest { source: WriteIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentity { source: WriteIdentityError },
+
+    #[snafu(display("identity `{name}` already exists"))]
+    IdentityAlreadyExists { name: String },
+}
+
+fn write_identity(dirs: &IcpCliDirs, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
+    let pem_path = ensure_key_pem_path(dirs, name)?;
+    fs::write(&pem_path, pem.as_bytes())?;
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum WriteIdentityError {
+    #[snafu(transparent)]
+    WriteFileError { source: fs::WriteFileError },
+
+    #[snafu(transparent)]
+    CreateDirectoryError { source: fs::CreateDirAllError },
 }
 
 fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {

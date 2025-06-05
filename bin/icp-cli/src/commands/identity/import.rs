@@ -5,8 +5,7 @@ use clap::{ArgGroup, Parser};
 use dialoguer::Password;
 use icp_fs::fs;
 use icp_identity::{
-    CreateIdentityError,
-    key::{CreateFormat, IdentityKey, create_identity},
+    key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
     seed::derive_default_key_from_seed,
 };

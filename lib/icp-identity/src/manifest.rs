@@ -1,13 +1,13 @@
-use crate::{
-    LoadIdentityError, WriteIdentityError,
-    paths::{
-        ensure_identity_defaults_path, ensure_identity_list_path, identity_defaults_path,
-        identity_list_path,
-    },
-    s_load::*,
+use crate::paths::{
+    ensure_identity_defaults_path, ensure_identity_list_path, identity_defaults_path,
+    identity_list_path,
 };
+use camino::Utf8PathBuf;
 use icp_dirs::IcpCliDirs;
-use icp_fs::json::{self, LoadJsonFileError};
+use icp_fs::{
+    fs,
+    json::{self, LoadJsonFileError},
+};
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
@@ -16,7 +16,7 @@ use strum::{Display, EnumString};
 pub fn write_identity_defaults(
     dirs: &IcpCliDirs,
     defaults: &IdentityDefaults,
-) -> Result<(), WriteIdentityError> {
+) -> Result<(), WriteIdentityManifestError> {
     let defaults_path = ensure_identity_defaults_path(dirs)?;
     json::save_json_file(&defaults_path, defaults)?;
     Ok(())
@@ -25,13 +25,22 @@ pub fn write_identity_defaults(
 pub fn write_identity_list(
     dirs: &IcpCliDirs,
     list: &IdentityList,
-) -> Result<(), WriteIdentityError> {
+) -> Result<(), WriteIdentityManifestError> {
     let defaults_path = ensure_identity_list_path(dirs)?;
     json::save_json_file(&defaults_path, list)?;
     Ok(())
 }
 
-pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityError> {
+#[derive(Debug, Snafu)]
+pub enum WriteIdentityManifestError {
+    #[snafu(transparent)]
+    WriteJsonError { source: json::SaveJsonFileError },
+
+    #[snafu(transparent)]
+    CreateDirectoryError { source: fs::CreateDirAllError },
+}
+
+pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityManifestError> {
     let id_list_file = identity_list_path(dirs);
     let list = match json::load_json_file(&id_list_file) {
         Ok(id_list) => id_list,
@@ -53,7 +62,18 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
     Ok(list)
 }
 
-pub fn load_identity_defaults(dirs: &IcpCliDirs) -> Result<IdentityDefaults, LoadIdentityError> {
+#[derive(Debug, Snafu)]
+pub enum LoadIdentityManifestError {
+    #[snafu(transparent)]
+    LoadJsonError { source: json::LoadJsonFileError },
+
+    #[snafu(display("file `{path}` was modified by an incompatible new version of icp-cli"))]
+    BadVersion { path: Utf8PathBuf },
+}
+
+pub fn load_identity_defaults(
+    dirs: &IcpCliDirs,
+) -> Result<IdentityDefaults, LoadIdentityManifestError> {
     let id_defaults_path = identity_defaults_path(dirs);
     let defaults = match json::load_json_file(&id_defaults_path) {
         Ok(id_defaults) => id_defaults,
@@ -91,10 +111,10 @@ pub fn change_default_identity(
 #[derive(Debug, Snafu)]
 pub enum ChangeDefaultsError {
     #[snafu(transparent)]
-    Load { source: LoadIdentityError },
+    Load { source: LoadIdentityManifestError },
 
     #[snafu(transparent)]
-    Write { source: WriteIdentityError },
+    Write { source: WriteIdentityManifestError },
 
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },

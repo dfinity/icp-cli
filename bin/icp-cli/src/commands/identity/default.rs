@@ -30,6 +30,6 @@ pub enum DefaultIdentityError {
 
     #[snafu(transparent)]
     LoadList {
-        source: icp_identity::LoadIdentityError,
+        source: icp_identity::manifest::LoadIdentityManifestError,
     },
 }

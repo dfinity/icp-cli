@@ -4,8 +4,7 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 use icp_fs::fs;
 use icp_identity::{
-    CreateIdentityError,
-    key::{CreateFormat, IdentityKey, create_identity},
+    key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     seed::derive_default_key_from_seed,
 };
 use snafu::Snafu;

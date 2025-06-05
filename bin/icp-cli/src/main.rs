@@ -7,7 +7,6 @@ use snafu::{Snafu, report};
 mod commands;
 mod env;
 mod error;
-mod project;
 
 #[derive(Parser)]
 struct Cli {

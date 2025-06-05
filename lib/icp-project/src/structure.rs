@@ -30,4 +30,8 @@ impl ProjectDirectoryStructure {
     pub fn network_root(&self, network_name: &str) -> Utf8PathBuf {
         self.work_dir().join("networks").join(network_name)
     }
+
+    pub fn canister_yaml_path(&self, canister_dir: &Utf8Path) -> Utf8PathBuf {
+        self.root.join(canister_dir).join("canister.yaml")
+    }
 }

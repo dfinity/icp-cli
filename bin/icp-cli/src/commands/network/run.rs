@@ -1,10 +1,7 @@
-use crate::project::directory::ProjectDirectory;
-use crate::{
-    commands::network::run::RunNetworkCommandError::ProjectNotFound,
-    project::directory::FindProjectError,
-};
+use crate::commands::network::run::RunNetworkCommandError::ProjectNotFound;
 use clap::Parser;
 use icp_network::{ManagedNetworkModel, RunNetworkError, run_network};
+use icp_project::directory::{FindProjectError, ProjectDirectory};
 use snafu::Snafu;
 
 /// Run the local network

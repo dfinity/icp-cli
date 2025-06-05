@@ -10,9 +10,6 @@ pub mod seed;
 #[derive(Debug, Snafu)]
 #[snafu(module(s_load))]
 pub enum LoadIdentityError {
-    #[snafu(display("failed to write configuration defaults"))]
-    WriteDefaultsError { source: WriteIdentityError },
-
     #[snafu(transparent)]
     ReadFileError { source: fs::ReadFileError },
 

@@ -5,56 +5,73 @@ use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommandField {
+    /// Command used to build a canister
+    Command(String),
+
+    /// Set of commands used to build a canister
+    Commands(Vec<String>),
+}
+
 /// Configuration for a custom canister build adapter.
 #[derive(Debug, Deserialize)]
 pub struct ScriptAdapter {
     /// Command used to build a canister
-    pub command: String,
+    #[serde(flatten)]
+    pub command: CommandField,
 }
 
 #[async_trait]
 impl Adapter for ScriptAdapter {
     async fn compile(&self, path: Utf8PathBuf) -> Result<(), AdapterCompileError> {
-        // Parse command input
-        let input = shellwords::split(&self.command).context(CommandParseSnafu {
-            command: &self.command,
-        })?;
+        let cmds = match &self.command {
+            CommandField::Command(cmd) => std::slice::from_ref(cmd),
+            CommandField::Commands(cmds) => cmds,
+        };
 
-        // Separate command and args
-        let (cmd, args) = input.split_first().context(InvalidCommandSnafu {
-            command: &self.command,
-            reason: "command must include at least one element".to_string(),
-        })?;
+        for input_cmd in cmds {
+            // Parse command input
+            let input =
+                shellwords::split(input_cmd).context(CommandParseSnafu { command: input_cmd })?;
 
-        // Command
-        let mut cmd = Command::new(cmd);
+            // Separate command and args
+            let (cmd, args) = input.split_first().context(InvalidCommandSnafu {
+                command: input_cmd,
+                reason: "command must include at least one element".to_string(),
+            })?;
 
-        // Args
-        cmd.args(args);
+            // Command
+            let mut cmd = Command::new(cmd);
 
-        // Set directory
-        cmd.current_dir(&path);
+            // Args
+            cmd.args(args);
 
-        // Output
-        cmd.stdin(Stdio::inherit());
-        cmd.stdout(Stdio::inherit());
-        cmd.stderr(Stdio::inherit());
+            // Set directory
+            cmd.current_dir(&path);
 
-        // Execute
-        let status = cmd.status().context(CommandInvokeSnafu {
-            command: &self.command,
-        })?;
+            // Output
+            cmd.stdin(Stdio::inherit());
+            cmd.stdout(Stdio::inherit());
+            cmd.stderr(Stdio::inherit());
 
-        // Status
-        if !status.success() {
-            return Err(ScriptAdapterCompileError::CommandStatus {
-                command: self.command.to_owned(),
-                code: status
-                    .code()
-                    .map(|c| c.to_string())
-                    .unwrap_or("N/A".to_string()),
+            // Execute
+            let status = cmd
+                .status()
+                .context(CommandInvokeSnafu { command: input_cmd })?;
+
+            // Status
+            if !status.success() {
+                return Err(ScriptAdapterCompileError::CommandStatus {
+                    command: input_cmd.to_owned(),
+                    code: status
+                        .code()
+                        .map(|c| c.to_string())
+                        .unwrap_or("N/A".to_string()),
+                }
+                .into());
             }
-            .into());
         }
 
         Ok(())

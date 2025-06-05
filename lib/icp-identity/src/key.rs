@@ -4,16 +4,17 @@ use crate::{
         IdentityKeyAlgorithm, IdentityList, IdentitySpec, PemFormat, load_identity_defaults,
         load_identity_list, write_identity_list,
     },
+    paths::{ensure_key_pem_path, key_pem_path},
     s_create::*,
     s_load::*,
 };
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use icp_dirs::IcpCliDirs;
-use icp_fs::fs::{self, CreateDirAllError};
+use icp_fs::fs;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -100,19 +101,6 @@ fn load_plaintext_identity(
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
     }
-}
-
-pub fn key_pem_path(dirs: &IcpCliDirs, name: &str) -> Utf8PathBuf {
-    dirs.identity_dir().join(format!("keys/{name}.pem"))
-}
-
-pub fn ensure_key_pem_path(
-    dirs: &IcpCliDirs,
-    name: &str,
-) -> Result<Utf8PathBuf, CreateDirAllError> {
-    let path = key_pem_path(dirs, name);
-    fs::create_dir_all(path.parent().unwrap())?;
-    Ok(path)
 }
 
 pub fn load_identity_in_context(

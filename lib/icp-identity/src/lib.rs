@@ -5,6 +5,7 @@ use snafu::Snafu;
 
 pub mod key;
 pub mod manifest;
+pub mod paths;
 pub mod seed;
 
 #[derive(Debug, Snafu)]

@@ -1,10 +1,13 @@
-use crate::{LoadIdentityError, WriteIdentityError, s_load::*};
-use camino::Utf8PathBuf;
-use icp_dirs::IcpCliDirs;
-use icp_fs::{
-    fs::{self, CreateDirAllError},
-    json::{self, LoadJsonFileError},
+use crate::{
+    LoadIdentityError, WriteIdentityError,
+    paths::{
+        ensure_identity_defaults_path, ensure_identity_list_path, identity_defaults_path,
+        identity_list_path,
+    },
+    s_load::*,
 };
+use icp_dirs::IcpCliDirs;
+use icp_fs::json::{self, LoadJsonFileError};
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
@@ -95,26 +98,6 @@ pub enum ChangeDefaultsError {
 
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
-}
-
-pub fn identity_defaults_path(dirs: &IcpCliDirs) -> Utf8PathBuf {
-    dirs.identity_dir().join("identity_defaults.json")
-}
-
-pub fn ensure_identity_defaults_path(dirs: &IcpCliDirs) -> Result<Utf8PathBuf, CreateDirAllError> {
-    let path = identity_defaults_path(dirs);
-    fs::create_dir_all(path.parent().unwrap())?;
-    Ok(path)
-}
-
-pub fn identity_list_path(dirs: &IcpCliDirs) -> Utf8PathBuf {
-    dirs.identity_dir().join("identity_list.json")
-}
-
-pub fn ensure_identity_list_path(dirs: &IcpCliDirs) -> Result<Utf8PathBuf, CreateDirAllError> {
-    let path = identity_list_path(dirs);
-    fs::create_dir_all(path.parent().unwrap())?;
-    Ok(path)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

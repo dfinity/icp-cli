@@ -14,7 +14,7 @@ pub fn create_dir_all(path: impl AsRef<Utf8Path>) -> Result<(), CreateDirAllErro
 }
 
 #[derive(Snafu, Debug)]
-#[snafu(display("failed to read {path}"))]
+#[snafu(display("failed to read file {path}"))]
 pub struct ReadFileError {
     pub path: Utf8PathBuf,
     pub source: std::io::Error,
@@ -25,9 +25,16 @@ pub fn read<P: AsRef<Utf8Path>>(path: P) -> Result<Vec<u8>, ReadFileError> {
     std::fs::read(path).context(ReadFileSnafu { path })
 }
 
-pub fn read_to_string<P: AsRef<Utf8Path>>(path: P) -> Result<String, ReadFileError> {
+#[derive(Snafu, Debug)]
+#[snafu(display("failed to read text file {path}"))]
+pub struct ReadToStringError {
+    pub path: Utf8PathBuf,
+    pub source: std::io::Error,
+}
+
+pub fn read_to_string<P: AsRef<Utf8Path>>(path: P) -> Result<String, ReadToStringError> {
     let path = path.as_ref();
-    std::fs::read_to_string(path).context(ReadFileSnafu { path })
+    std::fs::read_to_string(path).context(ReadToStringSnafu { path })
 }
 
 #[derive(Snafu, Debug)]

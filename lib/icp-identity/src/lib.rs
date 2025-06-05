@@ -11,7 +11,7 @@ pub mod seed;
 #[snafu(module(s_load))]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: fs::ReadFileError },
+    ReadFileError { source: fs::ReadToStringError },
 
     #[snafu(transparent)]
     LoadJsonError {

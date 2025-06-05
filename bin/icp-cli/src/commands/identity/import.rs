@@ -266,7 +266,7 @@ pub enum LoadKeyError {
     },
 
     #[snafu(transparent)]
-    ReadFileError { source: fs::ReadFileError },
+    ReadFileError { source: fs::ReadToStringError },
 
     #[snafu(display("expected 1 key block in PEM file `{path}`, found {count}"))]
     TooManyKeyBlocks { path: Utf8PathBuf, count: usize },
@@ -318,7 +318,7 @@ pub enum LoadKeyError {
 #[derive(Debug, Snafu)]
 pub enum DeriveKeyError {
     #[snafu(transparent)]
-    ReadSeedFileError { source: fs::ReadFileError },
+    ReadSeedFileError { source: fs::ReadToStringError },
 
     #[snafu(display("failed to read seed phrase from terminal"))]
     ReadSeedPhraseFromTerminalError { source: dialoguer::Error },

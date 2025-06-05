@@ -65,10 +65,7 @@ impl Adapter for ScriptAdapter {
             if !status.success() {
                 return Err(ScriptAdapterCompileError::CommandStatus {
                     command: input_cmd.to_owned(),
-                    code: status
-                        .code()
-                        .map(|c| c.to_string())
-                        .unwrap_or("N/A".to_string()),
+                    code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
                 }
                 .into());
             }

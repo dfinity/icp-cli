@@ -29,6 +29,7 @@ async fn main() -> Result<(), ProgramError> {
 pub enum ProgramError {
     #[snafu(transparent)]
     Dispatch { source: DispatchError },
+
     #[snafu(transparent)]
     Dirs { source: DiscoverDirsError },
 }

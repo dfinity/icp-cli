@@ -34,6 +34,7 @@ impl IcpCliDirs {
 pub enum DiscoverDirsError {
     #[snafu(display("user directories are non-UTF-8"))]
     NonUtf8 { source: camino::FromPathBufError },
+
     #[snafu(display("home directory could not be located"))]
     CannotFindHome,
 }

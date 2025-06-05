@@ -283,7 +283,10 @@ pub enum LoadKeyError {
         source: pkcs8::der::Error,
     },
 
-    #[snafu(display("incomplete key in PEM file `{path}`: missing field `{field}`"))]
+    #[snafu(display(
+        "incomplete key in PEM file `{path}`: missing field `{field}` \
+        (if you know what kind of key it is, use `--assert-key-type`)"
+    ))]
     IncompletePemKey { path: Utf8PathBuf, field: String },
 
     #[snafu(display("malformed key material in PEM file `{path}`"))]

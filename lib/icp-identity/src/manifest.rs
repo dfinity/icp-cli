@@ -89,8 +89,10 @@ pub fn change_default_identity(
 pub enum ChangeDefaultsError {
     #[snafu(transparent)]
     Load { source: LoadIdentityError },
+
     #[snafu(transparent)]
     Write { source: WriteIdentityError },
+
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
 }

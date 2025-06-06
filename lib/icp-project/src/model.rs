@@ -35,8 +35,12 @@ pub enum CanistersField {
 /// A project is a repository or directory grouping related canisters and network definitions.
 #[derive(Debug, Deserialize)]
 pub struct RawProjectManifest {
-    /// List of canister manifests belonging to this project.
-    /// Supports glob patterns to specify multiple canister YAML files.
+    /// Canister manifests belonging to this project.
+    /// This field uses `#[serde(flatten)]` to allow deserialization from either
+    /// a top-level `canister` key (for a single canister) or a `canisters` key
+    /// (for multiple canisters, supporting glob patterns).
+    /// If neither key is present, it defaults to `None`, which is then handled
+    /// by the `ProjectManifest::load` function to apply a default glob pattern.
     #[serde(flatten)]
     pub canisters: Option<RawCanistersField>,
 
@@ -59,18 +63,19 @@ pub struct ProjectManifest {
 }
 
 impl ProjectManifest {
-    /// Loads the project manifest (`project.yaml`) and resolves canister paths.
+    /// Loads the project manifest (`icp.yaml`) and resolves canister paths.
     ///
     /// This function utilizes the provided [`ProjectDirectoryStructure`] to locate
-    /// the `project.yaml` file and then identify all canister directories
-    /// referenced within it.
+    /// the `icp.yaml` file. It then deserializes the `canister` or `canisters`
+    /// field, handling both single-canister and multi-canister configurations.
+    /// If neither `canister` nor `canisters` is explicitly defined in the YAML,
+    /// a default glob pattern (`canisters/*`) is applied.
     ///
     /// # Canister Path Resolution
     ///
-    /// Currently, all paths specified in the `canisters` field of the manifest
-    /// are treated as glob patterns. This means that even if a direct path to a
-    /// canister directory is provided (e.g., `canisters/my_canister`), it will
-    /// be processed as a glob.
+    /// The `canisters` field in the manifest supports glob patterns to specify
+    /// multiple canister YAML files. Even if a direct path to a canister directory
+    /// is provided (e.g., `canisters/my_canister`), it will be processed as a glob.
     ///
     /// A consequence of this glob-based approach is that if an explicitly
     /// specified canister path does not contain a `canister.yaml` file (thus,
@@ -87,21 +92,22 @@ impl ProjectManifest {
         let mpath = pds.project_yaml_path();
         let mpath: &Utf8Path = mpath.as_ref();
 
-        // Load
+        // Load the raw project manifest from the icp.yaml file.
         let pm: RawProjectManifest = load_yaml_file(mpath)?;
 
-        // Fallback (default)
-        let cs = pm.canisters.unwrap_or_else(default_canisters);
+        // Resolve the canisters field: if not explicitly defined in the YAML (i.e., None),
+        // fall back to the default glob pattern for locating canister manifests.
+        let canisters_field = pm.canisters.unwrap_or_else(default_canisters);
 
-        // Canisters
-        let cs = match cs {
-            // Case 1: single-canister
+        // Process the resolved RawCanistersField into the final CanistersField.
+        let cs = match canisters_field {
+            // Case 1: Single-canister project, where 'canister' key was used.
             RawCanistersField::Canister(c) => CanistersField::Canister((
                 pds.root().to_owned(), // path
                 c,                     // manifest
             )),
 
-            // Case 2: multi-canister
+            // Case 2: Multi-canister project, where 'canisters' key was used (or default applied).
             RawCanistersField::Canisters(cs) => {
                 let mut out = vec![];
 
@@ -113,11 +119,11 @@ impl ProjectManifest {
                         .context(GlobPatternSnafu { pattern })?;
 
                     for cpath in matches {
-                        // Directory
+                        // Directory path of the found canister.
                         let cpath = cpath.context(GlobWalkSnafu { path: mpath })?;
                         let path: Utf8PathBuf = cpath.try_into()?;
 
-                        // Manifest
+                        // Load the canister manifest from the resolved path.
                         let mpath = pds.canister_yaml_path(&path);
                         let cm = CanisterManifest::load(&mpath)
                             .context(CanisterLoadSnafu { path: &path })?;
@@ -134,10 +140,10 @@ impl ProjectManifest {
         };
 
         Ok(ProjectManifest {
-            // Canisters
+            // The resolved canister configurations.
             canisters: cs,
 
-            // Networks
+            // Network definitions for the project.
             networks: pm.networks,
         })
     }

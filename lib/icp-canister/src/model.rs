@@ -17,13 +17,16 @@ use snafu::Snafu;
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Adapter {
-    /// A canister written in Rust.
+    /// Represents a canister built using the Rust programming language.
+    /// This variant holds the configuration specific to Rust-based builds.
     Rust(RustAdapter),
 
-    /// A canister written in Motoko.
+    /// Represents a canister built using the Motoko programming language.
+    /// This variant holds the configuration specific to Motoko-based builds.
     Motoko(MotokoAdapter),
 
-    /// A canister built using a custom script or command.
+    /// Represents a canister built using a custom script or command.
+    /// This variant allows for flexible build processes defined by the user.
     Script(ScriptAdapter),
 }
 
@@ -34,22 +37,37 @@ pub struct Build {
     pub adapter: Adapter,
 }
 
-/// Represents the manifest describing a single canister,
-/// including its name and how it should be built.
+/// Represents the manifest describing a single canister.
+/// This struct is typically loaded from a `canister.yaml` file and defines
+/// the canister's name and how it should be built into WebAssembly.
 #[derive(Debug, Deserialize)]
 pub struct CanisterManifest {
-    /// Name of the canister described by this manifest.
+    /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
-    /// Build configuration for producing the canister's WebAssembly.
+    /// The build configuration specifying how to compile the canister's source
+    /// code into a WebAssembly module, including the adapter to use.
     pub build: Build,
 }
 
 impl CanisterManifest {
+    /// Loads a `CanisterManifest` from the specified YAML file path.
+    ///
+    /// This function reads and deserializes the content of a `canister.yaml`
+    /// file into a `CanisterManifest` struct, providing the necessary
+    /// configuration for a single canister.
+    ///
+    /// # Arguments
+    /// * `path` - A reference to the path of the `canister.yaml` file.
+    ///
+    /// # Returns
+    /// A `Result` which is:
+    /// - `Ok(Self)` if the manifest is successfully loaded and parsed.
+    /// - `Err(LoadCanisterManifestError)` if an error occurs during file loading or parsing.
     pub fn load<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
         let path = path.as_ref();
 
-        // Load
+        // Load the canister manifest from the YAML file.
         let cm: CanisterManifest = load_yaml_file(path)?;
 
         Ok(cm)

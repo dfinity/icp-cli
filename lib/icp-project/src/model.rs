@@ -98,13 +98,13 @@ pub enum LoadProjectManifestError {
     #[snafu(transparent)]
     InvalidPathUtf8 { source: camino::FromPathBufError },
 
-    #[snafu(display("failed to glob pattern {pattern}"))]
+    #[snafu(display("failed to glob pattern '{pattern}'"))]
     GlobPattern {
         source: glob::PatternError,
         pattern: String,
     },
 
-    #[snafu(display("failed to glob pattern in {path}"))]
+    #[snafu(display("failed to glob pattern in '{path}'"))]
     GlobWalk {
         source: glob::GlobError,
         path: Utf8PathBuf,

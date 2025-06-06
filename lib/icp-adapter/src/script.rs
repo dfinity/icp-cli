@@ -77,21 +77,21 @@ impl Adapter for ScriptAdapter {
 
 #[derive(Debug, Snafu)]
 pub enum ScriptAdapterCompileError {
-    #[snafu(display("failed to parse command {command}: {source}"))]
+    #[snafu(display("failed to parse command '{command}'"))]
     CommandParse {
         command: String,
         source: shellwords::MismatchedQuotes,
     },
 
-    #[snafu(display("invalid command {command}: {reason}"))]
+    #[snafu(display("invalid command '{command}'"))]
     InvalidCommand { command: String, reason: String },
 
-    #[snafu(display("failed to execute command {command}: {source}"))]
+    #[snafu(display("failed to execute command '{command}'"))]
     CommandInvoke {
         command: String,
         source: std::io::Error,
     },
 
-    #[snafu(display("command {command} failed with status code {code}"))]
+    #[snafu(display("command '{command}' failed with status code {code}"))]
     CommandStatus { command: String, code: String },
 }

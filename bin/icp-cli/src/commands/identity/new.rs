@@ -1,0 +1,45 @@
+use crate::env::Env;
+use bip39::{Language, Mnemonic, MnemonicType};
+use camino::Utf8PathBuf;
+use clap::Parser;
+use icp_fs::fs;
+use icp_identity::{
+    key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
+    seed::derive_default_key_from_seed,
+};
+use snafu::Snafu;
+
+#[derive(Debug, Parser)]
+pub struct NewCmd {
+    name: String,
+    #[arg(long, value_name = "FILE")]
+    output_seed: Option<Utf8PathBuf>,
+}
+
+pub fn exec(env: &Env, cmd: NewCmd) -> Result<(), NewIdentityError> {
+    let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
+    let key = derive_default_key_from_seed(&mnemonic);
+    create_identity(
+        env.dirs(),
+        &cmd.name,
+        IdentityKey::Secp256k1(key),
+        CreateFormat::Plaintext,
+    )?;
+    if let Some(out_file) = cmd.output_seed {
+        fs::write(&out_file, mnemonic.to_string().as_bytes())?;
+        println!("Seed phrase written to file {out_file}");
+        Ok(())
+    } else {
+        println!("Your seed phrase: {mnemonic}");
+        Ok(())
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum NewIdentityError {
+    #[snafu(transparent)]
+    CreateIdentityError { source: CreateIdentityError },
+
+    #[snafu(transparent)]
+    WriteSeedFileError { source: fs::WriteFileError },
+}

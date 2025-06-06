@@ -9,18 +9,36 @@ name = "icp"
 path = "src/main.rs"
 
 [dependencies]
-camino = { workspace = true }
-clap = { version = "4.5.35", features = ["derive"] }
-icp-adapter = { path = "../../lib/icp-adapter" }
-icp-canister = { path = "../../lib/icp-canister" }
-icp-fs = { path = "../../lib/icp-fs" }
-icp-network = { path = "../../lib/icp-network" }
-icp-project = { path = "../../lib/icp-project" }
-snafu = { workspace = true }
-tokio = { workspace = true }
+bip32.workspace = true
+camino.workspace = true
+clap.workspace = true
+dialoguer.workspace = true
+elliptic-curve.workspace = true
+hex.workspace = true
+ic-agent.workspace = true
+icp-adapter.workspace = true
+icp-canister.workspace = true
+icp-dirs.workspace = true
+icp-fs.workspace = true
+icp-identity.workspace = true
+icp-network.workspace = true
+icp-project.workspace = true
+itertools.workspace = true
+k256.workspace = true
+pem.workspace = true
+pkcs8.workspace = true
+sec1.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
+tiny-bip39.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
 reqwest = { workspace = true }
 camino-tempfile = "1"
+
+[lints]
+workspace = true

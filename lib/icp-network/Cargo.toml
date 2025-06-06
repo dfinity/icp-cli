@@ -9,7 +9,7 @@ candid = { workspace = true }
 fd-lock = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-icp-fs = { "path" = "../icp-fs" }
+icp-fs = { workspace = true }
 pocket-ic = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

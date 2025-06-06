@@ -1,23 +1,23 @@
-use crate::commands::network::run::RunNetworkCommandError;
+use crate::{commands::network::run::RunNetworkCommandError, env::Env};
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
 mod run;
 
 #[derive(Parser, Debug)]
-pub struct Cmd {
+pub struct NetworkCmd {
     #[command(subcommand)]
-    subcmd: Subcmd,
+    subcmd: NetworkSubcmd,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Subcmd {
+pub enum NetworkSubcmd {
     Run(run::Cmd),
 }
 
-pub async fn dispatch(cmd: Cmd) -> Result<(), NetworkCommandError> {
+pub async fn dispatch(_env: &Env, cmd: NetworkCmd) -> Result<(), NetworkCommandError> {
     match cmd.subcmd {
-        Subcmd::Run(cmd) => run::exec(cmd).await?,
+        NetworkSubcmd::Run(cmd) => run::exec(cmd).await?,
     }
     Ok(())
 }

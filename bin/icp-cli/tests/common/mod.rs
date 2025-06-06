@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod guard;
 mod os;
 mod test_env;

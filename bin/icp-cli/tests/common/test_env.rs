@@ -10,6 +10,7 @@ use std::fs::create_dir_all;
 pub struct TestEnv {
     home_dir: Utf8TempDir,
     bin_dir: Utf8PathBuf,
+    asset_dir: Utf8PathBuf,
     dfx_path: Option<Utf8PathBuf>,
     os_path: OsString,
 }
@@ -18,13 +19,16 @@ impl TestEnv {
     pub fn new() -> Self {
         let home_dir = camino_tempfile::tempdir().expect("failed to create temp home dir");
         let bin_dir = home_dir.path().join("bin");
+        let asset_dir = home_dir.path().join("share");
         fs::create_dir(&bin_dir).expect("failed to create bin dir");
+        fs::create_dir(&asset_dir).expect("failed to create asset dir");
         let os_path = Self::build_os_path(&bin_dir);
         eprintln!("Test environment home directory: {}", home_dir.path());
 
         Self {
             home_dir,
             bin_dir,
+            asset_dir,
             dfx_path: None,
             os_path,
         }
@@ -82,13 +86,14 @@ impl TestEnv {
         cmd.current_dir(self.home_path());
         cmd.env("HOME", self.home_path());
         cmd.env("PATH", self.os_path.clone());
+        cmd.env_remove("ICP_HOME");
     }
 
     fn build_os_path(bin_dir: &Utf8Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
-        let mut new_path = bin_dir.as_os_str().to_os_string();
+        let mut new_path = bin_dir.as_os_str().to_owned();
         new_path.push(PATH_SEPARATOR);
-        new_path.push(old_path);
+        new_path.push(&old_path);
         new_path
     }
 
@@ -100,5 +105,16 @@ impl TestEnv {
         let bind_address = "127.0.0.1:8000";
         let networks = format!(r#"{{"local": {{"bind": "{}"}}}}"#, bind_address);
         fs::write(&networks_json_path, networks).unwrap();
+    }
+
+    pub fn pkg_dir(&self) -> Utf8PathBuf {
+        env!("CARGO_MANIFEST_DIR").into()
+    }
+
+    pub fn make_asset(&self, name: &str) -> Utf8PathBuf {
+        let target = self.asset_dir.join(name);
+        fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
+            .expect("failed to copy asset");
+        target
     }
 }

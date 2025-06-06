@@ -1,10 +1,9 @@
 mod common;
 
-use std::process::Command;
-
 use crate::common::TestEnv;
 use crate::common::guard::ChildGuard;
 use predicates::str::contains;
+use std::process::Command;
 
 #[test]
 fn hello() {

@@ -1,9 +1,9 @@
 use clap::Parser;
 use icp_adapter::{Adapter as _, AdapterCompileError};
-use icp_canister::model::{Adapter, CanisterManifest, LoadCanisterManifestError};
+use icp_canister::model::Adapter;
 use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
-    model::{LoadProjectManifestError, ProjectManifest},
+    model::{CanistersField, LoadProjectManifestError, ProjectManifest},
 };
 use snafu::Snafu;
 
@@ -20,14 +20,14 @@ pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
     // Load
     let pm = ProjectManifest::load(pds)?;
 
-    // List canisters in project
-    let mut cs = Vec::new();
+    // Normalize to a list
+    let cs = match pm.canisters {
+        // Case 1: single-canister
+        CanistersField::Canister((path, c)) => vec![(path, c)],
 
-    for c in pm.canisters {
-        let mpath = pds.canister_yaml_path(&c);
-        let cm = CanisterManifest::from_file(&mpath)?;
-        cs.push((c, cm));
-    }
+        // Case 2: multi-canister
+        CanistersField::Canisters(cs) => cs,
+    };
 
     // Build canisters
     for (path, c) in cs {
@@ -59,9 +59,6 @@ pub enum BuildCommandError {
 
     #[snafu(transparent)]
     ProjectLoad { source: LoadProjectManifestError },
-
-    #[snafu(transparent)]
-    CanisterLoad { source: LoadCanisterManifestError },
 
     #[snafu(transparent)]
     BuildAdapter { source: AdapterCompileError },

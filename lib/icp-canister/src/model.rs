@@ -46,7 +46,7 @@ pub struct CanisterManifest {
 }
 
 impl CanisterManifest {
-    pub fn from_file<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
+    pub fn load<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
         let path = path.as_ref();
 
         // Load

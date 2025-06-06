@@ -1,13 +1,14 @@
 use crate::structure::ProjectDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
+use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use serde::Deserialize;
 use snafu::{ResultExt, Snafu};
 
 /// Provides the default glob pattern for locating canister manifests
-/// when the `canisters` field is not explicitly specified in the YAML.
-fn default_canisters() -> Vec<Utf8PathBuf> {
-    ["canisters/*"].iter().map(Utf8PathBuf::from).collect()
+/// when no `canisters` are explicitly specified in the YAML.
+fn default_canisters() -> RawCanistersField {
+    RawCanistersField::Canisters(["canisters/*"].iter().map(Utf8PathBuf::from).collect())
 }
 
 /// Provides the default glob pattern for locating network definition files
@@ -16,18 +17,44 @@ fn default_networks() -> Vec<Utf8PathBuf> {
     ["networks/*"].iter().map(Utf8PathBuf::from).collect()
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RawCanistersField {
+    Canister(CanisterManifest),
+    Canisters(Vec<Utf8PathBuf>),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CanistersField {
+    Canister((Utf8PathBuf, CanisterManifest)),
+    Canisters(Vec<(Utf8PathBuf, CanisterManifest)>),
+}
+
+/// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
+/// A project is a repository or directory grouping related canisters and network definitions.
+#[derive(Debug, Deserialize)]
+pub struct RawProjectManifest {
+    /// List of canister manifests belonging to this project.
+    /// Supports glob patterns to specify multiple canister YAML files.
+    #[serde(flatten)]
+    pub canisters: Option<RawCanistersField>,
+
+    /// List of network definition files relevant to the project.
+    /// Supports glob patterns to reference multiple network config files.
+    #[serde(default = "default_networks")]
+    pub networks: Vec<Utf8PathBuf>,
+}
+
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
 #[derive(Debug, Deserialize)]
 pub struct ProjectManifest {
     /// List of canister manifests belonging to this project.
-    /// Supports glob patterns to specify multiple canister YAML files.
-    #[serde(default = "default_canisters")]
-    pub canisters: Vec<Utf8PathBuf>,
+    pub canisters: CanistersField,
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    #[serde(default = "default_networks")]
     pub networks: Vec<Utf8PathBuf>,
 }
 
@@ -61,32 +88,58 @@ impl ProjectManifest {
         let mpath: &Utf8Path = mpath.as_ref();
 
         // Load
-        let mut pm: ProjectManifest = load_yaml_file(mpath)?;
+        let pm: RawProjectManifest = load_yaml_file(mpath)?;
+
+        // Fallback (default)
+        let cs = pm.canisters.unwrap_or_else(default_canisters);
 
         // Canisters
-        let mut cs = Vec::new();
+        let cs = match cs {
+            // Case 1: single-canister
+            RawCanistersField::Canister(c) => CanistersField::Canister((
+                pds.root().to_owned(), // path
+                c,                     // manifest
+            )),
 
-        for pattern in pm.canisters {
-            let matches = glob::glob(pds.root().join(&pattern).as_str())
-                .context(GlobPatternSnafu { pattern })?;
+            // Case 2: multi-canister
+            RawCanistersField::Canisters(cs) => {
+                let mut out = vec![];
 
-            for cpath in matches {
-                let cpath = cpath.context(GlobWalkSnafu { path: mpath })?;
+                for pattern in cs {
+                    // TODO(or.ricon): We should check if the pattern is a glob
+                    //   If it's not, we should raise an error when the specified path
+                    //   does not represent a canister directory (e.g doesnt contain a canister.yaml file)
+                    let matches = glob::glob(pds.root().join(&pattern).as_str())
+                        .context(GlobPatternSnafu { pattern })?;
 
-                let path: Utf8PathBuf = cpath.try_into()?;
+                    for cpath in matches {
+                        // Directory
+                        let cpath = cpath.context(GlobWalkSnafu { path: mpath })?;
+                        let path: Utf8PathBuf = cpath.try_into()?;
 
-                // Skip non-canister directories
-                if !pds.canister_yaml_path(&path).exists() {
-                    continue;
+                        // Manifest
+                        let mpath = pds.canister_yaml_path(&path);
+                        let cm = CanisterManifest::load(&mpath)
+                            .context(CanisterLoadSnafu { path: &path })?;
+
+                        out.push((
+                            path, // path
+                            cm,   // manifest
+                        ))
+                    }
                 }
 
-                cs.push(path);
+                CanistersField::Canisters(out)
             }
-        }
+        };
 
-        pm.canisters = cs;
+        Ok(ProjectManifest {
+            // Canisters
+            canisters: cs,
 
-        Ok(pm)
+            // Networks
+            networks: pm.networks,
+        })
     }
 }
 
@@ -107,6 +160,12 @@ pub enum LoadProjectManifestError {
     #[snafu(display("failed to glob pattern in '{path}'"))]
     GlobWalk {
         source: glob::GlobError,
+        path: Utf8PathBuf,
+    },
+
+    #[snafu(display("failed to load canister manifest in path '{path}'"))]
+    CanisterLoad {
+        source: icp_canister::model::LoadCanisterManifestError,
         path: Utf8PathBuf,
     },
 }

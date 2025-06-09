@@ -148,8 +148,12 @@ impl ProjectManifest {
                             }
 
                             // Check for a canister manifest.
-                            if !pds.canister_yaml_path(&canister_path).exists() {
-                                return Err(LoadProjectManifestError::NoManifest { path: pattern });
+                            let manifest_path = pds.canister_yaml_path(&canister_path);
+
+                            if !manifest_path.exists() {
+                                return Err(LoadProjectManifestError::NoManifest {
+                                    path: manifest_path,
+                                });
                             }
 
                             vec![canister_path]

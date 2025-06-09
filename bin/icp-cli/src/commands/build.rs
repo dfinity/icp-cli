@@ -19,13 +19,6 @@ pub struct Cmd;
 /// 3. Normalizes the canister definitions into a unified list.
 /// 4. Iterates through each defined canister and invokes its respective build adapter
 ///    (Rust, Motoko, or custom script) to compile it into WebAssembly.
-///
-/// # Arguments
-/// * `_` - An unused `Cmd` struct, typically for command-line argument parsing.
-///
-/// # Returns
-/// A `Result` indicating success (`Ok(())`) or an error (`Err(BuildCommandError)`)
-/// if the project cannot be found, the manifest fails to load, or a canister build fails.
 pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
     // Find the current ICP project directory.
     let pd = ProjectDirectory::find()?.ok_or(BuildCommandError::ProjectNotFound)?;

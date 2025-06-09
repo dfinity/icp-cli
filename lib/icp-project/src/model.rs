@@ -52,7 +52,6 @@ pub struct RawProjectManifest {
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
-#[derive(Debug, Deserialize)]
 pub struct ProjectManifest {
     /// List of canister manifests belonging to this project.
     pub canisters: CanistersField,

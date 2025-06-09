@@ -52,18 +52,6 @@ pub struct CanisterManifest {
 
 impl CanisterManifest {
     /// Loads a `CanisterManifest` from the specified YAML file path.
-    ///
-    /// This function reads and deserializes the content of a `canister.yaml`
-    /// file into a `CanisterManifest` struct, providing the necessary
-    /// configuration for a single canister.
-    ///
-    /// # Arguments
-    /// * `path` - A reference to the path of the `canister.yaml` file.
-    ///
-    /// # Returns
-    /// A `Result` which is:
-    /// - `Ok(Self)` if the manifest is successfully loaded and parsed.
-    /// - `Err(LoadCanisterManifestError)` if an error occurs during file loading or parsing.
     pub fn load<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
         let path = path.as_ref();
 

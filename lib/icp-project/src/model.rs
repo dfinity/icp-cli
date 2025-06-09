@@ -141,7 +141,7 @@ impl ProjectManifest {
                             let canister_path = pds.root().join(&pattern);
 
                             // Check if path exists and that it's a directory.
-                            if !canister_path.exists() || !canister_path.is_dir() {
+                            if !canister_path.is_dir() {
                                 return Err(LoadProjectManifestError::CanisterPath {
                                     path: pattern,
                                 });

@@ -197,7 +197,7 @@ pub enum LoadProjectManifestError {
     #[snafu(display("canister path must exist and be a directory '{path}'"))]
     CanisterPath { path: Utf8PathBuf },
 
-    #[snafu(display("canister path does not contain a manifest '{path}'"))]
+    #[snafu(display("no canister manifest found at '{path}'"))]
     NoManifest { path: Utf8PathBuf },
 
     #[snafu(display("failed to glob pattern '{pattern}'"))]

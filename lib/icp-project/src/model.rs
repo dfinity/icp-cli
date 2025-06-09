@@ -1,4 +1,6 @@
-use crate::structure::ProjectDirectoryStructure;
+use std::str::FromStr;
+
+use crate::{glob::Pattern, structure::ProjectDirectoryStructure};
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
 use icp_canister::model::CanisterManifest;
@@ -9,17 +11,28 @@ use snafu::{ResultExt, Snafu};
 /// Provides the default glob pattern for locating canister manifests
 /// when no `canisters` are explicitly specified in the YAML.
 fn default_canisters() -> RawCanistersField {
-    RawCanistersField::Canisters(["canisters/*"].iter().map(Utf8PathBuf::from).collect())
+    RawCanistersField::Canisters(
+        ["canisters/*"]
+            .into_iter()
+            .map(Pattern::new)
+            .collect::<Result<_, _>>()
+            .unwrap(),
+    )
 }
 
 /// Provides the default glob pattern for locating network definition files
 /// when the `networks` field is not explicitly specified in the YAML.
-fn default_networks() -> Vec<Utf8PathBuf> {
-    ["networks/*"].iter().map(Utf8PathBuf::from).collect()
+fn default_networks() -> Vec<Pattern> {
+    ["networks/*"]
+        .into_iter()
+        .map(Pattern::new)
+        .collect::<Result<_, _>>()
+        .unwrap()
 }
 
-fn is_glob<P: AsRef<Utf8Path>>(path: P) -> bool {
-    let s = path.as_ref().as_str();
+fn is_glob(pattern: &Pattern) -> bool {
+    let pattern = pattern.value();
+    let s = pattern.as_str();
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
@@ -27,7 +40,7 @@ fn is_glob<P: AsRef<Utf8Path>>(path: P) -> bool {
 #[serde(rename_all = "lowercase")]
 pub enum RawCanistersField {
     Canister(CanisterManifest),
-    Canisters(Vec<Utf8PathBuf>),
+    Canisters(Vec<Pattern>),
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -45,8 +58,7 @@ pub struct RawProjectManifest {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    #[serde(default = "default_networks")]
-    pub networks: Vec<Utf8PathBuf>,
+    pub networks: Option<Vec<Pattern>>,
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -113,9 +125,13 @@ impl ProjectManifest {
                     let dirs = match is_glob(&pattern) {
                         // Glob
                         true => {
+                            // Pattern
+                            let pattern = pattern.value();
+                            let pattern = pattern.as_str();
+
                             // Resolve glob
-                            let matches = glob::glob(pds.root().join(&pattern).as_str())
-                                .context(GlobPatternSnafu { pattern: &pattern })?;
+                            let matches = glob::glob(pds.root().join(pattern).as_str())
+                                .context(GlobPatternSnafu { pattern })?;
 
                             // Extract values
                             let paths = matches
@@ -137,14 +153,16 @@ impl ProjectManifest {
 
                         // Explicit path
                         false => {
+                            // Path
+                            let path = Utf8PathBuf::from_str(pattern.value().as_str())
+                                .expect("this is an infallible operation");
+
                             // Resolve the explicit path against the project root.
-                            let canister_path = pds.root().join(&pattern);
+                            let canister_path = pds.root().join(&path);
 
                             // Check if path exists and that it's a directory.
                             if !canister_path.is_dir() {
-                                return Err(LoadProjectManifestError::CanisterPath {
-                                    path: pattern,
-                                });
+                                return Err(LoadProjectManifestError::CanisterPath { path });
                             }
 
                             // Check for a canister manifest.
@@ -180,12 +198,19 @@ impl ProjectManifest {
             }
         };
 
+        // Networks
+        let _networks = pm.networks.unwrap_or(default_networks());
+
+        // TODO(or.ricon): Parse network manifests
+        // NOTE(TMP): In the meantime, skip networks
+        let networks = vec![];
+
         Ok(ProjectManifest {
             // The resolved canister configurations.
             canisters: cs,
 
             // Network definitions for the project.
-            networks: pm.networks,
+            networks,
         })
     }
 }

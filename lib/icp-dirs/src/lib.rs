@@ -1,4 +1,4 @@
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use directories::ProjectDirs;
 use snafu::{OptionExt, ResultExt, Snafu};
 
@@ -12,8 +12,8 @@ pub struct IcpCliDirs {
 impl IcpCliDirs {
     pub fn new() -> Result<Self, DiscoverDirsError> {
         if let Ok(override_var) = std::env::var("ICP_HOME") {
-            let root = Utf8PathBuf::from(override_var.clone());
-            Ok(Self::from_override(root))
+            let override_dir = Utf8PathBuf::from(override_var.clone());
+            Ok(Self::from_override(&override_dir))
         } else {
             let project_dirs =
                 ProjectDirs::from("org.dfinity", "", "icp-cli").context(CannotFindHomeSnafu)?;
@@ -33,11 +33,13 @@ impl IcpCliDirs {
         })
     }
 
-    fn from_override(root: Utf8PathBuf) -> Self {
+    fn from_override(dir: &Utf8Path) -> Self {
+        // We won't have directories with the same name,
+        // so we can use the same root for all directories.
         Self {
-            cache_dir: root.join("cache"),
-            config_dir: root.join("config"),
-            data_dir: root.join("data"),
+            cache_dir: dir.to_path_buf(),
+            config_dir: dir.to_path_buf(),
+            data_dir: dir.to_path_buf(),
         }
     }
 }

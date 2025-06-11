@@ -337,14 +337,14 @@ pub enum LoadKeyError {
 #[derive(Debug, Snafu)]
 pub enum DeriveKeyError {
     #[snafu(transparent)]
-    ReadSeedFileError { source: fs::ReadToStringError },
+    ReadSeedFile { source: fs::ReadToStringError },
 
     #[snafu(display("failed to read seed phrase from terminal"))]
-    ReadSeedPhraseFromTerminalError { source: dialoguer::Error },
+    ReadSeedPhraseFromTerminal { source: dialoguer::Error },
 
     #[snafu(display("failed to parse seed phrase"))]
-    ParseMnemonicError { source: bip39::ErrorKind },
+    ParseMnemonic { source: bip39::ErrorKind },
 
     #[snafu(transparent)]
-    CreateIdentityError { source: CreateIdentityError },
+    CreateIdentity { source: CreateIdentityError },
 }

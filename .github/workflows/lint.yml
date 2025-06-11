@@ -27,6 +27,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-lint-1
 
       - name: Run Lint
-        run: cargo clippy --verbose --tests --benches -- -D warnings
+        run: cargo clippy --verbose --tests --benches -- -D warnings -D clippy::all
         env:
           RUST_BACKTRACE: 1

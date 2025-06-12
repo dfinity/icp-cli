@@ -117,6 +117,10 @@ fn network_same_port() {
         .assert()
         .success();
 
+    // "icp network start" will wait for the local network to be healthy,
+    // but for now we need to wait for the descriptor to be created.
+    testenv.wait_for_local_network_descriptor(&project_dir_a);
+
     eprintln!("second network run attempt");
     testenv
         .icp()

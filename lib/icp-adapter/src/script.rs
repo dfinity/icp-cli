@@ -42,6 +42,15 @@ impl Adapter for ScriptAdapter {
                 reason: "command must include at least one element".to_string(),
             })?;
 
+            // Try resolving the command as a local path (e.g., ./mytool)
+            let cmd = match dunce::canonicalize(path.join(cmd)) {
+                // Use the canonicalized local path if it exists
+                Ok(p) => p,
+
+                // Fall back to assuming it's a command in the system PATH
+                Err(_) => cmd.into(),
+            };
+
             // Command
             let mut cmd = Command::new(cmd);
 

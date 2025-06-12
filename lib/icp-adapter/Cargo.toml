@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 async-trait = { workspace = true }
 camino = { workspace = true }
+dunce = { workspace = true }
 serde = { workspace = true }
 shellwords = { workspace = true }
 snafu = { workspace = true }

@@ -20,6 +20,7 @@ candid = "0.10.14"
 clap = { version = "4.5.3", features = ["derive"] }
 dialoguer = "0.11.0"
 directories = "6.0.0"
+dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
 fd-lock = "4.0.4"

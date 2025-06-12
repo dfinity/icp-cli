@@ -1,5 +1,5 @@
 use crate::structure::ProjectDirectoryStructure;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use icp_network::NetworkDirectory;
 use snafu::{ResultExt, Snafu};
 use std::io;
@@ -29,9 +29,14 @@ impl ProjectDirectory {
         &self.structure
     }
 
-    pub fn network(&self, network_name: &str) -> NetworkDirectory {
+    pub fn network(
+        &self,
+        network_name: &str,
+        port_descriptor_dir: impl AsRef<Utf8Path>,
+    ) -> NetworkDirectory {
         let network_root = self.structure.network_root(network_name);
-        NetworkDirectory::new(&network_root)
+
+        NetworkDirectory::new(network_name, &network_root, port_descriptor_dir.as_ref())
     }
 }
 

@@ -2,24 +2,41 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 pub struct NetworkDirectoryStructure {
     pub network_root: Utf8PathBuf,
+    pub port_descriptor_dir: Utf8PathBuf,
 }
 
 impl NetworkDirectoryStructure {
-    pub fn new(network_root: &Utf8Path) -> Self {
+    pub fn new(network_root: &Utf8Path, port_descriptor_dir: &Utf8Path) -> Self {
         let network_root = network_root.to_path_buf();
-        Self { network_root }
+        let port_descriptor_dir = port_descriptor_dir.to_path_buf();
+        Self {
+            network_root,
+            port_descriptor_dir,
+        }
     }
 
-    pub fn network_root(&self) -> &Utf8PathBuf {
+    pub fn network_root(&self) -> &Utf8Path {
         &self.network_root
     }
 
-    pub fn project_descriptor_path(&self) -> Utf8PathBuf {
+    pub fn port_descriptor_dir(&self) -> &Utf8Path {
+        &self.port_descriptor_dir
+    }
+
+    pub fn network_lock_path(&self) -> Utf8PathBuf {
+        self.network_root.join("lock")
+    }
+
+    pub fn network_descriptor_path(&self) -> Utf8PathBuf {
         self.network_root.join("descriptor.json")
     }
 
-    pub fn lock_path(&self) -> Utf8PathBuf {
-        self.network_root.join("lock")
+    pub fn port_lock_path(&self, port: u16) -> Utf8PathBuf {
+        self.port_descriptor_dir.join(format!("{}.lock", port))
+    }
+
+    pub fn port_descriptor_path(&self, port: u16) -> Utf8PathBuf {
+        self.port_descriptor_dir.join(format!("{}.json", port))
     }
 
     pub fn state_dir(&self) -> Utf8PathBuf {

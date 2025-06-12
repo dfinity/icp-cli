@@ -117,4 +117,47 @@ impl TestEnv {
             .expect("failed to copy asset");
         target
     }
+    pub fn create_project_dir(&self, name: &str) -> Utf8PathBuf {
+        let project_dir = self.home_path().join(name);
+        std::fs::create_dir_all(&project_dir).expect("Failed to create icp project directory");
+        std::fs::write(project_dir.join("icp.yaml"), "").expect("Failed to write project file");
+        project_dir
+    }
+
+    // wait up to 30 seconds for descriptor path to contain valid json
+    pub fn wait_for_local_network_descriptor(&self, project_dir: &Utf8Path) {
+        let descriptor_path = project_dir
+            .join(".icp")
+            .join("networks")
+            .join("local")
+            .join("descriptor.json");
+        let start_time = std::time::Instant::now();
+        loop {
+            eprintln!(
+                "Checking for local network descriptor at {}",
+                descriptor_path
+            );
+            if descriptor_path.exists() && descriptor_path.is_file() {
+                let contents = fs::read_to_string(&descriptor_path)
+                    .expect("Failed to read local network descriptor");
+                let parsed = serde_json::from_str::<serde_json::Value>(&contents);
+                if parsed.is_ok() {
+                    eprintln!("Local network descriptor found at {}", descriptor_path);
+                    break;
+                } else {
+                    eprintln!(
+                        "Local network descriptor at {} is not valid JSON: {}",
+                        descriptor_path, contents
+                    );
+                }
+            }
+            if start_time.elapsed().as_secs() > 30 {
+                panic!(
+                    "Timed out waiting for local network descriptor at {}",
+                    descriptor_path
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
 }

@@ -24,13 +24,6 @@ pub enum RawCanistersField {
     Canisters(Vec<Utf8PathBuf>),
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CanistersField {
-    Canister((Utf8PathBuf, CanisterManifest)),
-    Canisters(Vec<(Utf8PathBuf, CanisterManifest)>),
-}
-
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
 #[derive(Debug, Deserialize)]
@@ -54,7 +47,7 @@ pub struct RawProjectManifest {
 /// A project is a repository or directory grouping related canisters and network definitions.
 pub struct ProjectManifest {
     /// List of canister manifests belonging to this project.
-    pub canisters: CanistersField,
+    pub canisters: Vec<(Utf8PathBuf, CanisterManifest)>,
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
@@ -101,10 +94,10 @@ impl ProjectManifest {
         // Process the resolved RawCanistersField into the final CanistersField.
         let cs = match canisters_field {
             // Case 1: Single-canister project, where 'canister' key was used.
-            RawCanistersField::Canister(c) => CanistersField::Canister((
+            RawCanistersField::Canister(c) => vec![(
                 pds.root().to_owned(), // path
                 c,                     // manifest
-            )),
+            )],
 
             // Case 2: Multi-canister project, where 'canisters' key was used (or default applied).
             RawCanistersField::Canisters(cs) => {
@@ -134,7 +127,7 @@ impl ProjectManifest {
                     }
                 }
 
-                CanistersField::Canisters(out)
+                out
             }
         };
 

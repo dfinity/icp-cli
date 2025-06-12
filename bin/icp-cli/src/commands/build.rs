@@ -3,7 +3,7 @@ use icp_adapter::{Adapter as _, AdapterCompileError};
 use icp_canister::model::Adapter;
 use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
-    model::{CanistersField, LoadProjectManifestError, ProjectManifest},
+    model::{LoadProjectManifestError, ProjectManifest},
 };
 use snafu::Snafu;
 
@@ -29,18 +29,8 @@ pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ProjectManifest::load(pds)?;
 
-    // Normalize the `CanistersField` into a flat list of (path, CanisterManifest) tuples.
-    // This handles both single-canister and multi-canister configurations uniformly.
-    let cs = match pm.canisters {
-        // If a single canister was defined, wrap it in a vector.
-        CanistersField::Canister((path, c)) => vec![(path, c)],
-
-        // If multiple canisters were defined (or default glob applied), use the list directly.
-        CanistersField::Canisters(cs) => cs,
-    };
-
     // Iterate through each resolved canister and trigger its build process.
-    for (path, c) in cs {
+    for (path, c) in pm.canisters {
         match c.build.adapter {
             // Compile using the custom script adapter.
             Adapter::Script(adapter) => {

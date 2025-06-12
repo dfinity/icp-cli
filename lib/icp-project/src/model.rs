@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::{glob::Pattern, structure::ProjectDirectoryStructure};
+use crate::structure::ProjectDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
 use icp_canister::model::CanisterManifest;
@@ -14,25 +14,21 @@ fn default_canisters() -> RawCanistersField {
     RawCanistersField::Canisters(
         ["canisters/*"]
             .into_iter()
-            .map(Pattern::new)
-            .collect::<Result<_, _>>()
-            .unwrap(),
+            .map(String::from)
+            .collect::<Vec<_>>(),
     )
 }
 
 /// Provides the default glob pattern for locating network definition files
 /// when the `networks` field is not explicitly specified in the YAML.
-fn default_networks() -> Vec<Pattern> {
+fn default_networks() -> Vec<String> {
     ["networks/*"]
         .into_iter()
-        .map(Pattern::new)
-        .collect::<Result<_, _>>()
-        .unwrap()
+        .map(String::from)
+        .collect::<Vec<_>>()
 }
 
-fn is_glob(pattern: &Pattern) -> bool {
-    let pattern = pattern.value();
-    let s = pattern.as_str();
+fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
@@ -40,7 +36,7 @@ fn is_glob(pattern: &Pattern) -> bool {
 #[serde(rename_all = "lowercase")]
 pub enum RawCanistersField {
     Canister(CanisterManifest),
-    Canisters(Vec<Pattern>),
+    Canisters(Vec<String>),
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -58,7 +54,7 @@ pub struct RawProjectManifest {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: Option<Vec<Pattern>>,
+    pub networks: Option<Vec<String>>,
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -125,13 +121,9 @@ impl ProjectManifest {
                     let dirs = match is_glob(&pattern) {
                         // Glob
                         true => {
-                            // Pattern
-                            let pattern = pattern.value();
-                            let pattern = pattern.as_str();
-
                             // Resolve glob
-                            let matches = glob::glob(pds.root().join(pattern).as_str())
-                                .context(GlobPatternSnafu { pattern })?;
+                            let matches = glob::glob(pds.root().join(&pattern).as_str())
+                                .context(GlobPatternSnafu { pattern: &pattern })?;
 
                             // Extract values
                             let paths = matches
@@ -154,7 +146,7 @@ impl ProjectManifest {
                         // Explicit path
                         false => {
                             // Path
-                            let path = Utf8PathBuf::from_str(pattern.value().as_str())
+                            let path = Utf8PathBuf::from_str(&pattern)
                                 .expect("this is an infallible operation");
 
                             // Resolve the explicit path against the project root.

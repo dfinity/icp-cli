@@ -1,6 +1,6 @@
 use crate::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
-use camino::Utf8PathBuf;
+use camino::Utf8Path;
 use serde::Deserialize;
 use snafu::Snafu;
 
@@ -15,7 +15,7 @@ pub struct MotokoAdapter {
 
 #[async_trait]
 impl Adapter for MotokoAdapter {
-    async fn compile(&self, _path: Utf8PathBuf) -> Result<(), AdapterCompileError> {
+    async fn compile(&self, _path: &Utf8Path) -> Result<(), AdapterCompileError> {
         Ok(())
     }
 }

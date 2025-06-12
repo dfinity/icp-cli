@@ -1,6 +1,6 @@
 use crate::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
-use camino::Utf8PathBuf;
+use camino::Utf8Path;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
@@ -25,7 +25,7 @@ pub struct ScriptAdapter {
 
 #[async_trait]
 impl Adapter for ScriptAdapter {
-    async fn compile(&self, path: Utf8PathBuf) -> Result<(), AdapterCompileError> {
+    async fn compile(&self, path: &Utf8Path) -> Result<(), AdapterCompileError> {
         let cmds = match &self.command {
             CommandField::Command(cmd) => std::slice::from_ref(cmd),
             CommandField::Commands(cmds) => cmds,
@@ -49,7 +49,7 @@ impl Adapter for ScriptAdapter {
             cmd.args(args);
 
             // Set directory
-            cmd.current_dir(&path);
+            cmd.current_dir(path);
 
             // Output
             cmd.stdin(Stdio::inherit());

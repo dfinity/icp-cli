@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use camino::Utf8PathBuf;
+use camino::Utf8Path;
 use motoko::MotokoAdapterCompileError;
 use rust::RustAdapterCompileError;
 use script::ScriptAdapterCompileError;
@@ -11,7 +11,7 @@ pub mod script;
 
 #[async_trait]
 pub trait Adapter {
-    async fn compile(&self, path: Utf8PathBuf) -> Result<(), AdapterCompileError>;
+    async fn compile(&self, path: &Utf8Path) -> Result<(), AdapterCompileError>;
 }
 
 #[derive(Debug, Snafu)]

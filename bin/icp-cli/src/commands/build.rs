@@ -33,15 +33,15 @@ pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
     for (path, c) in cs {
         match c.build.adapter {
             Adapter::Script(adapter) => {
-                adapter.compile(path).await?;
+                adapter.compile(&path).await?;
             }
 
             Adapter::Motoko(adapter) => {
-                adapter.compile(path).await?;
+                adapter.compile(&path).await?;
             }
 
             Adapter::Rust(adapter) => {
-                adapter.compile(path).await?;
+                adapter.compile(&path).await?;
             }
         }
     }

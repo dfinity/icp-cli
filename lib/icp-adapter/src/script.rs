@@ -5,7 +5,7 @@ use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum CommandField {
     /// Command used to build a canister
@@ -25,7 +25,7 @@ impl CommandField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct ScriptAdapter {
     /// Command used to build a canister
     #[serde(flatten)]

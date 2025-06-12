@@ -15,6 +15,15 @@ pub enum CommandField {
     Commands(Vec<String>),
 }
 
+impl CommandField {
+    fn as_vec(&self) -> Vec<String> {
+        match self {
+            Self::Command(cmd) => vec![cmd.clone()],
+            Self::Commands(cmds) => cmds.clone(),
+        }
+    }
+}
+
 /// Configuration for a custom canister build adapter.
 #[derive(Debug, Deserialize)]
 pub struct ScriptAdapter {
@@ -26,19 +35,15 @@ pub struct ScriptAdapter {
 #[async_trait]
 impl Adapter for ScriptAdapter {
     async fn compile(&self, path: &Utf8Path) -> Result<(), AdapterCompileError> {
-        let cmds = match &self.command {
-            CommandField::Command(cmd) => std::slice::from_ref(cmd),
-            CommandField::Commands(cmds) => cmds,
-        };
-
-        for input_cmd in cmds {
+        for input_cmd in self.command.as_vec() {
             // Parse command input
-            let input =
-                shellwords::split(input_cmd).context(CommandParseSnafu { command: input_cmd })?;
+            let input = shellwords::split(&input_cmd).context(CommandParseSnafu {
+                command: &input_cmd,
+            })?;
 
             // Separate command and args
             let (cmd, args) = input.split_first().context(InvalidCommandSnafu {
-                command: input_cmd,
+                command: &input_cmd,
                 reason: "command must include at least one element".to_string(),
             })?;
 
@@ -66,14 +71,14 @@ impl Adapter for ScriptAdapter {
             cmd.stderr(Stdio::inherit());
 
             // Execute
-            let status = cmd
-                .status()
-                .context(CommandInvokeSnafu { command: input_cmd })?;
+            let status = cmd.status().context(CommandInvokeSnafu {
+                command: &input_cmd,
+            })?;
 
             // Status
             if !status.success() {
                 return Err(ScriptAdapterCompileError::CommandStatus {
-                    command: input_cmd.to_owned(),
+                    command: input_cmd,
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
                 }
                 .into());

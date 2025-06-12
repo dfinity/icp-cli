@@ -1,21 +1,24 @@
 use crate::RunNetworkError::NoPocketIcPath;
-use crate::config::model::managed::ManagedNetworkModel;
-use crate::config::model::network_descriptor::NetworkDescriptorModel;
-use crate::directory::OpenLockFileError;
+use crate::config::model::managed::{BindPort, ManagedNetworkModel};
+use crate::config::model::network_descriptor::{
+    NetworkDescriptorGatewayPort, NetworkDescriptorModel,
+};
+use crate::directory::SaveNetworkDescriptorError;
+use crate::managed::descriptor::fixed_port_lock::AnotherProjectRunningOnSamePortError;
+use crate::managed::descriptor::network_lock::ProjectNetworkAlreadyRunningError;
 use crate::managed::pocketic::admin::{
     CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
 };
 use crate::managed::pocketic::instance::PocketIcInstance;
 use crate::managed::pocketic::native::spawn_pocketic;
 use crate::managed::run::InitializePocketicError::NoRootKey;
-use crate::structure::NetworkDirectoryStructure;
 use crate::{NetworkDirectory, status};
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::fs::{
     CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
     remove_file,
 };
-use icp_fs::json::{SaveJsonFileError, save_json_file};
+use icp_fs::lock::OpenFileForWriteLockError;
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
@@ -32,24 +35,38 @@ use uuid::Uuid;
 pub async fn run_network(
     config: ManagedNetworkModel,
     nd: NetworkDirectory,
+    project_root: &Utf8Path,
 ) -> Result<(), RunNetworkError> {
     let pocketic_path = Utf8PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
 
     nd.ensure_exists()?;
 
-    let mut file = nd.open_lock_file()?;
-    let _guard = file
-        .try_write()
-        .map_err(|_| RunNetworkError::AlreadyRunningThisProject)?;
+    let mut network_lock = nd.open_network_lock_file()?;
+    let _network_claim = network_lock.try_acquire()?;
 
-    run_pocketic(&pocketic_path, config, nd.structure()).await?;
+    let mut port_lock;
+    let _port_claim;
+
+    if let BindPort::Fixed(port) = &config.gateway.port {
+        port_lock = Some(nd.open_port_lock_file(*port)?);
+        _port_claim = Some(port_lock.as_mut().unwrap().try_acquire()?);
+    }
+
+    run_pocketic(&pocketic_path, &config, &nd, project_root).await?;
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
-    #[snafu(display("already running (this project)"))]
-    AlreadyRunningThisProject,
+    #[snafu(transparent)]
+    ProjectNetworkAlreadyRunning {
+        source: ProjectNetworkAlreadyRunningError,
+    },
+
+    #[snafu(transparent)]
+    AnotherProjectRunningOnSamePort {
+        source: AnotherProjectRunningOnSamePortError,
+    },
 
     #[snafu(transparent)]
     CreateDirFailed { source: CreateDirAllError },
@@ -58,7 +75,7 @@ pub enum RunNetworkError {
     NoPocketIcPath,
 
     #[snafu(transparent)]
-    OpenLockFile { source: OpenLockFileError },
+    OpenFileForWriteLock { source: OpenFileForWriteLockError },
 
     #[snafu(transparent)]
     RunPocketIc { source: RunPocketIcError },
@@ -66,9 +83,11 @@ pub enum RunNetworkError {
 
 async fn run_pocketic(
     pocketic_path: &Utf8Path,
-    _config: ManagedNetworkModel,
-    nds: &NetworkDirectoryStructure,
+    config: &ManagedNetworkModel,
+    nd: &NetworkDirectory,
+    project_root: &Utf8Path,
 ) -> Result<(), RunPocketIcError> {
+    let nds = nd.structure();
     eprintln!("PocketIC path: {pocketic_path}");
 
     create_dir_all(nds.pocketic_dir())?;
@@ -88,14 +107,21 @@ async fn run_pocketic(
         eprintln!("PocketIC started on port {port}");
         let instance = initialize_pocketic(port, &nds.state_dir()).await?;
 
-        let nd = NetworkDescriptorModel {
+        let gateway = NetworkDescriptorGatewayPort {
+            port: instance.gateway_port,
+            fixed: matches!(config.gateway.port, BindPort::Fixed(_)),
+        };
+        let descriptor = NetworkDescriptorModel {
             id: Uuid::new_v4(),
-            path: nds.network_root().to_path_buf(),
-            gateway_port: Some(instance.gateway_port),
+            project_dir: project_root.to_path_buf(),
+            network: nd.network_name().to_string(),
+            network_dir: nd.structure().network_root().to_path_buf(),
+            gateway,
             pid: Some(child.id().unwrap()),
             root_key: instance.root_key,
         };
-        save_json_file(nds.project_descriptor_path(), &nd)?;
+
+        let _cleaner = nd.save_network_descriptors(&descriptor)?;
         eprintln!("Press Ctrl-C to exit.");
         let _ = wait_for_shutdown(&mut child).await;
         Ok(())
@@ -120,7 +146,7 @@ pub enum RunPocketIcError {
     RemoveFile { source: RemoveFileError },
 
     #[snafu(transparent)]
-    SaveJsonFile { source: SaveJsonFileError },
+    SaveNetworkDescriptor { source: SaveNetworkDescriptorError },
 
     #[snafu(transparent)]
     InitPocketIc { source: InitializePocketicError },

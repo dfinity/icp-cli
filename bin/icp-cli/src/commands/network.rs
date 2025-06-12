@@ -15,9 +15,9 @@ pub enum NetworkSubcmd {
     Run(run::Cmd),
 }
 
-pub async fn dispatch(_env: &Env, cmd: NetworkCmd) -> Result<(), NetworkCommandError> {
+pub async fn dispatch(env: &Env, cmd: NetworkCmd) -> Result<(), NetworkCommandError> {
     match cmd.subcmd {
-        NetworkSubcmd::Run(cmd) => run::exec(cmd).await?,
+        NetworkSubcmd::Run(cmd) => run::exec(env, cmd).await?,
     }
     Ok(())
 }

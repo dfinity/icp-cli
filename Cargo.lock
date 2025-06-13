@@ -1392,10 +1392,12 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "camino",
+ "camino-tempfile",
  "dunce",
  "serde",
  "shellwords",
  "snafu",
+ "tokio",
 ]
 
 [[package]]

@@ -10,3 +10,7 @@ dunce = { workspace = true }
 serde = { workspace = true }
 shellwords = { workspace = true }
 snafu = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+camino-tempfile = { workspace = true }

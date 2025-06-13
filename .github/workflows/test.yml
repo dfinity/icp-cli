@@ -12,7 +12,7 @@ env:
   # Use the local .curlrc
   CURL_HOME: .
   # Disable DFX telemetry
-  DFX_TELEMETRY: 'off'
+  DFX_TELEMETRY: "off"
 
 jobs:
   discover:
@@ -53,6 +53,9 @@ jobs:
           dfx cache install
           echo "ICPTEST_DFX_PATH=$(dfx cache show)/dfx" >> "$GITHUB_ENV"
           echo "ICP_POCKET_IC_PATH=$(dfx cache show)/pocket-ic" >> "$GITHUB_ENV"
+
+      - name: Run unit tests
+        run: cargo test --workspace --lib --bins
 
       - name: Run ${{ matrix.test }}
         run: cargo test --test ${{ matrix.test }}

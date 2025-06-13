@@ -97,7 +97,7 @@ pub enum ScriptAdapterCompileError {
         source: shellwords::MismatchedQuotes,
     },
 
-    #[snafu(display("invalid command '{command}'"))]
+    #[snafu(display("invalid command '{command}': {reason}"))]
     InvalidCommand { command: String, reason: String },
 
     #[snafu(display("failed to execute command '{command}'"))]

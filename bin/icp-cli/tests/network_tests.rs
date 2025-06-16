@@ -13,14 +13,7 @@ fn hello() {
 
     let icp_project_dir = testenv.create_project_dir("icp");
 
-    let icp_path = env!("CARGO_BIN_EXE_icp");
-    let mut cmd = Command::new(icp_path);
-    cmd.env("HOME", testenv.home_path())
-        .current_dir(icp_project_dir)
-        .arg("network")
-        .arg("run");
-
-    let _child_guard = ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ");
+    let _child_guard = testenv.start_network_in(&icp_project_dir);
 
     testenv.configure_dfx_local_network();
 
@@ -100,13 +93,7 @@ fn network_same_port() {
     let project_dir_a = testenv.create_project_dir("a");
     let project_dir_b = testenv.create_project_dir("b");
 
-    let icp_path = env!("CARGO_BIN_EXE_icp");
-    let mut cmd = Command::new(icp_path);
-    cmd.env("HOME", testenv.home_path())
-        .current_dir(&project_dir_a)
-        .arg("network")
-        .arg("run");
-    let _child_guard = ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ");
+    let _child_guard = testenv.start_network_in(&project_dir_a);
 
     eprintln!("configure dfx local network");
     testenv.configure_dfx_local_network();

@@ -14,7 +14,7 @@ use snafu::Snafu;
 /// type: rust
 /// package: my_canister
 /// ```
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Adapter {
     /// Represents a canister built using the Rust programming language.
@@ -32,7 +32,7 @@ pub enum Adapter {
 
 /// Describes how the canister should be built into WebAssembly,
 /// including the adapter responsible for the build.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct Build {
     pub adapter: Adapter,
 }
@@ -40,7 +40,7 @@ pub struct Build {
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,

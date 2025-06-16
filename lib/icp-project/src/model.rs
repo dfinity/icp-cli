@@ -1,5 +1,6 @@
 use crate::structure::ProjectDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
+use glob::GlobError;
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use serde::Deserialize;
@@ -15,6 +16,11 @@ fn default_canisters() -> RawCanistersField {
 /// when the `networks` field is not explicitly specified in the YAML.
 fn default_networks() -> Vec<Utf8PathBuf> {
     ["networks/*"].iter().map(Utf8PathBuf::from).collect()
+}
+
+fn is_glob<P: AsRef<Utf8Path>>(path: P) -> bool {
+    let s = path.as_ref().as_str();
+    s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,21 +71,21 @@ impl ProjectManifest {
     ///
     /// # Canister Path Resolution
     ///
-    /// The `canisters` field in the manifest supports glob patterns to specify
-    /// multiple canister YAML files. Even if a direct path to a canister directory
-    /// is provided (e.g., `canisters/my_canister`), it will be processed as a glob.
+    /// The `canisters` field supports both glob patterns and explicit paths to define
+    /// which canisters are part of the project.
     ///
-    /// A consequence of this glob-based approach is that if an explicitly
-    /// specified canister path does not contain a `canister.yaml` file (thus,
-    /// not being a valid canister directory according to `ProjectDirectoryStructure`),
-    /// it will be silently ignored rather than causing an error.
+    /// - **Glob Patterns**: Paths containing wildcards (e.g., `*`, `?`) are treated
+    ///   as glob patterns. They are expanded to find all matching directories that
+    ///   contain a `canister.yaml` file. Directories that match the glob but do not
+    ///   contain a manifest are silently ignored.
     ///
-    /// **Future Improvement:** This behavior should be changed. In a future
-    /// version, if a path in the `canisters` list is *not* a glob pattern (i.e.,
-    /// it's an explicit path), and that path does not point to a valid canister
-    /// directory (i.e., it's missing a `canister.yaml` or is not a directory),
-    /// the loading process should raise an error. This will provide clearer
-    /// feedback for misconfigured manifests.
+    /// - **Explicit Paths**: Paths without wildcards are treated as explicit references
+    ///   to canister directories. For each explicit path, the function verifies that:
+    ///     1. The path exists and is a directory.
+    ///     2. The directory contains a `canister.yaml` manifest file.
+    ///
+    /// If an explicit path fails these checks, the loading process will return an
+    /// error, providing clear feedback for misconfigured manifests.
     pub fn load(pds: &ProjectDirectoryStructure) -> Result<Self, LoadProjectManifestError> {
         let mpath = pds.project_yaml_path();
         let mpath: &Utf8Path = mpath.as_ref();
@@ -104,25 +110,68 @@ impl ProjectManifest {
                 let mut out = vec![];
 
                 for pattern in cs {
-                    // TODO(or.ricon): We should check if the pattern is a glob
-                    //   If it's not, we should raise an error when the specified path
-                    //   does not represent a canister directory (e.g doesnt contain a canister.yaml file)
-                    let matches = glob::glob(pds.root().join(&pattern).as_str())
-                        .context(GlobPatternSnafu { pattern })?;
+                    let dirs = match is_glob(&pattern) {
+                        // Glob
+                        true => {
+                            // Resolve glob
+                            let matches = glob::glob(pds.root().join(&pattern).as_str())
+                                .context(GlobPatternSnafu { pattern: &pattern })?;
 
-                    for cpath in matches {
-                        // Directory path of the found canister.
-                        let cpath = cpath.context(GlobWalkSnafu { path: mpath })?;
-                        let path: Utf8PathBuf = cpath.try_into()?;
+                            // Extract values
+                            let paths = matches
+                                .collect::<Result<Vec<_>, GlobError>>()
+                                .context(GlobWalkSnafu { path: &pattern })?;
+
+                            // Convert to Utf8 paths
+                            let paths = paths
+                                .into_iter()
+                                .map(Utf8PathBuf::try_from)
+                                .collect::<Result<Vec<_>, _>>()?;
+
+                            // Skip non-canister directories
+                            paths
+                                .into_iter()
+                                .filter(|path| pds.canister_yaml_path(path).exists())
+                                .collect()
+                        }
+
+                        // Explicit path
+                        false => {
+                            // Resolve the explicit path against the project root.
+                            let canister_path = pds.root().join(&pattern);
+
+                            // Check if path exists and that it's a directory.
+                            if !canister_path.is_dir() {
+                                return Err(LoadProjectManifestError::CanisterPath {
+                                    path: pattern,
+                                });
+                            }
+
+                            // Check for a canister manifest.
+                            let manifest_path = pds.canister_yaml_path(&canister_path);
+
+                            if !manifest_path.exists() {
+                                return Err(LoadProjectManifestError::NoManifest {
+                                    path: manifest_path,
+                                });
+                            }
+
+                            vec![canister_path]
+                        }
+                    };
+
+                    // Iterate over canister directories
+                    for cpath in dirs {
+                        // Canister manifest path
+                        let mpath = pds.canister_yaml_path(&cpath);
 
                         // Load the canister manifest from the resolved path.
-                        let mpath = pds.canister_yaml_path(&path);
                         let cm = CanisterManifest::load(&mpath)
-                            .context(CanisterLoadSnafu { path: &path })?;
+                            .context(CanisterLoadSnafu { path: &cpath })?;
 
                         out.push((
-                            path, // path
-                            cm,   // manifest
+                            cpath, // path
+                            cm,    // manifest
                         ))
                     }
                 }
@@ -149,10 +198,16 @@ pub enum LoadProjectManifestError {
     #[snafu(transparent)]
     InvalidPathUtf8 { source: camino::FromPathBufError },
 
+    #[snafu(display("canister path must exist and be a directory '{path}'"))]
+    CanisterPath { path: Utf8PathBuf },
+
+    #[snafu(display("no canister manifest found at '{path}'"))]
+    NoManifest { path: Utf8PathBuf },
+
     #[snafu(display("failed to glob pattern '{pattern}'"))]
     GlobPattern {
         source: glob::PatternError,
-        pattern: String,
+        pattern: Utf8PathBuf,
     },
 
     #[snafu(display("failed to glob pattern in '{path}'"))]
@@ -166,4 +221,287 @@ pub enum LoadProjectManifestError {
         source: icp_canister::model::LoadCanisterManifestError,
         path: Utf8PathBuf,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use camino_tempfile::tempdir;
+    use icp_adapter::script::{CommandField, ScriptAdapter};
+    use icp_canister::model::{Adapter, Build, CanisterManifest};
+
+    use crate::{
+        model::{LoadProjectManifestError, ProjectManifest},
+        structure::ProjectDirectoryStructure,
+    };
+
+    #[test]
+    fn empty_project() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Write project-manifest
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            "",                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+
+        // Verify no canisters were found
+        assert!(pm.canisters.is_empty());
+    }
+
+    #[test]
+    fn single_canister_project() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Write project-manifest
+        let pm = r#"
+    canister:
+      name: canister-1
+      build:
+        adapter:
+          type: script
+          command: echo test
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+
+        // Verify canister was loaded
+        let canisters = vec![(
+            project_dir.path().to_owned(),
+            CanisterManifest {
+                name: "canister-1".into(),
+                build: Build {
+                    adapter: Adapter::Script(ScriptAdapter {
+                        command: CommandField::Command("echo test".into()),
+                    }),
+                },
+            },
+        )];
+
+        assert_eq!(pm.canisters, canisters);
+    }
+
+    #[test]
+    fn multi_canister_project() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Create canister directory
+        std::fs::create_dir(project_dir.path().join("canister-1"))
+            .expect("failed to create canister directory");
+
+        // Write canister-manifest
+        let cm = r#"
+    name: canister-1
+    build:
+      adapter:
+        type: script
+        command: echo test
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("canister-1/canister.yaml"), // path
+            cm,                                                  // contents
+        )
+        .expect("failed to write canister manifest");
+
+        // Write project-manifest
+        let pm = r#"
+    canisters:
+      - canister-1
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+
+        // Verify canister was loaded
+        let canisters = vec![(
+            project_dir.path().join("canister-1"),
+            CanisterManifest {
+                name: "canister-1".into(),
+                build: Build {
+                    adapter: Adapter::Script(ScriptAdapter {
+                        command: CommandField::Command("echo test".into()),
+                    }),
+                },
+            },
+        )];
+
+        assert_eq!(pm.canisters, canisters);
+    }
+
+    #[test]
+    fn invalid_project_manifest() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Write project-manifest
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            "invalid-content",                   // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds);
+
+        // Assert failure
+        assert!(matches!(pm, Err(LoadProjectManifestError::Parse { .. })));
+    }
+
+    #[test]
+    fn invalid_canister_manifest() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Create canister directory
+        std::fs::create_dir(project_dir.path().join("canister-1"))
+            .expect("failed to create canister directory");
+
+        // Write canister-manifest
+        std::fs::write(
+            project_dir.path().join("canister-1/canister.yaml"), // path
+            "invalid-content",                                   // contents
+        )
+        .expect("failed to write canister manifest");
+
+        // Write project-manifest
+        let pm = r#"
+    canisters:
+      - canister-1
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds);
+
+        // Assert failure
+        assert!(matches!(
+            pm,
+            Err(LoadProjectManifestError::CanisterLoad { .. })
+        ));
+    }
+
+    #[test]
+    fn glob_path_non_canister() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Create canister directory
+        std::fs::create_dir_all(project_dir.path().join("canisters/canister-1"))
+            .expect("failed to create canister directory");
+
+        // Skip writing canister-manifest
+        //
+
+        // Write project-manifest
+        let pm = r#"
+    canisters:
+      - canisters/*
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+
+        // Verify no canisters were found
+        assert!(pm.canisters.is_empty());
+    }
+
+    #[test]
+    fn explicit_path_non_canister() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Create canister directory
+        std::fs::create_dir(project_dir.path().join("canister-1"))
+            .expect("failed to create canister directory");
+
+        // Skip writing canister-manifest
+        //
+
+        // Write project-manifest
+        let pm = r#"
+    canisters:
+      - canister-1
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds);
+
+        // Assert failure
+        assert!(matches!(
+            pm,
+            Err(LoadProjectManifestError::NoManifest { .. })
+        ));
+    }
+
+    #[test]
+    fn invalid_glob_pattern() {
+        // Setup
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        // Write project-manifest
+        let pm = r#"
+    canisters:
+      - canisters/***
+    "#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pds = ProjectDirectoryStructure::new(project_dir.path());
+        let pm = ProjectManifest::load(&pds);
+
+        // Assert failure
+        assert!(matches!(
+            pm,
+            Err(LoadProjectManifestError::GlobPattern { .. })
+        ));
+    }
 }

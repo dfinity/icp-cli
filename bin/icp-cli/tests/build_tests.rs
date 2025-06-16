@@ -1,11 +1,11 @@
 use crate::common::TestEnv;
-use icp_fs::fs::{create_dir_all, write};
+use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
 
 #[test]
-fn build_adapter_script_simple() {
+fn build_adapter_script() {
     let env = TestEnv::new();
 
     // Setup project
@@ -13,30 +13,17 @@ fn build_adapter_script_simple() {
 
     // Project manifest
     let pm = r#"
-    canisters:
-      - my-canister
+    canister:
+      name: my-canister
+      build:
+        adapter:
+          type: script
+          command: echo hi
     "#;
 
     write(
         project_dir.join("icp.yaml"), // path
         pm,                           // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Canister manifest
-    let cm = r#"
-    name: my-canister
-    build:
-      adapter:
-        type: script
-        command: echo hi
-    "#;
-
-    create_dir_all(project_dir.join("my-canister")).expect("failed to create canister directory");
-
-    write(
-        project_dir.join("my-canister/canister.yaml"), // path
-        cm,                                            // contents
     )
     .expect("failed to write project manifest");
 

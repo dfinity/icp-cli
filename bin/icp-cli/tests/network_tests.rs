@@ -1,10 +1,8 @@
 mod common;
 
 use crate::common::TestEnv;
-use crate::common::guard::ChildGuard;
 use predicates::str::contains;
 use serial_test::file_serial;
-use std::process::Command;
 
 #[test]
 #[file_serial]

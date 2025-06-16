@@ -1,3 +1,4 @@
+use crate::common::guard::ChildGuard;
 use crate::common::os::PATH_SEPARATOR;
 use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -122,6 +123,20 @@ impl TestEnv {
         std::fs::create_dir_all(&project_dir).expect("Failed to create icp project directory");
         std::fs::write(project_dir.join("icp.yaml"), "").expect("Failed to write project file");
         project_dir
+    }
+
+    pub fn start_network_in(&self, project_dir: &Utf8Path) -> ChildGuard {
+        let icp_path = env!("CARGO_BIN_EXE_icp");
+        let mut cmd = std::process::Command::new(icp_path);
+        cmd.current_dir(project_dir)
+            .env("HOME", self.home_path())
+            .env_remove("ICP_HOME")
+            .arg("network")
+            .arg("run");
+
+        eprintln!("Running network in {}", project_dir);
+
+        ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ")
     }
 
     // wait up to 30 seconds for descriptor path to contain valid json

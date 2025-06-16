@@ -39,6 +39,8 @@ fn hello() {
         .arg("motoko")
         .arg("--frontend")
         .arg("simple-assets")
+        .arg("--agent-version") // don't contact npm to look up the agent-js version
+        .arg("99.99")
         .assert()
         .success();
 

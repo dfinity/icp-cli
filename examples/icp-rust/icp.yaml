@@ -1,0 +1,6 @@
+canister:
+  name: icp-template-rust
+  build:
+    adapter:
+      type: script
+      command: cargo build --target wasm32-unknown-unknown --release --locked

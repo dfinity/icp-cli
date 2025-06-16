@@ -1522,7 +1522,9 @@ name = "icp-project"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "camino-tempfile",
  "glob",
+ "icp-adapter",
  "icp-canister",
  "icp-fs",
  "icp-network",

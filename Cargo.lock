@@ -726,6 +726,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1381,10 +1387,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp-adapter"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "camino",
+ "camino-tempfile",
+ "dunce",
+ "serde",
+ "shellwords",
+ "snafu",
+ "tokio",
+]
+
+[[package]]
 name = "icp-canister"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "icp-adapter",
  "icp-fs",
  "serde",
  "snafu",
@@ -1403,6 +1424,7 @@ dependencies = [
  "elliptic-curve",
  "hex",
  "ic-agent",
+ "icp-adapter",
  "icp-canister",
  "icp-dirs",
  "icp-fs",
@@ -2855,6 +2877,16 @@ name = "shell-words"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
+
+[[package]]
+name = "shellwords"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89e515aa4699a88148ed5ef96413ceef0048ce95b43fbc955a33bde0a70fcae6"
+dependencies = [
+ "lazy_static",
+ "regex",
+]
 
 [[package]]
 name = "shlex"

@@ -16,6 +16,7 @@ dialoguer.workspace = true
 elliptic-curve.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
+icp-adapter.workspace = true
 icp-canister.workspace = true
 icp-dirs.workspace = true
 icp-fs.workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "icp-adapter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = { workspace = true }
+camino = { workspace = true }
+dunce = { workspace = true }
+serde = { workspace = true }
+shellwords = { workspace = true }
+snafu = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+camino-tempfile = { workspace = true }

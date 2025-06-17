@@ -20,8 +20,8 @@ pub enum CanisterSubcmd {
 
 pub async fn dispatch(env: &Env, cmd: Cmd) -> Result<(), CanisterCommandError> {
     match cmd.subcmd {
-        CanisterSubcmd::Create(subcmd) => create::exec(env, subcmd)?,
-        CanisterSubcmd::Install(subcmd) => install::exec(env, subcmd)?,
+        CanisterSubcmd::Create(subcmd) => create::exec(env, subcmd).await?,
+        CanisterSubcmd::Install(subcmd) => install::exec(env, subcmd).await?,
     }
     Ok(())
 }

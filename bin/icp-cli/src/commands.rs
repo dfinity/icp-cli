@@ -1,5 +1,7 @@
 use crate::{
-    commands::{build::BuildCommandError, network::NetworkCommandError},
+    commands::{
+        build::BuildCommandError, canister::CanisterCommandError, network::NetworkCommandError,
+    },
     env::Env,
 };
 use clap::{Parser, Subcommand};
@@ -7,6 +9,7 @@ use identity::IdentityCommandError;
 use snafu::Snafu;
 
 mod build;
+mod canister;
 mod identity;
 mod network;
 
@@ -19,6 +22,7 @@ pub struct Cmd {
 #[derive(Subcommand, Debug)]
 pub enum Subcmd {
     Build(build::Cmd),
+    Canister(canister::Cmd),
     Identity(identity::IdentityCmd),
     Network(network::NetworkCmd),
 }
@@ -26,6 +30,7 @@ pub enum Subcmd {
 pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
     match cli.subcommand {
         Subcmd::Build(opts) => build::exec(opts).await?,
+        Subcmd::Canister(opts) => canister::dispatch(env, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(env, opts).await?,
         Subcmd::Network(opts) => network::dispatch(env, opts).await?,
     }
@@ -36,6 +41,9 @@ pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
 pub enum DispatchError {
     #[snafu(transparent)]
     Build { source: BuildCommandError },
+
+    #[snafu(transparent)]
+    Canister { source: CanisterCommandError },
 
     #[snafu(transparent)]
     Identity { source: IdentityCommandError },

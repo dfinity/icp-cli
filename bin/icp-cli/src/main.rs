@@ -1,9 +1,11 @@
+use crate::canister_store::CanisterStore;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
 use env::Env;
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
+mod canister_store;
 mod commands;
 mod env;
 
@@ -19,9 +21,22 @@ struct Cli {
 #[report]
 async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
+
+    // Setup project directory structure
     let dirs = IcpCliDirs::new()?;
-    let env = Env::new(dirs, cli.identity);
+
+    // Canister Store
+    let cs = CanisterStore::new();
+
+    // Setup environment
+    let env = Env::new(
+        dirs,         // dirs
+        cli.identity, // identity
+        cs,           // canister_store
+    );
+
     commands::dispatch(&env, cli.command).await?;
+
     Ok(())
 }
 

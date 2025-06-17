@@ -1,3 +1,4 @@
+use crate::canister_store::{Register, RegisterError};
 use crate::env::Env;
 use clap::Parser;
 use ic_agent::{Agent, AgentError, export::Principal};
@@ -127,10 +128,12 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         );
 
         // Create the canister
-        let cid = builder.await?;
+        let (cid,) = builder.await?;
 
-        // TODO(or.ricon): Associate created canister ID with
-        println!("Created canister '{}' with ID: '{}'", c.name, cid.0);
+        // Register the canister ID
+        env.canister_store.register(&c.name, &cid)?;
+
+        eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
     }
 
     Ok(())
@@ -158,4 +161,7 @@ pub enum CanisterCreateError {
 
     #[snafu(transparent)]
     BuildAgent { source: AgentError },
+
+    #[snafu(transparent)]
+    RegisterCanister { source: RegisterError },
 }

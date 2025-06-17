@@ -1,7 +1,11 @@
-use crate::env::Env;
+use crate::{
+    canister_store::{Lookup, LookupError},
+    env::Env,
+};
 use clap::Parser;
-use ic_agent::{Agent, AgentError, export::Principal};
+use ic_agent::{Agent, AgentError};
 use ic_utils::interfaces::management_canister::builders::InstallMode;
+use icp_fs::fs::read;
 use icp_identity::key::LoadIdentityInContextError;
 use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
@@ -68,14 +72,19 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
     }
 
     for (_, c) in cs {
-        let cid = Principal::anonymous();
-        let wasm = vec![];
+        // Lookup the canister id
+        let cid = env.canister_store.lookup(&c.name)?;
+
+        // TODO(or.ricon): Lookup the canister build artifact
+        // Load WASM payload
+        let wasm =
+            read("/Users/orricon/workspace/chirbun/icp-cli/examples/icp-motoko/main.wasm").unwrap();
 
         mgmt.install_code(&cid, &wasm)
             .with_mode(InstallMode::Install)
             .await?;
 
-        println!(
+        eprintln!(
             "Installed WASM payload to canister '{}' (ID: '{}')",
             c.name, cid,
         );
@@ -101,8 +110,11 @@ pub enum CanisterInstallError {
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
 
-    #[snafu(display("no canisters available to build"))]
+    #[snafu(display("no canisters available to install"))]
     NoCanisters,
+
+    #[snafu(transparent)]
+    LookupCanister { source: LookupError },
 
     #[snafu(transparent)]
     InstallAgent { source: AgentError },

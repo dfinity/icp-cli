@@ -1,4 +1,5 @@
 use crate::canister_store::CanisterStore;
+use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
 use env::Env;
@@ -13,6 +14,10 @@ mod env;
 struct Cli {
     #[arg(long, global = true)]
     identity: Option<String>,
+
+    #[arg(long, default_value = "ids.json")]
+    store: Utf8PathBuf,
+
     #[command(flatten)]
     command: Cmd,
 }
@@ -26,7 +31,7 @@ async fn main() -> Result<(), ProgramError> {
     let dirs = IcpCliDirs::new()?;
 
     // Canister Store
-    let cs = CanisterStore::new();
+    let cs = CanisterStore::new(&cli.store);
 
     // Setup environment
     let env = Env::new(

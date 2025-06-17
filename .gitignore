@@ -1,1 +1,10 @@
 /target
+
+# Local (directories)
+.icp
+canisters
+networks
+
+# Local (manifests)
+icp.yaml
+canister.yaml

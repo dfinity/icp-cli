@@ -1,15 +1,18 @@
 use camino::Utf8PathBuf;
-use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
+use icp_fs::fs::{CreateDirAllError, ReadFileError, WriteFileError, create_dir_all, read, write};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
-pub enum RegisterError {
+pub enum SaveError {
+    #[snafu(display("failed to create artifacts directory"))]
+    ArtifactsDir { source: CreateDirAllError },
+
     #[snafu(display("failed to write artifact file"))]
-    RegisterWriteFileError { source: WriteFileError },
+    SaveWriteFileError { source: WriteFileError },
 }
 
-pub trait Register {
-    fn register(&self, name: &str, wasm: &[u8]) -> Result<(), RegisterError>;
+pub trait Save {
+    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
 }
 
 #[derive(Debug, Snafu)]
@@ -33,10 +36,13 @@ impl ArtifactStore {
     }
 }
 
-impl Register for ArtifactStore {
-    fn register(&self, name: &str, wasm: &[u8]) -> Result<(), RegisterError> {
+impl Save for ArtifactStore {
+    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+        // Create artifacts directory
+        create_dir_all(&self.0).context(ArtifactsDirSnafu)?;
+
         // Store artifact
-        write(self.0.join(name), wasm).context(RegisterWriteFileSnafu)?;
+        write(self.0.join(name), wasm).context(SaveWriteFileSnafu)?;
 
         Ok(())
     }

@@ -1416,6 +1416,7 @@ dependencies = [
  "camino",
  "camino-tempfile",
  "dunce",
+ "icp-fs",
  "serde",
  "shellwords",
  "snafu",

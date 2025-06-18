@@ -1,6 +1,7 @@
 use crate::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
 use camino::Utf8Path;
+use icp_fs::fs::{ReadFileError, read};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
@@ -34,8 +35,18 @@ pub struct ScriptAdapter {
 
 #[async_trait]
 impl Adapter for ScriptAdapter {
-    async fn compile(&self, path: &Utf8Path) -> Result<(), AdapterCompileError> {
-        for input_cmd in self.command.as_vec() {
+    async fn compile(&self, path: &Utf8Path) -> Result<Vec<u8>, AdapterCompileError> {
+        // Normalize `command` field based on whether it's a single command or multiple.
+        let cmds = self.command.as_vec();
+
+        // Note the number of commands
+        let ncmds = cmds.len();
+
+        // Create placeholder for wasm artifact
+        let mut wasm: Option<Vec<u8>> = None;
+
+        // Iterate over configured commands
+        for (i, input_cmd) in cmds.into_iter().enumerate() {
             // Parse command input
             let input = shellwords::split(&input_cmd).context(CommandParseSnafu {
                 command: &input_cmd,
@@ -67,25 +78,44 @@ impl Adapter for ScriptAdapter {
 
             // Output
             cmd.stdin(Stdio::inherit());
-            cmd.stdout(Stdio::inherit());
+            cmd.stdout(Stdio::piped());
             cmd.stderr(Stdio::inherit());
 
             // Execute
-            let status = cmd.status().context(CommandInvokeSnafu {
+            let out = cmd.output().context(CommandInvokeSnafu {
                 command: &input_cmd,
             })?;
 
             // Status
-            if !status.success() {
+            if !out.status.success() {
                 return Err(ScriptAdapterCompileError::CommandStatus {
                     command: input_cmd,
-                    code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
+                    code: out
+                        .status
+                        .code()
+                        .map_or("N/A".to_string(), |c| c.to_string()),
                 }
                 .into());
             }
+
+            // The last command should always return a path to the built wasm artifact
+            if i == ncmds - 1 {
+                // TODO(or.ricon): Sanity-check the output
+                // - non-empty
+                // - does it exist
+                // - valid wasm
+
+                // Grab the output from the final command
+                let path = String::from_utf8(out.stdout).context(PathParseSnafu)?;
+
+                // Set output
+                wasm = Some(read(path.trim()).context(ReadOutputSnafu)?);
+            }
         }
 
-        Ok(())
+        wasm.ok_or(AdapterCompileError::Script {
+            source: ScriptAdapterCompileError::NoOutput,
+        })
     }
 }
 
@@ -108,6 +138,15 @@ pub enum ScriptAdapterCompileError {
 
     #[snafu(display("command '{command}' failed with status code {code}"))]
     CommandStatus { command: String, code: String },
+
+    #[snafu(display("failed to parse output path"))]
+    PathParse { source: std::string::FromUtf8Error },
+
+    #[snafu(display("failed to read output wasm artifact"))]
+    ReadOutput { source: ReadFileError },
+
+    #[snafu(display("no output has been set"))]
+    NoOutput,
 }
 
 #[cfg(test)]

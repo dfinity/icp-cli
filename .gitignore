@@ -5,6 +5,10 @@
 canisters
 networks
 
+# Local (artifacts)
+ids.json
+artifacts
+
 # Local (manifests)
 icp.yaml
 canister.yaml

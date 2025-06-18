@@ -1,5 +1,5 @@
-use crate::canister_store::{Lookup, LookupError, Register, RegisterError};
 use crate::env::Env;
+use crate::store_id::{Lookup, LookupError, Register, RegisterError};
 use clap::Parser;
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
@@ -117,7 +117,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
     let cs = cs
         .into_iter()
         .filter(|&(_, c)| {
-            match env.canister_store.lookup(&c.name) {
+            match env.id_store.lookup(&c.name) {
                 // Exists (skip)
                 Ok(_) => false,
 
@@ -182,7 +182,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         let (cid,) = builder.await?;
 
         // Register the canister ID
-        env.canister_store.register(&c.name, &cid)?;
+        env.id_store.register(&c.name, &cid)?;
 
         eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
     }

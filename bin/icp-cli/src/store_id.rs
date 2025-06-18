@@ -10,7 +10,7 @@ struct Association(String, Principal);
 
 #[derive(Debug, Snafu)]
 pub enum RegisterError {
-    #[snafu(display("failed to load canister store"))]
+    #[snafu(display("failed to load canister id store"))]
     RegisterLoadStore {
         source: lockedjson::LoadJsonWithLockError,
     },
@@ -18,7 +18,7 @@ pub enum RegisterError {
     #[snafu(display("canister '{name}' is already registered with id '{id}'"))]
     RegisterAlreadyRegistered { name: String, id: Principal },
 
-    #[snafu(display("failed to save canister store"))]
+    #[snafu(display("failed to save canister id store"))]
     RegisterSaveStore {
         source: lockedjson::SaveJsonWithLockError,
     },
@@ -30,7 +30,7 @@ pub trait Register {
 
 #[derive(Debug, Snafu)]
 pub enum LookupError {
-    #[snafu(display("failed to load canister store"))]
+    #[snafu(display("failed to load canister id store"))]
     LookupLoadStore {
         source: lockedjson::LoadJsonWithLockError,
     },
@@ -43,15 +43,15 @@ pub trait Lookup {
     fn lookup(&self, name: &str) -> Result<Principal, LookupError>;
 }
 
-pub struct CanisterStore(Utf8PathBuf);
+pub struct IdStore(Utf8PathBuf);
 
-impl CanisterStore {
+impl IdStore {
     pub fn new(path: &Utf8PathBuf) -> Self {
         Self(path.clone())
     }
 }
 
-impl Register for CanisterStore {
+impl Register for IdStore {
     fn register(&self, name: &str, cid: &Principal) -> Result<(), RegisterError> {
         // Load JSON
         let mut cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
@@ -78,7 +78,7 @@ impl Register for CanisterStore {
     }
 }
 
-impl Lookup for CanisterStore {
+impl Lookup for IdStore {
     fn lookup(&self, name: &str) -> Result<Principal, LookupError> {
         // Load JSON
         let cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)

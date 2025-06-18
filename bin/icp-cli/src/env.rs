@@ -1,4 +1,4 @@
-use crate::canister_store::CanisterStore;
+use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use ic_agent::Identity;
 use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
@@ -7,15 +7,22 @@ use std::sync::Arc;
 pub struct Env {
     dirs: IcpCliDirs,
     identity: Option<String>,
-    pub canister_store: CanisterStore,
+    pub id_store: IdStore,
+    pub artifact_store: ArtifactStore,
 }
 
 impl Env {
-    pub fn new(dirs: IcpCliDirs, identity: Option<String>, canister_store: CanisterStore) -> Self {
+    pub fn new(
+        dirs: IcpCliDirs,
+        identity: Option<String>,
+        id_store: IdStore,
+        artifact_store: ArtifactStore,
+    ) -> Self {
         Self {
             dirs,
             identity,
-            canister_store,
+            id_store,
+            artifact_store,
         }
     }
 

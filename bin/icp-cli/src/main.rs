@@ -1,4 +1,4 @@
-use crate::canister_store::CanisterStore;
+use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
@@ -6,9 +6,11 @@ use env::Env;
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
-mod canister_store;
 mod commands;
 mod env;
+
+mod store_artifact;
+mod store_id;
 
 #[derive(Parser)]
 struct Cli {
@@ -16,7 +18,10 @@ struct Cli {
     identity: Option<String>,
 
     #[arg(long, default_value = "ids.json")]
-    store: Utf8PathBuf,
+    id_store: Utf8PathBuf,
+
+    #[arg(long, default_value = "artifacts")]
+    artifact_store: Utf8PathBuf,
 
     #[command(flatten)]
     command: Cmd,
@@ -30,14 +35,18 @@ async fn main() -> Result<(), ProgramError> {
     // Setup project directory structure
     let dirs = IcpCliDirs::new()?;
 
-    // Canister Store
-    let cs = CanisterStore::new(&cli.store);
+    // Canister ID Store
+    let ids = IdStore::new(&cli.id_store);
+
+    // Canister Artifact Store (wasm)
+    let artifacts = ArtifactStore::new(&cli.artifact_store);
 
     // Setup environment
     let env = Env::new(
         dirs,         // dirs
         cli.identity, // identity
-        cs,           // canister_store
+        ids,          // id_store
+        artifacts,    // artifact_store
     );
 
     commands::dispatch(&env, cli.command).await?;

@@ -162,7 +162,11 @@ mod tests {
 
         // Define adapter
         let v = ScriptAdapter {
-            command: CommandField::Command(format!("sh -c 'echo test > {}'", f.path())),
+            command: CommandField::Command(format!(
+                "sh -c 'echo test > {} && echo {}'",
+                f.path(),
+                f.path()
+            )),
         };
 
         // Invoke adapter
@@ -188,6 +192,7 @@ mod tests {
                 format!("sh -c 'echo cmd-1 >> {}'", f.path()),
                 format!("sh -c 'echo cmd-2 >> {}'", f.path()),
                 format!("sh -c 'echo cmd-3 >> {}'", f.path()),
+                format!("echo {}", f.path()),
             ]),
         };
 

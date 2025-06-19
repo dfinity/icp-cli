@@ -1,4 +1,5 @@
 use crate::common::TestEnv;
+use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::{create_dir_all, write};
 use predicates::{ord::eq, str::PredicateStrExt};
 
@@ -11,15 +12,21 @@ fn single_canister_project() {
     // Setup project
     let project_dir = env.create_project_dir("icp");
 
+    // Create temporary file
+    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+
     // Project manifest
-    let pm = r#"
-    canister:
-      name: my-canister
-      build:
-        adapter:
-          type: script
-          command: echo hi
-    "#;
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            adapter:
+              type: script
+              command: echo {}
+        "#,
+        f.path()
+    );
 
     write(
         project_dir.join("icp.yaml"), // path
@@ -32,8 +39,7 @@ fn single_canister_project() {
         .current_dir(project_dir)
         .args(["build"])
         .assert()
-        .success()
-        .stdout(eq("hi").trim());
+        .success();
 }
 
 #[test]
@@ -55,14 +61,20 @@ fn multi_canister_project() {
     )
     .expect("failed to write project manifest");
 
+    // Create temporary file
+    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+
     // Canister manifest
-    let cm = r#"
-    name: my-canister
-    build:
-      adapter:
-        type: script
-        command: echo hi
-    "#;
+    let cm = format!(
+        r#"
+        name: my-canister
+        build:
+          adapter:
+            type: script
+            command: echo {}
+        "#,
+        f.path()
+    );
 
     create_dir_all(project_dir.join("my-canister")).expect("failed to create canister directory");
 
@@ -77,8 +89,7 @@ fn multi_canister_project() {
         .current_dir(project_dir)
         .args(["build"])
         .assert()
-        .success()
-        .stdout(eq("hi").trim());
+        .success();
 }
 
 #[test]
@@ -100,14 +111,20 @@ fn glob_path() {
     )
     .expect("failed to write project manifest");
 
+    // Create temporary file
+    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+
     // Canister manifest
-    let cm = r#"
-    name: my-canister
-    build:
-      adapter:
-        type: script
-        command: echo hi
-    "#;
+    let cm = format!(
+        r#"
+        name: my-canister
+        build:
+          adapter:
+            type: script
+            command: echo {}
+        "#,
+        f.path()
+    );
 
     create_dir_all(project_dir.join("canisters/my-canister"))
         .expect("failed to create canister directory");
@@ -123,8 +140,7 @@ fn glob_path() {
         .current_dir(project_dir)
         .args(["build"])
         .assert()
-        .success()
-        .stdout(eq("hi").trim());
+        .success();
 }
 
 #[test]

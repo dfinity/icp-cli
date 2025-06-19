@@ -122,7 +122,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
                 Ok(_) => false,
 
                 // Doesn't exist (include)
-                Err(LookupError::LookupIdNotFound { .. }) => true,
+                Err(LookupError::IdNotFound { .. }) => true,
 
                 // Lookup failed
                 Err(err) => panic!("{err}"),

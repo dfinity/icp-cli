@@ -16,7 +16,7 @@ pub enum RegisterError {
     },
 
     #[snafu(display("canister '{name}' is already registered with id '{id}'"))]
-    RegisterAlreadyRegistered { name: String, id: Principal },
+    AlreadyRegistered { name: String, id: Principal },
 
     #[snafu(display("failed to save canister id store"))]
     RegisterSaveStore {
@@ -36,7 +36,7 @@ pub enum LookupError {
     },
 
     #[snafu(display("could not find ID for canister '{name}'"))]
-    LookupIdNotFound { name: String },
+    IdNotFound { name: String },
 }
 
 pub trait Lookup {
@@ -61,7 +61,7 @@ impl Register for IdStore {
         // Check for existence
         for Association(cname, cid) in cs.iter() {
             if name == cname {
-                return Err(RegisterError::RegisterAlreadyRegistered {
+                return Err(RegisterError::AlreadyRegistered {
                     name: name.to_owned(),
                     id: *cid,
                 });
@@ -93,7 +93,7 @@ impl Lookup for IdStore {
         }
 
         // Not Found
-        Err(LookupError::LookupIdNotFound {
+        Err(LookupError::IdNotFound {
             name: name.to_owned(),
         })
     }

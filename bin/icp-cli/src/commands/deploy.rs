@@ -103,7 +103,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
                 },
 
                 // Controllers
-                controller: vec![], // TODO?
+                controller: cmd.controller.to_owned(),
 
                 // Options
                 options: CanisterOptions {

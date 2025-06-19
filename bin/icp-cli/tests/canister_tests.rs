@@ -1,9 +1,11 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
+use serial_test::file_serial;
 
 mod common;
 
 #[test]
+#[file_serial]
 fn canister_create() {
     let env = TestEnv::new().with_dfx();
 
@@ -48,6 +50,7 @@ fn canister_create() {
 }
 
 #[test]
+#[file_serial]
 fn canister_install() {
     let env = TestEnv::new().with_dfx();
 

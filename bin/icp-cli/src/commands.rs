@@ -1,6 +1,7 @@
 use crate::{
     commands::{
-        build::BuildCommandError, canister::CanisterCommandError, network::NetworkCommandError,
+        build::BuildCommandError, canister::CanisterCommandError, deploy::DeployCommandError,
+        network::NetworkCommandError,
     },
     env::Env,
 };
@@ -10,6 +11,7 @@ use snafu::Snafu;
 
 mod build;
 mod canister;
+mod deploy;
 mod identity;
 mod network;
 
@@ -23,6 +25,7 @@ pub struct Cmd {
 pub enum Subcmd {
     Build(build::Cmd),
     Canister(canister::Cmd),
+    Deploy(deploy::Cmd),
     Identity(identity::IdentityCmd),
     Network(network::NetworkCmd),
 }
@@ -31,6 +34,7 @@ pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
     match cli.subcommand {
         Subcmd::Build(opts) => build::exec(env, opts).await?,
         Subcmd::Canister(opts) => canister::dispatch(env, opts).await?,
+        Subcmd::Deploy(opts) => deploy::exec(env, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(env, opts).await?,
         Subcmd::Network(opts) => network::dispatch(env, opts).await?,
     }
@@ -44,6 +48,9 @@ pub enum DispatchError {
 
     #[snafu(transparent)]
     Canister { source: CanisterCommandError },
+
+    #[snafu(transparent)]
+    Deploy { source: DeployCommandError },
 
     #[snafu(transparent)]
     Identity { source: IdentityCommandError },

@@ -16,11 +16,11 @@ use snafu::Snafu;
 #[derive(Debug, Parser)]
 pub struct CanisterInstallCmd {
     /// The name of the canister within the current project
-    name: Option<String>,
+    pub name: Option<String>,
 
     /// The URL of the IC network endpoint
     #[clap(long, default_value = "http://127.0.0.1:8000")]
-    network_url: String,
+    pub network_url: String,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {

@@ -11,67 +11,67 @@ use icp_project::{
 use snafu::Snafu;
 
 #[derive(Debug, Parser)]
-struct CanisterIDs {
+pub struct CanisterIDs {
     /// The effective canister ID to use when calling the management canister.
     #[clap(long)]
-    effective_id: Principal,
+    pub effective_id: Principal,
 
     /// The specific canister ID to assign if creating with a fixed principal.
     #[clap(long)]
-    specific_id: Option<Principal>,
+    pub specific_id: Option<Principal>,
 }
 
-#[derive(Debug, Parser)]
-struct CanisterOptions {
+#[derive(Debug, Default, Parser)]
+pub struct CanisterOptions {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
     #[clap(long)]
-    compute_allocation: Option<u64>,
+    pub compute_allocation: Option<u64>,
 
     /// Optional memory allocation in bytes. If unset, memory is allocated dynamically.
     #[clap(long)]
-    memory_allocation: Option<u64>,
+    pub memory_allocation: Option<u64>,
 
     /// Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     #[clap(long)]
-    freezing_threshold: Option<u64>,
+    pub freezing_threshold: Option<u64>,
 
     /// Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles.
     #[clap(long)]
-    reserved_cycles_limit: Option<u64>,
+    pub reserved_cycles_limit: Option<u64>,
 
     /// Optional Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
     #[clap(long)]
-    wasm_memory_limit: Option<u64>,
+    pub wasm_memory_limit: Option<u64>,
 
     /// Optional Wasm memory threshold in bytes. Triggers a callback when exceeded.
     #[clap(long)]
-    wasm_memory_threshold: Option<u64>,
+    pub wasm_memory_threshold: Option<u64>,
 }
 
 #[derive(Debug, Parser)]
 pub struct CanisterCreateCmd {
     /// The name of the canister within the current project
-    name: Option<String>,
+    pub name: Option<String>,
 
     /// The URL of the IC network endpoint
     #[clap(long, default_value = "http://localhost:8000")]
-    network_url: String,
+    pub network_url: String,
 
     /// Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
-    ids: CanisterIDs,
+    pub ids: CanisterIDs,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[clap(long)]
-    controller: Vec<Principal>,
+    pub controller: Vec<Principal>,
 
     /// Resource-related options and thresholds for the new canister.
     #[clap(flatten)]
-    options: CanisterOptions,
+    pub options: CanisterOptions,
 
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
     #[clap(long, short = 'q')]
-    quiet: bool,
+    pub quiet: bool,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {

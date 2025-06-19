@@ -1,8 +1,5 @@
 use crate::{
-    commands::{
-        build::BuildCommandError, canister::CanisterCommandError, deploy::DeployCommandError,
-        network::NetworkCommandError,
-    },
+    commands::{canister::CanisterCommandError, network::NetworkCommandError},
     env::Env,
 };
 use clap::{Parser, Subcommand};
@@ -44,13 +41,13 @@ pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
 #[derive(Debug, Snafu)]
 pub enum DispatchError {
     #[snafu(transparent)]
-    Build { source: BuildCommandError },
+    Build { source: build::CommandError },
 
     #[snafu(transparent)]
     Canister { source: CanisterCommandError },
 
     #[snafu(transparent)]
-    Deploy { source: DeployCommandError },
+    Deploy { source: deploy::CommandError },
 
     #[snafu(transparent)]
     Identity { source: IdentityCommandError },

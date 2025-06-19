@@ -1,17 +1,156 @@
-use crate::env::Env;
+use crate::{
+    commands::{
+        build,
+        canister::{
+            self,
+            create::{CanisterCreateCmd, CanisterCreateError, CanisterIDs, CanisterOptions},
+            install::{CanisterInstallCmd, CanisterInstallError},
+        },
+    },
+    env::Env,
+};
 use clap::Parser;
-use icp_project::{directory::FindProjectError, model::LoadProjectManifestError};
+use ic_agent::export::Principal;
+use icp_identity::key::LoadIdentityInContextError;
+use icp_project::{
+    directory::{FindProjectError, ProjectDirectory},
+    model::{LoadProjectManifestError, ProjectManifest},
+};
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]
-pub struct Cmd;
+pub struct Cmd {
+    /// The name of the canister within the current project
+    name: Option<String>,
 
-pub async fn exec(_env: &Env, _: Cmd) -> Result<(), DeployCommandError> {
+    /// The URL of the IC network endpoint
+    #[clap(long, default_value = "http://localhost:8000")]
+    network_url: String,
+
+    /// The effective canister ID to use when calling the management canister.
+    #[clap(long)]
+    pub effective_id: Principal,
+
+    /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
+    #[clap(long)]
+    pub controller: Vec<Principal>,
+}
+
+pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
+    // Find the current ICP project directory.
+    let pd = ProjectDirectory::find()?.ok_or(CommandError::ProjectNotFound)?;
+
+    // Get the project directory structure for path resolution.
+    let pds = pd.structure();
+
+    // Load the project manifest, which defines the canisters to be built.
+    let pm = ProjectManifest::load(pds)?;
+
+    // Choose canisters to create
+    let cs = pm
+        .canisters
+        .iter()
+        .filter(|(_, c)| match &cmd.name {
+            Some(name) => name == &c.name,
+            None => true,
+        })
+        .collect::<Vec<_>>();
+
+    // Check if a canister name was specified and is present in the project
+    if let Some(name) = &cmd.name {
+        if cs.is_empty() {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+    }
+
+    // Build the selected canisters
+    eprintln!("\nBuilding canisters:");
+    for (_, c) in &cs {
+        eprintln!("- {}", c.name);
+
+        // TODO(or.ricon): Temporary approach that can be revisited.
+        //                 Currently we simply invoke the adjacent `build` command.
+        //                 We should consider refactoring `build` to use library code instead.
+        build::exec(
+            env,
+            build::Cmd {
+                name: Some(c.name.to_owned()),
+            },
+        )
+        .await?;
+    }
+
+    // Create the selected canisters
+    eprintln!("\nCreating canisters:");
+    for (_, c) in &cs {
+        eprintln!("- {}", c.name);
+
+        // TODO(or.ricon): Temporary approach that can be revisited.
+        //                 Currently we simply invoke the adjacent `canister::create` command.
+        //                 We should consider refactoring `canister::create` to use library code instead.
+        let out = canister::create::exec(
+            env,
+            CanisterCreateCmd {
+                name: Some(c.name.to_owned()),
+                network_url: cmd.network_url.to_owned(),
+
+                // Ids
+                ids: CanisterIDs {
+                    effective_id: cmd.effective_id.to_owned(),
+                    specific_id: None,
+                },
+
+                // Controllers
+                controller: vec![], // TODO?
+
+                // Options
+                options: CanisterOptions {
+                    ..Default::default()
+                },
+
+                quiet: false,
+            },
+        )
+        .await;
+
+        if let Err(err) = out {
+            if !matches!(err, CanisterCreateError::NoCanisters) {
+                return Err(CommandError::Create { source: err });
+            }
+        }
+    }
+
+    // Install the selected canisters
+    eprintln!("\nInstalling canisters:");
+    for (_, c) in &cs {
+        eprintln!("- {}", c.name);
+
+        // TODO(or.ricon): Temporary approach that can be revisited.
+        //                 Currently we simply invoke the adjacent `canister::create` command.
+        //                 We should consider refactoring `canister::create` to use library code instead.
+        let out = canister::install::exec(
+            env,
+            CanisterInstallCmd {
+                name: Some(c.name.to_owned()),
+                network_url: cmd.network_url.to_owned(),
+            },
+        )
+        .await;
+
+        if let Err(err) = out {
+            if !matches!(err, CanisterInstallError::NoCanisters) {
+                return Err(CommandError::Install { source: err });
+            }
+        }
+    }
+
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
-pub enum DeployCommandError {
+pub enum CommandError {
     #[snafu(transparent)]
     FindProjectError { source: FindProjectError },
 
@@ -20,4 +159,23 @@ pub enum DeployCommandError {
 
     #[snafu(transparent)]
     ProjectLoad { source: LoadProjectManifestError },
+
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityInContextError },
+
+    #[snafu(display("project does not contain a canister named '{name}'"))]
+    CanisterNotFound { name: String },
+
+    #[snafu(transparent)]
+    Build { source: build::CommandError },
+
+    #[snafu(transparent)]
+    Create {
+        source: canister::create::CanisterCreateError,
+    },
+
+    #[snafu(transparent)]
+    Install {
+        source: canister::install::CanisterInstallError,
+    },
 }

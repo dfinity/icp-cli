@@ -3,8 +3,8 @@ use snafu::Snafu;
 
 use crate::env::Env;
 
-mod create;
-mod install;
+pub mod create;
+pub mod install;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {

@@ -68,6 +68,10 @@ pub struct CanisterCreateCmd {
     /// Resource-related options and thresholds for the new canister.
     #[clap(flatten)]
     options: CanisterOptions,
+
+    /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
+    #[clap(long, short = 'q')]
+    quiet: bool,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
@@ -184,7 +188,11 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         // Register the canister ID
         env.id_store.register(&c.name, &cid)?;
 
-        eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
+        if cmd.quiet {
+            println!("{}", cid);
+        } else {
+            eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
+        }
     }
 
     Ok(())

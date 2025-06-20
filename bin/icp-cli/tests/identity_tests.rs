@@ -222,3 +222,19 @@ fn identity_use() {
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
 }
+
+#[test]
+fn identity_list() {
+    let env = TestEnv::new();
+    env.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(eq("* anonymous\n"));
+    env.icp()
+        .args(["identity", "list", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(eq("{\"v\":1,\"identities\":{\"anonymous\":{\"kind\":\"anonymous\"}}}\n"));
+    
+}

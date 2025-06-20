@@ -1,4 +1,4 @@
-use clap::{ArgGroup, Args};
+use clap::{ArgGroup, Args, ValueEnum};
 
 #[derive(Args, Clone, Debug, Default)]
 #[clap(
@@ -22,4 +22,17 @@ impl NetworkOpt {
             self.network.as_deref().unwrap_or("local")
         }
     }
+}
+
+#[derive(Args, Debug)]
+pub struct FormatOpt {
+    /// Choose the output format
+    #[arg(long, value_enum, default_value_t = Format::Human)]
+    pub format: Format,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum Format {
+    Json,
+    Human,
 }

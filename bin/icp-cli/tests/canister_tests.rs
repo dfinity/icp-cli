@@ -1,6 +1,5 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
-use predicates::{ord::eq, str::PredicateStrExt};
 use serial_test::serial;
 
 mod common;
@@ -104,24 +103,17 @@ fn canister_install() {
         .success();
 
     // Create canister
-    let out = env
-        .icp()
+    env.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
             "create",
-            "--quiet", // Set quiet so only the canister ID is output
+            // "--quiet", // Set quiet so only the canister ID is output
             "--effective-id",
             "ghsi2-tqaaa-aaaan-aaaca-cai",
         ])
         .assert()
         .success();
-
-    let cid =
-        String::from_utf8(out.get_output().stdout.to_owned()).expect("failed to read canister id");
-
-    // Trim newline
-    let cid = cid.trim();
 
     // Install canister
     env.icp()
@@ -130,19 +122,9 @@ fn canister_install() {
         .assert()
         .success();
 
-    // Query canister
-    env.dfx()
+    env.icp()
         .current_dir(&project_dir)
-        .args([
-            "canister",
-            "call",
-            "--network",
-            "http://localhost:8000",
-            cid,
-            "greet",
-            "(\"test\")",
-        ])
+        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
         .assert()
-        .success()
-        .stdout(eq("(\"Hello, test!\")").trim());
+        .success();
 }

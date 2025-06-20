@@ -235,6 +235,7 @@ fn identity_list() {
         .args(["identity", "list", "--format", "json"])
         .assert()
         .success()
-        .stdout(eq("{\"v\":1,\"identities\":{\"anonymous\":{\"kind\":\"anonymous\"}}}\n"));
-    
+        .stdout(eq(
+            "{\"v\":1,\"identities\":{\"anonymous\":{\"kind\":\"anonymous\"}}}\n",
+        ));
 }

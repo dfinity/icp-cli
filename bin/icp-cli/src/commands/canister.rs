@@ -5,6 +5,7 @@ use crate::env::Env;
 
 pub mod create;
 pub mod install;
+pub mod status;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -16,12 +17,14 @@ pub struct Cmd {
 pub enum CanisterSubcmd {
     Create(create::CanisterCreateCmd),
     Install(install::CanisterInstallCmd),
+    Status(status::CanisterStatusCmd),
 }
 
 pub async fn dispatch(env: &Env, cmd: Cmd) -> Result<(), CanisterCommandError> {
     match cmd.subcmd {
         CanisterSubcmd::Create(subcmd) => create::exec(env, subcmd).await?,
         CanisterSubcmd::Install(subcmd) => install::exec(env, subcmd).await?,
+        CanisterSubcmd::Status(subcmd) => status::exec(env, subcmd).await?,
     }
     Ok(())
 }
@@ -35,4 +38,7 @@ pub enum CanisterCommandError {
     Install {
         source: install::CanisterInstallError,
     },
+
+    #[snafu(transparent)]
+    Status { source: status::CanisterStatusError },
 }

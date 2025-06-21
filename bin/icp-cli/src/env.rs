@@ -13,7 +13,6 @@ pub struct EnvBuilder {
 }
 
 impl EnvBuilder {
-   
     pub fn identity(mut self, identity: Option<String>) -> Self {
         self.identity = identity;
         self
@@ -31,7 +30,6 @@ impl EnvBuilder {
             output_format: self.output_format,
         }
     }
-
 }
 
 pub struct Env {
@@ -41,7 +39,6 @@ pub struct Env {
 }
 
 impl Env {
-
     pub fn builder() -> EnvBuilder {
         EnvBuilder::default()
     }

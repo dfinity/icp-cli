@@ -5,20 +5,17 @@ use icp_identity::manifest::{
 };
 use snafu::Snafu;
 
-use crate::options::{Format, WithFormat};
+use crate::options::Format;
 
 #[derive(Debug, Parser)]
-pub struct ListCmd {
-    #[command(flatten)]
-    with_format: WithFormat,
-}
+pub struct ListCmd;
 
-pub fn exec(env: &Env, cmd: ListCmd) -> Result<(), ListKeysError> {
+pub fn exec(env: &Env, _cmd: ListCmd) -> Result<(), ListKeysError> {
     let dirs = env.dirs();
     let list = load_identity_list(dirs)?;
     let defaults = load_identity_defaults(dirs)?;
 
-    match cmd.with_format.format {
+    match env.output_format {
         Format::Json => handle_json_output(list, defaults),
         Format::Text => handle_text_output(list, defaults),
     }

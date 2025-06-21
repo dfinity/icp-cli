@@ -45,6 +45,12 @@ impl IcpCliDirs {
     }
 }
 
+impl Default for IcpCliDirs {
+    fn default() -> Self {
+        IcpCliDirs::new().expect("This initialization should not fail")
+    }
+}
+
 #[derive(Debug, Snafu)]
 pub enum DiscoverDirsError {
     #[snafu(display("user directories are non-UTF-8"))]

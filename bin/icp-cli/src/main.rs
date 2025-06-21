@@ -1,7 +1,8 @@
 use clap::Parser;
 use commands::{Cmd, DispatchError};
 use env::Env;
-use icp_dirs::{DiscoverDirsError, IcpCliDirs};
+use icp_dirs::DiscoverDirsError;
+use options::Format;
 use snafu::{Snafu, report};
 
 mod commands;
@@ -12,6 +13,10 @@ mod options;
 struct Cli {
     #[arg(long, global = true)]
     identity: Option<String>,
+
+    #[arg(long, global = true, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+
     #[command(flatten)]
     command: Cmd,
 }
@@ -20,8 +25,10 @@ struct Cli {
 #[report]
 async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
-    let dirs = IcpCliDirs::new()?;
-    let env = Env::new(dirs, cli.identity);
+    let env = Env::builder()
+        .identity(cli.identity)
+        .output_format(cli.format)
+        .build();
     commands::dispatch(&env, cli.command).await?;
     Ok(())
 }

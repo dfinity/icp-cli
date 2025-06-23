@@ -1,7 +1,6 @@
 use crate::{
-    env::Env,
-    store_artifact::{Lookup as _, LookupError as LookupArtifactError},
-    store_id::{Lookup as _, LookupError as LookupIdError},
+    env::Env, store_artifact::LookupError as LookupArtifactError,
+    store_id::LookupError as LookupIdError,
 };
 use clap::Parser;
 use ic_agent::{Agent, AgentError};
@@ -42,6 +41,7 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
         .with_arc_identity(identity)
         .build()?;
 
+    // TODO(or.ricon): This is to be replaced with a centralized agent or agent-builder
     if cmd.network_url.contains("127.0.0.1") || cmd.network_url.contains("localhost") {
         agent.fetch_root_key().await?;
     }

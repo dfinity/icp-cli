@@ -17,10 +17,10 @@ struct Cli {
     #[arg(long, global = true)]
     identity: Option<String>,
 
-    #[arg(long, default_value = "./icp/ids.json")]
+    #[arg(long, default_value = ".icp/ids.json")]
     id_store: Utf8PathBuf,
 
-    #[arg(long, default_value = "./icp/artifacts")]
+    #[arg(long, default_value = ".icp/artifacts")]
     artifact_store: Utf8PathBuf,
 
     #[command(flatten)]

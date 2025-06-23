@@ -11,7 +11,7 @@ pub mod script;
 
 #[async_trait]
 pub trait Adapter {
-    async fn compile(&self, path: &Utf8Path) -> Result<(), AdapterCompileError>;
+    async fn compile(&self, path: &Utf8Path) -> Result<Vec<u8>, AdapterCompileError>;
 }
 
 #[derive(Debug, Snafu)]

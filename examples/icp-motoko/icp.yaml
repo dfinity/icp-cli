@@ -7,3 +7,4 @@ canister:
        - sh -c 'command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/current/developer-docs/setup/install/.\n"; exit 1; }'
        - sh -c 'command -v mops >/dev/null 2>&1 || { echo >&2 "mops not found. To install mops, see https://mops.one/docs/install.\n"; exit 1; }'
        - sh -c 'moc src/main.mo $(mops sources)'
+       - echo main.wasm

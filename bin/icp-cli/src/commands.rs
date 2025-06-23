@@ -29,7 +29,7 @@ pub enum Subcmd {
 
 pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
     match cli.subcommand {
-        Subcmd::Build(opts) => build::exec(opts).await?,
+        Subcmd::Build(opts) => build::exec(env, opts).await?,
         Subcmd::Canister(opts) => canister::dispatch(env, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(env, opts).await?,
         Subcmd::Network(opts) => network::dispatch(env, opts).await?,

@@ -15,8 +15,8 @@ pub struct MotokoAdapter {
 
 #[async_trait]
 impl Adapter for MotokoAdapter {
-    async fn compile(&self, _path: &Utf8Path) -> Result<(), AdapterCompileError> {
-        Ok(())
+    async fn compile(&self, _path: &Utf8Path) -> Result<Vec<u8>, AdapterCompileError> {
+        Ok(vec![])
     }
 }
 

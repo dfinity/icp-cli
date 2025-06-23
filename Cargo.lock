@@ -1346,6 +1346,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-utils"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d1812840b28c9f526d8e9642d5ffe347a91c22537c24d4ba3c334f74bcd012e"
+dependencies = [
+ "async-trait",
+ "candid",
+ "futures-util",
+ "ic-agent",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "thiserror 2.0.12",
+ "time",
+ "tokio",
+]
+
+[[package]]
 name = "ic-verify-bls-signature"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1394,6 +1416,7 @@ dependencies = [
  "camino",
  "camino-tempfile",
  "dunce",
+ "icp-fs",
  "serde",
  "shellwords",
  "snafu",
@@ -1424,6 +1447,7 @@ dependencies = [
  "elliptic-curve",
  "hex",
  "ic-agent",
+ "ic-utils",
  "icp-adapter",
  "icp-canister",
  "icp-dirs",
@@ -2716,6 +2740,12 @@ dependencies = [
  "core-foundation-sys",
  "libc",
 ]
+
+[[package]]
+name = "semver"
+version = "1.0.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56e6fa9c48d24d85fb3de5ad847117517440f6beceb7798af16b4a87d616b8d0"
 
 [[package]]
 name = "serde"

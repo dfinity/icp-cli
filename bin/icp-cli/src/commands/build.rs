@@ -1,3 +1,4 @@
+use crate::{env::Env, store_artifact::SaveError};
 use clap::Parser;
 use icp_adapter::{Adapter as _, AdapterCompileError};
 use icp_canister::model::Adapter;
@@ -19,7 +20,7 @@ pub struct Cmd;
 /// 3. Normalizes the canister definitions into a unified list.
 /// 4. Iterates through each defined canister and invokes its respective build adapter
 ///    (Rust, Motoko, or custom script) to compile it into WebAssembly.
-pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
+pub async fn exec(env: &Env, _: Cmd) -> Result<(), BuildCommandError> {
     // Find the current ICP project directory.
     let pd = ProjectDirectory::find()?.ok_or(BuildCommandError::ProjectNotFound)?;
 
@@ -31,22 +32,19 @@ pub async fn exec(_: Cmd) -> Result<(), BuildCommandError> {
 
     // Iterate through each resolved canister and trigger its build process.
     for (path, c) in pm.canisters {
-        match c.build.adapter {
+        let wasm = match c.build.adapter {
             // Compile using the custom script adapter.
-            Adapter::Script(adapter) => {
-                adapter.compile(&path).await?;
-            }
+            Adapter::Script(adapter) => adapter.compile(&path).await?,
 
             // Compile using the Motoko adapter.
-            Adapter::Motoko(adapter) => {
-                adapter.compile(&path).await?;
-            }
+            Adapter::Motoko(adapter) => adapter.compile(&path).await?,
 
             // Compile using the Rust adapter.
-            Adapter::Rust(adapter) => {
-                adapter.compile(&path).await?;
-            }
-        }
+            Adapter::Rust(adapter) => adapter.compile(&path).await?,
+        };
+
+        // Save the wasm artifact
+        env.artifact_store.save(&c.name, &wasm)?;
     }
 
     Ok(())
@@ -65,4 +63,7 @@ pub enum BuildCommandError {
 
     #[snafu(transparent)]
     BuildAdapter { source: AdapterCompileError },
+
+    #[snafu(transparent)]
+    ArtifactStore { source: SaveError },
 }

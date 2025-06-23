@@ -18,5 +18,6 @@ pub fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Result<()> 
     } else {
         writeln!(term, "{args}")?;
     }
+    term.flush()?;
     Ok(())
 }

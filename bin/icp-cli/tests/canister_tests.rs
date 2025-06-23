@@ -109,7 +109,7 @@ fn canister_install() {
         .args([
             "canister",
             "create",
-            // "--quiet", // Set quiet so only the canister ID is output
+            "--quiet", // Set quiet so only the canister ID is output
             "--effective-id",
             "ghsi2-tqaaa-aaaan-aaaca-cai",
         ])

@@ -10,10 +10,12 @@ use icp_project::{
 };
 use snafu::Snafu;
 
+const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
+
 #[derive(Debug, Parser)]
 struct CanisterIDs {
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long)]
+    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
     effective_id: Principal,
 
     /// The specific canister ID to assign if creating with a fixed principal.

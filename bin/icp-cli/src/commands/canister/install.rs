@@ -1,7 +1,6 @@
 use crate::{
-    env::Env,
-    store_artifact::{Lookup as _, LookupError as LookupArtifactError},
-    store_id::{Lookup as _, LookupError as LookupIdError},
+    env::Env, store_artifact::LookupError as LookupArtifactError,
+    store_id::LookupError as LookupIdError,
 };
 use clap::Parser;
 use ic_agent::{Agent, AgentError};

@@ -1,7 +1,4 @@
-use crate::{
-    env::Env,
-    store_artifact::{Save, SaveError},
-};
+use crate::{env::Env, store_artifact::SaveError};
 use clap::Parser;
 use icp_adapter::{Adapter as _, AdapterCompileError};
 use icp_canister::model::Adapter;

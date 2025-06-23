@@ -24,10 +24,6 @@ pub enum RegisterError {
     },
 }
 
-pub trait Register {
-    fn register(&self, name: &str, cid: &Principal) -> Result<(), RegisterError>;
-}
-
 #[derive(Debug, Snafu)]
 pub enum LookupError {
     #[snafu(display("failed to load canister id store"))]
@@ -39,10 +35,6 @@ pub enum LookupError {
     IdNotFound { name: String },
 }
 
-pub trait Lookup {
-    fn lookup(&self, name: &str) -> Result<Principal, LookupError>;
-}
-
 pub struct IdStore(Utf8PathBuf);
 
 impl IdStore {
@@ -51,8 +43,8 @@ impl IdStore {
     }
 }
 
-impl Register for IdStore {
-    fn register(&self, name: &str, cid: &Principal) -> Result<(), RegisterError> {
+impl IdStore {
+    pub fn register(&self, name: &str, cid: &Principal) -> Result<(), RegisterError> {
         // Load JSON
         let mut cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
             .context(RegisterLoadStoreSnafu)?
@@ -76,10 +68,8 @@ impl Register for IdStore {
 
         Ok(())
     }
-}
 
-impl Lookup for IdStore {
-    fn lookup(&self, name: &str) -> Result<Principal, LookupError> {
+    pub fn lookup(&self, name: &str) -> Result<Principal, LookupError> {
         // Load JSON
         let cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
             .context(LookupLoadStoreSnafu)?

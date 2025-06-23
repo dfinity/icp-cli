@@ -1,5 +1,5 @@
 use crate::env::Env;
-use crate::store_id::{Lookup, LookupError, Register, RegisterError};
+use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;

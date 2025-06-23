@@ -57,7 +57,7 @@ pub struct CanisterCreateCmd {
     #[clap(long, default_value = "http://localhost:8000")]
     network_url: String,
 
-    /// Canister ID configuration, including the effective and optionally specific ID.
+    // Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
     ids: CanisterIDs,
 
@@ -65,7 +65,7 @@ pub struct CanisterCreateCmd {
     #[clap(long)]
     controller: Vec<Principal>,
 
-    /// Resource-related options and thresholds for the new canister.
+    // Resource-related options and thresholds for the new canister.
     #[clap(flatten)]
     options: CanisterOptions,
 

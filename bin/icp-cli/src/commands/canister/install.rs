@@ -42,6 +42,7 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
         .with_arc_identity(identity)
         .build()?;
 
+    // TODO(or.ricon): This is to be replaced with a centralized agent or agent-builder
     if cmd.network_url.contains("127.0.0.1") || cmd.network_url.contains("localhost") {
         agent.fetch_root_key().await?;
     }

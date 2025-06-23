@@ -37,12 +37,14 @@ pub async fn exec(env: &Env, cmd: CanisterCallCmd) -> Result<(), CanisterCallErr
     };
     let args = candid_parser::parse_idl_args(&cmd.args).context(DecodeArgsSnafu)?;
     let arg_bytes = args.to_bytes().context(EncodeArgsSnafu)?;
+
     let agent = Agent::builder().with_url(&cmd.network_url).build().unwrap();
     agent.fetch_root_key().await.unwrap();
     let res = agent
         .update(&canister_id, &cmd.method)
         .with_arg(arg_bytes)
         .await?;
+
     let ret = IDLArgs::from_bytes(&res[..]).context(DecodeReturnSnafu)?;
 
     let term = Term::stdout();
@@ -70,14 +72,19 @@ pub enum CanisterCallError {
     LookupError {
         source: crate::store_id::LookupError,
     },
+
     #[snafu(display("failed to parse candid arguments"))]
     DecodeArgsError { source: candid_parser::Error },
+
     #[snafu(display("failed to serialize candid arguments"))]
     EncodeArgsError { source: candid::Error },
+
     #[snafu(display("failed to decode candid return value"))]
     DecodeReturnError { source: candid::Error },
+
     #[snafu(transparent)]
     CallError { source: ic_agent::AgentError },
+
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityInContextError },
 }

@@ -106,7 +106,7 @@ impl ProjectManifest {
         let canisters_field = pm.canisters.unwrap_or_else(default_canisters);
 
         // Process the resolved RawCanistersField into the final CanistersField.
-        let cs = match canisters_field {
+        let canisters = match canisters_field {
             // Case 1: Single-canister project, where 'canister' key was used.
             RawCanistersField::Canister(c) => vec![(
                 pds.root().to_owned(), // path
@@ -199,7 +199,7 @@ impl ProjectManifest {
 
         Ok(ProjectManifest {
             // The resolved canister configurations.
-            canisters: cs,
+            canisters,
 
             // Network definitions for the project.
             networks,

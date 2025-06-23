@@ -104,7 +104,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     // Choose canisters to create
-    let cs = pm
+    let canisters = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -115,13 +115,13 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
 
     // Case 1 (canister not found)
     if let Some(name) = cmd.name {
-        if cs.is_empty() {
+        if canisters.is_empty() {
             return Err(CanisterCreateError::CanisterNotFound { name });
         }
     }
 
     // Case 2 (skip created canisters)
-    let cs = cs
+    let canisters = canisters
         .into_iter()
         .filter(|&(_, c)| {
             match env.id_store.lookup(&c.name) {
@@ -138,11 +138,11 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         .collect::<Vec<_>>();
 
     // Case 3 (no canisters)
-    if cs.is_empty() {
+    if canisters.is_empty() {
         return Err(CanisterCreateError::NoCanisters);
     }
 
-    for (_, c) in cs {
+    for (_, c) in canisters {
         // Create canister
         let mut builder = mgmt.create_canister();
 

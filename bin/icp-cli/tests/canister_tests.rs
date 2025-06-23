@@ -1,5 +1,6 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
+use predicates::{ord::eq, str::PredicateStrExt};
 use serial_test::serial;
 
 mod common;
@@ -126,5 +127,6 @@ fn canister_install() {
         .current_dir(&project_dir)
         .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
         .assert()
-        .success();
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
 }

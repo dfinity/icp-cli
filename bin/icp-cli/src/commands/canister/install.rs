@@ -15,11 +15,11 @@ use snafu::Snafu;
 #[derive(Debug, Parser)]
 pub struct CanisterInstallCmd {
     /// The name of the canister within the current project
-    name: Option<String>,
+    pub name: Option<String>,
 
     /// The URL of the IC network endpoint
     #[clap(long, default_value = "http://127.0.0.1:8000")]
-    network_url: String,
+    pub network_url: String,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
@@ -50,7 +50,7 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     // Choose canisters to install
-    let cs = pm
+    let canisters = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -61,17 +61,17 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
 
     // Case 1 (canister not found)
     if let Some(name) = cmd.name {
-        if cs.is_empty() {
+        if canisters.is_empty() {
             return Err(CanisterInstallError::CanisterNotFound { name });
         }
     }
 
     // Case 2 (no canisters)
-    if cs.is_empty() {
+    if canisters.is_empty() {
         return Err(CanisterInstallError::NoCanisters);
     }
 
-    for (_, c) in cs {
+    for (_, c) in canisters {
         // Lookup the canister id
         let cid = env.id_store.lookup(&c.name)?;
 

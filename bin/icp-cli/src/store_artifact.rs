@@ -11,10 +11,6 @@ pub enum SaveError {
     SaveWriteFileError { source: WriteFileError },
 }
 
-pub trait Save {
-    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
-}
-
 #[derive(Debug, Snafu)]
 pub enum LookupError {
     #[snafu(display("failed to read artifact file"))]
@@ -22,10 +18,6 @@ pub enum LookupError {
 
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },
-}
-
-pub trait Lookup {
-    fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError>;
 }
 
 pub struct ArtifactStore(Utf8PathBuf);
@@ -36,8 +28,8 @@ impl ArtifactStore {
     }
 }
 
-impl Save for ArtifactStore {
-    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+impl ArtifactStore {
+    pub fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
         // Create artifacts directory
         create_dir_all(&self.0).context(ArtifactsDirSnafu)?;
 
@@ -46,10 +38,8 @@ impl Save for ArtifactStore {
 
         Ok(())
     }
-}
 
-impl Lookup for ArtifactStore {
-    fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    pub fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
         // Not Found
         if !self.0.join(name).exists() {
             return Err(LookupError::LookupArtifactNotFound {

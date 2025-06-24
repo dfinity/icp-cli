@@ -1,7 +1,4 @@
-use crate::{
-    env::Env,
-    store_id::{Lookup as _, LookupError as LookupIdError},
-};
+use crate::{env::Env, store_id::LookupError as LookupIdError};
 use clap::Parser;
 use ic_agent::{Agent, AgentError};
 use ic_utils::interfaces::management_canister::StatusCallResult;

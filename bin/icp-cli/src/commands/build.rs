@@ -1,7 +1,4 @@
-use crate::{
-    env::Env,
-    store_artifact::{Save, SaveError},
-};
+use crate::{env::Env, store_artifact::SaveError};
 use clap::Parser;
 use icp_adapter::{Adapter as _, AdapterCompileError};
 use icp_canister::model::Adapter;
@@ -37,7 +34,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     let pm = ProjectManifest::load(pds)?;
 
     // Choose canisters to build
-    let cs = pm
+    let canisters = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -48,7 +45,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
 
     // Check if selected canister exists
     if let Some(name) = cmd.name {
-        if cs.is_empty() {
+        if canisters.is_empty() {
             return Err(CommandError::CanisterNotFound { name });
         }
     }

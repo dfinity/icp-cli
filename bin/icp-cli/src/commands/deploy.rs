@@ -47,7 +47,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     let pm = ProjectManifest::load(pds)?;
 
     // Choose canisters to create
-    let cs = pm
+    let canisters = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -58,7 +58,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
 
     // Check if a canister name was specified and is present in the project
     if let Some(name) = &cmd.name {
-        if cs.is_empty() {
+        if canisters.is_empty() {
             return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
             });
@@ -67,7 +67,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
 
     // Build the selected canisters
     eprintln!("\nBuilding canisters:");
-    for (_, c) in &cs {
+    for (_, c) in &canisters {
         eprintln!("- {}", c.name);
 
         // TODO(or.ricon): Temporary approach that can be revisited.
@@ -84,7 +84,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
 
     // Create the selected canisters
     eprintln!("\nCreating canisters:");
-    for (_, c) in &cs {
+    for (_, c) in &canisters {
         eprintln!("- {}", c.name);
 
         // TODO(or.ricon): Temporary approach that can be revisited.
@@ -124,7 +124,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
 
     // Install the selected canisters
     eprintln!("\nInstalling canisters:");
-    for (_, c) in &cs {
+    for (_, c) in &canisters {
         eprintln!("- {}", c.name);
 
         // TODO(or.ricon): Temporary approach that can be revisited.

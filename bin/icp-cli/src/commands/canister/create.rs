@@ -1,5 +1,5 @@
 use crate::env::Env;
-use crate::store_id::{Lookup, LookupError, Register, RegisterError};
+use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
@@ -10,10 +10,12 @@ use icp_project::{
 };
 use snafu::Snafu;
 
+const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
+
 #[derive(Debug, Parser)]
 pub struct CanisterIDs {
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long)]
+    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
     pub effective_id: Principal,
 
     /// The specific canister ID to assign if creating with a fixed principal.
@@ -57,7 +59,7 @@ pub struct CanisterCreateCmd {
     #[clap(long, default_value = "http://localhost:8000")]
     pub network_url: String,
 
-    /// Canister ID configuration, including the effective and optionally specific ID.
+    // Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
     pub ids: CanisterIDs,
 
@@ -65,7 +67,7 @@ pub struct CanisterCreateCmd {
     #[clap(long)]
     pub controller: Vec<Principal>,
 
-    /// Resource-related options and thresholds for the new canister.
+    // Resource-related options and thresholds for the new canister.
     #[clap(flatten)]
     pub options: CanisterOptions,
 
@@ -93,6 +95,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         .with_arc_identity(identity)
         .build()?;
 
+    // TODO(or.ricon): This is to be replaced with a centralized agent or agent-builder
     if cmd.network_url.contains("127.0.0.1") || cmd.network_url.contains("localhost") {
         agent.fetch_root_key().await?;
     }
@@ -101,7 +104,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     // Choose canisters to create
-    let cs = pm
+    let canisters = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -112,13 +115,13 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
 
     // Case 1 (canister not found)
     if let Some(name) = cmd.name {
-        if cs.is_empty() {
+        if canisters.is_empty() {
             return Err(CanisterCreateError::CanisterNotFound { name });
         }
     }
 
     // Case 2 (skip created canisters)
-    let cs = cs
+    let canisters = canisters
         .into_iter()
         .filter(|&(_, c)| {
             match env.id_store.lookup(&c.name) {
@@ -135,11 +138,11 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         .collect::<Vec<_>>();
 
     // Case 3 (no canisters)
-    if cs.is_empty() {
+    if canisters.is_empty() {
         return Err(CanisterCreateError::NoCanisters);
     }
 
-    for (_, c) in cs {
+    for (_, c) in canisters {
         // Create canister
         let mut builder = mgmt.create_canister();
 

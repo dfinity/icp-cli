@@ -1,8 +1,9 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
 use predicates::{
+    ord::eq,
     prelude::PredicateBooleanExt,
-    str::{contains, starts_with},
+    str::{PredicateStrExt, contains, starts_with},
 };
 use serial_test::serial;
 
@@ -107,8 +108,7 @@ fn canister_install() {
         .success();
 
     // Create canister
-    let out = env
-        .icp()
+    env.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -120,9 +120,6 @@ fn canister_install() {
         .assert()
         .success();
 
-    let _cid =
-        String::from_utf8(out.get_output().stdout.to_owned()).expect("failed to read canister id");
-
     // Install canister
     env.icp()
         .current_dir(&project_dir)
@@ -130,20 +127,12 @@ fn canister_install() {
         .assert()
         .success();
 
-    // TODO(or.ricon): Query canister
-    // env.dfx()
-    //     .current_dir(&project_dir)
-    //     .args([
-    //         "canister",
-    //         "call",
-    //         "--network",
-    //         "http://localhost:8000",
-    //         &cid,
-    //         "greet",
-    //         "(\"test\")",
-    //     ])
-    //     .assert()
-    //     .success();
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
 }
 
 #[test]

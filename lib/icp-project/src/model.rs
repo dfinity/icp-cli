@@ -59,6 +59,7 @@ pub struct RawProjectManifest {
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
+#[derive(Debug)]
 pub struct ProjectManifest {
     /// List of canister manifests belonging to this project.
     pub canisters: Vec<(Utf8PathBuf, CanisterManifest)>,
@@ -244,7 +245,7 @@ pub enum LoadProjectManifestError {
 mod tests {
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::model::{Adapter, Build, CanisterManifest};
+    use icp_canister::model::{Adapter, Build, CanisterManifest, Deploy};
 
     use crate::{
         model::{LoadProjectManifestError, ProjectManifest},
@@ -306,6 +307,7 @@ mod tests {
                         command: CommandField::Command("echo test".into()),
                     }),
                 },
+                deploy: Deploy::default(),
             },
         )];
 
@@ -362,6 +364,7 @@ mod tests {
                         command: CommandField::Command("echo test".into()),
                     }),
                 },
+                deploy: Deploy::default(),
             },
         )];
 

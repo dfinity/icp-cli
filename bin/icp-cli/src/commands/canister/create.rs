@@ -163,22 +163,46 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         }
 
         // Compute
-        builder = builder.with_optional_compute_allocation(cmd.options.compute_allocation);
+        builder = builder.with_optional_compute_allocation(
+            cmd.options
+                .compute_allocation
+                .or(c.deploy.options.compute_allocation),
+        );
 
         // Memory
-        builder = builder.with_optional_memory_allocation(cmd.options.memory_allocation);
+        builder = builder.with_optional_memory_allocation(
+            cmd.options
+                .memory_allocation
+                .or(c.deploy.options.memory_allocation),
+        );
 
         // Freezing Threshold
-        builder = builder.with_optional_freezing_threshold(cmd.options.freezing_threshold);
+        builder = builder.with_optional_freezing_threshold(
+            cmd.options
+                .freezing_threshold
+                .or(c.deploy.options.freezing_threshold),
+        );
 
         // Reserved Cycles (limit)
-        builder = builder.with_optional_reserved_cycles_limit(cmd.options.reserved_cycles_limit);
+        builder = builder.with_optional_reserved_cycles_limit(
+            cmd.options
+                .reserved_cycles_limit
+                .or(c.deploy.options.reserved_cycles_limit),
+        );
 
         // Wasm (memory limit)
-        builder = builder.with_optional_wasm_memory_limit(cmd.options.wasm_memory_limit);
+        builder = builder.with_optional_wasm_memory_limit(
+            cmd.options
+                .wasm_memory_limit
+                .or(c.deploy.options.wasm_memory_limit),
+        );
 
         // Wasm (memory threshold)
-        builder = builder.with_optional_wasm_memory_threshold(cmd.options.wasm_memory_threshold);
+        builder = builder.with_optional_wasm_memory_threshold(
+            cmd.options
+                .wasm_memory_threshold
+                .or(c.deploy.options.wasm_memory_threshold),
+        );
 
         // Logs
         builder = builder.with_optional_log_visibility(

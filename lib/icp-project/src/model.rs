@@ -60,6 +60,9 @@ pub struct RawProjectManifest {
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
 pub struct ProjectManifest {
+    /// Access to the project directory.
+    pub directory: ProjectDirectory,
+
     /// List of canister manifests belonging to this project.
     pub canisters: Vec<(Utf8PathBuf, CanisterManifest)>,
 
@@ -193,6 +196,9 @@ impl ProjectManifest {
         let networks = vec![];
 
         Ok(ProjectManifest {
+            // The project directory.
+            directory: pd,
+
             // The resolved canister configurations.
             canisters,
 

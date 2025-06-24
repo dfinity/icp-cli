@@ -1,8 +1,7 @@
-use crate::commands::network::run::RunNetworkCommandError::ProjectNotFound;
-use crate::env::Env;
+use crate::commands::network::run::RunNetworkCommandError::GetProject;
+use crate::env::{Env, GetProjectError};
 use clap::Parser;
 use icp_network::{ManagedNetworkModel, RunNetworkError, run_network};
-use icp_project::directory::{FindProjectError, ProjectDirectory};
 use snafu::Snafu;
 
 /// Run the local network
@@ -10,9 +9,10 @@ use snafu::Snafu;
 pub struct Cmd {}
 
 pub async fn exec(env: &Env, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
+    let project = env.project().map_err(|source| GetProject { source })?;
+    let pd = &project.directory;
     let network_name = "local";
     let config = ManagedNetworkModel::default();
-    let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
     let nd = pd.network(network_name, env.dirs().port_descriptor_dir());
     let project_root = pd.structure().root();
 
@@ -26,11 +26,8 @@ pub async fn exec(env: &Env, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
 
 #[derive(Debug, Snafu)]
 pub enum RunNetworkCommandError {
-    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
-    ProjectNotFound,
-
     #[snafu(transparent)]
-    FindProjectError { source: FindProjectError },
+    GetProject { source: GetProjectError },
 
     #[snafu(transparent)]
     RunNetwork { source: RunNetworkError },

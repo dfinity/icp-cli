@@ -117,20 +117,13 @@ fn deploy() {
         .assert()
         .success();
 
-    // TODO(or.ricon): Query canister
-    // env.dfx()
-    //     .current_dir(&project_dir)
-    //     .args([
-    //         "canister",
-    //         "call",
-    //         "--network",
-    //         "http://localhost:8000",
-    //         &cid,
-    //         "greet",
-    //         "(\"test\")",
-    //     ])
-    //     .assert()
-    //     .success();
+    // Query canister
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
 }
 
 #[test]
@@ -190,18 +183,11 @@ fn deploy_twice_should_fail() {
         .failure()
         .stderr(contains("cannot be installed because the canister is not empty").trim());
 
-    // TODO(or.ricon): Query canister
-    // env.dfx()
-    //     .current_dir(&project_dir)
-    //     .args([
-    //         "canister",
-    //         "call",
-    //         "--network",
-    //         "http://localhost:8000",
-    //         &cid,
-    //         "greet",
-    //         "(\"test\")",
-    //     ])
-    //     .assert()
-    //     .success();
+    // Query canister
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
 }

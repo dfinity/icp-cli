@@ -27,11 +27,8 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     // Find the current ICP project directory.
     let pd = ProjectDirectory::find()?.ok_or(CommandError::ProjectNotFound)?;
 
-    // Get the project directory structure for path resolution.
-    let pds = pd.structure();
-
     // Load the project manifest, which defines the canisters to be built.
-    let pm = ProjectManifest::load(pds)?;
+    let pm = ProjectManifest::load(pd)?;
 
     // Choose canisters to build
     let canisters = pm

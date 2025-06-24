@@ -80,11 +80,8 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
     // Find the current ICP project directory.
     let pd = ProjectDirectory::find()?.ok_or(CanisterCreateError::ProjectNotFound)?;
 
-    // Get the project directory structure for path resolution.
-    let pds = pd.structure();
-
     // Load the project manifest, which defines the canisters to be built.
-    let pm = ProjectManifest::load(pds)?;
+    let pm = ProjectManifest::load(pd)?;
 
     // Load the currently selected identity
     let identity = env.load_identity()?;

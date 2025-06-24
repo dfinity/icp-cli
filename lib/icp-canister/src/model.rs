@@ -1,8 +1,5 @@
-use camino::Utf8Path;
 use icp_adapter::{motoko::MotokoAdapter, rust::RustAdapter, script::ScriptAdapter};
-use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use serde::Deserialize;
-use snafu::Snafu;
 
 /// Identifies the type of adapter used to build the canister,
 /// along with its configuration.
@@ -48,22 +45,4 @@ pub struct CanisterManifest {
     /// The build configuration specifying how to compile the canister's source
     /// code into a WebAssembly module, including the adapter to use.
     pub build: Build,
-}
-
-impl CanisterManifest {
-    /// Loads a `CanisterManifest` from the specified YAML file path.
-    pub fn load<P: AsRef<Utf8Path>>(path: P) -> Result<Self, LoadCanisterManifestError> {
-        let path = path.as_ref();
-
-        // Load the canister manifest from the YAML file.
-        let cm: CanisterManifest = load_yaml_file(path)?;
-
-        Ok(cm)
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum LoadCanisterManifestError {
-    #[snafu(transparent)]
-    Parse { source: LoadYamlFileError },
 }

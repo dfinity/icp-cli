@@ -13,10 +13,6 @@ use crate::{
 use clap::Parser;
 use ic_agent::export::Principal;
 use icp_identity::key::LoadIdentityInContextError;
-use icp_project::{
-    directory::{FindProjectError, ProjectDirectory},
-    model::{LoadProjectManifestError, ProjectManifest},
-};
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]

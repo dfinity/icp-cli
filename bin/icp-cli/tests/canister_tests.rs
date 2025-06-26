@@ -1,4 +1,5 @@
 use crate::common::TestEnv;
+use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::write;
 use predicates::{
     ord::eq,
@@ -17,15 +18,21 @@ fn canister_create() {
     // Setup project
     let project_dir = env.create_project_dir("icp");
 
+    // Create temporary file
+    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+
     // Project manifest
-    let pm = r#"
-    canister:
-      name: my-canister
-      build:
-        adapter:
-          type: script
-          command: echo hi
-    "#;
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            adapter:
+              type: script
+              command: echo {}
+        "#,
+        f.path()
+    );
 
     write(
         project_dir.join("icp.yaml"), // path

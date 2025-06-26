@@ -59,9 +59,9 @@ pub struct CanisterOptions {
     pub wasm_memory_threshold: Option<u64>,
 }
 
-/// Configuration for canister deployment
+/// Configuration for canister creation
 #[derive(Debug, Default, Deserialize, PartialEq)]
-pub struct Deploy {
+pub struct Create {
     pub options: CanisterOptions,
 }
 
@@ -77,9 +77,10 @@ pub struct CanisterManifest {
     /// code into a WebAssembly module, including the adapter to use.
     pub build: Build,
 
-    /// The deploy configuration specifying the various options to deploy
-    /// the canister with.
-    pub deploy: Deploy,
+    /// The configuration specifying the various options when
+    /// creating the canister.
+    #[serde(default)]
+    pub create: Create,
 }
 
 impl CanisterManifest {

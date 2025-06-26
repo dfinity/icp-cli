@@ -21,7 +21,7 @@ pub struct CanisterInstallCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
-    let pm = env.project().map_err(|source| GetProject { source })?;
+    let pm = env.project()?;
 
     // Load the currently selected identity
     let identity = env.load_identity()?;

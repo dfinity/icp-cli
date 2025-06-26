@@ -9,7 +9,7 @@ use snafu::Snafu;
 pub struct Cmd {}
 
 pub async fn exec(env: &Env, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
-    let project = env.project().map_err(|source| GetProject { source })?;
+    let project = env.project()?;
     let pd = &project.directory;
     let network_name = "local";
     let config = ManagedNetworkModel::default();

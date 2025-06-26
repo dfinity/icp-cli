@@ -22,9 +22,7 @@ pub struct Cmd {
 ///    (Rust, Motoko, or custom script) to compile it into WebAssembly.
 pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = env
-        .project()
-        .map_err(|source| CommandError::GetProject { source })?;
+    let pm = env.project()?;
 
     // Choose canisters to build
     let canisters = pm

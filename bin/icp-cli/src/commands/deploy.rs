@@ -35,9 +35,7 @@ pub struct Cmd {
 
 pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = env
-        .project()
-        .map_err(|source| CommandError::GetProject { source })?;
+    let pm = env.project()?;
 
     // Choose canisters to create
     let canisters = pm

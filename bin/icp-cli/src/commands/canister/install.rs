@@ -1,4 +1,3 @@
-use crate::commands::canister::install::CanisterInstallError::GetProject;
 use crate::env::GetProjectError;
 use crate::{
     env::Env, store_artifact::LookupError as LookupArtifactError,

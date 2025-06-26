@@ -1,4 +1,3 @@
-use crate::commands::canister::create::CanisterCreateError::GetProject;
 use crate::env::{Env, GetProjectError};
 use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;

@@ -1,4 +1,3 @@
-use crate::commands::network::run::RunNetworkCommandError::GetProject;
 use crate::env::{Env, GetProjectError};
 use clap::Parser;
 use icp_network::{ManagedNetworkModel, RunNetworkError, run_network};

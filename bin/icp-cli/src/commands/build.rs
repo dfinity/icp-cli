@@ -40,7 +40,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     // Choose canisters to build
     let canisters = pm
         .canisters
-        .iter()
+        .into_iter()
         .filter(|(_, c)| match &cmd.name {
             Some(name) => name == &c.name,
             None => true,
@@ -55,7 +55,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Iterate through each resolved canister and trigger its build process.
-    for (canister_path, c) in pm.canisters {
+    for (canister_path, c) in canisters {
         // Create a temporary directory for build artifacts
         let build_dir = tempdir().context(BuildDirSnafu)?;
 

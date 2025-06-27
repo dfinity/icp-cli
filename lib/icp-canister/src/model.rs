@@ -37,6 +37,34 @@ pub struct Build {
     pub adapter: Adapter,
 }
 
+/// Canister options, such as compute and memory allocation.
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct CanisterOptions {
+    /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
+    pub compute_allocation: Option<u64>,
+
+    /// Memory allocation in bytes. If unset, memory is allocated dynamically.
+    pub memory_allocation: Option<u64>,
+
+    /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
+    pub freezing_threshold: Option<u64>,
+
+    /// Reserved cycles limit. If set, the canister cannot consume more than this many cycles.
+    pub reserved_cycles_limit: Option<u64>,
+
+    /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
+    pub wasm_memory_limit: Option<u64>,
+
+    /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
+    pub wasm_memory_threshold: Option<u64>,
+}
+
+/// Configuration for canister creation
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct Create {
+    pub options: CanisterOptions,
+}
+
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
@@ -48,6 +76,11 @@ pub struct CanisterManifest {
     /// The build configuration specifying how to compile the canister's source
     /// code into a WebAssembly module, including the adapter to use.
     pub build: Build,
+
+    /// The configuration specifying the various options when
+    /// creating the canister.
+    #[serde(default)]
+    pub create: Create,
 }
 
 impl CanisterManifest {

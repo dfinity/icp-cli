@@ -1,9 +1,6 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
-use predicates::{
-    ord::eq,
-    str::{PredicateStrExt, contains},
-};
+use predicates::{ord::eq, str::PredicateStrExt};
 use serial_test::serial;
 
 mod common;
@@ -128,7 +125,7 @@ fn deploy() {
 
 #[test]
 #[serial]
-fn deploy_twice_should_fail() {
+fn deploy_twice_should_succeed() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
@@ -180,8 +177,7 @@ fn deploy_twice_should_fail() {
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
-        .failure()
-        .stderr(contains("cannot be installed because the canister is not empty").trim());
+        .success();
 
     // Query canister
     env.icp()

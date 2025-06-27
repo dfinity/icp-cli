@@ -59,6 +59,7 @@ pub struct RawProjectManifest {
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
+#[derive(Debug)]
 pub struct ProjectManifest {
     /// Access to the project directory.
     pub directory: ProjectDirectory,
@@ -247,7 +248,7 @@ mod tests {
     use crate::model::{LoadProjectManifestError, ProjectManifest};
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::model::{Adapter, Build, CanisterManifest};
+    use icp_canister::model::{Adapter, Build, CanisterManifest, Create};
 
     #[test]
     fn empty_project() {
@@ -276,13 +277,13 @@ mod tests {
 
         // Write project-manifest
         let pm = r#"
-    canister:
-      name: canister-1
-      build:
-        adapter:
-          type: script
-          command: echo test
-    "#;
+        canister:
+          name: canister-1
+          build:
+            adapter:
+              type: script
+              command: echo test
+        "#;
 
         std::fs::write(
             project_dir.path().join("icp.yaml"), // path
@@ -304,6 +305,7 @@ mod tests {
                         command: CommandField::Command("echo test".into()),
                     }),
                 },
+                create: Create::default(),
             },
         )];
 
@@ -321,12 +323,12 @@ mod tests {
 
         // Write canister-manifest
         let cm = r#"
-    name: canister-1
-    build:
-      adapter:
-        type: script
-        command: echo test
-    "#;
+        name: canister-1
+        build:
+          adapter:
+            type: script
+            command: echo test
+        "#;
 
         std::fs::write(
             project_dir.path().join("canister-1/canister.yaml"), // path
@@ -336,9 +338,9 @@ mod tests {
 
         // Write project-manifest
         let pm = r#"
-    canisters:
-      - canister-1
-    "#;
+        canisters:
+          - canister-1
+        "#;
 
         std::fs::write(
             project_dir.path().join("icp.yaml"), // path
@@ -360,6 +362,7 @@ mod tests {
                         command: CommandField::Command("echo test".into()),
                     }),
                 },
+                create: Create::default(),
             },
         )];
 
@@ -404,9 +407,9 @@ mod tests {
 
         // Write project-manifest
         let pm = r#"
-    canisters:
-      - canister-1
-    "#;
+        canisters:
+          - canister-1
+        "#;
 
         std::fs::write(
             project_dir.path().join("icp.yaml"), // path
@@ -439,9 +442,9 @@ mod tests {
 
         // Write project-manifest
         let pm = r#"
-    canisters:
-      - canisters/*
-    "#;
+        canisters:
+          - canisters/*
+        "#;
 
         std::fs::write(
             project_dir.path().join("icp.yaml"), // path
@@ -471,9 +474,9 @@ mod tests {
 
         // Write project-manifest
         let pm = r#"
-    canisters:
-      - canister-1
-    "#;
+        canisters:
+          - canister-1
+        "#;
 
         std::fs::write(
             project_dir.path().join("icp.yaml"), // path
@@ -499,9 +502,9 @@ mod tests {
 
         // Write project-manifest
         let pm = r#"
-    canisters:
-      - canisters/***
-    "#;
+        canisters:
+          - canisters/***
+        "#;
 
         std::fs::write(
             project_dir.path().join("icp.yaml"), // path

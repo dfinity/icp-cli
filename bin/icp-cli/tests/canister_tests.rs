@@ -29,7 +29,7 @@ fn canister_create() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#,
         f.path()
     );
@@ -84,7 +84,7 @@ fn canister_create_with_options() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
           create:
             options:
               compute_allocation: 10
@@ -164,7 +164,7 @@ fn canister_create_with_options_cmdline_override() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
           create:
             options:
               compute_allocation: 10
@@ -236,7 +236,7 @@ fn canister_install() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#,
         wasm,
     );
@@ -313,7 +313,7 @@ fn canister_status() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#,
         wasm,
     );
@@ -375,7 +375,7 @@ fn canister_stop() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#,
         wasm,
     );
@@ -444,7 +444,7 @@ fn canister_start() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#,
         wasm,
     );
@@ -531,7 +531,7 @@ fn canister_delete() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#,
         wasm,
     );

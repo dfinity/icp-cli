@@ -73,13 +73,15 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             Adapter::Rust(adapter) => adapter.compile(&canister_path, &wasm_output_path).await?,
         };
 
-        // TODO(or.ricon): Sanity-check the output
-        // - non-empty
-        // - does it exist
-        // - valid wasm
+        // Verify a file exists in the wasm output path
+        if !wasm_output_path.exists() {
+            return Err(CommandError::NoOutput);
+        }
 
-        // Set output
+        // Load wasm output
         let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
+
+        // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
         // Save the wasm artifact
         env.artifact_store.save(&c.name, &wasm)?;
@@ -117,28 +119,3 @@ pub enum CommandError {
     #[snafu(transparent)]
     ArtifactStore { source: SaveError },
 }
-
-/*
-// The last command should always return a path to the built wasm artifact
-            if i == ncmds - 1 {
-                // TODO(or.ricon): Sanity-check the output
-                // - non-empty
-                // - does it exist
-                // - valid wasm
-
-                // Grab the output from the final command
-                let path = String::from_utf8(out.stdout).context(PathParseSnafu)?;
-
-                // Set output
-                wasm = Some(read(path.trim()).context(ReadOutputSnafu)?);
-            }
-
-    #[snafu(display("failed to parse output path"))]
-    PathParse { source: std::string::FromUtf8Error },
-
-    #[snafu(display("failed to read output wasm artifact"))]
-    ReadOutput { source: ReadFileError },
-
-    #[snafu(display("no output has been set"))]
-    NoOutput,
-*/

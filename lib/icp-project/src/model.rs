@@ -284,7 +284,7 @@ mod tests {
           build:
             adapter:
               type: script
-              command: echo test
+              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#;
 
         std::fs::write(
@@ -304,7 +304,9 @@ mod tests {
                 name: "canister-1".into(),
                 build: Build {
                     adapter: Adapter::Script(ScriptAdapter {
-                        command: CommandField::Command("echo test".into()),
+                        command: CommandField::Command(
+                            "sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'".into(),
+                        ),
                     }),
                 },
                 create: Create::default(),
@@ -329,7 +331,7 @@ mod tests {
         build:
           adapter:
             type: script
-            command: echo test
+            command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
         "#;
 
         std::fs::write(
@@ -361,7 +363,9 @@ mod tests {
                 name: "canister-1".into(),
                 build: Build {
                     adapter: Adapter::Script(ScriptAdapter {
-                        command: CommandField::Command("echo test".into()),
+                        command: CommandField::Command(
+                            "sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'".into(),
+                        ),
                     }),
                 },
                 create: Create::default(),

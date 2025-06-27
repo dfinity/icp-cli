@@ -5,7 +5,7 @@ use serde::Deserialize;
 use snafu::Snafu;
 
 /// Configuration for a Motoko-based canister build adapter.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct MotokoAdapter {
     /// Optional path to the main Motoko source file.
     /// If omitted, a default like `main.mo` may be assumed.

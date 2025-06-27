@@ -5,7 +5,7 @@ use serde::Deserialize;
 use snafu::Snafu;
 
 /// Configuration for a Rust-based canister build adapter.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct RustAdapter {
     /// The name of the Cargo package to build.
     pub package: String,

@@ -62,16 +62,24 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // Prepare a path for our output wasm
         let wasm_output_path = build_dir.path().join("out.wasm");
 
-        match c.build.adapter {
-            // Compile using the custom script adapter.
-            Adapter::Script(adapter) => adapter.compile(&canister_path, &wasm_output_path).await?,
+        for step in c.build.into_vec() {
+            match step.adapter {
+                // Compile using the custom script adapter.
+                Adapter::Script(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
 
-            // Compile using the Motoko adapter.
-            Adapter::Motoko(adapter) => adapter.compile(&canister_path, &wasm_output_path).await?,
+                // Compile using the Motoko adapter.
+                Adapter::Motoko(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
 
-            // Compile using the Rust adapter.
-            Adapter::Rust(adapter) => adapter.compile(&canister_path, &wasm_output_path).await?,
-        };
+                // Compile using the Rust adapter.
+                Adapter::Rust(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
+            };
+        }
 
         // Verify a file exists in the wasm output path
         if !wasm_output_path.exists() {

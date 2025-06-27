@@ -14,7 +14,7 @@ use snafu::Snafu;
 /// type: rust
 /// package: my_canister
 /// ```
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Adapter {
     /// Represents a canister built using the Rust programming language.
@@ -32,9 +32,30 @@ pub enum Adapter {
 
 /// Describes how the canister should be built into WebAssembly,
 /// including the adapter responsible for the build.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Build {
     pub adapter: Adapter,
+}
+
+/// Represents one or more build steps.
+/// This enum allows the `build` field in `canister.yaml` to be either
+/// a single build configuration or a list of them.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum BuildSteps {
+    Single(Build),
+    Sequence(Vec<Build>),
+}
+
+impl BuildSteps {
+    /// Consumes the enum and returns a `Vec<Build>`, ensuring
+    /// the build logic can uniformly handle both single and multiple build steps.
+    pub fn into_vec(self) -> Vec<Build> {
+        match self {
+            BuildSteps::Single(build) => vec![build],
+            BuildSteps::Sequence(builds) => builds,
+        }
+    }
 }
 
 /// Canister options, such as compute and memory allocation.
@@ -75,7 +96,7 @@ pub struct CanisterManifest {
 
     /// The build configuration specifying how to compile the canister's source
     /// code into a WebAssembly module, including the adapter to use.
-    pub build: Build,
+    pub build: BuildSteps,
 
     /// The configuration specifying the various options when
     /// creating the canister.

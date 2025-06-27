@@ -6,6 +6,7 @@ use crate::{
             create::{CanisterCreateCmd, CanisterCreateError, CanisterIDs, CanisterOptions},
             install::{CanisterInstallCmd, CanisterInstallError},
         },
+        sync,
     },
     env::Env,
 };
@@ -151,6 +152,29 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // Sync the selected canisters
+    eprintln!("\nSyncing canisters:");
+    for (_, c) in &canisters {
+        eprintln!("- {}", c.name);
+
+        // TODO(or.ricon): Temporary approach that can be revisited.
+        //                 Currently we simply invoke the adjacent `canister::create` command.
+        //                 We should consider refactoring `canister::create` to use library code instead.
+        let out = sync::exec(
+            env,
+            sync::Cmd {
+                name: Some(c.name.to_owned()),
+            },
+        )
+        .await;
+
+        if let Err(err) = out {
+            if !matches!(err, sync::CommandError::NoCanisters) {
+                return Err(CommandError::Sync { source: err });
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -183,4 +207,7 @@ pub enum CommandError {
     Install {
         source: canister::install::CanisterInstallError,
     },
+
+    #[snafu(transparent)]
+    Sync { source: sync::CommandError },
 }

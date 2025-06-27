@@ -32,11 +32,15 @@ pub async fn exec(_env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         })
         .collect::<Vec<_>>();
 
-    // Check if selected canister exists
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CommandError::CanisterNotFound { name });
-        }
+    // Ensure at least one canister has been selected
+    if canisters.is_empty() {
+        return Err(match cmd.name {
+            // Selected canister not found
+            Some(name) => CommandError::CanisterNotFound { name },
+
+            // No canisters found at all
+            None => CommandError::NoCanisters,
+        });
     }
 
     // Iterate through each resolved canister and trigger its sync process.
@@ -58,6 +62,9 @@ pub enum CommandError {
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("no canisters available to install"))]
+    NoCanisters,
 }
 
 // #[snafu(transparent)]

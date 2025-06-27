@@ -23,6 +23,10 @@ pub struct Cmd {
     /// The name of the canister within the current project
     name: Option<String>,
 
+    /// Specifies the mode of canister installation.
+    #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
+    pub mode: String,
+
     /// The URL of the IC network endpoint
     #[clap(long, default_value = "http://localhost:8000")]
     network_url: String,
@@ -134,6 +138,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             env,
             CanisterInstallCmd {
                 name: Some(c.name.to_owned()),
+                mode: cmd.mode.to_owned(),
                 network_url: cmd.network_url.to_owned(),
             },
         )

@@ -17,6 +17,10 @@ pub struct CanisterInstallCmd {
     /// The name of the canister within the current project
     pub name: Option<String>,
 
+    /// Specifies the mode of canister installation.
+    #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
+    pub mode: String,
+
     /// The URL of the IC network endpoint
     #[clap(long, default_value = "http://127.0.0.1:8000")]
     pub network_url: String,
@@ -78,8 +82,35 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
         // Lookup the canister build artifact
         let wasm = env.artifact_store.lookup(&c.name)?;
 
+        // Retrieve canister status
+        let (status,) = mgmt.canister_status(&cid).await?;
+
+        let install_mode = match cmd.mode.as_ref() {
+            // Auto
+            "auto" => match status.module_hash {
+                // Canister has had code installed to it.
+                Some(_) => InstallMode::Upgrade(None),
+
+                // Canister has not had code installed to it.
+                None => InstallMode::Install,
+            },
+
+            // Install
+            "install" => InstallMode::Install,
+
+            // Reinstall
+            "reinstall" => InstallMode::Reinstall,
+
+            // Upgrade
+            "upgrade" => InstallMode::Upgrade(None),
+
+            // invalid
+            _ => panic!("invalid install mode"),
+        };
+
+        // Install code to canister
         mgmt.install_code(&cid, &wasm)
-            .with_mode(InstallMode::Install)
+            .with_mode(install_mode)
             .await?;
 
         eprintln!(

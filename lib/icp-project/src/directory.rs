@@ -1,4 +1,4 @@
-use crate::model::RawProjectManifest;
+use crate::model::ProjectManifest;
 use crate::structure::ProjectDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_canister::model::CanisterManifest;
@@ -48,7 +48,7 @@ impl ProjectDirectory {
         NetworkDirectory::new(network_name, &network_root, port_descriptor_dir.as_ref())
     }
 
-    pub fn load_project_manifest(&self) -> Result<RawProjectManifest, LoadYamlFileError> {
+    pub fn load_project_manifest(&self) -> Result<ProjectManifest, LoadYamlFileError> {
         let path = self.structure.project_yaml_path();
         load_yaml_file(path)
     }

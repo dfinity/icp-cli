@@ -1,4 +1,4 @@
-use crate::{Adapter, AdapterCompileError};
+use crate::build::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use serde::Deserialize;

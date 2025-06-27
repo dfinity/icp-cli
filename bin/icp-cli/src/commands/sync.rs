@@ -1,5 +1,6 @@
 use crate::env::Env;
 use clap::Parser;
+use icp_adapter::sync::AdapterSyncError;
 use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
     model::{LoadProjectManifestError, ProjectManifest},
@@ -65,7 +66,7 @@ pub enum CommandError {
 
     #[snafu(display("no canisters available to install"))]
     NoCanisters,
-}
 
-// #[snafu(transparent)]
-// SyncAdapter { source: SyncError },
+    #[snafu(transparent)]
+    SyncAdapter { source: AdapterSyncError },
+}

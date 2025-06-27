@@ -1,8 +1,9 @@
-use crate::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use serde::Deserialize;
 use snafu::Snafu;
+
+use crate::build::{Adapter, AdapterCompileError};
 
 /// Configuration for a Motoko-based canister build adapter.
 #[derive(Clone, Debug, Deserialize, PartialEq)]

@@ -3,7 +3,7 @@ use std::io;
 use crate::{env::Env, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
-use icp_adapter::{Adapter as _, AdapterCompileError};
+use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::model::Adapter;
 use icp_fs::fs::{ReadFileError, read};
 use icp_project::{

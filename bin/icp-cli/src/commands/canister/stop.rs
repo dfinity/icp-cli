@@ -3,7 +3,6 @@ use crate::{env::Env, store_id::LookupError as LookupIdError};
 use clap::Parser;
 use ic_agent::{Agent, AgentError};
 use icp_identity::key::LoadIdentityInContextError;
-use icp_project::model::LoadProjectManifestError;
 use snafu::Snafu;
 
 #[derive(Debug, Parser)]
@@ -56,12 +55,6 @@ pub async fn exec(env: &Env, cmd: CanisterStopCmd) -> Result<(), CanisterStopErr
 pub enum CanisterStopError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
-
-    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
-    ProjectNotFound,
-
-    #[snafu(transparent)]
-    ProjectLoad { source: LoadProjectManifestError },
 
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityInContextError },

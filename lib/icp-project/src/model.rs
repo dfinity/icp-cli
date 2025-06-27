@@ -59,7 +59,6 @@ pub struct RawProjectManifest {
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
-#[derive(Debug)]
 pub struct ProjectManifest {
     /// Access to the project directory.
     pub directory: ProjectDirectory,

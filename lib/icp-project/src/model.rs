@@ -245,7 +245,7 @@ pub enum LoadProjectManifestError {
 mod tests {
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::model::{Adapter, Build, BuildSteps, CanisterManifest, Create};
+    use icp_canister::model::{Adapter, Build, BuildSteps, CanisterManifest, Create, SyncSteps};
 
     use crate::{
         model::{LoadProjectManifestError, ProjectManifest},
@@ -310,6 +310,7 @@ mod tests {
                     }),
                 }),
                 create: Create::default(),
+                sync: SyncSteps::default(),
             },
         )];
 
@@ -369,6 +370,7 @@ mod tests {
                     }),
                 }),
                 create: Create::default(),
+                sync: SyncSteps::default(),
             },
         )];
 

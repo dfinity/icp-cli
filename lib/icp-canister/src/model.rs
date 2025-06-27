@@ -58,6 +58,38 @@ impl BuildSteps {
     }
 }
 
+/// Describes how the canister should be synced,
+/// including the adapter responsible for the sync.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Sync {}
+
+/// Represents one or more sync steps.
+/// This enum allows the `sync` field in `canister.yaml` to be either
+/// a single sync configuration or a list of them.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum SyncSteps {
+    Single(Sync),
+    Sequence(Vec<Sync>),
+}
+
+impl SyncSteps {
+    /// Consumes the enum and returns a `Vec<Sync>`, ensuring
+    /// the sync logic can uniformly handle both single and multiple sync steps.
+    pub fn into_vec(self) -> Vec<Sync> {
+        match self {
+            SyncSteps::Single(sync) => vec![sync],
+            SyncSteps::Sequence(syncs) => syncs,
+        }
+    }
+}
+
+impl Default for SyncSteps {
+    fn default() -> Self {
+        Self::Sequence(vec![])
+    }
+}
+
 /// Canister options, such as compute and memory allocation.
 #[derive(Debug, Default, Deserialize, PartialEq)]
 pub struct CanisterOptions {
@@ -102,6 +134,10 @@ pub struct CanisterManifest {
     /// creating the canister.
     #[serde(default)]
     pub create: Create,
+
+    /// The configuration specifying how to sync the canister
+    #[serde(default)]
+    pub sync: SyncSteps,
 }
 
 impl CanisterManifest {

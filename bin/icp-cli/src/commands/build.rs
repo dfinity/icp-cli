@@ -4,7 +4,7 @@ use crate::{env::Env, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
-use icp_canister::model::Adapter;
+use icp_canister::model::AdapterBuild;
 use icp_fs::fs::{ReadFileError, read};
 use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
@@ -65,17 +65,17 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         for step in c.build.into_vec() {
             match step.adapter {
                 // Compile using the custom script adapter.
-                Adapter::Script(adapter) => {
+                AdapterBuild::Script(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
 
                 // Compile using the Motoko adapter.
-                Adapter::Motoko(adapter) => {
+                AdapterBuild::Motoko(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
 
                 // Compile using the Rust adapter.
-                Adapter::Rust(adapter) => {
+                AdapterBuild::Rust(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
             };

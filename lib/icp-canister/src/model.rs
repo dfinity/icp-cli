@@ -16,7 +16,7 @@ use snafu::Snafu;
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum Adapter {
+pub enum AdapterBuild {
     /// Represents a canister built using the Rust programming language.
     /// This variant holds the configuration specific to Rust-based builds.
     Rust(RustAdapter),
@@ -34,7 +34,7 @@ pub enum Adapter {
 /// including the adapter responsible for the build.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Build {
-    pub adapter: Adapter,
+    pub adapter: AdapterBuild,
 }
 
 /// Represents one or more build steps.
@@ -58,10 +58,30 @@ impl BuildSteps {
     }
 }
 
+/// Identifies the type of adapter used to sync the canister,
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: script
+/// command: echo "synchronizing canister"
+/// ```
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum AdapterSync {
+    /// Represents a canister built using a custom script or command.
+    /// This variant allows for flexible build processes defined by the user.
+    Script(ScriptAdapter),
+}
+
 /// Describes how the canister should be synced,
 /// including the adapter responsible for the sync.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Sync {}
+pub struct Sync {
+    pub adapter: AdapterSync,
+}
 
 /// Represents one or more sync steps.
 /// This enum allows the `sync` field in `canister.yaml` to be either

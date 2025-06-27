@@ -1,6 +1,7 @@
 use crate::env::Env;
 use clap::Parser;
-use icp_adapter::sync::AdapterSyncError;
+use icp_adapter::sync::{Adapter, AdapterSyncError};
+use icp_canister::model::AdapterSync;
 use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
     model::{LoadProjectManifestError, ProjectManifest},
@@ -33,19 +34,27 @@ pub async fn exec(_env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         })
         .collect::<Vec<_>>();
 
-    // Ensure at least one canister has been selected
-    if canisters.is_empty() {
-        return Err(match cmd.name {
-            // Selected canister not found
-            Some(name) => CommandError::CanisterNotFound { name },
+    // Check if selected canister exists
+    if let Some(name) = cmd.name {
+        if canisters.is_empty() {
+            return Err(CommandError::CanisterNotFound { name });
+        }
+    }
 
-            // No canisters found at all
-            None => CommandError::NoCanisters,
-        });
+    // Verify at least one canister is available to create
+    if canisters.is_empty() {
+        return Err(CommandError::NoCanisters);
     }
 
     // Iterate through each resolved canister and trigger its sync process.
-    for (_canister_path, _c) in canisters {}
+    for (canister_path, c) in canisters {
+        for step in c.sync.into_vec() {
+            match step.adapter {
+                // Synchronize the canister using the custom script adapter.
+                AdapterSync::Script(adapter) => adapter.sync(&canister_path).await?,
+            };
+        }
+    }
 
     Ok(())
 }

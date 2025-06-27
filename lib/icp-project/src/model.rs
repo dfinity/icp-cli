@@ -245,7 +245,9 @@ pub enum LoadProjectManifestError {
 mod tests {
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::model::{Adapter, Build, BuildSteps, CanisterManifest, Create, SyncSteps};
+    use icp_canister::model::{
+        AdapterBuild, Build, BuildSteps, CanisterManifest, Create, SyncSteps,
+    };
 
     use crate::{
         model::{LoadProjectManifestError, ProjectManifest},
@@ -303,7 +305,7 @@ mod tests {
             CanisterManifest {
                 name: "canister-1".into(),
                 build: BuildSteps::Single(Build {
-                    adapter: Adapter::Script(ScriptAdapter {
+                    adapter: AdapterBuild::Script(ScriptAdapter {
                         command: CommandField::Command(
                             "sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'".into(),
                         ),
@@ -363,7 +365,7 @@ mod tests {
             CanisterManifest {
                 name: "canister-1".into(),
                 build: BuildSteps::Single(Build {
-                    adapter: Adapter::Script(ScriptAdapter {
+                    adapter: AdapterBuild::Script(ScriptAdapter {
                         command: CommandField::Command(
                             "sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'".into(),
                         ),

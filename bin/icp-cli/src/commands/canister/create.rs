@@ -113,6 +113,13 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         })
         .collect::<Vec<_>>();
 
+    // Check if selected canister exists
+    if let Some(name) = cmd.name {
+        if canisters.is_empty() {
+            return Err(CanisterCreateError::CanisterNotFound { name });
+        }
+    }
+
     // Skip created canisters
     let canisters = canisters
         .into_iter()
@@ -130,15 +137,9 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         })
         .collect::<Vec<_>>();
 
-    // Ensure at least one canister has been selected
+    // Verify at least one canister is available to create
     if canisters.is_empty() {
-        return Err(match cmd.name {
-            // Selected canister not found
-            Some(name) => CanisterCreateError::CanisterNotFound { name },
-
-            // No canisters found at all
-            None => CanisterCreateError::NoCanisters,
-        });
+        return Err(CanisterCreateError::NoCanisters);
     }
 
     for (_, c) in canisters {

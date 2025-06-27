@@ -1,4 +1,4 @@
-use crate::env::GetProjectError::{FindProjectDirectory, LoadProjectManifest, ProjectNotFound};
+use crate::env::GetProjectError::{ProjectNotFound};
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use ic_agent::Identity;
 use icp_dirs::IcpCliDirs;
@@ -54,13 +54,13 @@ impl Env {
     // should propagate any errors immediately, the error
     // isn't memoized. This avoids having to clone the error type.
     pub fn project(&self) -> Result<&ProjectManifest, GetProjectError> {
-        let pd = ProjectDirectory::find()
-            .map_err(|source| FindProjectDirectory { source })?
+        let pd = ProjectDirectory::find()?
             .ok_or(ProjectNotFound)?;
 
-        self.project
-            .get_or_try_init(|| ProjectManifest::load(pd))
-            .map_err(|source| LoadProjectManifest { source })
+        let project = self.project
+            .get_or_try_init(|| ProjectManifest::load(pd))?;
+
+        Ok(project)
     }
 }
 

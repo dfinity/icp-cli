@@ -13,8 +13,12 @@ pub struct RustAdapter {
 
 #[async_trait]
 impl Adapter for RustAdapter {
-    async fn compile(&self, _path: &Utf8Path) -> Result<Vec<u8>, AdapterCompileError> {
-        Ok(vec![])
+    async fn compile(
+        &self,
+        _canister_path: &Utf8Path,
+        _wasm_output_path: &Utf8Path,
+    ) -> Result<(), AdapterCompileError> {
+        Ok(())
     }
 }
 

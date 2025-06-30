@@ -201,7 +201,9 @@ mod tests {
     use crate::project::{LoadProjectManifestError, Project};
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::model::{Adapter, Build, CanisterManifest, Create};
+    use icp_canister::model::{
+        AdapterBuild, Build, BuildSteps, CanisterManifest, Create, SyncSteps,
+    };
 
     #[test]
     fn empty_project() {
@@ -235,7 +237,7 @@ mod tests {
           build:
             adapter:
               type: script
-              command: echo test
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
         std::fs::write(
@@ -253,12 +255,15 @@ mod tests {
             project_dir.path().to_owned(),
             CanisterManifest {
                 name: "canister-1".into(),
-                build: Build {
-                    adapter: Adapter::Script(ScriptAdapter {
-                        command: CommandField::Command("echo test".into()),
+                build: BuildSteps::Single(Build {
+                    adapter: AdapterBuild::Script(ScriptAdapter {
+                        command: CommandField::Command(
+                            "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
+                        ),
                     }),
-                },
+                }),
                 create: Create::default(),
+                sync: SyncSteps::default(),
             },
         )];
 
@@ -280,7 +285,7 @@ mod tests {
         build:
           adapter:
             type: script
-            command: echo test
+            command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
         std::fs::write(
@@ -310,12 +315,15 @@ mod tests {
             project_dir.path().join("canister-1"),
             CanisterManifest {
                 name: "canister-1".into(),
-                build: Build {
-                    adapter: Adapter::Script(ScriptAdapter {
-                        command: CommandField::Command("echo test".into()),
+                build: BuildSteps::Single(Build {
+                    adapter: AdapterBuild::Script(ScriptAdapter {
+                        command: CommandField::Command(
+                            "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
+                        ),
                     }),
-                },
+                }),
                 create: Create::default(),
+                sync: SyncSteps::default(),
             },
         )];
 

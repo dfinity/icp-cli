@@ -149,8 +149,8 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         eprintln!("- {}", c.name);
 
         // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `canister::create` command.
-        //                 We should consider refactoring `canister::create` to use library code instead.
+        //                 Currently we simply invoke the adjacent `canister::sync` command.
+        //                 We should consider refactoring `canister::sync` to use library code instead.
         let out = sync::exec(
             env,
             sync::Cmd {

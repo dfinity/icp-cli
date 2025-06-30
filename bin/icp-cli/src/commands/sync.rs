@@ -2,7 +2,6 @@ use crate::env::{Env, GetProjectError};
 use clap::Parser;
 use icp_adapter::sync::{Adapter, AdapterSyncError};
 use icp_canister::model::AdapterSync;
-use icp_project::directory::FindProjectError;
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]
@@ -33,7 +32,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
-    // Verify at least one canister is available to create
+    // Verify at least one canister is available to sync
     if canisters.is_empty() {
         return Err(CommandError::NoCanisters);
     }
@@ -56,16 +55,10 @@ pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
-    #[snafu(transparent)]
-    FindProjectError { source: FindProjectError },
-
-    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
-    ProjectNotFound,
-
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
 
-    #[snafu(display("no canisters available to install"))]
+    #[snafu(display("no canisters available to sync"))]
     NoCanisters,
 
     #[snafu(transparent)]

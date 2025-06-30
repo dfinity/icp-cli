@@ -281,7 +281,7 @@ mod tests {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
         std::fs::write(
@@ -302,7 +302,7 @@ mod tests {
                 build: Build {
                     adapter: Adapter::Script(ScriptAdapter {
                         command: CommandField::Command(
-                            "sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'".into(),
+                            "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
                     }),
                 },
@@ -328,7 +328,7 @@ mod tests {
         build:
           adapter:
             type: script
-            command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
+            command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
         std::fs::write(
@@ -361,7 +361,7 @@ mod tests {
                 build: Build {
                     adapter: Adapter::Script(ScriptAdapter {
                         command: CommandField::Command(
-                            "sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'".into(),
+                            "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
                     }),
                 },

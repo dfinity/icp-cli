@@ -84,7 +84,7 @@ fn deploy() {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         wasm,
     );
@@ -142,7 +142,7 @@ fn deploy_twice_should_succeed() {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} $ICP_WASM_OUTPUT_PATH'
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         wasm,
     );

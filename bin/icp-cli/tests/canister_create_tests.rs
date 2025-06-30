@@ -77,7 +77,7 @@ fn canister_create_with_options() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           create:
             options:
               compute_allocation: 10
@@ -157,7 +157,7 @@ fn canister_create_with_options_cmdline_override() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           create:
             options:
               compute_allocation: 10

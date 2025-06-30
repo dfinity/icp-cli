@@ -1,13 +1,9 @@
-use crate::env::Env;
+use crate::env::{Env, GetProjectError};
 use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
 use icp_identity::key::LoadIdentityInContextError;
-use icp_project::{
-    directory::{FindProjectError, ProjectDirectory},
-    model::{LoadProjectManifestError, ProjectManifest},
-};
 use snafu::Snafu;
 
 const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
@@ -77,14 +73,7 @@ pub struct CanisterCreateCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
-    // Find the current ICP project directory.
-    let pd = ProjectDirectory::find()?.ok_or(CanisterCreateError::ProjectNotFound)?;
-
-    // Get the project directory structure for path resolution.
-    let pds = pd.structure();
-
-    // Load the project manifest, which defines the canisters to be built.
-    let pm = ProjectManifest::load(pds)?;
+    let pm = env.project()?;
 
     // Load the currently selected identity
     let identity = env.load_identity()?;
@@ -228,13 +217,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
 #[derive(Debug, Snafu)]
 pub enum CanisterCreateError {
     #[snafu(transparent)]
-    FindProjectError { source: FindProjectError },
-
-    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
-    ProjectNotFound,
-
-    #[snafu(transparent)]
-    ProjectLoad { source: LoadProjectManifestError },
+    GetProject { source: GetProjectError },
 
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityInContextError },

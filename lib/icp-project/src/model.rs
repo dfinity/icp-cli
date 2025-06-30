@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
-use crate::structure::ProjectDirectoryStructure;
-use camino::{Utf8Path, Utf8PathBuf};
+use crate::directory::ProjectDirectory;
+use camino::Utf8PathBuf;
 use glob::GlobError;
 use icp_canister::model::CanisterManifest;
-use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
+use icp_fs::yaml::LoadYamlFileError;
 use serde::Deserialize;
 use snafu::{ResultExt, Snafu};
 
@@ -59,8 +59,10 @@ pub struct RawProjectManifest {
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
-#[derive(Debug)]
 pub struct ProjectManifest {
+    /// Access to the project directory.
+    pub directory: ProjectDirectory,
+
     /// List of canister manifests belonging to this project.
     pub canisters: Vec<(Utf8PathBuf, CanisterManifest)>,
 
@@ -95,12 +97,9 @@ impl ProjectManifest {
     ///
     /// If an explicit path fails these checks, the loading process will return an
     /// error, providing clear feedback for misconfigured manifests.
-    pub fn load(pds: &ProjectDirectoryStructure) -> Result<Self, LoadProjectManifestError> {
-        let mpath = pds.project_yaml_path();
-        let mpath: &Utf8Path = mpath.as_ref();
-
-        // Load the raw project manifest from the icp.yaml file.
-        let pm: RawProjectManifest = load_yaml_file(mpath)?;
+    pub fn load(pd: ProjectDirectory) -> Result<Self, LoadProjectManifestError> {
+        let pds = pd.structure();
+        let pm = pd.load_project_manifest()?;
 
         // Resolve the canisters field: if not explicitly defined in the YAML (i.e., None),
         // fall back to the default glob pattern for locating canister manifests.
@@ -173,11 +172,9 @@ impl ProjectManifest {
 
                     // Iterate over canister directories
                     for cpath in dirs {
-                        // Canister manifest path
-                        let mpath = pds.canister_yaml_path(&cpath);
-
                         // Load the canister manifest from the resolved path.
-                        let cm = CanisterManifest::load(&mpath)
+                        let cm = pd
+                            .load_canister_manifest(&cpath)
                             .context(CanisterLoadSnafu { path: &cpath })?;
 
                         out.push((
@@ -199,6 +196,9 @@ impl ProjectManifest {
         let networks = vec![];
 
         Ok(ProjectManifest {
+            // The project directory.
+            directory: pd,
+
             // The resolved canister configurations.
             canisters,
 
@@ -236,21 +236,18 @@ pub enum LoadProjectManifestError {
 
     #[snafu(display("failed to load canister manifest in path '{path}'"))]
     CanisterLoad {
-        source: icp_canister::model::LoadCanisterManifestError,
+        source: LoadYamlFileError,
         path: Utf8PathBuf,
     },
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::directory::ProjectDirectory;
+    use crate::model::{LoadProjectManifestError, ProjectManifest};
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
     use icp_canister::model::{Adapter, Build, CanisterManifest, Create};
-
-    use crate::{
-        model::{LoadProjectManifestError, ProjectManifest},
-        structure::ProjectDirectoryStructure,
-    };
 
     #[test]
     fn empty_project() {
@@ -265,8 +262,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd).expect("failed to load project manifest");
 
         // Verify no canisters were found
         assert!(pm.canisters.is_empty());
@@ -294,8 +291,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd).expect("failed to load project manifest");
 
         // Verify canister was loaded
         let canisters = vec![(
@@ -353,8 +350,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd).expect("failed to load project manifest");
 
         // Verify canister was loaded
         let canisters = vec![(
@@ -388,8 +385,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds);
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd);
 
         // Assert failure
         assert!(matches!(pm, Err(LoadProjectManifestError::Parse { .. })));
@@ -424,8 +421,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds);
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd);
 
         // Assert failure
         assert!(matches!(
@@ -459,8 +456,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds).expect("failed to load project manifest");
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd).expect("failed to load project manifest");
 
         // Verify no canisters were found
         assert!(pm.canisters.is_empty());
@@ -491,8 +488,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds);
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd);
 
         // Assert failure
         assert!(matches!(
@@ -519,8 +516,8 @@ mod tests {
         .expect("failed to write project manifest");
 
         // Load Project
-        let pds = ProjectDirectoryStructure::new(project_dir.path());
-        let pm = ProjectManifest::load(&pds);
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = ProjectManifest::load(pd);
 
         // Assert failure
         assert!(matches!(

@@ -22,7 +22,7 @@ fn build_adapter_script() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         f.path()
     );

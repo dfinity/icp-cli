@@ -1,7 +1,6 @@
 use crate::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
 use camino::Utf8Path;
-use icp_fs::fs::{ReadFileError, read};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
@@ -35,18 +34,16 @@ pub struct ScriptAdapter {
 
 #[async_trait]
 impl Adapter for ScriptAdapter {
-    async fn compile(&self, path: &Utf8Path) -> Result<Vec<u8>, AdapterCompileError> {
+    async fn compile(
+        &self,
+        canister_path: &Utf8Path,
+        wasm_output_path: &Utf8Path,
+    ) -> Result<(), AdapterCompileError> {
         // Normalize `command` field based on whether it's a single command or multiple.
         let cmds = self.command.as_vec();
 
-        // Note the number of commands
-        let ncmds = cmds.len();
-
-        // Create placeholder for wasm artifact
-        let mut wasm: Option<Vec<u8>> = None;
-
         // Iterate over configured commands
-        for (i, input_cmd) in cmds.into_iter().enumerate() {
+        for input_cmd in cmds {
             // Parse command input
             let input = shellwords::split(&input_cmd).context(CommandParseSnafu {
                 command: &input_cmd,
@@ -59,7 +56,7 @@ impl Adapter for ScriptAdapter {
             })?;
 
             // Try resolving the command as a local path (e.g., ./mytool)
-            let cmd = match dunce::canonicalize(path.join(cmd)) {
+            let cmd = match dunce::canonicalize(canister_path.join(cmd)) {
                 // Use the canonicalized local path if it exists
                 Ok(p) => p,
 
@@ -74,11 +71,14 @@ impl Adapter for ScriptAdapter {
             cmd.args(args);
 
             // Set directory
-            cmd.current_dir(path);
+            cmd.current_dir(canister_path);
+
+            // Environment Variables
+            cmd.env("ICP_WASM_OUTPUT_PATH", wasm_output_path);
 
             // Output
             cmd.stdin(Stdio::inherit());
-            cmd.stdout(Stdio::piped());
+            cmd.stdout(Stdio::inherit());
             cmd.stderr(Stdio::inherit());
 
             // Execute
@@ -97,25 +97,9 @@ impl Adapter for ScriptAdapter {
                 }
                 .into());
             }
-
-            // The last command should always return a path to the built wasm artifact
-            if i == ncmds - 1 {
-                // TODO(or.ricon): Sanity-check the output
-                // - non-empty
-                // - does it exist
-                // - valid wasm
-
-                // Grab the output from the final command
-                let path = String::from_utf8(out.stdout).context(PathParseSnafu)?;
-
-                // Set output
-                wasm = Some(read(path.trim()).context(ReadOutputSnafu)?);
-            }
         }
 
-        wasm.ok_or(AdapterCompileError::Script {
-            source: ScriptAdapterCompileError::NoOutput,
-        })
+        Ok(())
     }
 }
 
@@ -138,15 +122,6 @@ pub enum ScriptAdapterCompileError {
 
     #[snafu(display("command '{command}' failed with status code {code}"))]
     CommandStatus { command: String, code: String },
-
-    #[snafu(display("failed to parse output path"))]
-    PathParse { source: std::string::FromUtf8Error },
-
-    #[snafu(display("failed to read output wasm artifact"))]
-    ReadOutput { source: ReadFileError },
-
-    #[snafu(display("no output has been set"))]
-    NoOutput,
 }
 
 #[cfg(test)]
@@ -170,7 +145,9 @@ mod tests {
         };
 
         // Invoke adapter
-        v.compile("/".into()).await.expect("unexpected failure");
+        v.compile("/".into(), "/".into())
+            .await
+            .expect("unexpected failure");
 
         // Verify command ran
         let mut out = String::new();
@@ -197,7 +174,9 @@ mod tests {
         };
 
         // Invoke adapter
-        v.compile("/".into()).await.expect("unexpected failure");
+        v.compile("/".into(), "/".into())
+            .await
+            .expect("unexpected failure");
 
         // Verify command ran
         let mut out = String::new();
@@ -216,7 +195,7 @@ mod tests {
         };
 
         // Invoke adapter
-        let out = v.compile("/".into()).await;
+        let out = v.compile("/".into(), "/".into()).await;
 
         // Assert failure
         assert!(matches!(
@@ -235,7 +214,7 @@ mod tests {
         };
 
         // Invoke adapter
-        let out = v.compile("/".into()).await;
+        let out = v.compile("/".into(), "/".into()).await;
 
         println!("{out:?}");
 
@@ -256,7 +235,7 @@ mod tests {
         };
 
         // Invoke adapter
-        let out = v.compile("/".into()).await;
+        let out = v.compile("/".into(), "/".into()).await;
 
         println!("{out:?}");
 

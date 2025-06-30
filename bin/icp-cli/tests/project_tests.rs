@@ -23,7 +23,7 @@ fn single_canister_project() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         f.path()
     );
@@ -71,7 +71,7 @@ fn multi_canister_project() {
         build:
           adapter:
             type: script
-            command: echo {}
+            command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         f.path()
     );
@@ -121,7 +121,7 @@ fn glob_path() {
         build:
           adapter:
             type: script
-            command: echo {}
+            command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         f.path()
     );

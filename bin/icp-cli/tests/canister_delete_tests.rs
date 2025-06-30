@@ -23,7 +23,7 @@ fn canister_delete() {
           build:
             adapter:
               type: script
-              command: echo {}
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         wasm,
     );

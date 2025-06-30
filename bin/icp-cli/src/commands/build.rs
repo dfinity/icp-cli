@@ -1,9 +1,13 @@
+use std::io;
+
 use crate::env::GetProjectError;
 use crate::{env::Env, store_artifact::SaveError};
+use camino_tempfile::tempdir;
 use clap::Parser;
 use icp_adapter::{Adapter as _, AdapterCompileError};
 use icp_canister::model::Adapter;
-use snafu::Snafu;
+use icp_fs::fs::{ReadFileError, read};
+use snafu::{ResultExt, Snafu};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -42,17 +46,33 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Iterate through each resolved canister and trigger its build process.
-    for (path, c) in &pm.canisters {
-        let wasm = match &c.build.adapter {
+    for (canister_path, c) in &pm.canisters {
+        // Create a temporary directory for build artifacts
+        let build_dir = tempdir().context(BuildDirSnafu)?;
+
+        // Prepare a path for our output wasm
+        let wasm_output_path = build_dir.path().join("out.wasm");
+
+        match &c.build.adapter {
             // Compile using the custom script adapter.
-            Adapter::Script(adapter) => adapter.compile(path).await?,
+            Adapter::Script(adapter) => adapter.compile(canister_path, &wasm_output_path).await?,
 
             // Compile using the Motoko adapter.
-            Adapter::Motoko(adapter) => adapter.compile(path).await?,
+            Adapter::Motoko(adapter) => adapter.compile(canister_path, &wasm_output_path).await?,
 
             // Compile using the Rust adapter.
-            Adapter::Rust(adapter) => adapter.compile(path).await?,
+            Adapter::Rust(adapter) => adapter.compile(canister_path, &wasm_output_path).await?,
         };
+
+        // Verify a file exists in the wasm output path
+        if !wasm_output_path.exists() {
+            return Err(CommandError::NoOutput);
+        }
+
+        // Load wasm output
+        let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
+
+        // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
         // Save the wasm artifact
         env.artifact_store.save(&c.name, &wasm)?;
@@ -69,8 +89,17 @@ pub enum CommandError {
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
 
+    #[snafu(display("failed to create a temporary build directory"))]
+    BuildDir { source: io::Error },
+
     #[snafu(transparent)]
     BuildAdapter { source: AdapterCompileError },
+
+    #[snafu(display("failed to read output wasm artifact"))]
+    ReadOutput { source: ReadFileError },
+
+    #[snafu(display("no output has been set"))]
+    NoOutput,
 
     #[snafu(transparent)]
     ArtifactStore { source: SaveError },

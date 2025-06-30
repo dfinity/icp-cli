@@ -4,7 +4,7 @@ use ic_agent::Identity;
 use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
 use icp_project::directory::{FindProjectError, ProjectDirectory};
-use icp_project::model::{LoadProjectManifestError, ProjectManifest};
+use icp_project::project::{LoadProjectManifestError, Project};
 use snafu::Snafu;
 use std::sync::{Arc, OnceLock};
 
@@ -13,7 +13,7 @@ pub struct Env {
     identity: Option<String>,
     pub id_store: IdStore,
     pub artifact_store: ArtifactStore,
-    project: TryOnceLock<ProjectManifest>,
+    project: TryOnceLock<Project>,
 }
 
 impl Env {
@@ -53,15 +53,15 @@ impl Env {
     // This memoizes the project if successful, but since the program
     // should propagate any errors immediately, the error
     // isn't memoized. This avoids having to clone the error type.
-    pub fn project(&self) -> Result<&ProjectManifest, GetProjectError> {
+    pub fn project(&self) -> Result<&Project, GetProjectError> {
         self.project
             .get_or_try_init(|| self.find_and_load_project())
     }
 
-    fn find_and_load_project(&self) -> Result<ProjectManifest, GetProjectError> {
+    fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
         let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
 
-        let project = ProjectManifest::load(pd)?;
+        let project = Project::load(pd)?;
         Ok(project)
     }
 }

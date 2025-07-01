@@ -1,7 +1,6 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
-use serial_test::serial;
 
 mod common;
 
@@ -66,12 +65,12 @@ fn deploy_canister_not_found() {
 }
 
 #[test]
-#[serial]
 fn deploy() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
+    env.configure_icp_local_network_random_port(&project_dir);
 
     // Use vendored WASM
     let wasm = env.make_asset("example_icp_mo.wasm");
@@ -124,12 +123,12 @@ fn deploy() {
 }
 
 #[test]
-#[serial]
 fn deploy_twice_should_succeed() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
+    env.configure_icp_local_network_random_port(&project_dir);
 
     // Use vendored WASM
     let wasm = env.make_asset("example_icp_mo.wasm");

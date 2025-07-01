@@ -1,17 +1,16 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
-use serial_test::serial;
 
 mod common;
 
 #[test]
-#[serial]
 fn canister_install() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
+    env.configure_icp_local_network_random_port(&project_dir);
 
     // Use vendored WASM
     let wasm = env.make_asset("example_icp_mo.wasm");

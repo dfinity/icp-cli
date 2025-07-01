@@ -5,17 +5,16 @@ use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
-use serial_test::serial;
 
 mod common;
 
 #[test]
-#[serial]
 fn canister_create() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
+    env.configure_icp_local_network_random_port(&project_dir);
 
     // Project manifest
     let pm = r#"
@@ -59,12 +58,12 @@ fn canister_create() {
 }
 
 #[test]
-#[serial]
 fn canister_create_with_options() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
+    env.configure_icp_local_network_random_port(&project_dir);
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
@@ -139,12 +138,12 @@ fn canister_create_with_options() {
 }
 
 #[test]
-#[serial]
 fn canister_create_with_options_cmdline_override() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
+    env.configure_icp_local_network_random_port(&project_dir);
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");

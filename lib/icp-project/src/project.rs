@@ -397,10 +397,10 @@ mod tests {
     use crate::project::{LoadProjectManifestError, Project};
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_network::{BindPort, NetworkConfig};
     use icp_canister::model::{
         AdapterBuild, Build, BuildSteps, CanisterManifest, Create, SyncSteps,
     };
+    use icp_network::{BindPort, NetworkConfig};
 
     #[test]
     fn empty_project() {

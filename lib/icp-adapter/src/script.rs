@@ -1,11 +1,12 @@
-use crate::{Adapter, AdapterCompileError};
+use crate::build::{self, AdapterCompileError};
+use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum CommandField {
     /// Command used to build a canister
@@ -25,7 +26,7 @@ impl CommandField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ScriptAdapter {
     /// Command used to build a canister
     #[serde(flatten)]
@@ -33,7 +34,7 @@ pub struct ScriptAdapter {
 }
 
 #[async_trait]
-impl Adapter for ScriptAdapter {
+impl build::Adapter for ScriptAdapter {
     async fn compile(
         &self,
         canister_path: &Utf8Path,
@@ -45,12 +46,12 @@ impl Adapter for ScriptAdapter {
         // Iterate over configured commands
         for input_cmd in cmds {
             // Parse command input
-            let input = shellwords::split(&input_cmd).context(CommandParseSnafu {
+            let input = shellwords::split(&input_cmd).context(CommandParseCompileSnafu {
                 command: &input_cmd,
             })?;
 
             // Separate command and args
-            let (cmd, args) = input.split_first().context(InvalidCommandSnafu {
+            let (cmd, args) = input.split_first().context(InvalidCommandCompileSnafu {
                 command: &input_cmd,
                 reason: "command must include at least one element".to_string(),
             })?;
@@ -82,7 +83,7 @@ impl Adapter for ScriptAdapter {
             cmd.stderr(Stdio::inherit());
 
             // Execute
-            let out = cmd.output().context(CommandInvokeSnafu {
+            let out = cmd.output().context(CommandInvokeCompileSnafu {
                 command: &input_cmd,
             })?;
 
@@ -104,7 +105,94 @@ impl Adapter for ScriptAdapter {
 }
 
 #[derive(Debug, Snafu)]
+#[snafu(context(suffix(CompileSnafu)))]
 pub enum ScriptAdapterCompileError {
+    #[snafu(display("failed to parse command '{command}'"))]
+    CommandParse {
+        command: String,
+        source: shellwords::MismatchedQuotes,
+    },
+
+    #[snafu(display("invalid command '{command}': {reason}"))]
+    InvalidCommand { command: String, reason: String },
+
+    #[snafu(display("failed to execute command '{command}'"))]
+    CommandInvoke {
+        command: String,
+        source: std::io::Error,
+    },
+
+    #[snafu(display("command '{command}' failed with status code {code}"))]
+    CommandStatus { command: String, code: String },
+}
+
+#[async_trait]
+impl sync::Adapter for ScriptAdapter {
+    async fn sync(&self, canister_path: &Utf8Path) -> Result<(), AdapterSyncError> {
+        // Normalize `command` field based on whether it's a single command or multiple.
+        let cmds = self.command.as_vec();
+
+        // Iterate over configured commands
+        for input_cmd in cmds {
+            // Parse command input
+            let input = shellwords::split(&input_cmd).context(CommandParseSyncSnafu {
+                command: &input_cmd,
+            })?;
+
+            // Separate command and args
+            let (cmd, args) = input.split_first().context(InvalidCommandSyncSnafu {
+                command: &input_cmd,
+                reason: "command must include at least one element".to_string(),
+            })?;
+
+            // Try resolving the command as a local path (e.g., ./mytool)
+            let cmd = match dunce::canonicalize(canister_path.join(cmd)) {
+                // Use the canonicalized local path if it exists
+                Ok(p) => p,
+
+                // Fall back to assuming it's a command in the system PATH
+                Err(_) => cmd.into(),
+            };
+
+            // Command
+            let mut cmd = Command::new(cmd);
+
+            // Args
+            cmd.args(args);
+
+            // Set directory
+            cmd.current_dir(canister_path);
+
+            // Output
+            cmd.stdin(Stdio::inherit());
+            cmd.stdout(Stdio::inherit());
+            cmd.stderr(Stdio::inherit());
+
+            // Execute
+            let out = cmd.output().context(CommandInvokeSyncSnafu {
+                command: &input_cmd,
+            })?;
+
+            // Status
+            if !out.status.success() {
+                return Err(ScriptAdapterSyncError::CommandStatus {
+                    command: input_cmd,
+                    code: out
+                        .status
+                        .code()
+                        .map_or("N/A".to_string(), |c| c.to_string()),
+                }
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(context(suffix(SyncSnafu)))]
+pub enum ScriptAdapterSyncError {
     #[snafu(display("failed to parse command '{command}'"))]
     CommandParse {
         command: String,
@@ -126,6 +214,8 @@ pub enum ScriptAdapterCompileError {
 
 #[cfg(test)]
 mod tests {
+    use crate::build::Adapter as _;
+
     use super::*;
     use camino_tempfile::NamedUtf8TempFile;
     use std::io::Read;

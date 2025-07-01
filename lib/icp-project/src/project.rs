@@ -269,7 +269,7 @@ impl Project {
         network_path: &Utf8Path,
         pd: &ProjectDirectory,
     ) -> Result<(), CheckSpecificNetworkError> {
-        let config_path = pd.structure().network_config_path(&network_path);
+        let config_path = pd.structure().network_config_path(network_path);
 
         if !config_path.is_file() {
             return Err(CheckSpecificNetworkError::NetworkPath {

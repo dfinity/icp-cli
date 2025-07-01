@@ -72,7 +72,7 @@ pub struct CanisterCreateCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
-    env.set_network_opt(cmd.network);
+    env.require_network(cmd.network);
 
     let pm = env.project()?;
 

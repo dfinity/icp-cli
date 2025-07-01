@@ -23,7 +23,7 @@ pub struct CanisterInstallCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
-    env.set_network_opt(cmd.network);
+    env.require_network(cmd.network);
 
     let pm = env.project()?;
 

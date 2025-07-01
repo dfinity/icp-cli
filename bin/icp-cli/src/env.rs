@@ -61,7 +61,7 @@ impl Env {
             .get_or_try_init(|| self.find_and_load_project())
     }
 
-    pub fn set_network_opt(&self, opt: NetworkOpt) {
+    pub fn require_network(&self, opt: NetworkOpt) {
         let network_name = opt.to_network_name();
 
         match self.network_name.get() {

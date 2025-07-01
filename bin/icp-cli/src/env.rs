@@ -46,10 +46,10 @@ impl Env {
         Self {
             dirs,
             identity_name,
+            identity: TryOnceLock::new(),
             id_store,
             artifact_store,
             project: TryOnceLock::new(),
-            identity: TryOnceLock::new(),
             network_name: OnceLock::new(),
             default_effective_canister_id: OnceLock::new(),
             agent: TryOnceLock::new(),

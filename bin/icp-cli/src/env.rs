@@ -13,13 +13,26 @@ use std::sync::{Arc, OnceLock};
 
 pub struct Env {
     dirs: IcpCliDirs,
+
+    /// The name of the identity to use, set from the command line.
     identity_name: Option<String>,
+    /// The identity to use for the agent, instantiated on-demand.
+    identity: TryOnceLock<Arc<dyn Identity>>,
+
     pub id_store: IdStore,
     pub artifact_store: ArtifactStore,
+
+    /// The current project, instantiated on-demand.
     project: TryOnceLock<Project>,
-    identity: TryOnceLock<Arc<dyn Identity>>,
+
+    /// The network name, set from the command line for those commands that access a network.
     network_name: OnceLock<String>,
+
+    /// The default effective canister ID for the network, available for managed networks
+    /// after creating the agent.
     default_effective_canister_id: OnceLock<Principal>,
+
+    /// The agent used to access the network, instantiated on-demand.
     agent: TryOnceLock<Agent>,
 }
 

@@ -11,6 +11,7 @@ mod canister;
 mod deploy;
 mod identity;
 mod network;
+mod sync;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -25,6 +26,7 @@ pub enum Subcmd {
     Deploy(deploy::Cmd),
     Identity(identity::IdentityCmd),
     Network(network::NetworkCmd),
+    Sync(sync::Cmd),
 }
 
 pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
@@ -34,6 +36,7 @@ pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
         Subcmd::Deploy(opts) => deploy::exec(env, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(env, opts).await?,
         Subcmd::Network(opts) => network::dispatch(env, opts).await?,
+        Subcmd::Sync(opts) => sync::exec(env, opts).await?,
     }
     Ok(())
 }
@@ -54,4 +57,7 @@ pub enum DispatchError {
 
     #[snafu(transparent)]
     Network { source: NetworkCommandError },
+
+    #[snafu(transparent)]
+    Sync { source: sync::CommandError },
 }

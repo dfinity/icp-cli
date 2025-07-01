@@ -42,16 +42,15 @@ pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInst
         })
         .collect::<Vec<_>>();
 
-    // Case 1 (canister not found)
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CanisterInstallError::CanisterNotFound { name });
-        }
-    }
-
-    // Case 2 (no canisters)
+    // Ensure at least one canister has been selected
     if canisters.is_empty() {
-        return Err(CanisterInstallError::NoCanisters);
+        return Err(match cmd.name {
+            // Selected canister not found
+            Some(name) => CanisterInstallError::CanisterNotFound { name },
+
+            // No canisters found at all
+            None => CanisterInstallError::NoCanisters,
+        });
     }
 
     for (_, c) in canisters {

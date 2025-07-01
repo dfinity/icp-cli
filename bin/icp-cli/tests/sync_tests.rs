@@ -1,11 +1,12 @@
 use crate::common::TestEnv;
 use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::write;
+use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
 
 #[test]
-fn build_adapter_script_single() {
+fn sync_adapter_script_single() {
     let env = TestEnv::new();
 
     // Setup project
@@ -23,6 +24,10 @@ fn build_adapter_script_single() {
             adapter:
               type: script
               command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+          sync:
+            adapter:
+              type: script
+              command: echo "syncing"
         "#,
         f.path()
     );
@@ -33,16 +38,17 @@ fn build_adapter_script_single() {
     )
     .expect("failed to write project manifest");
 
-    // Invoke build
+    // Invoke sync
     env.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["sync"])
         .assert()
-        .success();
+        .success()
+        .stdout(eq("syncing").trim());
 }
 
 #[test]
-fn build_adapter_script_multiple() {
+fn sync_adapter_script_multiple() {
     let env = TestEnv::new();
 
     // Setup project
@@ -57,15 +63,16 @@ fn build_adapter_script_multiple() {
         canister:
           name: my-canister
           build:
+            adapter:
+              type: script
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+          sync:
             - adapter:
                 type: script
-                command: echo "before"
+                command: echo "first"
             - adapter:
                 type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-            - adapter:
-                type: script
-                command: echo "after"
+                command: echo "second"
         "#,
         f.path()
     );
@@ -79,7 +86,8 @@ fn build_adapter_script_multiple() {
     // Invoke build
     env.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["sync"])
         .assert()
-        .success();
+        .success()
+        .stdout(eq("first\nsecond").trim());
 }

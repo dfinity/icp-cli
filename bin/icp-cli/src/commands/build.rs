@@ -4,8 +4,8 @@ use crate::env::GetProjectError;
 use crate::{env::Env, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
-use icp_adapter::{Adapter as _, AdapterCompileError};
-use icp_canister::model::Adapter;
+use icp_adapter::build::{Adapter as _, AdapterCompileError};
+use icp_canister::model::AdapterBuild;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
 
@@ -36,6 +36,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             Some(name) => name == &c.name,
             None => true,
         })
+        .cloned()
         .collect::<Vec<_>>();
 
     // Check if selected canister exists
@@ -46,23 +47,31 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Iterate through each resolved canister and trigger its build process.
-    for (canister_path, c) in &pm.canisters {
+    for (canister_path, c) in canisters {
         // Create a temporary directory for build artifacts
         let build_dir = tempdir().context(BuildDirSnafu)?;
 
         // Prepare a path for our output wasm
         let wasm_output_path = build_dir.path().join("out.wasm");
 
-        match &c.build.adapter {
-            // Compile using the custom script adapter.
-            Adapter::Script(adapter) => adapter.compile(canister_path, &wasm_output_path).await?,
+        for step in c.build.into_vec() {
+            match step.adapter {
+                // Compile using the custom script adapter.
+                AdapterBuild::Script(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
 
-            // Compile using the Motoko adapter.
-            Adapter::Motoko(adapter) => adapter.compile(canister_path, &wasm_output_path).await?,
+                // Compile using the Motoko adapter.
+                AdapterBuild::Motoko(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
 
-            // Compile using the Rust adapter.
-            Adapter::Rust(adapter) => adapter.compile(canister_path, &wasm_output_path).await?,
-        };
+                // Compile using the Rust adapter.
+                AdapterBuild::Rust(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
+            };
+        }
 
         // Verify a file exists in the wasm output path
         if !wasm_output_path.exists() {

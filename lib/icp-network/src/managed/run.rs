@@ -33,7 +33,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 pub async fn run_network(
-    config: ManagedNetworkModel,
+    config: &ManagedNetworkModel,
     nd: NetworkDirectory,
     project_root: &Utf8Path,
 ) -> Result<(), RunNetworkError> {
@@ -52,7 +52,7 @@ pub async fn run_network(
         _port_claim = Some(port_lock.as_mut().unwrap().try_acquire()?);
     }
 
-    run_pocketic(&pocketic_path, &config, &nd, project_root).await?;
+    run_pocketic(&pocketic_path, config, &nd, project_root).await?;
     Ok(())
 }
 
@@ -103,20 +103,23 @@ async fn run_pocketic(
     let mut child = spawn_pocketic(pocketic_path, &port_file);
 
     let result = async {
-        let port = wait_for_port(&port_file, &mut child).await?;
-        eprintln!("PocketIC started on port {port}");
-        let instance = initialize_pocketic(port, &nds.state_dir()).await?;
+        let pocketic_port = wait_for_port(&port_file, &mut child).await?;
+        eprintln!("PocketIC started on port {pocketic_port}");
+        let instance =
+            initialize_pocketic(pocketic_port, &config.gateway.port, &nds.state_dir()).await?;
 
         let gateway = NetworkDescriptorGatewayPort {
             port: instance.gateway_port,
             fixed: matches!(config.gateway.port, BindPort::Fixed(_)),
         };
+        let default_effective_canister_id = instance.effective_canister_id;
         let descriptor = NetworkDescriptorModel {
             id: Uuid::new_v4(),
             project_dir: project_root.to_path_buf(),
             network: nd.network_name().to_string(),
             network_dir: nd.structure().network_root().to_path_buf(),
             gateway,
+            default_effective_canister_id,
             pid: Some(child.id().unwrap()),
             root_key: instance.root_key,
         };
@@ -231,11 +234,15 @@ pub enum WaitForPortError {
 }
 
 async fn initialize_pocketic(
-    port: u16,
+    pocketic_port: u16,
+    gateway_bind_port: &BindPort,
     state_dir: &Utf8Path,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
-    let pic =
-        PocketIcAdminInterface::new(format!("http://localhost:{port}").parse::<Url>().unwrap());
+    let pic = PocketIcAdminInterface::new(
+        format!("http://localhost:{pocketic_port}")
+            .parse::<Url>()
+            .unwrap(),
+    );
 
     eprintln!("Initializing PocketIC instance");
 
@@ -251,10 +258,14 @@ async fn initialize_pocketic(
     let artificial_delay = 600;
     pic.auto_progress(instance_id, artificial_delay).await?;
 
+    let gateway_port = match gateway_bind_port {
+        BindPort::Fixed(port) => Some(*port),
+        BindPort::Random => None,
+    };
     let gateway_info = pic
         .create_http_gateway(
             HttpGatewayBackend::PocketIcInstance(instance_id),
-            Some(8000),
+            gateway_port,
         )
         .await?;
     eprintln!(

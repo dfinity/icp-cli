@@ -7,7 +7,7 @@ use snafu::Snafu;
 pub struct PrincipalCmd {}
 
 pub fn exec(env: &Env, _cmd: PrincipalCmd) -> Result<(), PrincipalError> {
-    let identity = env.load_identity()?;
+    let identity = env.identity()?;
     let principal = identity
         .sender()
         .map_err(|message| PrincipalError::IdentityError { message })?;

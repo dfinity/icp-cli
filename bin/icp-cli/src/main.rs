@@ -9,6 +9,7 @@ use snafu::{Snafu, report};
 mod candid;
 mod commands;
 mod env;
+mod options;
 mod store_artifact;
 mod store_id;
 

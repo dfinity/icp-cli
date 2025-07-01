@@ -1,39 +1,122 @@
 use crate::env::GetProjectError::ProjectNotFound;
+use crate::options::NetworkOpt;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
-use ic_agent::Identity;
+use candid::Principal;
+use ic_agent::{Agent, Identity};
 use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
+use icp_network::access::{CreateAgentError, GetNetworkAccessError, NetworkAccess};
 use icp_project::directory::{FindProjectError, ProjectDirectory};
-use icp_project::project::{LoadProjectManifestError, Project};
+use icp_project::project::{LoadProjectManifestError, NoSuchNetworkError, Project};
 use snafu::Snafu;
 use std::sync::{Arc, OnceLock};
 
 pub struct Env {
     dirs: IcpCliDirs,
-    identity: Option<String>,
+
+    /// The name of the identity to use, set from the command line.
+    identity_name: Option<String>,
+    /// The identity to use for the agent, instantiated on-demand.
+    identity: TryOnceLock<Arc<dyn Identity>>,
+
     pub id_store: IdStore,
     pub artifact_store: ArtifactStore,
+
+    /// The current project, instantiated on-demand.
     project: TryOnceLock<Project>,
+
+    /// The network name, set from the command line for those commands that access a network.
+    network_name: OnceLock<String>,
+
+    /// The default effective canister ID for the network, available for managed networks
+    /// after creating the agent.
+    default_effective_canister_id: OnceLock<Principal>,
+
+    /// The agent used to access the network, instantiated on-demand.
+    agent: TryOnceLock<Agent>,
 }
 
 impl Env {
     pub fn new(
         dirs: IcpCliDirs,
-        identity: Option<String>,
+        identity_name: Option<String>,
         id_store: IdStore,
         artifact_store: ArtifactStore,
     ) -> Self {
         Self {
             dirs,
-            identity,
+            identity_name,
+            identity: TryOnceLock::new(),
             id_store,
             artifact_store,
             project: TryOnceLock::new(),
+            network_name: OnceLock::new(),
+            default_effective_canister_id: OnceLock::new(),
+            agent: TryOnceLock::new(),
         }
     }
 
-    pub fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
-        if let Some(identity) = &self.identity {
+    pub fn dirs(&self) -> &IcpCliDirs {
+        &self.dirs
+    }
+
+    // Accessors using TryOnceLock only cache success.
+    // Errors are re-evaluated on each access attempt.
+
+    pub fn identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
+        self.identity
+            .get_or_try_init(|| self.load_identity())
+            .cloned()
+    }
+
+    pub fn project(&self) -> Result<&Project, GetProjectError> {
+        self.project
+            .get_or_try_init(|| self.find_and_load_project())
+    }
+
+    pub fn require_network(&self, opt: NetworkOpt) {
+        let network_name = opt.to_network_name();
+
+        match self.network_name.get() {
+            Some(existing) if *existing == network_name => {
+                // Already set to the same value — fine, do nothing
+            }
+            Some(existing) => {
+                // Already set to a different value — not allowed
+                panic!(
+                    "NetworkOpt was already set to a different value: {:?} vs {:?}",
+                    existing, opt
+                );
+            }
+            None => {
+                // Not yet set — store it
+                self.network_name
+                    .set(network_name)
+                    .expect("Should only fail if already set");
+            }
+        }
+    }
+
+    // The default effective canister ID is available for local networks
+    // after constructing the agent.
+    #[allow(dead_code)]
+    pub fn default_effective_canister_id(
+        &self,
+    ) -> Result<Principal, NoDefaultEffectiveCanisterIdError> {
+        self.default_effective_canister_id
+            .get()
+            .ok_or(NoDefaultEffectiveCanisterIdError)
+            .cloned()
+    }
+
+    pub fn agent(&self) -> Result<&Agent, EnvGetAgentError> {
+        self.agent.get_or_try_init(|| self.create_agent())
+    }
+}
+
+impl Env {
+    fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
+        if let Some(identity) = &self.identity_name {
             Ok(icp_identity::key::load_identity(
                 &self.dirs,
                 &icp_identity::manifest::load_identity_list(&self.dirs)?,
@@ -45,25 +128,77 @@ impl Env {
         }
     }
 
-    pub fn dirs(&self) -> &IcpCliDirs {
-        &self.dirs
-    }
-
-    // Returns the project manifest if it exists in the current directory or its parents.
-    // This memoizes the project if successful, but since the program
-    // should propagate any errors immediately, the error
-    // isn't memoized. This avoids having to clone the error type.
-    pub fn project(&self) -> Result<&Project, GetProjectError> {
-        self.project
-            .get_or_try_init(|| self.find_and_load_project())
-    }
-
     fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
         let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
 
         let project = Project::load(pd)?;
         Ok(project)
     }
+
+    fn create_network_access(&self) -> Result<NetworkAccess, EnvGetNetworkAccessError> {
+        let network_name = self
+            .network_name
+            .get()
+            .cloned()
+            .expect("call set_network_opt before get_network_access");
+
+        if network_name == "ic" {
+            return Ok(NetworkAccess::mainnet());
+        }
+
+        // For other networks, we need to load the project
+        // in order to read the network configuration.
+        let project = self.project()?;
+        let nd = project
+            .directory
+            .network(&network_name, self.dirs.port_descriptor_dir());
+        let network_config = project.get_network_config(&network_name)?;
+
+        let ac = icp_network::access::get_network_access(nd, network_config)?;
+
+        if let Some(default_effective_canister_id) = ac.default_effective_canister_id {
+            self.default_effective_canister_id
+                .set(default_effective_canister_id)
+                .expect("default effective canister id should only be set once");
+        }
+
+        Ok(ac)
+    }
+
+    fn create_agent(&self) -> Result<Agent, EnvGetAgentError> {
+        let network_access = self.create_network_access()?;
+        let identity = self.identity()?;
+        let agent = network_access.create_agent(identity)?;
+        Ok(agent)
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("no default effective canister id set"))]
+pub struct NoDefaultEffectiveCanisterIdError;
+
+#[derive(Debug, Snafu)]
+pub enum EnvGetNetworkAccessError {
+    #[snafu(transparent)]
+    GetProject { source: GetProjectError },
+
+    #[snafu(transparent)]
+    GetNetworkAccess { source: GetNetworkAccessError },
+
+    #[snafu(transparent)]
+    NoSuchNetwork { source: NoSuchNetworkError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum EnvGetAgentError {
+    #[snafu(transparent)]
+    EnvGetNetworkAccess { source: EnvGetNetworkAccessError },
+
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityInContextError },
+
+    #[snafu(transparent)]
+    CreateAgent { source: CreateAgentError },
 }
 
 #[derive(Debug, Snafu)]

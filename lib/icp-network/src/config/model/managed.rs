@@ -18,7 +18,7 @@ pub struct GatewayModel {
 #[derive(Debug, Clone, Deserialize)]
 pub enum BindPort {
     Fixed(u16),
-    Dynamic,
+    Random,
 }
 
 fn default_host() -> String {
@@ -44,7 +44,7 @@ where
 {
     let raw = u16::deserialize(deserializer)?;
     Ok(if raw == 0 {
-        BindPort::Dynamic
+        BindPort::Random
     } else {
         BindPort::Fixed(raw)
     })

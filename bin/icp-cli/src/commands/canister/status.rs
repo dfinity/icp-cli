@@ -1,9 +1,9 @@
-use crate::env::GetProjectError;
+use crate::env::{EnvGetAgentError, GetProjectError};
+use crate::options::NetworkOpt;
 use crate::{env::Env, store_id::LookupError as LookupIdError};
 use clap::Parser;
-use ic_agent::{Agent, AgentError};
+use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::StatusCallResult;
-use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
 #[derive(Debug, Parser)]
@@ -11,12 +11,13 @@ pub struct CanisterStatusCmd {
     /// The name of the canister within the current project
     pub name: String,
 
-    /// The URL of the IC network endpoint
-    #[clap(long, default_value = "http://127.0.0.1:8000")]
-    pub network_url: String,
+    #[clap(flatten)]
+    network: NetworkOpt,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterStatusCmd) -> Result<(), CanisterStatusError> {
+    env.require_network(cmd.network);
+
     // Load the project manifest, which defines the canisters to be built.
     let pm = env.project()?;
 
@@ -30,21 +31,10 @@ pub async fn exec(env: &Env, cmd: CanisterStatusCmd) -> Result<(), CanisterStatu
     // Lookup the canister id
     let cid = env.id_store.lookup(&c.name)?;
 
-    // Load the currently selected identity
-    let identity = env.load_identity()?;
-
-    // Create an agent pointing to the desired network endpoint
-    let agent = Agent::builder()
-        .with_url(&cmd.network_url)
-        .with_arc_identity(identity)
-        .build()?;
-
-    if cmd.network_url.contains("127.0.0.1") || cmd.network_url.contains("localhost") {
-        agent.fetch_root_key().await?;
-    }
+    let agent = env.agent()?;
 
     // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
     // Retrieve canister status from management canister
     let (result,) = mgmt.canister_status(&cid).await?;
@@ -61,7 +51,7 @@ pub enum CanisterStatusError {
     GetProject { source: GetProjectError },
 
     #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
+    EnvGetAgent { source: EnvGetAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },

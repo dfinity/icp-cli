@@ -10,6 +10,7 @@ use crate::structure::NetworkDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::fs::{CreateDirAllError, create_dir_all};
 use icp_fs::lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock};
+use icp_fs::lockedjson::{LoadJsonWithLockError, load_json_with_lock};
 use snafu::prelude::*;
 
 pub struct NetworkDirectory {
@@ -43,6 +44,19 @@ impl NetworkDirectory {
     pub fn ensure_exists(&self) -> Result<(), CreateDirAllError> {
         create_dir_all(self.structure.network_root())?;
         create_dir_all(self.structure.port_descriptor_dir())
+    }
+
+    pub fn load_network_descriptor(
+        &self,
+    ) -> Result<Option<NetworkDescriptorModel>, LoadJsonWithLockError> {
+        load_json_with_lock(self.structure.network_descriptor_path())
+    }
+
+    pub fn load_port_descriptor(
+        &self,
+        port: u16,
+    ) -> Result<Option<NetworkDescriptorModel>, LoadJsonWithLockError> {
+        load_json_with_lock(self.structure.port_descriptor_path(port))
     }
 
     pub fn open_network_lock_file(&self) -> Result<NetworkLock, OpenFileForWriteLockError> {

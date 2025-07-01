@@ -18,9 +18,12 @@ impl ProjectDirectoryStructure {
         self.root.join("icp.yaml")
     }
 
-    #[allow(dead_code)]
-    pub fn network_config_path(&self, name: &str) -> Utf8PathBuf {
-        self.root.join("networks").join(format!("{name}.yaml"))
+    pub fn canister_yaml_path(&self, canister_dir: &Utf8Path) -> Utf8PathBuf {
+        self.root.join(canister_dir).join("canister.yaml")
+    }
+
+    pub fn network_config_path(&self, network_path: &Utf8Path) -> Utf8PathBuf {
+        self.root.join(format!("{network_path}.yaml"))
     }
 
     fn work_dir(&self) -> Utf8PathBuf {
@@ -29,9 +32,5 @@ impl ProjectDirectoryStructure {
 
     pub fn network_root(&self, network_name: &str) -> Utf8PathBuf {
         self.work_dir().join("networks").join(network_name)
-    }
-
-    pub fn canister_yaml_path(&self, canister_dir: &Utf8Path) -> Utf8PathBuf {
-        self.root.join(canister_dir).join("canister.yaml")
     }
 }

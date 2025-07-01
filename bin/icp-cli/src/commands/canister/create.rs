@@ -1,9 +1,9 @@
-use crate::env::{Env, GetProjectError};
+use crate::env::{Env, EnvGetAgentError, GetProjectError};
+use crate::options::NetworkOpt;
 use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
-use ic_agent::{Agent, AgentError, export::Principal};
+use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
-use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
 const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
@@ -51,9 +51,8 @@ pub struct CanisterCreateCmd {
     /// The name of the canister within the current project
     pub name: Option<String>,
 
-    /// The URL of the IC network endpoint
-    #[clap(long, default_value = "http://localhost:8000")]
-    pub network_url: String,
+    #[clap(flatten)]
+    pub network: NetworkOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
@@ -73,24 +72,14 @@ pub struct CanisterCreateCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
+    env.require_network(cmd.network);
+
     let pm = env.project()?;
 
-    // Load the currently selected identity
-    let identity = env.load_identity()?;
-
-    // Create an agent pointing to the desired network endpoint
-    let agent = Agent::builder()
-        .with_url(&cmd.network_url)
-        .with_arc_identity(identity)
-        .build()?;
-
-    // TODO(or.ricon): This is to be replaced with a centralized agent or agent-builder
-    if cmd.network_url.contains("127.0.0.1") || cmd.network_url.contains("localhost") {
-        agent.fetch_root_key().await?;
-    }
+    let agent = env.agent()?;
 
     // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
     // Choose canisters to create
     let canisters = pm
@@ -220,7 +209,7 @@ pub enum CanisterCreateError {
     GetProject { source: GetProjectError },
 
     #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
+    EnvGetAgent { source: EnvGetAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
@@ -229,7 +218,7 @@ pub enum CanisterCreateError {
     NoCanisters,
 
     #[snafu(transparent)]
-    BuildAgent { source: AgentError },
+    CreateCanister { source: AgentError },
 
     #[snafu(transparent)]
     RegisterCanister { source: RegisterError },

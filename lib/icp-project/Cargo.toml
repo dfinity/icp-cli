@@ -9,9 +9,12 @@ glob = { workspace = true }
 icp-canister = { path = "../icp-canister" }
 icp-fs = { "path" = "../icp-fs" }
 icp-network = { path = "../icp-network" }
+pathdiff.workspace = true
 serde = { workspace = true }
 snafu = { workspace = true }
 
 [dev-dependencies]
 icp-adapter = { path = "../icp-adapter" }
 camino-tempfile = { workspace = true }
+serde_yaml.workspace = true
+serde_json.workspace = true

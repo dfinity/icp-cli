@@ -1,4 +1,5 @@
 use crate::env::GetProjectError;
+use crate::options::NetworkOpt;
 use crate::{
     commands::{
         build,
@@ -24,9 +25,8 @@ pub struct Cmd {
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub mode: String,
 
-    /// The URL of the IC network endpoint
-    #[clap(long, default_value = "http://localhost:8000")]
-    network_url: String,
+    #[clap(flatten)]
+    network: NetworkOpt,
 
     /// The effective canister ID to use when calling the management canister.
     #[clap(long)]
@@ -89,7 +89,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             env,
             CanisterCreateCmd {
                 name: Some(c.name.to_owned()),
-                network_url: cmd.network_url.to_owned(),
+                network: cmd.network.clone(),
 
                 // Ids
                 ids: CanisterIDs {
@@ -130,7 +130,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             CanisterInstallCmd {
                 name: Some(c.name.to_owned()),
                 mode: cmd.mode.to_owned(),
-                network_url: cmd.network_url.to_owned(),
+                network: cmd.network.clone(),
             },
         )
         .await;

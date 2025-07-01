@@ -1,8 +1,10 @@
 use crate::common::guard::ChildGuard;
+use crate::common::network::{TestNetwork, TestNetworkForDfx};
 use crate::common::os::PATH_SEPARATOR;
 use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::Utf8TempDir;
+use serde_json::{Value, json};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -108,6 +110,42 @@ impl TestEnv {
         fs::write(&networks_json_path, networks).unwrap();
     }
 
+    pub fn configure_dfx_network(
+        &self,
+        icp_project_dir: &Utf8Path,
+        network_name: &str,
+    ) -> TestNetworkForDfx {
+        let test_network = self.wait_for_network_descriptor(icp_project_dir, network_name);
+
+        let dfx_network_name = format!("{}-{}", icp_project_dir.file_name().unwrap(), network_name);
+        let gateway_port = test_network.gateway_port;
+
+        let dfx_config_dir = self.home_path().join(".config").join("dfx");
+        create_dir_all(&dfx_config_dir).expect("create .config directory");
+        let networks_json_path = dfx_config_dir.join("networks.json");
+
+        // Build the bind address
+        let bind_address = format!("127.0.0.1:{gateway_port}");
+
+        // Create the inner object
+        let network_entry = json!({
+            "bind": bind_address,
+        });
+
+        // Construct the outer object dynamically
+        let mut root = serde_json::Map::new();
+        root.insert(dfx_network_name.to_string(), network_entry);
+
+        let networks = serde_json::to_string_pretty(&Value::Object(root)).unwrap();
+
+        eprintln!("Configuring dfx network: {}", networks);
+        fs::write(&networks_json_path, networks).unwrap();
+        TestNetworkForDfx {
+            dfx_network_name,
+            gateway_port,
+        }
+    }
+
     pub fn pkg_dir(&self) -> Utf8PathBuf {
         env!("CARGO_MANIFEST_DIR").into()
     }
@@ -136,43 +174,92 @@ impl TestEnv {
 
         eprintln!("Running network in {}", project_dir);
 
-        ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ")
+        let child_guard = ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ");
+
+        // "icp network start" will wait for the local network to be healthy,
+        // but for now we need to wait for the descriptor to be created.
+        self.wait_for_local_network_descriptor(project_dir);
+
+        child_guard
     }
 
     // wait up to 30 seconds for descriptor path to contain valid json
-    pub fn wait_for_local_network_descriptor(&self, project_dir: &Utf8Path) {
+    pub fn wait_for_local_network_descriptor(&self, project_dir: &Utf8Path) -> TestNetwork {
+        self.wait_for_network_descriptor(project_dir, "local")
+    }
+
+    pub fn wait_for_network_descriptor(
+        &self,
+        project_dir: &Utf8Path,
+        network_name: &str,
+    ) -> TestNetwork {
         let descriptor_path = project_dir
             .join(".icp")
             .join("networks")
-            .join("local")
+            .join(network_name)
             .join("descriptor.json");
         let start_time = std::time::Instant::now();
-        loop {
-            eprintln!(
-                "Checking for local network descriptor at {}",
-                descriptor_path
-            );
+        let network_descriptor = loop {
+            eprintln!("Checking for network descriptor at {}", descriptor_path);
             if descriptor_path.exists() && descriptor_path.is_file() {
                 let contents = fs::read_to_string(&descriptor_path)
-                    .expect("Failed to read local network descriptor");
+                    .expect("Failed to read network descriptor");
                 let parsed = serde_json::from_str::<serde_json::Value>(&contents);
-                if parsed.is_ok() {
-                    eprintln!("Local network descriptor found at {}", descriptor_path);
-                    break;
+                if let Ok(value) = parsed {
+                    eprintln!("Network descriptor found at {}", descriptor_path);
+                    break value;
                 } else {
                     eprintln!(
-                        "Local network descriptor at {} is not valid JSON: {}",
+                        "Network descriptor at {} is not valid JSON: {}",
                         descriptor_path, contents
                     );
                 }
             }
             if start_time.elapsed().as_secs() > 30 {
                 panic!(
-                    "Timed out waiting for local network descriptor at {}",
+                    "Timed out waiting for network descriptor at {}",
                     descriptor_path
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+
+        let gateway_port: u16 = network_descriptor
+            .get("gateway")
+            .and_then(|g| g.get("port"))
+            .and_then(|p| p.as_u64())
+            .expect("network descriptor does not contain gateway port")
+            as u16;
+
+        let root_key = network_descriptor
+            .get("root-key")
+            .and_then(|rk| rk.as_str())
+            .expect("network descriptor does not contain root key")
+            .to_string();
+
+        TestNetwork {
+            gateway_port,
+            root_key,
         }
+    }
+
+    pub fn configure_icp_local_network_random_port(&self, project_dir: &Utf8Path) {
+        self.configure_icp_local_network_port(project_dir, 0);
+    }
+
+    pub fn configure_icp_local_network_port(&self, project_dir: &Utf8Path, gateway_port: u16) {
+        let networks_dir = project_dir.join("networks");
+        create_dir_all(&networks_dir).expect("Failed to create networks directory");
+        fs::write(
+            networks_dir.join("local.yaml"),
+            format!(
+                r#"
+        mode: managed
+        gateway:
+          port: {gateway_port}
+        "#
+            ),
+        )
+        .unwrap();
     }
 }

@@ -3,7 +3,7 @@ use crate::structure::ProjectDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
-use icp_network::NetworkDirectory;
+use icp_network::{NetworkConfig, NetworkDirectory};
 use snafu::{ResultExt, Snafu};
 use std::io;
 
@@ -58,6 +58,14 @@ impl ProjectDirectory {
         canister_path: &Utf8Path,
     ) -> Result<CanisterManifest, LoadYamlFileError> {
         let path = self.structure().canister_yaml_path(canister_path);
+        load_yaml_file(path)
+    }
+
+    pub fn load_network_config(
+        &self,
+        network_path: &Utf8Path,
+    ) -> Result<NetworkConfig, LoadYamlFileError> {
+        let path = self.structure.network_config_path(network_path);
         load_yaml_file(path)
     }
 }

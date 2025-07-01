@@ -1,33 +1,27 @@
+use crate::env::EnvGetAgentError;
+use crate::options::NetworkOpt;
+use crate::{candid::print_candid_for_term, env::Env};
 use candid_parser::IDLArgs;
 use clap::Parser;
 use dialoguer::console::Term;
-use ic_agent::Agent;
 use icp_identity::key::LoadIdentityInContextError;
 use snafu::{ResultExt, Snafu};
 
-use crate::{candid::print_candid_for_term, env::Env};
-
 #[derive(Parser, Debug)]
 pub struct CanisterCallCmd {
-    /// The URL of the IC network endpoint
-    #[clap(long, default_value = "http://localhost:8000")]
-    network_url: String,
+    #[clap(flatten)]
+    network: NetworkOpt,
+
     pub canister: String,
     pub method: String,
     pub args: String,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCallCmd) -> Result<(), CanisterCallError> {
-    let identity = env.load_identity()?;
+    env.set_network_opt(cmd.network);
 
-    let agent = Agent::builder()
-        .with_url(&cmd.network_url)
-        .with_arc_identity(identity)
-        .build()?;
-    // TODO replace with centralized agent builder
-    if cmd.network_url.contains("127.0.0.1") || cmd.network_url.contains("localhost") {
-        agent.fetch_root_key().await?;
-    }
+    let agent = env.agent()?;
+
     let canister_id = if let Ok(principal) = cmd.canister.parse() {
         principal
     } else {
@@ -49,6 +43,9 @@ pub async fn exec(env: &Env, cmd: CanisterCallCmd) -> Result<(), CanisterCallErr
 
 #[derive(Debug, Snafu)]
 pub enum CanisterCallError {
+    #[snafu(transparent)]
+    EnvCreateAgent { source: EnvGetAgentError },
+
     #[snafu(transparent)]
     LookupError {
         source: crate::store_id::LookupError,

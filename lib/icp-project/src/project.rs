@@ -1,10 +1,13 @@
 use crate::directory::ProjectDirectory;
-use crate::model::CanistersField;
-use camino::Utf8PathBuf;
+use crate::model::{CanistersField, default_networks};
+use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
+use icp_network::{NetworkConfig, NetworkName};
+use pathdiff::diff_utf8_paths;
 use snafu::{ResultExt, Snafu};
+use std::collections::HashMap;
 use std::str::FromStr;
 
 fn is_glob(s: &str) -> bool {
@@ -22,7 +25,7 @@ pub struct Project {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: Vec<Utf8PathBuf>,
+    pub networks: HashMap<NetworkName, NetworkConfig>,
 }
 
 impl Project {
@@ -126,6 +129,7 @@ impl Project {
 
                     // Iterate over canister directories
                     for cpath in dirs {
+                        eprintln!("cpath is {:?}", cpath);
                         // Load the canister manifest from the resolved path.
                         let cm = pd
                             .load_canister_manifest(&cpath)
@@ -143,11 +147,8 @@ impl Project {
         };
 
         // Networks
-        let _networks = pm.networks.unwrap_or(crate::model::default_networks());
-
-        // TODO(or.ricon): Parse network manifests
-        // NOTE(TMP): In the meantime, skip networks
-        let networks = vec![];
+        let networks = pm.networks.unwrap_or(default_networks());
+        let networks = Self::load_networks(&pd, networks)?;
 
         Ok(Project {
             // The project directory.
@@ -159,6 +160,129 @@ impl Project {
             // Network definitions for the project.
             networks,
         })
+    }
+
+    fn load_networks(
+        pd: &ProjectDirectory,
+        network_paths: Vec<String>,
+    ) -> Result<HashMap<NetworkName, NetworkConfig>, LoadNetworksError> {
+        let network_paths = Self::gather_network_paths(pd, network_paths)?;
+
+        let mut networks = Self::load_network_configurations(pd, network_paths)?;
+
+        // If no local network is defined, add a default one
+        if !networks.contains_key("local") {
+            networks.insert(
+                NetworkName::from_str("local").unwrap(),
+                NetworkConfig::local_default(),
+            );
+        }
+
+        Ok(networks)
+    }
+
+    // For network paths that are glob patterns, it's ok if they don't match any files.
+    // For specific network paths, we make sure the configuration file exists.
+    fn gather_network_paths(
+        pd: &ProjectDirectory,
+        network_paths: Vec<String>,
+    ) -> Result<Vec<Utf8PathBuf>, GatherNetworkPathsError> {
+        // relative to the project root, not including .yaml extension
+        let mut result_paths = vec![];
+        for network_path in network_paths {
+            if is_glob(&network_path) {
+                let mut glob_paths = Self::normalize_glob_networks(&network_path, pd)?;
+                result_paths.append(&mut glob_paths);
+            } else {
+                let path = Utf8PathBuf::from(network_path);
+                Self::check_specific_network(&path, pd)?;
+                result_paths.push(path);
+            }
+        }
+
+        Ok(result_paths)
+    }
+
+    fn load_network_configurations(
+        pd: &ProjectDirectory,
+        network_paths: Vec<Utf8PathBuf>,
+    ) -> Result<HashMap<NetworkName, NetworkConfig>, LoadNetworkConfigurationsError> {
+        let mut networks = HashMap::new();
+
+        for network_path in network_paths {
+            let name = network_path
+                .file_name()
+                .ok_or(LoadNetworkConfigurationsError::NoNetworkName {
+                    network_path: network_path.clone(),
+                })?
+                .to_string();
+            if name == "ic" {
+                return Err(LoadNetworkConfigurationsError::CannotRedefineIcNetwork {
+                    network_path: network_path.clone(),
+                });
+            }
+            if networks.contains_key(&name) {
+                return Err(LoadNetworkConfigurationsError::DuplicateNetworkName { name });
+            }
+            // Load the network config from the path
+            let network_config = pd.load_network_config(&network_path)?;
+
+            // Insert into the networks map
+            networks.insert(name, network_config);
+        }
+
+        Ok(networks)
+    }
+
+    // For a pattern like `networks/*`, this function will return all matching network paths,
+    // relative to the project root, without the `.yaml` extension.
+    // For example, for pattern `networks/*`, it will return
+    // paths like `networks/local` or `networks/test`.
+    fn normalize_glob_networks(
+        pattern: &str,
+        pd: &ProjectDirectory,
+    ) -> Result<Vec<Utf8PathBuf>, NormalizeGlobNetworksError> {
+        let root = pd.structure().root();
+        let matches =
+            glob::glob(root.join(pattern).as_str()).context(NetworkGlobPatternSnafu { pattern })?;
+        let paths = matches
+            .collect::<Result<Vec<_>, GlobError>>()
+            .context(NetworkGlobWalkSnafu { path: &pattern })?;
+
+        paths
+            .into_iter()
+            .filter_map(|path| match Utf8PathBuf::try_from(path) {
+                Ok(p) if p.extension() == Some("yaml") => {
+                    let without_ext = p.with_extension("");
+                    let rel = diff_utf8_paths(&without_ext, root)?;
+                    Some(Ok(rel))
+                }
+                Ok(_) => None,
+                Err(e) => Some(Err(e.into())),
+            })
+            .collect()
+    }
+
+    // For a specific network path, this function makes sure the
+    // network configuration file exists
+    fn check_specific_network(
+        network_path: &Utf8Path,
+        pd: &ProjectDirectory,
+    ) -> Result<(), CheckSpecificNetworkError> {
+        let config_path = pd.structure().network_config_path(&network_path);
+
+        if !config_path.is_file() {
+            return Err(CheckSpecificNetworkError::NetworkPath {
+                network_path: network_path.to_path_buf(),
+                config_path,
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn find_network_config(&self, network_name: &str) -> Option<&NetworkConfig> {
+        self.networks.get(network_name)
     }
 }
 
@@ -193,6 +317,78 @@ pub enum LoadProjectManifestError {
         source: LoadYamlFileError,
         path: Utf8PathBuf,
     },
+
+    #[snafu(transparent)]
+    LoadNetworks { source: LoadNetworksError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GatherNetworkPathsError {
+    #[snafu(transparent)]
+    NormalizeGlobNetworks { source: NormalizeGlobNetworksError },
+
+    #[snafu(transparent)]
+    CheckSpecificNetwork { source: CheckSpecificNetworkError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadNetworkConfigurationsError {
+    #[snafu(display(
+        "cannot redefine the 'ic' network; the network path '{network_path}' is invalid"
+    ))]
+    CannotRedefineIcNetwork { network_path: Utf8PathBuf },
+
+    #[snafu(display("duplicate network name found: '{name}'"))]
+    DuplicateNetworkName { name: NetworkName },
+
+    #[snafu(transparent)]
+    LoadYamlFile { source: LoadYamlFileError },
+
+    #[snafu(display("unable to determine network name from path '{network_path}'"))]
+    NoNetworkName { network_path: Utf8PathBuf },
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadNetworksError {
+    #[snafu(transparent)]
+    GatherNetworkPaths { source: GatherNetworkPathsError },
+
+    #[snafu(transparent)]
+    LoadNetworkConfigurations {
+        source: LoadNetworkConfigurationsError,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum NormalizeGlobNetworksError {
+    #[snafu(transparent)]
+    InvalidPathUtf8 { source: camino::FromPathBufError },
+
+    #[snafu(display("failed to glob pattern '{pattern}'"))]
+    NetworkGlobPattern {
+        source: glob::PatternError,
+        pattern: Utf8PathBuf,
+    },
+
+    #[snafu(display("failed to glob pattern in '{path}'"))]
+    NetworkGlobWalk {
+        source: glob::GlobError,
+        path: Utf8PathBuf,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum CheckSpecificNetworkError {
+    #[snafu(transparent)]
+    InvalidPathUtf8 { source: camino::FromPathBufError },
+
+    #[snafu(display(
+        "configuration file for network '{network_path}' not found at '{config_path}'"
+    ))]
+    NetworkPath {
+        network_path: Utf8PathBuf,
+        config_path: Utf8PathBuf,
+    },
 }
 
 #[cfg(test)]
@@ -202,6 +398,7 @@ mod tests {
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
     use icp_canister::model::{Adapter, Build, CanisterManifest, Create};
+    use icp_network::{BindPort, NetworkConfig};
 
     #[test]
     fn empty_project() {
@@ -474,5 +671,32 @@ mod tests {
             pm,
             Err(LoadProjectManifestError::GlobPattern { .. })
         ));
+    }
+
+    #[test]
+    fn default_local_network() {
+        let project_dir = tempdir().expect("failed to create temporary project directory");
+
+        let pm = r#""#;
+
+        std::fs::write(
+            project_dir.path().join("icp.yaml"), // path
+            pm,                                  // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Load Project
+        let pd = ProjectDirectory::new(project_dir.path());
+        let pm = Project::load(pd).unwrap();
+
+        let local_network = pm
+            .find_network_config("local")
+            .expect("local network should be defined");
+        let NetworkConfig::Managed(managed) = local_network else {
+            panic!("Expected local network to be managed");
+        };
+        // Check that the local network has the default configuration
+        assert_eq!(managed.gateway.host, "127.0.0.1");
+        assert!(matches!(managed.gateway.port, BindPort::Fixed(8000)));
     }
 }

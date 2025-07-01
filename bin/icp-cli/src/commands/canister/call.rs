@@ -18,7 +18,7 @@ pub struct CanisterCallCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCallCmd) -> Result<(), CanisterCallError> {
-    env.require_network(cmd.network);
+    env.require_network(cmd.network.name());
 
     let agent = env.agent()?;
 

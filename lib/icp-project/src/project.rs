@@ -281,8 +281,13 @@ impl Project {
         Ok(())
     }
 
-    pub fn find_network_config(&self, network_name: &str) -> Option<&NetworkConfig> {
-        self.networks.get(network_name)
+    pub fn get_network_config(
+        &self,
+        network_name: &str,
+    ) -> Result<&NetworkConfig, NoSuchNetworkError> {
+        self.networks.get(network_name).ok_or(NoSuchNetworkError {
+            network: network_name.to_string(),
+        })
     }
 }
 
@@ -389,6 +394,12 @@ pub enum CheckSpecificNetworkError {
         network_path: Utf8PathBuf,
         config_path: Utf8PathBuf,
     },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("no such network: '{}'", network))]
+pub struct NoSuchNetworkError {
+    network: String,
 }
 
 #[cfg(test)]
@@ -698,7 +709,7 @@ mod tests {
         let pm = Project::load(pd).unwrap();
 
         let local_network = pm
-            .find_network_config("local")
+            .get_network_config("local")
             .expect("local network should be defined");
         let NetworkConfig::Managed(managed) = local_network else {
             panic!("Expected local network to be managed");

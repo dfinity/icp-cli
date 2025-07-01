@@ -156,9 +156,6 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("no descriptor found for port {port}"))]
     NoPortDescriptor { port: u16 },
-
-    #[snafu(display("no such network: {network}"))]
-    NoSuchNetwork { network: String },
 }
 
 #[derive(Debug, Snafu)]

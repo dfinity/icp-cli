@@ -7,7 +7,7 @@ use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
 use icp_network::access::{CreateAgentError, GetNetworkAccessError, NetworkAccess};
 use icp_project::directory::{FindProjectError, ProjectDirectory};
-use icp_project::project::{LoadProjectManifestError, Project};
+use icp_project::project::{LoadProjectManifestError, NoSuchNetworkError, Project};
 use snafu::Snafu;
 use std::sync::{Arc, OnceLock};
 
@@ -139,11 +139,7 @@ impl Env {
         let nd = project
             .directory
             .network(&network_name, self.dirs.port_descriptor_dir());
-        let network_config = project.find_network_config(&network_name).ok_or(
-            GetNetworkAccessError::NoSuchNetwork {
-                network: network_name.clone(),
-            },
-        )?;
+        let network_config = project.get_network_config(&network_name)?;
 
         let ac = icp_network::access::get_network_access(nd, network_config)?;
 
@@ -175,6 +171,9 @@ pub enum EnvGetNetworkAccessError {
 
     #[snafu(transparent)]
     GetNetworkAccess { source: GetNetworkAccessError },
+
+    #[snafu(transparent)]
+    NoSuchNetwork { source: NoSuchNetworkError },
 }
 
 #[derive(Debug, Snafu)]

@@ -1,5 +1,4 @@
 use crate::env::GetProjectError::ProjectNotFound;
-use crate::options::NetworkOpt;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -74,9 +73,7 @@ impl Env {
             .get_or_try_init(|| self.find_and_load_project())
     }
 
-    pub fn require_network(&self, opt: NetworkOpt) {
-        let network_name = opt.to_network_name();
-
+    pub fn require_network(&self, network_name: &str) {
         match self.network_name.get() {
             Some(existing) if *existing == network_name => {
                 // Already set to the same value — fine, do nothing
@@ -84,14 +81,13 @@ impl Env {
             Some(existing) => {
                 // Already set to a different value — not allowed
                 panic!(
-                    "NetworkOpt was already set to a different value: {:?} vs {:?}",
-                    existing, opt
+                    "NetworkOpt was already set to a different value: {existing} vs {network_name}"
                 );
             }
             None => {
                 // Not yet set — store it
                 self.network_name
-                    .set(network_name)
+                    .set(network_name.to_string())
                     .expect("Should only fail if already set");
             }
         }

@@ -15,7 +15,7 @@ pub struct CanisterStartCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterStartCmd) -> Result<(), CanisterStartError> {
-    env.require_network(cmd.network);
+    env.require_network(cmd.network.name());
 
     // Load the project manifest, which defines the canisters to be built.
     let pm = env.project()?;

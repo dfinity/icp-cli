@@ -15,11 +15,11 @@ pub struct NetworkOpt {
 }
 
 impl NetworkOpt {
-    pub fn to_network_name(&self) -> String {
+    pub fn name(&self) -> &str {
         if self.ic {
-            "ic".to_string()
+            "ic"
         } else {
-            self.network.as_deref().unwrap_or("local").to_string()
+            self.network.as_deref().unwrap_or("local")
         }
     }
 }

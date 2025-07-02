@@ -70,6 +70,11 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
                 AdapterBuild::Rust(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
+
+                // Compile using the Pre-built adapter.
+                AdapterBuild::Prebuilt(adapter) => {
+                    adapter.compile(&canister_path, &wasm_output_path).await?
+                }
             };
         }
 

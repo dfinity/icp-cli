@@ -1,6 +1,6 @@
 use crate::{
-    motoko::MotokoAdapterCompileError, rust::RustAdapterCompileError,
-    script::ScriptAdapterCompileError,
+    motoko::MotokoAdapterCompileError, pre_built::PrebuiltAdapterCompileError,
+    rust::RustAdapterCompileError, script::ScriptAdapterCompileError,
 };
 use async_trait::async_trait;
 use camino::Utf8Path;
@@ -25,4 +25,7 @@ pub enum AdapterCompileError {
 
     #[snafu(transparent)]
     Script { source: ScriptAdapterCompileError },
+
+    #[snafu(transparent)]
+    Prebuilt { source: PrebuiltAdapterCompileError },
 }

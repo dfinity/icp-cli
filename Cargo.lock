@@ -1534,10 +1534,12 @@ dependencies = [
  "camino-tempfile",
  "dunce",
  "icp-fs",
+ "reqwest",
  "serde",
  "shellwords",
  "snafu",
  "tokio",
+ "url",
 ]
 
 [[package]]

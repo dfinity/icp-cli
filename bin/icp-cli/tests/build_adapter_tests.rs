@@ -69,7 +69,7 @@ fn build_adapter_pre_built_url() {
                     .expect("failed to respond with wasm file"),
 
                 // Wrong path
-                _ => {}
+                _ => panic!("wrong path"),
             }
         }
     });
@@ -131,7 +131,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
                     .expect("failed to respond with wasm file"),
 
                 // Wrong path
-                _ => {}
+                _ => panic!("wrong path"),
             }
         }
     });
@@ -199,7 +199,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
                     .expect("failed to respond with wasm file"),
 
                 // Wrong path
-                _ => {}
+                _ => panic!("wrong path"),
             }
         }
     });

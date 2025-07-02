@@ -6,16 +6,26 @@ use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
 use reqwest::{Client, Method, Request, StatusCode, Url};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use snafu::Snafu;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+pub struct RemoteSource {
+    /// Url to fetch the remote WASM file from
+    url: String,
+
+    /// Optional sha256 checksum of the remote WASM file
+    sha256: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged, rename_all = "lowercase")]
 pub enum SourceField {
     /// Local path on-disk to read a WASM file from
     Path(Utf8PathBuf),
 
-    /// Remote Url to fetch a WASM file from
-    Url(String),
+    /// Remote source to fetch a WASM file from
+    Url(RemoteSource),
 }
 
 /// Configuration for a Pre-built canister build adapter.
@@ -39,12 +49,12 @@ impl Adapter for PrebuiltAdapter {
             }
 
             // Remote url
-            SourceField::Url(u) => {
+            SourceField::Url(s) => {
                 // Initialize a new http client
                 let http_client = Client::new();
 
                 // Parse Url
-                let u = Url::from_str(u)
+                let u = Url::from_str(&s.url)
                     .map_err(|err| PrebuiltAdapterCompileError::Url { source: err })?;
 
                 // Construct request
@@ -74,9 +84,29 @@ impl Adapter for PrebuiltAdapter {
                 let bs = resp
                     .bytes()
                     .await
-                    .map_err(|err| PrebuiltAdapterCompileError::Request { source: err })?;
+                    .map_err(|err| PrebuiltAdapterCompileError::Request { source: err })?
+                    .to_vec();
 
-                bs.to_vec()
+                if let Some(sha256) = &s.sha256 {
+                    // Calculate checksum
+                    let cksm = hex::encode({
+                        let mut h = Sha256::new();
+                        h.update(&bs);
+                        h.finalize()
+                    });
+
+                    // Verify Checksum
+                    if &cksm != sha256 {
+                        return Err(PrebuiltAdapterCompileError::Checksum {
+                            url: u,
+                            expected: sha256.to_owned(),
+                            actual: cksm.to_owned(),
+                        }
+                        .into());
+                    }
+                }
+
+                bs
             }
         };
 
@@ -104,6 +134,19 @@ pub enum PrebuiltAdapterCompileError {
 
     #[snafu(display("fetching {url} resulted in status-code: {code}"))]
     Status { url: Url, code: StatusCode },
+
+    #[snafu(display(
+        r#"
+        resource {url} has unexpected checksum.
+            expected: {expected}
+            actual: {actual}
+        "#
+    ))]
+    Checksum {
+        url: Url,
+        expected: String,
+        actual: String,
+    },
 
     #[snafu(transparent)]
     WriteFile { source: WriteFileError },

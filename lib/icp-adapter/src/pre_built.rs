@@ -10,6 +10,15 @@ use sha2::{Digest, Sha256};
 use snafu::Snafu;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct LocalSource {
+    /// Local path on-disk to read a WASM file from
+    path: Utf8PathBuf,
+
+    /// Optional sha256 checksum of the local WASM file
+    sha256: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct RemoteSource {
     /// Url to fetch the remote WASM file from
     url: String,
@@ -22,10 +31,10 @@ pub struct RemoteSource {
 #[serde(untagged, rename_all = "lowercase")]
 pub enum SourceField {
     /// Local path on-disk to read a WASM file from
-    Path(Utf8PathBuf),
+    Local(LocalSource),
 
-    /// Remote source to fetch a WASM file from
-    Url(RemoteSource),
+    /// Remote url to fetch a WASM file from
+    Remote(RemoteSource),
 }
 
 /// Configuration for a Pre-built canister build adapter.
@@ -44,12 +53,33 @@ impl Adapter for PrebuiltAdapter {
     ) -> Result<(), AdapterCompileError> {
         let wasm = match &self.source {
             // Local path
-            SourceField::Path(p) => {
-                read(p).map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?
+            SourceField::Local(s) => {
+                let bs = read(&s.path)
+                    .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?;
+
+                if let Some(expected) = &s.sha256 {
+                    // Calculate checksum
+                    let actual = hex::encode({
+                        let mut h = Sha256::new();
+                        h.update(&bs);
+                        h.finalize()
+                    });
+
+                    // Verify Checksum
+                    if &actual != expected {
+                        return Err(PrebuiltAdapterCompileError::Checksum {
+                            expected: expected.to_owned(),
+                            actual: actual.to_owned(),
+                        }
+                        .into());
+                    }
+                }
+
+                bs
             }
 
             // Remote url
-            SourceField::Url(s) => {
+            SourceField::Remote(s) => {
                 // Initialize a new http client
                 let http_client = Client::new();
 
@@ -98,7 +128,6 @@ impl Adapter for PrebuiltAdapter {
                     // Verify Checksum
                     if &actual != expected {
                         return Err(PrebuiltAdapterCompileError::Checksum {
-                            url: u,
                             expected: expected.to_owned(),
                             actual: actual.to_owned(),
                         }
@@ -137,16 +166,12 @@ pub enum PrebuiltAdapterCompileError {
 
     #[snafu(display(
         r#"
-        resource {url} has unexpected checksum.
+        resource has unexpected checksum.
             expected: {expected}
             actual: {actual}
         "#
     ))]
-    Checksum {
-        url: Url,
-        expected: String,
-        actual: String,
-    },
+    Checksum { expected: String, actual: String },
 
     #[snafu(transparent)]
     WriteFile { source: WriteFileError },

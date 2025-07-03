@@ -42,13 +42,7 @@ fn canister_status() {
     let _g = env.start_network_in(&project_dir);
 
     // Wait for network
-    env.configure_dfx_local_network();
-
-    env.dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir);
 
     // Deploy project
     env.icp()

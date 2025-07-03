@@ -87,20 +87,20 @@ impl Adapter for PrebuiltAdapter {
                     .map_err(|err| PrebuiltAdapterCompileError::Request { source: err })?
                     .to_vec();
 
-                if let Some(sha256) = &s.sha256 {
+                if let Some(expected) = &s.sha256 {
                     // Calculate checksum
-                    let cksm = hex::encode({
+                    let actual = hex::encode({
                         let mut h = Sha256::new();
                         h.update(&bs);
                         h.finalize()
                     });
 
                     // Verify Checksum
-                    if &cksm != sha256 {
+                    if &actual != expected {
                         return Err(PrebuiltAdapterCompileError::Checksum {
                             url: u,
-                            expected: sha256.to_owned(),
-                            actual: cksm.to_owned(),
+                            expected: expected.to_owned(),
+                            actual: actual.to_owned(),
                         }
                         .into());
                     }

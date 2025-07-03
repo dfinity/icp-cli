@@ -95,7 +95,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
     let wasm = read(wasm).expect("failed to load wasm test-file");
 
     // Calculate checksum
-    let cksm = hex::encode({
+    let actual = hex::encode({
         let mut h = Sha256::new();
         h.update(&wasm);
         h.finalize()
@@ -133,7 +133,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
         .stderr(
             contains("unexpected checksum")
                 .and(contains("expected: invalid"))
-                .and(contains(format!("actual: {cksm}"))),
+                .and(contains(format!("actual: {actual}"))),
         );
 }
 
@@ -149,7 +149,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
     let wasm = read(wasm).expect("failed to load wasm test-file");
 
     // Calculate checksum
-    let cksm = hex::encode({
+    let actual = hex::encode({
         let mut h = Sha256::new();
         h.update(&wasm);
         h.finalize()
@@ -168,7 +168,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
             adapter:
               type: pre-built
               url: http://{addr}/canister.wasm
-              sha256: {cksm}
+              sha256: {actual}
         "#,
     );
 

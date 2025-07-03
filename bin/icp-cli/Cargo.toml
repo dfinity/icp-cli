@@ -18,6 +18,7 @@ clap.workspace = true
 dialoguer.workspace = true
 elliptic-curve.workspace = true
 hex.workspace = true
+httptest.workspace = true
 ic-agent.workspace = true
 ic-utils.workspace = true
 icp-adapter.workspace = true
@@ -35,7 +36,6 @@ sec1.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 snafu.workspace = true
-tiny_http.workspace = true
 tiny-bip39.workspace = true
 tokio.workspace = true
 

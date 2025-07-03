@@ -1,10 +1,7 @@
-use std::thread;
-
-use crate::common::TestEnv;
+use crate::common::{TestEnv, test_server::spawn_test_server};
 use icp_fs::fs::{read, write};
 use k256::sha2::{Digest, Sha256};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
-use tiny_http::{Response, Server};
 
 mod common;
 
@@ -57,22 +54,8 @@ fn build_adapter_pre_built_url() {
     let wasm = read(wasm).expect("failed to load wasm test-file");
 
     // Spawn HTTP server
-    let srv = Server::http("0.0:0").expect("failed to initialize test http server");
-    let addr = srv.server_addr();
-
-    thread::spawn(move || {
-        for req in srv.incoming_requests() {
-            match req.url() {
-                // Correct path
-                "/canister.wasm" => req
-                    .respond(Response::from_data(wasm.clone()))
-                    .expect("failed to respond with wasm file"),
-
-                // Wrong path
-                _ => panic!("wrong path"),
-            }
-        }
-    });
+    let server = spawn_test_server("GET", "/canister.wasm", &wasm);
+    let addr = server.addr();
 
     // Project manifest
     let pm = format!(
@@ -119,22 +102,8 @@ fn build_adapter_pre_built_url_invalid_checksum() {
     });
 
     // Spawn HTTP server
-    let srv = Server::http("0.0:0").expect("failed to initialize test http server");
-    let addr = srv.server_addr();
-
-    thread::spawn(move || {
-        for req in srv.incoming_requests() {
-            match req.url() {
-                // Correct path
-                "/canister.wasm" => req
-                    .respond(Response::from_data(wasm.clone()))
-                    .expect("failed to respond with wasm file"),
-
-                // Wrong path
-                _ => panic!("wrong path"),
-            }
-        }
-    });
+    let server = spawn_test_server("GET", "/canister.wasm", &wasm);
+    let addr = server.addr();
 
     // Project manifest
     let pm = format!(
@@ -187,22 +156,8 @@ fn build_adapter_pre_built_url_valid_checksum() {
     });
 
     // Spawn HTTP server
-    let srv = Server::http("0.0:0").expect("failed to initialize test http server");
-    let addr = srv.server_addr();
-
-    thread::spawn(move || {
-        for req in srv.incoming_requests() {
-            match req.url() {
-                // Correct path
-                "/canister.wasm" => req
-                    .respond(Response::from_data(wasm.clone()))
-                    .expect("failed to respond with wasm file"),
-
-                // Wrong path
-                _ => panic!("wrong path"),
-            }
-        }
-    });
+    let server = spawn_test_server("GET", "/canister.wasm", &wasm);
+    let addr = server.addr();
 
     // Project manifest
     let pm = format!(

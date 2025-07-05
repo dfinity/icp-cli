@@ -17,12 +17,7 @@ fn hello() {
 
     testenv.configure_dfx_local_network();
 
-    testenv
-        .dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    testenv.ping_until_healthy(&icp_project_dir);
 
     testenv
         .dfx()
@@ -103,13 +98,7 @@ fn network_random_port() {
     let dfx_network_name = test_network.dfx_network_name;
     let gateway_port = test_network.gateway_port;
 
-    testenv
-        .dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .arg(&dfx_network_name)
-        .assert()
-        .success();
+    testenv.ping_until_healthy(&project_dir);
 
     testenv
         .dfx()
@@ -186,22 +175,9 @@ fn network_same_port() {
     let project_dir_b = testenv.create_project_dir("b");
 
     let _child_guard = testenv.start_network_in(&project_dir_a);
-    testenv.wait_for_local_network_descriptor(&project_dir_a);
-
-    eprintln!("configure dfx local network");
-    testenv.configure_dfx_local_network();
 
     eprintln!("wait for network healthy");
-    testenv
-        .dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
-
-    // "icp network start" will wait for the local network to be healthy,
-    // but for now we need to wait for the descriptor to be created.
-    testenv.wait_for_local_network_descriptor(&project_dir_a);
+    testenv.ping_until_healthy(&project_dir_a);
 
     eprintln!("second network run attempt");
     testenv
@@ -238,31 +214,14 @@ fn two_projects_different_fixed_ports() {
     testenv.configure_icp_local_network_port(&project_dir_b, 8002);
 
     let _a_guard = testenv.start_network_in(&project_dir_a);
-    testenv.wait_for_local_network_descriptor(&project_dir_a);
 
-    eprintln!("configure dfx local network");
-    let test_network_a = testenv.configure_dfx_network(&project_dir_a, "local");
-
-    eprintln!("wait for network healthy");
-    testenv
-        .dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .arg(&test_network_a.dfx_network_name)
-        .assert()
-        .success();
+    eprintln!("wait for network A healthy");
+    testenv.ping_until_healthy(&project_dir_a);
 
     let _b_guard = testenv.start_network_in(&project_dir_b);
-    testenv.wait_for_local_network_descriptor(&project_dir_b);
-    let test_network_b = testenv.configure_dfx_network(&project_dir_b, "local");
-    eprintln!("wait for network healthy");
-    testenv
-        .dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .arg(&test_network_b.dfx_network_name)
-        .assert()
-        .success();
+
+    eprintln!("wait for network B healthy");
+    testenv.ping_until_healthy(&project_dir_b);
 }
 
 #[test]
@@ -274,7 +233,6 @@ fn deploy_to_other_projects_network() {
     env.configure_icp_local_network_random_port(&project_dir_a);
     let _g = env.start_network_in(&project_dir_a);
     let test_network = env.wait_for_local_network_descriptor(&project_dir_a);
-    let dfx_test_network = env.configure_dfx_network(&project_dir_a, "local");
 
     let project_dir_b = env.create_project_dir("icp-b");
     let project_dir_b_networks = project_dir_b.join("networks");
@@ -318,12 +276,7 @@ fn deploy_to_other_projects_network() {
     )
     .expect("failed to write project manifest");
 
-    env.dfx()
-        .arg("ping")
-        .arg(dfx_test_network.dfx_network_name)
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir_a);
 
     // Deploy project (first time)
     env.icp()
@@ -360,7 +313,6 @@ fn round_robin_routing() {
     env.configure_icp_local_network_random_port(&project_dir_a);
     let _g = env.start_network_in(&project_dir_a);
     let test_network = env.wait_for_local_network_descriptor(&project_dir_a);
-    let dfx_test_network = env.configure_dfx_network(&project_dir_a, "local");
 
     let project_dir_b = env.create_project_dir("icp-b");
     let project_dir_b_networks = project_dir_b.join("networks");
@@ -406,12 +358,7 @@ fn round_robin_routing() {
     )
     .expect("failed to write project manifest");
 
-    env.dfx()
-        .arg("ping")
-        .arg(dfx_test_network.dfx_network_name)
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir_a);
 
     // Deploy project (first time)
     env.icp()

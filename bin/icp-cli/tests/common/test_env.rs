@@ -183,6 +183,17 @@ impl TestEnv {
         child_guard
     }
 
+    pub fn ping_until_healthy(&self, project_dir: &Utf8Path) {
+        let descriptor = self.wait_for_local_network_descriptor(project_dir);
+        let network_url = format!("http://localhost:{}", descriptor.gateway_port);
+        self.dfx()
+            .arg("ping")
+            .arg(network_url)
+            .arg("--wait-healthy")
+            .assert()
+            .success();
+    }
+
     // wait up to 30 seconds for descriptor path to contain valid json
     pub fn wait_for_local_network_descriptor(&self, project_dir: &Utf8Path) -> TestNetwork {
         self.wait_for_network_descriptor(project_dir, "local")

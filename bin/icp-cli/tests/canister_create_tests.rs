@@ -37,13 +37,7 @@ fn canister_create() {
     let _g = env.start_network_in(&project_dir);
 
     // Wait for network
-    env.configure_dfx_local_network();
-
-    env.dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir);
 
     // Create canister
     env.icp()
@@ -100,13 +94,7 @@ fn canister_create_with_options() {
     let _g = env.start_network_in(&project_dir);
 
     // Wait for network
-    env.configure_dfx_local_network();
-
-    env.dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir);
 
     // Create canister
     env.icp()
@@ -175,13 +163,7 @@ fn canister_create_with_options_cmdline_override() {
     let _g = env.start_network_in(&project_dir);
 
     // Wait for network
-    env.configure_dfx_local_network();
-
-    env.dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir);
 
     // Create canister
     env.icp()

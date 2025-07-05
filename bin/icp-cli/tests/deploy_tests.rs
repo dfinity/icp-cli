@@ -99,13 +99,7 @@ fn deploy() {
     let _g = env.start_network_in(&project_dir);
 
     // Wait for network
-    env.configure_dfx_local_network();
-
-    env.dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir);
 
     // Deploy project
     env.icp()
@@ -157,13 +151,7 @@ fn deploy_twice_should_succeed() {
     let _g = env.start_network_in(&project_dir);
 
     // Wait for network
-    env.configure_dfx_local_network();
-
-    env.dfx()
-        .arg("ping")
-        .arg("--wait-healthy")
-        .assert()
-        .success();
+    env.ping_until_healthy(&project_dir);
 
     // Deploy project (first time)
     env.icp()

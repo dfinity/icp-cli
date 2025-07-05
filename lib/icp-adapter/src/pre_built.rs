@@ -13,18 +13,12 @@ use snafu::Snafu;
 pub struct LocalSource {
     /// Local path on-disk to read a WASM file from
     path: Utf8PathBuf,
-
-    /// Optional sha256 checksum of the local WASM file
-    sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct RemoteSource {
     /// Url to fetch the remote WASM file from
     url: String,
-
-    /// Optional sha256 checksum of the remote WASM file
-    sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -42,6 +36,9 @@ pub enum SourceField {
 pub struct PrebuiltAdapter {
     #[serde(flatten)]
     source: SourceField,
+
+    /// Optional sha256 checksum of the WASM 
+    sha256: Option<String>,
 }
 
 #[async_trait]
@@ -54,29 +51,9 @@ impl Adapter for PrebuiltAdapter {
         let wasm = match &self.source {
             // Local path
             SourceField::Local(s) => {
-                let bs = read(&s.path)
-                    .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?;
-
-                if let Some(expected) = &s.sha256 {
-                    // Calculate checksum
-                    let actual = hex::encode({
-                        let mut h = Sha256::new();
-                        h.update(&bs);
-                        h.finalize()
-                    });
-
-                    // Verify Checksum
-                    if &actual != expected {
-                        return Err(PrebuiltAdapterCompileError::Checksum {
-                            expected: expected.to_owned(),
-                            actual: actual.to_owned(),
-                        }
-                        .into());
-                    }
-                }
-
-                bs
-            }
+                read(&s.path)
+                    .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?
+            },
 
             // Remote url
             SourceField::Remote(s) => {
@@ -111,33 +88,32 @@ impl Adapter for PrebuiltAdapter {
                 }
 
                 // Read response body
-                let bs = resp
+                resp
                     .bytes()
                     .await
                     .map_err(|err| PrebuiltAdapterCompileError::Request { source: err })?
-                    .to_vec();
-
-                if let Some(expected) = &s.sha256 {
-                    // Calculate checksum
-                    let actual = hex::encode({
-                        let mut h = Sha256::new();
-                        h.update(&bs);
-                        h.finalize()
-                    });
-
-                    // Verify Checksum
-                    if &actual != expected {
-                        return Err(PrebuiltAdapterCompileError::Checksum {
-                            expected: expected.to_owned(),
-                            actual: actual.to_owned(),
-                        }
-                        .into());
-                    }
-                }
-
-                bs
+                    .to_vec()
             }
         };
+
+        // Verify the checksum if it's provided
+        if let Some(expected) = &self.sha256 {
+            // Calculate checksum
+            let actual = hex::encode({
+                let mut h = Sha256::new();
+                h.update(&wasm);
+                h.finalize()
+            });
+
+            // Verify Checksum
+            if &actual != expected {
+                return Err(PrebuiltAdapterCompileError::Checksum {
+                    expected: expected.to_owned(),
+                    actual: actual.to_owned(),
+                }
+                .into());
+            }
+        }
 
         // Set WASM file
         write(

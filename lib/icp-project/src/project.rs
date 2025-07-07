@@ -129,7 +129,6 @@ impl Project {
 
                     // Iterate over canister directories
                     for cpath in dirs {
-                        eprintln!("cpath is {:?}", cpath);
                         // Load the canister manifest from the resolved path.
                         let cm = pd
                             .load_canister_manifest(&cpath)

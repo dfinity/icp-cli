@@ -1,4 +1,6 @@
-use icp_adapter::{motoko::MotokoAdapter, rust::RustAdapter, script::ScriptAdapter};
+use icp_adapter::{
+    motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter, script::ScriptAdapter,
+};
 use serde::Deserialize;
 
 /// Identifies the type of adapter used to build the canister,
@@ -25,6 +27,11 @@ pub enum AdapterBuild {
     /// Represents a canister built using a custom script or command.
     /// This variant allows for flexible build processes defined by the user.
     Script(ScriptAdapter),
+
+    /// Represents a pre-built canister.
+    /// This variant allows for retrieving a canister WASM from various sources.
+    #[serde(rename = "pre-built")]
+    Prebuilt(PrebuiltAdapter),
 }
 
 /// Describes how the canister should be built into WebAssembly,

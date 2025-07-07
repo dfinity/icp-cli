@@ -7,10 +7,14 @@ edition = "2024"
 async-trait = { workspace = true }
 camino = { workspace = true }
 dunce = { workspace = true }
+hex = { workspace = true }
 icp-fs = { "path" = "../icp-fs" }
+reqwest = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
 shellwords = { workspace = true }
 snafu = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

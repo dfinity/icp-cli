@@ -37,7 +37,7 @@ pub struct PrebuiltAdapter {
     #[serde(flatten)]
     source: SourceField,
 
-    /// Optional sha256 checksum of the WASM 
+    /// Optional sha256 checksum of the WASM
     sha256: Option<String>,
 }
 
@@ -50,10 +50,8 @@ impl Adapter for PrebuiltAdapter {
     ) -> Result<(), AdapterCompileError> {
         let wasm = match &self.source {
             // Local path
-            SourceField::Local(s) => {
-                read(&s.path)
-                    .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?
-            },
+            SourceField::Local(s) => read(&s.path)
+                .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?,
 
             // Remote url
             SourceField::Remote(s) => {
@@ -88,8 +86,7 @@ impl Adapter for PrebuiltAdapter {
                 }
 
                 // Read response body
-                resp
-                    .bytes()
+                resp.bytes()
                     .await
                     .map_err(|err| PrebuiltAdapterCompileError::Request { source: err })?
                     .to_vec()

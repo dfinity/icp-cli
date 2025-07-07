@@ -1,6 +1,6 @@
 use crate::{
     env::{Env, EnvGetAgentError, GetProjectError},
-    options::IdentityOpt,
+    options::{IdentityOpt, NetworkOpt},
     store_id::LookupError,
 };
 use clap::Parser;
@@ -15,6 +15,9 @@ pub struct Cmd {
 
     #[clap(flatten)]
     pub identity: IdentityOpt,
+
+    #[clap(flatten)]
+    pub network: NetworkOpt,
 }
 
 pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
@@ -22,6 +25,9 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
 
     // Load the project manifest, which defines the canisters to be synced.
     let pm = env.project()?;
+
+    // Initialize network handler
+    env.require_network(cmd.network.name());
 
     // Choose canisters to sync
     let canisters = pm

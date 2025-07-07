@@ -30,7 +30,7 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    network: NetworkOpt,
+    pub network: NetworkOpt,
 
     /// The effective canister ID to use when calling the management canister.
     #[clap(long)]
@@ -161,6 +161,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             sync::Cmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
+                network: cmd.network.clone(),
             },
         )
         .await;

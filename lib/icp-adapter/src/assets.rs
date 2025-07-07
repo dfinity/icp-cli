@@ -6,6 +6,7 @@ use ic_asset::error::SyncError;
 use ic_utils::{Canister, canister::CanisterBuilderError};
 use serde::Deserialize;
 use snafu::Snafu;
+use tokio::task::JoinError;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -46,31 +47,47 @@ impl sync::Adapter for AssetsAdapter {
         let dirs = self.dir.as_vec();
 
         #[allow(clippy::disallowed_types)]
-        let _dirs = dirs
+        let dirs = dirs
             .iter()
-            .map(std::path::Path::new)
-            .collect::<Vec<&std::path::Path>>();
+            .map(std::path::PathBuf::from)
+            .collect::<Vec<std::path::PathBuf>>();
 
-        // Prepare canister client
-        let _canister = Canister::builder()
-            .with_canister_id(canister_id.to_owned())
-            .with_agent(agent)
-            .build()
-            .map_err(|err| AssetsAdapterSyncError::CanisterBuilder { source: err })?;
+        // Clone the agent and canister_id to move into the async task
+        let agent = agent.clone();
+        let canister_id = canister_id.to_owned();
 
         // ic-asset requires a logger, so provide it a nop logger
-        let _logger = slog::Logger::root(slog::Discard, slog::o!());
+        let logger = slog::Logger::root(slog::Discard, slog::o!());
 
-        // Synchronize assets to canister
-        // ic_asset::sync(
-        //     &canister, // canister
-        //     &dirs,     // dirs
-        //     false,     // no_delete
-        //     &logger,   // logger
-        //     None,      // progress
-        // )
-        // .await
-        // .map_err(|err| AssetsAdapterSyncError::Sync { source: err })?;
+        // Spawn a local task to perform synchornization
+        // This is required because AssetSyncProgressRenderer is !Send
+        tokio::task::spawn_local(async move {
+            // Convert PathBuf to &Path inside the async block
+            #[allow(clippy::disallowed_types)]
+            let dirs: Vec<&std::path::Path> = dirs.iter().map(|p| p.as_path()).collect();
+
+            // Prepare canister client inside the async block
+            let canister = Canister::builder()
+                .with_canister_id(canister_id)
+                .with_agent(&agent)
+                .build()
+                .map_err(|err| AssetsAdapterSyncError::CanisterBuilder { source: err })?;
+
+            // Synchronize assets to canister
+            ic_asset::sync(
+                &canister, // canister
+                &dirs,     // dirs
+                false,     // no_delete
+                &logger,   // logger
+                None,      // progress
+            )
+            .await
+            .map_err(|err| AssetsAdapterSyncError::Sync { source: err })?;
+
+            Ok::<_, AssetsAdapterSyncError>(())
+        })
+        .await
+        .map_err(|err| AssetsAdapterSyncError::Join { source: err })??;
 
         Ok(())
     }
@@ -84,4 +101,7 @@ pub enum AssetsAdapterSyncError {
 
     #[snafu(transparent)]
     Sync { source: SyncError },
+
+    #[snafu(transparent)]
+    Join { source: JoinError },
 }

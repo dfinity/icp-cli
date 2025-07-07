@@ -1,5 +1,8 @@
-use crate::env::{Env, GetProjectError};
-use crate::options::IdentityOpt;
+use crate::{
+    env::{Env, EnvGetAgentError, GetProjectError},
+    options::IdentityOpt,
+    store_id::LookupError,
+};
 use clap::Parser;
 use icp_adapter::sync::{Adapter, AdapterSyncError};
 use icp_canister::model::AdapterSync;
@@ -43,12 +46,21 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         return Err(CommandError::NoCanisters);
     }
 
+    // Prepare agent
+    let agent = env.agent()?;
+
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in canisters {
+        // Get canister principal ID
+        let cid = env.id_store.lookup(&c.name)?;
+
         for step in c.sync.into_vec() {
             match step.adapter {
                 // Synchronize the canister using the custom script adapter.
-                AdapterSync::Script(adapter) => adapter.sync(&canister_path).await?,
+                AdapterSync::Script(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
+
+                // Synchronize the canister using the assets adapter.
+                AdapterSync::Assets(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
             };
         }
     }
@@ -66,6 +78,12 @@ pub enum CommandError {
 
     #[snafu(display("no canisters available to sync"))]
     NoCanisters,
+
+    #[snafu(transparent)]
+    GetAgent { source: EnvGetAgentError },
+
+    #[snafu(transparent)]
+    IdLookup { source: LookupError },
 
     #[snafu(transparent)]
     SyncAdapter { source: AdapterSyncError },

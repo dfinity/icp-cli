@@ -31,6 +31,7 @@ glob = "0.3.2"
 hex = "0.4.3"
 httptest = "0.16.3"
 ic-agent = { version = "0.40.1" }
+ic-asset = { version = "0.23.0" }
 ic-utils = { version = "0.40.1" }
 icp-adapter = { path = "lib/icp-adapter" }
 icp-canister = { path = "lib/icp-canister" }
@@ -53,6 +54,7 @@ serde_json = "1.0"
 serde_yaml = "0.9.34"
 sha2 = "0.10.9"
 shellwords = "1.1.0"
+slog = "2.7.0"
 snafu = "0.8.5"
 strum = { version = "0.27", features = ["derive"] }
 tempfile = "3"

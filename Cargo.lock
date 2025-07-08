@@ -1847,9 +1847,9 @@ dependencies = [
 
 [[package]]
 name = "ic-asset"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c387e5f4cc8704767776bd9d73f7a3a1a977de73b3d0d46f2a051a606a8676"
+checksum = "ce03b2cedca837a840b1e01eef0c9bedfabc1b8242be57bd9318dd300431a681"
 dependencies = [
  "backoff",
  "brotli",

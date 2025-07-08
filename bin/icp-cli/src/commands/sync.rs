@@ -22,12 +22,10 @@ pub struct Cmd {
 
 pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     env.require_identity(cmd.identity.name());
+    env.require_network(cmd.network.name());
 
     // Load the project manifest, which defines the canisters to be synced.
     let pm = env.project()?;
-
-    // Initialize network handler
-    env.require_network(cmd.network.name());
 
     // Choose canisters to sync
     let canisters = pm

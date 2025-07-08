@@ -184,12 +184,10 @@ impl TestEnv {
     }
 
     pub fn ping_until_healthy(&self, project_dir: &Utf8Path) {
-        let descriptor = self.wait_for_local_network_descriptor(project_dir);
-        let network_url = format!("http://localhost:{}", descriptor.gateway_port);
-        self.dfx()
-            .arg("ping")
-            .arg(network_url)
-            .arg("--wait-healthy")
+        self.wait_for_local_network_descriptor(project_dir);
+        self.icp()
+            .current_dir(project_dir)
+            .args(["network", "ping", "--wait-healthy"])
             .assert()
             .success();
     }
@@ -272,5 +270,24 @@ impl TestEnv {
             ),
         )
         .unwrap();
+    }
+
+    fn network_descriptor_path(&self, project_dir: &Utf8Path, network: &str) -> Utf8PathBuf {
+        project_dir
+            .join(".icp")
+            .join("networks")
+            .join(network)
+            .join("descriptor.json")
+    }
+
+    pub fn read_network_descriptor(&self, project_dir: &Utf8Path, network: &str) -> Vec<u8> {
+        std::fs::read(self.network_descriptor_path(project_dir, network))
+            .expect("Failed to read network descriptor file")
+    }
+
+    pub fn write_network_descriptor(&self, project_dir: &Utf8Path, network: &str, contents: &[u8]) {
+        let descriptor_path = self.network_descriptor_path(project_dir, network);
+        std::fs::write(&descriptor_path, contents)
+            .expect("Failed to write network descriptor file");
     }
 }

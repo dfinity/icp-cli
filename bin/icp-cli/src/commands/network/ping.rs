@@ -31,7 +31,7 @@ pub async fn exec(env: &Env, cmd: PingCmd) -> Result<(), PingNetworkCommandError
     let agent = env.agent()?;
 
     let status = if cmd.wait_healthy {
-        ping_until_healthy(&agent).await?
+        ping_until_healthy(agent).await?
     } else {
         agent
             .status()

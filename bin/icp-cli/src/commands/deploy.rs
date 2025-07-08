@@ -1,3 +1,4 @@
+use crate::commands::canister::create::DEFAULT_EFFECTIVE_ID;
 use crate::env::GetProjectError;
 use crate::options::{IdentityOpt, NetworkOpt};
 use crate::{
@@ -33,7 +34,7 @@ pub struct Cmd {
     pub network: NetworkOpt,
 
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long)]
+    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
     pub effective_id: Principal,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.

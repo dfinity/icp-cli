@@ -1,6 +1,9 @@
 use crate::common::TestEnv;
 use icp_fs::fs::write;
-use predicates::{ord::eq, str::PredicateStrExt};
+use predicates::{
+    ord::eq,
+    str::{PredicateStrExt, contains},
+};
 use serial_test::serial;
 
 mod common;
@@ -44,12 +47,13 @@ fn sync_adapter_script_single() {
     // Wait for network
     env.ping_until_healthy(&project_dir);
 
-    // Deploy project
+    // Deploy project (it should sync as well)
     env.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
-        .success();
+        .success()
+        .stdout(contains("syncing").trim());
 
     // Invoke sync
     env.icp()
@@ -102,14 +106,15 @@ fn sync_adapter_script_multiple() {
     // Wait for network
     env.ping_until_healthy(&project_dir);
 
-    // Deploy project
+    // Deploy project (it should sync as well)
     env.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
-        .success();
+        .success()
+        .stdout(contains("first\nsecond").trim());
 
-    // Invoke build
+    // Invoke sync
     env.icp()
         .current_dir(project_dir)
         .args(["sync"])
@@ -174,7 +179,7 @@ async fn sync_adapter_static_assets() {
         .assert()
         .success();
 
-    // Invoke build
+    // Invoke sync
     env.icp()
         .current_dir(project_dir)
         .args(["sync"])

@@ -58,7 +58,7 @@ impl sync::Adapter for AssetsAdapter {
         // ic-asset requires a logger, so provide it a nop logger
         let logger = slog::Logger::root(slog::Discard, slog::o!());
 
-        // Prepare canister client inside the async block
+        // Prepare canister client
         let canister = Canister::builder()
             .with_canister_id(canister_id.to_owned())
             .with_agent(agent)

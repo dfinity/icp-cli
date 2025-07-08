@@ -1,5 +1,5 @@
 use crate::env::{Env, EnvGetAgentError, GetProjectError};
-use crate::options::NetworkOpt;
+use crate::options::{IdentityOpt, NetworkOpt};
 use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
@@ -52,6 +52,9 @@ pub struct CanisterCreateCmd {
     pub name: Option<String>,
 
     #[clap(flatten)]
+    pub identity: IdentityOpt,
+
+    #[clap(flatten)]
     pub network: NetworkOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
@@ -72,6 +75,7 @@ pub struct CanisterCreateCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
+    env.require_identity(cmd.identity.name());
     env.require_network(cmd.network.name());
 
     let pm = env.project()?;

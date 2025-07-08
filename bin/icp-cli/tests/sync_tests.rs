@@ -1,19 +1,20 @@
 use crate::common::TestEnv;
-use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
+use serial_test::serial;
 
 mod common;
 
 #[test]
+#[serial]
 fn sync_adapter_script_single() {
-    let env = TestEnv::new();
+    let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
 
-    // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    // Use vendored WASM
+    let wasm = env.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -23,13 +24,12 @@ fn sync_adapter_script_single() {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+              command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
           sync:
             adapter:
               type: script
               command: echo "syncing"
         "#,
-        f.path()
     );
 
     write(
@@ -37,6 +37,19 @@ fn sync_adapter_script_single() {
         pm,                           // contents
     )
     .expect("failed to write project manifest");
+
+    // Start network
+    let _g = env.start_network_in(&project_dir);
+
+    // Wait for network
+    env.ping_until_healthy(&project_dir);
+
+    // Deploy project
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .assert()
+        .success();
 
     // Invoke sync
     env.icp()
@@ -48,14 +61,15 @@ fn sync_adapter_script_single() {
 }
 
 #[test]
+#[serial]
 fn sync_adapter_script_multiple() {
-    let env = TestEnv::new();
+    let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
 
-    // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    // Use vendored WASM
+    let wasm = env.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -65,7 +79,7 @@ fn sync_adapter_script_multiple() {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+              command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
           sync:
             - adapter:
                 type: script
@@ -74,7 +88,6 @@ fn sync_adapter_script_multiple() {
                 type: script
                 command: echo "second"
         "#,
-        f.path()
     );
 
     write(
@@ -82,6 +95,19 @@ fn sync_adapter_script_multiple() {
         pm,                           // contents
     )
     .expect("failed to write project manifest");
+
+    // Start network
+    let _g = env.start_network_in(&project_dir);
+
+    // Wait for network
+    env.ping_until_healthy(&project_dir);
+
+    // Deploy project
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .assert()
+        .success();
 
     // Invoke build
     env.icp()

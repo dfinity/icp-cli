@@ -6,7 +6,7 @@ use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
 use snafu::Snafu;
 
-const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
+pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
 
 #[derive(Debug, Parser)]
 pub struct CanisterIDs {

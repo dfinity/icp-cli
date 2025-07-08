@@ -1,5 +1,6 @@
 use icp_adapter::{
-    motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter, script::ScriptAdapter,
+    assets::AssetsAdapter, motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter,
+    script::ScriptAdapter,
 };
 use serde::Deserialize;
 
@@ -75,9 +76,12 @@ impl BuildSteps {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum AdapterSync {
-    /// Represents a canister built using a custom script or command.
-    /// This variant allows for flexible build processes defined by the user.
+    /// Represents a canister synced using a custom script or command.
+    /// This variant allows for flexible sync processes defined by the user.
     Script(ScriptAdapter),
+
+    /// Represents syncing of an assets canister
+    Assets(AssetsAdapter),
 }
 
 /// Describes how the canister should be synced,

@@ -3,6 +3,7 @@ pub mod build;
 pub mod sync;
 
 // Adapter Types
+pub mod assets;
 pub mod motoko;
 pub mod pre_built;
 pub mod rust;

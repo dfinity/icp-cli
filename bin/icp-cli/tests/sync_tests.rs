@@ -1,19 +1,23 @@
 use crate::common::TestEnv;
-use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::write;
-use predicates::{ord::eq, str::PredicateStrExt};
+use predicates::{
+    ord::eq,
+    str::{PredicateStrExt, contains},
+};
+use serial_test::serial;
 
 mod common;
 
 #[test]
+#[serial]
 fn sync_adapter_script_single() {
-    let env = TestEnv::new();
+    let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
 
-    // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    // Use vendored WASM
+    let wasm = env.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -23,13 +27,12 @@ fn sync_adapter_script_single() {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+              command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
           sync:
             adapter:
               type: script
               command: echo "syncing"
         "#,
-        f.path()
     );
 
     write(
@@ -37,6 +40,20 @@ fn sync_adapter_script_single() {
         pm,                           // contents
     )
     .expect("failed to write project manifest");
+
+    // Start network
+    let _g = env.start_network_in(&project_dir);
+
+    // Wait for network
+    env.ping_until_healthy(&project_dir);
+
+    // Deploy project (it should sync as well)
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .assert()
+        .success()
+        .stdout(contains("syncing").trim());
 
     // Invoke sync
     env.icp()
@@ -48,14 +65,15 @@ fn sync_adapter_script_single() {
 }
 
 #[test]
+#[serial]
 fn sync_adapter_script_multiple() {
-    let env = TestEnv::new();
+    let env = TestEnv::new().with_dfx();
 
     // Setup project
     let project_dir = env.create_project_dir("icp");
 
-    // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    // Use vendored WASM
+    let wasm = env.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -65,7 +83,7 @@ fn sync_adapter_script_multiple() {
           build:
             adapter:
               type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+              command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
           sync:
             - adapter:
                 type: script
@@ -74,7 +92,6 @@ fn sync_adapter_script_multiple() {
                 type: script
                 command: echo "second"
         "#,
-        f.path()
     );
 
     write(
@@ -83,11 +100,101 @@ fn sync_adapter_script_multiple() {
     )
     .expect("failed to write project manifest");
 
-    // Invoke build
+    // Start network
+    let _g = env.start_network_in(&project_dir);
+
+    // Wait for network
+    env.ping_until_healthy(&project_dir);
+
+    // Deploy project (it should sync as well)
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .assert()
+        .success()
+        .stdout(contains("first\nsecond").trim());
+
+    // Invoke sync
     env.icp()
         .current_dir(project_dir)
         .args(["sync"])
         .assert()
         .success()
         .stdout(eq("first\nsecond").trim());
+}
+
+#[tokio::test]
+#[serial]
+async fn sync_adapter_static_assets() {
+    let env = TestEnv::new().with_dfx();
+
+    // Setup project
+    let project_dir = env.create_project_dir("icp");
+    let assets_dir = project_dir.join("www");
+
+    // Create assets directory
+    icp_fs::fs::create_dir_all(&assets_dir).expect("failed to create assets directory");
+
+    // Create simple index page
+    icp_fs::fs::write(assets_dir.join("index.html"), "hello").expect("failed to create index page");
+
+    // Project manifest
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            adapter:
+              type: pre-built
+              url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+              sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+
+          sync:
+            adapter:
+              type: assets
+              dirs:
+                - {assets_dir}
+        "#,
+    );
+
+    write(
+        project_dir.join("icp.yaml"), // path
+        pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = env.start_network_in(&project_dir);
+
+    // Wait for network
+    env.ping_until_healthy(&project_dir);
+
+    // Canister ID
+    let cid = "uqqxf-5h777-77774-qaaaa-cai";
+
+    // Deploy project
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", cid])
+        .assert()
+        .success();
+
+    // Invoke sync
+    env.icp()
+        .current_dir(project_dir)
+        .args(["sync"])
+        .assert()
+        .success();
+
+    // Verify that assets canister was synced
+    let resp = reqwest::get(format!("http://localhost:8000/?canisterId={cid}"))
+        .await
+        .expect("request failed");
+
+    let out = resp
+        .text()
+        .await
+        .expect("failed to read canister response body");
+
+    assert_eq!(out, "hello");
 }

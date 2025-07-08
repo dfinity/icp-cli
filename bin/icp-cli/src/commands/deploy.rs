@@ -1,3 +1,4 @@
+use crate::commands::canister::create::DEFAULT_EFFECTIVE_ID;
 use crate::env::GetProjectError;
 use crate::options::{IdentityOpt, NetworkOpt};
 use crate::{
@@ -30,10 +31,10 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    network: NetworkOpt,
+    pub network: NetworkOpt,
 
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long)]
+    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
     pub effective_id: Principal,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
@@ -161,6 +162,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             sync::Cmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
+                network: cmd.network.clone(),
             },
         )
         .await;

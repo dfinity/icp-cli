@@ -2,6 +2,7 @@ use crate::build::{self, AdapterCompileError};
 use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
 use camino::Utf8Path;
+use ic_agent::{Agent, export::Principal};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::process::{Command, Stdio};
@@ -128,7 +129,12 @@ pub enum ScriptAdapterCompileError {
 
 #[async_trait]
 impl sync::Adapter for ScriptAdapter {
-    async fn sync(&self, canister_path: &Utf8Path) -> Result<(), AdapterSyncError> {
+    async fn sync(
+        &self,
+        canister_path: &Utf8Path,
+        _canister_id: &Principal,
+        _agent: &Agent,
+    ) -> Result<(), AdapterSyncError> {
         // Normalize `command` field based on whether it's a single command or multiple.
         let cmds = self.command.as_vec();
 

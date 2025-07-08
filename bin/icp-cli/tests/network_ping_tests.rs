@@ -1,6 +1,7 @@
 mod common;
 
 use crate::common::TestEnv;
+use crate::common::predicates::json::field::json_field;
 use assert_cmd::assert::Assert;
 use camino::Utf8Path;
 use predicates::str::contains;
@@ -24,36 +25,18 @@ fn ping_local() {
         .map(|byte| Value::Number(serde_json::Number::from(byte)))
         .collect::<Vec<Value>>();
 
-    let output = testenv
+    testenv
         .icp()
         .current_dir(&project_dir)
         .args(["network", "ping"])
         .assert()
         .success()
-        .get_output()
-        .stdout
-        .clone();
-
-    let json: Value = serde_json::from_slice(&output).expect("stdout was not valid JSON");
-
-    let root_key = json
-        .get("root_key")
-        .expect("missing 'root_key' field")
-        .as_array()
-        .expect("'root_key' was not an array");
-
-    assert_eq!(
-        root_key, &expected_root_key,
-        "unexpected value for 'root_key'"
-    );
-
-    let status = json
-        .get("replica_health_status")
-        .expect("missing 'replica_health_status' field")
-        .as_str()
-        .expect("'replica_health_status' was not a string");
-
-    assert_eq!(status, "healthy", "unexpected replica_health_status");
+        .stdout(json_field("root_key").array().equals(expected_root_key))
+        .stdout(
+            json_field("replica_health_status")
+                .string()
+                .equals("healthy"),
+        );
 }
 
 #[test]
@@ -198,36 +181,22 @@ fn attempt_ping_other_project() {
         .map(|byte| Value::Number(serde_json::Number::from(byte)))
         .collect::<Vec<Value>>();
 
-    let output = testenv
+    testenv
         .icp()
         .current_dir(&project_dir_b)
         .args(["network", "ping"])
         .assert()
         .success()
-        .get_output()
-        .stdout
-        .clone();
-
-    let json: Value = serde_json::from_slice(&output).expect("stdout was not valid JSON");
-
-    let root_key = json
-        .get("root_key")
-        .expect("missing 'root_key' field")
-        .as_array()
-        .expect("'root_key' was not an array");
-
-    assert_eq!(
-        root_key, &expected_root_key,
-        "unexpected value for 'root_key'"
-    );
-
-    let status = json
-        .get("replica_health_status")
-        .expect("missing 'replica_health_status' field")
-        .as_str()
-        .expect("'replica_health_status' was not a string");
-
-    assert_eq!(status, "healthy", "unexpected replica_health_status");
+        .stdout(
+            json_field("root_key")
+                .array()
+                .equals(expected_root_key.clone()),
+        )
+        .stdout(
+            json_field("replica_health_status")
+                .string()
+                .equals("healthy"),
+        );
 
     let expected = format!(
         r#"Error: port 8000 is already in use by the local network of another project at {}"#,

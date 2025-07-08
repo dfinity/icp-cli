@@ -1,6 +1,8 @@
 mod common;
 
 use crate::common::TestEnv;
+use assert_cmd::assert::Assert;
+use camino::Utf8Path;
 use predicates::str::contains;
 use predicates::{ord::eq, str::PredicateStrExt};
 use serde_json::Value;
@@ -99,116 +101,66 @@ fn ping_cli_options() {
     )
     .unwrap();
 
+    enum NetworkArg<'a> {
+        DefaultLocal,
+        Positional(&'a str),
+        Flag(&'a str),
+        Environment(&'a str),
+    }
+    let assert_ping = |dir: &Utf8Path, param_type: NetworkArg| -> Assert {
+        let mut cmd = testenv.icp();
+        let cmd = cmd.current_dir(dir).args(["network", "ping"]);
+        let cmd = match param_type {
+            NetworkArg::DefaultLocal => cmd,
+            NetworkArg::Positional(network) => cmd.arg(network),
+            NetworkArg::Flag(network) => cmd.arg("--network").arg(network),
+            NetworkArg::Environment(network) => cmd.env("ICP_NETWORK", network),
+        };
+        cmd.assert()
+    };
+
     // each can ping their own network
-    testenv
-        .icp()
-        .current_dir(&project_dir_a)
-        .args(["network", "ping"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&project_dir_b)
-        .args(["network", "ping"])
-        .assert()
-        .success();
+    assert_ping(&project_dir_a, NetworkArg::DefaultLocal).success();
+    assert_ping(&project_dir_b, NetworkArg::DefaultLocal).success();
+
     // the project with no network cannot ping its own network
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping"])
-        .assert()
+    assert_ping(&no_network_project_dir, NetworkArg::DefaultLocal)
         .failure()
         .stderr(eq("Error: the local network for this project is not running").trim());
 
+    let project_a = "project-a";
+    let project_b = "project-b";
+
     // from a project not running a network, we can ping project-a and project-b
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "project-a"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "--network", "project-a"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .env("ICP_NETWORK", "project-a")
-        .args(["network", "ping"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "project-b"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "--network", "project-b"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .env("ICP_NETWORK", "project-b")
-        .args(["network", "ping"])
-        .assert()
-        .success();
+    assert_ping(&no_network_project_dir, NetworkArg::Positional(project_a)).success();
+    assert_ping(&no_network_project_dir, NetworkArg::Flag(project_a)).success();
+    assert_ping(&no_network_project_dir, NetworkArg::Environment(project_a)).success();
+
+    assert_ping(&no_network_project_dir, NetworkArg::Positional(project_b)).success();
+    assert_ping(&no_network_project_dir, NetworkArg::Flag(project_b)).success();
+    assert_ping(&no_network_project_dir, NetworkArg::Environment(project_b)).success();
 
     // PocketIc seems to use an identical root key for all local networks,
     // so we'll stop one network and make sure we can still ping the other one.
     child_guard_a.take().unwrap();
 
     // can't ping project-a anymore
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "project-a"])
-        .assert()
+    assert_ping(&no_network_project_dir, NetworkArg::Positional(project_a))
         .failure()
         .stderr(contains("failed to ping the network"));
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "--network", "project-a"])
-        .assert()
+
+    assert_ping(&no_network_project_dir, NetworkArg::Flag(project_a))
         .failure()
         .stderr(contains("failed to ping the network"));
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping"])
-        .env("ICP_NETWORK", "project-a")
-        .assert()
+
+    assert_ping(&no_network_project_dir, NetworkArg::Environment(project_a))
         .failure()
         .stderr(contains("failed to ping the network"));
 
     // can still ping project-b
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "project-b"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .args(["network", "ping", "--network", "project-b"])
-        .assert()
-        .success();
-    testenv
-        .icp()
-        .current_dir(&no_network_project_dir)
-        .env("ICP_NETWORK", "project-b")
-        .args(["network", "ping"])
-        .assert()
-        .success();
+    assert_ping(&no_network_project_dir, NetworkArg::Positional(project_b)).success();
+    assert_ping(&no_network_project_dir, NetworkArg::Flag(project_b)).success();
+    assert_ping(&no_network_project_dir, NetworkArg::Environment(project_b)).success();
 }
 
 #[file_serial(default_local_network)]

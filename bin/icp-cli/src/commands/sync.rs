@@ -1,4 +1,5 @@
 use crate::env::{Env, GetProjectError};
+use crate::options::IdentityOpt;
 use clap::Parser;
 use icp_adapter::sync::{Adapter, AdapterSyncError};
 use icp_canister::model::AdapterSync;
@@ -8,9 +9,14 @@ use snafu::Snafu;
 pub struct Cmd {
     /// The name of the canister within the current project
     pub name: Option<String>,
+
+    #[clap(flatten)]
+    pub identity: IdentityOpt,
 }
 
 pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
+    env.require_identity(cmd.identity.name());
+
     // Load the project manifest, which defines the canisters to be synced.
     let pm = env.project()?;
 

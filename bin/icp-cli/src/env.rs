@@ -14,7 +14,7 @@ pub struct Env {
     dirs: IcpCliDirs,
 
     /// The name of the identity to use, set from the command line.
-    identity_name: Option<String>,
+    identity_name: OnceLock<Option<String>>,
     /// The identity to use for the agent, instantiated on-demand.
     identity: TryOnceLock<Arc<dyn Identity>>,
 
@@ -36,15 +36,10 @@ pub struct Env {
 }
 
 impl Env {
-    pub fn new(
-        dirs: IcpCliDirs,
-        identity_name: Option<String>,
-        id_store: IdStore,
-        artifact_store: ArtifactStore,
-    ) -> Self {
+    pub fn new(dirs: IcpCliDirs, id_store: IdStore, artifact_store: ArtifactStore) -> Self {
         Self {
             dirs,
-            identity_name,
+            identity_name: OnceLock::new(),
             identity: TryOnceLock::new(),
             id_store,
             artifact_store,
@@ -71,6 +66,26 @@ impl Env {
     pub fn project(&self) -> Result<&Project, GetProjectError> {
         self.project
             .get_or_try_init(|| self.find_and_load_project())
+    }
+
+    pub fn require_identity(&self, identity_name: Option<&str>) {
+        match self.identity_name.get() {
+            Some(existing) if existing.as_deref() == identity_name => {
+                // Already set to the same value — fine, do nothing
+            }
+            Some(existing) => {
+                // Already set to a different value — not allowed
+                panic!(
+                    "IdentityOpt was already set to a different value: {existing:?} vs {identity_name:?}"
+                );
+            }
+            None => {
+                // Not yet set — store it
+                self.identity_name
+                    .set(identity_name.map(|s| s.to_string()))
+                    .expect("Should only fail if already set");
+            }
+        }
     }
 
     pub fn require_network(&self, network_name: &str) {
@@ -112,11 +127,16 @@ impl Env {
 
 impl Env {
     fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
-        if let Some(identity) = &self.identity_name {
+        let identity_name = self
+            .identity_name
+            .get()
+            .cloned()
+            .expect("call require_identity before load_identity");
+        if let Some(identity) = identity_name {
             Ok(icp_identity::key::load_identity(
                 &self.dirs,
                 &icp_identity::manifest::load_identity_list(&self.dirs)?,
-                identity,
+                &identity,
                 || todo!(),
             )?)
         } else {

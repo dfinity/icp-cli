@@ -1,5 +1,5 @@
 use crate::env::GetProjectError;
-use crate::options::NetworkOpt;
+use crate::options::{IdentityOpt, NetworkOpt};
 use crate::{
     commands::{
         build,
@@ -25,6 +25,9 @@ pub struct Cmd {
     /// Specifies the mode of canister installation.
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub mode: String,
+
+    #[clap(flatten)]
+    pub identity: IdentityOpt,
 
     #[clap(flatten)]
     network: NetworkOpt,
@@ -90,6 +93,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             env,
             CanisterCreateCmd {
                 name: Some(c.name.to_owned()),
+                identity: cmd.identity.clone(),
                 network: cmd.network.clone(),
 
                 // Ids
@@ -131,6 +135,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             CanisterInstallCmd {
                 name: Some(c.name.to_owned()),
                 mode: cmd.mode.to_owned(),
+                identity: cmd.identity.clone(),
                 network: cmd.network.clone(),
             },
         )
@@ -155,6 +160,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
             env,
             sync::Cmd {
                 name: Some(c.name.to_owned()),
+                identity: cmd.identity.clone(),
             },
         )
         .await;

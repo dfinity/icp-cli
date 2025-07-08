@@ -1,5 +1,5 @@
 use crate::env::{EnvGetAgentError, GetProjectError};
-use crate::options::NetworkOpt;
+use crate::options::{IdentityOpt, NetworkOpt};
 use crate::{env::Env, store_id::LookupError as LookupIdError};
 use clap::Parser;
 use ic_agent::AgentError;
@@ -11,10 +11,14 @@ pub struct CanisterStopCmd {
     pub name: String,
 
     #[clap(flatten)]
+    identity: IdentityOpt,
+
+    #[clap(flatten)]
     network: NetworkOpt,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterStopCmd) -> Result<(), CanisterStopError> {
+    env.require_identity(cmd.identity.name());
     env.require_network(cmd.network.name());
 
     // Load the project manifest, which defines the canisters to be built.

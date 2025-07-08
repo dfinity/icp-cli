@@ -1,5 +1,5 @@
 use crate::env::EnvGetAgentError;
-use crate::options::NetworkOpt;
+use crate::options::{IdentityOpt, NetworkOpt};
 use crate::{candid::print_candid_for_term, env::Env};
 use candid_parser::IDLArgs;
 use clap::Parser;
@@ -10,6 +10,9 @@ use snafu::{ResultExt, Snafu};
 #[derive(Parser, Debug)]
 pub struct CanisterCallCmd {
     #[clap(flatten)]
+    identity: IdentityOpt,
+
+    #[clap(flatten)]
     network: NetworkOpt,
 
     pub canister: String,
@@ -18,6 +21,7 @@ pub struct CanisterCallCmd {
 }
 
 pub async fn exec(env: &Env, cmd: CanisterCallCmd) -> Result<(), CanisterCallError> {
+    env.require_identity(cmd.identity.name());
     env.require_network(cmd.network.name());
 
     let agent = env.agent()?;

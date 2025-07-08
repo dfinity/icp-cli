@@ -15,9 +15,6 @@ mod store_id;
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, global = true)]
-    identity: Option<String>,
-
     #[arg(long, default_value = ".icp/ids.json")]
     id_store: Utf8PathBuf,
 
@@ -44,10 +41,9 @@ async fn main() -> Result<(), ProgramError> {
 
     // Setup environment
     let env = Env::new(
-        dirs,         // dirs
-        cli.identity, // identity
-        ids,          // id_store
-        artifacts,    // artifact_store
+        dirs,      // dirs
+        ids,       // id_store
+        artifacts, // artifact_store
     );
 
     commands::dispatch(&env, cli.command).await?;

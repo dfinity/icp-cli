@@ -1,5 +1,5 @@
 use crate::env::{EnvGetAgentError, GetProjectError};
-use crate::options::NetworkOpt;
+use crate::options::{IdentityOpt, NetworkOpt};
 use crate::{
     env::Env, store_artifact::LookupError as LookupArtifactError,
     store_id::LookupError as LookupIdError,
@@ -19,10 +19,14 @@ pub struct CanisterInstallCmd {
     pub mode: String,
 
     #[clap(flatten)]
+    pub identity: IdentityOpt,
+
+    #[clap(flatten)]
     pub network: NetworkOpt,
 }
 
 pub async fn exec(env: &Env, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
+    env.require_identity(cmd.identity.name());
     env.require_network(cmd.network.name());
 
     let pm = env.project()?;

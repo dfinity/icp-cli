@@ -6,7 +6,6 @@ use ic_asset::error::SyncError;
 use ic_utils::{Canister, canister::CanisterBuilderError};
 use serde::Deserialize;
 use snafu::Snafu;
-use tokio::task::JoinError;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -88,7 +87,4 @@ pub enum AssetsAdapterSyncError {
 
     #[snafu(transparent)]
     Sync { source: SyncError },
-
-    #[snafu(transparent)]
-    Join { source: JoinError },
 }

@@ -117,3 +117,79 @@ fn sync_adapter_script_multiple() {
         .success()
         .stdout(eq("first\nsecond").trim());
 }
+
+#[tokio::test]
+#[serial]
+async fn sync_adapter_static_assets() {
+    let env = TestEnv::new().with_dfx();
+
+    // Setup project
+    let project_dir = env.create_project_dir("icp");
+    let assets_dir = project_dir.join("www");
+
+    // Create assets directory
+    icp_fs::fs::create_dir_all(&assets_dir).expect("failed to create assets directory");
+
+    // Create simple index page
+    icp_fs::fs::write(assets_dir.join("index.html"), "hello").expect("failed to create index page");
+
+    // Project manifest
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            adapter:
+              type: pre-built
+              url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+              sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+
+          sync:
+            adapter:
+              type: assets
+              dirs:
+                - {assets_dir}
+        "#,
+    );
+
+    write(
+        project_dir.join("icp.yaml"), // path
+        pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = env.start_network_in(&project_dir);
+
+    // Wait for network
+    env.ping_until_healthy(&project_dir);
+
+    // Canister ID
+    let cid = "uqqxf-5h777-77774-qaaaa-cai";
+
+    // Deploy project
+    env.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", cid])
+        .assert()
+        .success();
+
+    // Invoke build
+    env.icp()
+        .current_dir(project_dir)
+        .args(["sync"])
+        .assert()
+        .success();
+
+    // Verify that assets canister was synced
+    let resp = reqwest::get(format!("http://localhost:8000/?canisterId={cid}"))
+        .await
+        .expect("request failed");
+
+    let out = resp
+        .text()
+        .await
+        .expect("failed to read canister response body");
+
+    assert_eq!(out, "hello");
+}

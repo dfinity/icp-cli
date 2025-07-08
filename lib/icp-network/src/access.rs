@@ -82,7 +82,7 @@ pub fn get_network_access(
                     .context(NoPortDescriptorSnafu { port })?;
                 if descriptor.id != port_descriptor.id {
                     return Err(GetNetworkAccessError::NetworkRunningOtherProject {
-                        network: nd.network_name().to_string(),
+                        network: port_descriptor.network,
                         port: port_descriptor.gateway.port,
                         project_dir: port_descriptor.project_dir,
                     });
@@ -146,7 +146,7 @@ pub enum GetNetworkAccessError {
     NetworkNotRunning { network: String },
 
     #[snafu(display(
-        "this project is configured to use port {port} for the {network} network, but it is already in use by another project at {project_dir}"
+        "port {port} is already in use by the {network} network of another project at {project_dir}"
     ))]
     NetworkRunningOtherProject {
         network: String,

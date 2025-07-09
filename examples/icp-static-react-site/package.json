@@ -1,0 +1,11 @@
+{
+  "name": "hello-react",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "vite": "^5.0.0"
+  }
+}

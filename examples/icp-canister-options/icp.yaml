@@ -1,0 +1,17 @@
+canister:
+  name: my-canister
+
+  build:
+    - adapter:
+        type: pre-built
+        path: ../icp-pre-built/dist/hello_world.wasm
+        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+  create:
+    options:
+      compute_allocation: 1
+      memory_allocation: 4294967296
+      freezing_threshold: 2592000
+      reserved_cycles_limit: 1000000000000
+      wasm_memory_limit: 1073741824
+      wasm_memory_threshold: 536870912

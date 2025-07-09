@@ -1,5 +1,5 @@
 canister:
-  name: icp-static-assets
+  name: my-canister
 
   build:
     - adapter:

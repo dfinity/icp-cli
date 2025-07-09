@@ -1,5 +1,5 @@
 canister:
-  name: icp-template-rust
+  name: my-canister
   build:
     adapter:
       type: script

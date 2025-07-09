@@ -2,17 +2,3 @@
 
 # Local (directories)
 .icp
-canisters
-networks
-
-# Local (artifacts)
-ids.json
-artifacts
-
-# Local (manifests)
-icp.yaml
-canister.yaml
-
-# Examples (manifests)
-!examples/**/icp.yaml
-!examples/**/canister.yaml

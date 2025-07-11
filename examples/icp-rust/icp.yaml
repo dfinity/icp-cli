@@ -1,6 +1,8 @@
 canister:
-  name: icp-template-rust
+  name: my-canister
   build:
     adapter:
       type: script
-      command: cargo build --target wasm32-unknown-unknown --release --locked
+      commands:
+        - cargo build --target wasm32-unknown-unknown --release --locked
+        - sh -c 'mv target/wasm32-unknown-unknown/release/icp_template_rust.wasm "$ICP_WASM_OUTPUT_PATH"'

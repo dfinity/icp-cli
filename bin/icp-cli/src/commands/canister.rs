@@ -6,6 +6,7 @@ use crate::env::Env;
 pub mod call;
 pub mod create;
 pub mod delete;
+pub mod info;
 pub mod install;
 pub mod start;
 pub mod status;
@@ -22,6 +23,7 @@ pub enum CanisterSubcmd {
     Call(call::CanisterCallCmd),
     Create(create::CanisterCreateCmd),
     Delete(delete::CanisterDeleteCmd),
+    Info(info::CanisterInfoCmd),
     Install(install::CanisterInstallCmd),
     Start(start::CanisterStartCmd),
     Status(status::CanisterStatusCmd),
@@ -33,6 +35,7 @@ pub async fn dispatch(env: &Env, cmd: Cmd) -> Result<(), CanisterCommandError> {
         CanisterSubcmd::Call(subcmd) => call::exec(env, subcmd).await?,
         CanisterSubcmd::Create(subcmd) => create::exec(env, subcmd).await?,
         CanisterSubcmd::Delete(subcmd) => delete::exec(env, subcmd).await?,
+        CanisterSubcmd::Info(subcmd) => info::exec(env, subcmd).await?,
         CanisterSubcmd::Install(subcmd) => install::exec(env, subcmd).await?,
         CanisterSubcmd::Start(subcmd) => start::exec(env, subcmd).await?,
         CanisterSubcmd::Status(subcmd) => status::exec(env, subcmd).await?,
@@ -54,6 +57,9 @@ pub enum CanisterCommandError {
 
     #[snafu(transparent)]
     Start { source: start::CanisterStartError },
+
+    #[snafu(transparent)]
+    Info { source: info::CanisterInfoError },
 
     #[snafu(transparent)]
     Install {

@@ -118,9 +118,9 @@ impl Default for SyncSteps {
     }
 }
 
-/// Canister options, such as compute and memory allocation.
+/// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct CanisterOptions {
+pub struct CanisterSettings {
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
     pub compute_allocation: Option<u64>,
 
@@ -140,12 +140,6 @@ pub struct CanisterOptions {
     pub wasm_memory_threshold: Option<u64>,
 }
 
-/// Configuration for canister creation
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct Create {
-    pub options: CanisterOptions,
-}
-
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
@@ -158,10 +152,10 @@ pub struct CanisterManifest {
     /// code into a WebAssembly module, including the adapter to use.
     pub build: BuildSteps,
 
-    /// The configuration specifying the various options when
+    /// The configuration specifying the various settings when
     /// creating the canister.
     #[serde(default)]
-    pub create: Create,
+    pub settings: CanisterSettings,
 
     /// The configuration specifying how to sync the canister
     #[serde(default)]

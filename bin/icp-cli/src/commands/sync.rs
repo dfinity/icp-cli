@@ -5,7 +5,7 @@ use crate::{
 };
 use clap::Parser;
 use icp_adapter::sync::{Adapter, AdapterSyncError};
-use icp_canister::model::AdapterSync;
+use icp_canister::model::SyncStep;
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]
@@ -61,10 +61,10 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         for step in c.sync.steps {
             match step {
                 // Synchronize the canister using the custom script adapter.
-                AdapterSync::Script(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
+                SyncStep::Script(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
 
                 // Synchronize the canister using the assets adapter.
-                AdapterSync::Assets(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
+                SyncStep::Assets(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
             };
         }
     }

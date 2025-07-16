@@ -410,7 +410,7 @@ mod tests {
 
     use icp_adapter::script::{CommandField, ScriptAdapter};
     use icp_canister::model::{
-        AdapterBuild, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
+        BuildStep, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
     };
     use icp_network::{BindPort, NetworkConfig};
 
@@ -468,7 +468,7 @@ mod tests {
             CanisterManifest {
                 name: "canister-1".into(),
                 build: BuildSteps {
-                    steps: vec![AdapterBuild::Script(ScriptAdapter {
+                    steps: vec![BuildStep::Script(ScriptAdapter {
                         command: CommandField::Command(
                             "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
@@ -528,7 +528,7 @@ mod tests {
             CanisterManifest {
                 name: "canister-1".into(),
                 build: BuildSteps {
-                    steps: vec![AdapterBuild::Script(ScriptAdapter {
+                    steps: vec![BuildStep::Script(ScriptAdapter {
                         command: CommandField::Command(
                             "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),

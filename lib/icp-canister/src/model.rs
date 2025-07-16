@@ -16,7 +16,7 @@ use serde::Deserialize;
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum AdapterBuild {
+pub enum BuildStep {
     /// Represents a canister built using the Rust programming language.
     /// This variant holds the configuration specific to Rust-based builds.
     Rust(RustAdapter),
@@ -39,7 +39,7 @@ pub enum AdapterBuild {
 /// including the adapters and build steps responsible for the build.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct BuildSteps {
-    pub steps: Vec<AdapterBuild>,
+    pub steps: Vec<BuildStep>,
 }
 
 /// Identifies the type of adapter used to sync the canister,
@@ -54,7 +54,7 @@ pub struct BuildSteps {
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum AdapterSync {
+pub enum SyncStep {
     /// Represents a canister synced using a custom script or command.
     /// This variant allows for flexible sync processes defined by the user.
     Script(ScriptAdapter),
@@ -67,7 +67,7 @@ pub enum AdapterSync {
 /// including the adapters and steps responsible for the sync.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct SyncSteps {
-    pub steps: Vec<AdapterSync>,
+    pub steps: Vec<SyncStep>,
 }
 
 /// Canister settings, such as compute and memory allocation.

@@ -20,7 +20,7 @@ pub struct CanisterIDs {
 }
 
 #[derive(Debug, Default, Parser)]
-pub struct CanisterOptions {
+pub struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
     #[clap(long)]
     pub compute_allocation: Option<u64>,
@@ -65,9 +65,9 @@ pub struct CanisterCreateCmd {
     #[clap(long)]
     pub controller: Vec<Principal>,
 
-    // Resource-related options and thresholds for the new canister.
+    // Resource-related settings and thresholds for the new canister.
     #[clap(flatten)]
-    pub options: CanisterOptions,
+    pub settings: CanisterSettings,
 
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
     #[clap(long, short = 'q')]
@@ -146,44 +146,44 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
 
         // Compute
         builder = builder.with_optional_compute_allocation(
-            cmd.options
+            cmd.settings
                 .compute_allocation
-                .or(c.create.options.compute_allocation),
+                .or(c.settings.compute_allocation),
         );
 
         // Memory
         builder = builder.with_optional_memory_allocation(
-            cmd.options
+            cmd.settings
                 .memory_allocation
-                .or(c.create.options.memory_allocation),
+                .or(c.settings.memory_allocation),
         );
 
         // Freezing Threshold
         builder = builder.with_optional_freezing_threshold(
-            cmd.options
+            cmd.settings
                 .freezing_threshold
-                .or(c.create.options.freezing_threshold),
+                .or(c.settings.freezing_threshold),
         );
 
         // Reserved Cycles (limit)
         builder = builder.with_optional_reserved_cycles_limit(
-            cmd.options
+            cmd.settings
                 .reserved_cycles_limit
-                .or(c.create.options.reserved_cycles_limit),
+                .or(c.settings.reserved_cycles_limit),
         );
 
         // Wasm (memory limit)
         builder = builder.with_optional_wasm_memory_limit(
-            cmd.options
+            cmd.settings
                 .wasm_memory_limit
-                .or(c.create.options.wasm_memory_limit),
+                .or(c.settings.wasm_memory_limit),
         );
 
         // Wasm (memory threshold)
         builder = builder.with_optional_wasm_memory_threshold(
-            cmd.options
+            cmd.settings
                 .wasm_memory_threshold
-                .or(c.create.options.wasm_memory_threshold),
+                .or(c.settings.wasm_memory_threshold),
         );
 
         // Logs

@@ -408,7 +408,7 @@ mod tests {
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
     use icp_canister::model::{
-        AdapterBuild, Build, BuildSteps, CanisterManifest, Create, SyncSteps,
+        AdapterBuild, Build, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
     };
     use icp_network::{BindPort, NetworkConfig};
 
@@ -469,7 +469,7 @@ mod tests {
                         ),
                     }),
                 }),
-                create: Create::default(),
+                settings: CanisterSettings::default(),
                 sync: SyncSteps::default(),
             },
         )];
@@ -529,7 +529,7 @@ mod tests {
                         ),
                     }),
                 }),
-                create: Create::default(),
+                settings: CanisterSettings::default(),
                 sync: SyncSteps::default(),
             },
         )];

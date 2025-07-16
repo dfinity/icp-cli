@@ -6,7 +6,7 @@ use crate::{
         build,
         canister::{
             self,
-            create::{CanisterCreateCmd, CanisterCreateError, CanisterIDs, CanisterOptions},
+            create::{CanisterCreateCmd, CanisterCreateError, CanisterIDs, CanisterSettings},
             install::{CanisterInstallCmd, CanisterInstallError},
         },
         sync,
@@ -106,8 +106,8 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
                 // Controllers
                 controller: cmd.controller.to_owned(),
 
-                // Options
-                options: CanisterOptions {
+                // Settings
+                settings: CanisterSettings {
                     ..Default::default()
                 },
 

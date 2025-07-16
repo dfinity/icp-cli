@@ -54,7 +54,7 @@ fn canister_create() {
 
 #[test]
 #[serial]
-fn canister_create_with_options() {
+fn canister_create_with_settings() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
@@ -72,14 +72,13 @@ fn canister_create_with_options() {
             adapter:
               type: script
               command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-          create:
-            options:
-              compute_allocation: 10
-              memory_allocation: 4294967296
-              freezing_threshold: 2592000
-              reserved_cycles_limit: 1000000000000
-              wasm_memory_limit: 1073741824
-              wasm_memory_threshold: 536870912
+          settings:
+            compute_allocation: 10
+            memory_allocation: 4294967296
+            freezing_threshold: 2592000
+            reserved_cycles_limit: 1000000000000
+            wasm_memory_limit: 1073741824
+            wasm_memory_threshold: 536870912
         "#,
         f.path()
     );
@@ -108,7 +107,7 @@ fn canister_create_with_options() {
         .assert()
         .success();
 
-    // Verify creation options
+    // Verify creation settings
     env.icp()
         .current_dir(&project_dir)
         .args(["canister", "status", "my-canister"])
@@ -128,7 +127,7 @@ fn canister_create_with_options() {
 
 #[test]
 #[serial]
-fn canister_create_with_options_cmdline_override() {
+fn canister_create_with_settings_cmdline_override() {
     let env = TestEnv::new().with_dfx();
 
     // Setup project
@@ -146,9 +145,8 @@ fn canister_create_with_options_cmdline_override() {
             adapter:
               type: script
               command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-          create:
-            options:
-              compute_allocation: 10
+          settings:
+            compute_allocation: 10
         "#,
         f.path()
     );
@@ -179,7 +177,7 @@ fn canister_create_with_options_cmdline_override() {
         .assert()
         .success();
 
-    // Verify creation options
+    // Verify creation settings
     env.icp()
         .current_dir(&project_dir)
         .args(["canister", "status", "my-canister"])

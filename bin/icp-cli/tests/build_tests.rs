@@ -20,9 +20,9 @@ fn build_adapter_script_single() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         f.path()
     );
@@ -57,14 +57,12 @@ fn build_adapter_script_multiple() {
         canister:
           name: my-canister
           build:
-            - adapter:
-                type: script
+            steps:
+              - type: script
                 command: echo "before"
-            - adapter:
-                type: script
+              - type: script
                 command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-            - adapter:
-                type: script
+              - type: script
                 command: echo "after"
         "#,
         f.path()

@@ -58,8 +58,8 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // Get canister principal ID
         let cid = env.id_store.lookup(&c.name)?;
 
-        for step in c.sync.into_vec() {
-            match step.adapter {
+        for step in c.sync.steps {
+            match step {
                 // Synchronize the canister using the custom script adapter.
                 AdapterSync::Script(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
 

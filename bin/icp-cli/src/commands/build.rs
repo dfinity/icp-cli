@@ -54,8 +54,8 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // Prepare a path for our output wasm
         let wasm_output_path = build_dir.path().join("out.wasm");
 
-        for step in c.build.into_vec() {
-            match step.adapter {
+        for step in c.build.steps {
+            match step {
                 // Compile using the custom script adapter.
                 AdapterBuild::Script(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?

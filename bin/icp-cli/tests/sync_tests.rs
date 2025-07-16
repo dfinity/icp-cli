@@ -25,13 +25,13 @@ fn sync_adapter_script_single() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
           sync:
-            adapter:
-              type: script
-              command: echo "syncing"
+            steps:
+              - type: script
+                command: echo "syncing"
         "#,
     );
 
@@ -81,15 +81,14 @@ fn sync_adapter_script_multiple() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
           sync:
-            - adapter:
-                type: script
+            steps:
+              - type: script
                 command: echo "first"
-            - adapter:
-                type: script
+              - type: script
                 command: echo "second"
         "#,
     );
@@ -144,16 +143,16 @@ async fn sync_adapter_static_assets() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
-              sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+            steps:
+              - type: pre-built
+                url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
 
           sync:
-            adapter:
-              type: assets
-              dirs:
-                - {assets_dir}
+            steps:
+              - type: assets
+                dirs:
+                  - {assets_dir}
         "#,
     );
 

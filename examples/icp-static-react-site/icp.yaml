@@ -2,24 +2,22 @@ canister:
   name: my-canister
 
   build:
-    - adapter:
-        type: script
+    steps:
+      - type: script
         commands:
           - sh -c 'command -v npm >/dev/null 2>&1 || { echo >&2 "npm not found. To install npm, see https://docs.npmjs.com/downloading-and-installing-node-js-and-npm \n"; exit 1; }'
           - npm install
           - npm run build
 
-    - adapter:
-        type: pre-built
+      - type: pre-built
         url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
         sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
 
   sync:
-    - adapter:
-        type: script
+    steps:
+      - type: script
         command: npm run build
 
-    - adapter:
-        type: assets
+      - type: assets
         dirs:
           - dist

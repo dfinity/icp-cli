@@ -22,9 +22,9 @@ fn canister_create() {
     canister:
       name: my-canister
       build:
-        adapter:
-          type: script
-          command: echo hi
+        steps:
+          - type: script
+            command: echo hi
     "#;
 
     write(
@@ -69,9 +69,9 @@ fn canister_create_with_settings() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           settings:
             compute_allocation: 10
             memory_allocation: 4294967296
@@ -142,9 +142,9 @@ fn canister_create_with_settings_cmdline_override() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           settings:
             compute_allocation: 10
         "#,

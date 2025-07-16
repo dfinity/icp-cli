@@ -21,9 +21,9 @@ fn build_adapter_pre_built_path() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              path: {wasm}
+            steps:
+              - type: pre-built
+                path: {wasm}
         "#,
     );
 
@@ -65,10 +65,10 @@ fn build_adapter_pre_built_path_invalid_checksum() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              path: {wasm}
-              sha256: invalid
+            steps:
+              - type: pre-built
+                path: {wasm}
+                sha256: invalid
         "#,
     );
 
@@ -115,10 +115,10 @@ fn build_adapter_pre_built_path_valid_checksum() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              path: {wasm}
-              sha256: {actual}
+            steps:
+              - type: pre-built
+                path: {wasm}
+                sha256: {actual}
         "#,
     );
 
@@ -157,9 +157,9 @@ fn build_adapter_pre_built_url() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              url: http://{addr}/canister.wasm
+            steps:
+              - type: pre-built
+                url: http://{addr}/canister.wasm
         "#,
     );
 
@@ -205,10 +205,10 @@ fn build_adapter_pre_built_url_invalid_checksum() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              url: http://{addr}/canister.wasm
-              sha256: invalid
+            steps:
+              - type: pre-built
+                url: http://{addr}/canister.wasm
+                sha256: invalid
         "#,
     );
 
@@ -259,10 +259,10 @@ fn build_adapter_pre_built_url_valid_checksum() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: pre-built
-              url: http://{addr}/canister.wasm
-              sha256: {actual}
+            steps:
+              - type: pre-built
+                url: http://{addr}/canister.wasm
+                sha256: {actual}
         "#,
     );
 

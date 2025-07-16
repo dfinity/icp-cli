@@ -263,9 +263,9 @@ fn deploy_to_other_projects_network() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         wasm,
     );
@@ -345,9 +345,9 @@ fn round_robin_routing() {
         canister:
           name: my-canister
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#,
         wasm,
     );

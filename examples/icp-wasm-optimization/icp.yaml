@@ -2,20 +2,18 @@ canister:
   name: my-canister
 
   build:
-    - adapter:
-        type: pre-built
+    steps:
+      - type: pre-built
         path: ../icp-pre-built/dist/hello_world.wasm
         sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 
-    - adapter:
-        type: script
+      - type: script
         commands:
           - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
           - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}-opt" shrink --keep-name-section'
           - sh -c 'mv "${ICP_WASM_OUTPUT_PATH}-opt" "$ICP_WASM_OUTPUT_PATH"'
 
-    - adapter:
-        type: script
+      - type: script
         commands:
           - sh -c 'command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }'
           - sh -c 'gzip --no-name "$ICP_WASM_OUTPUT_PATH"'

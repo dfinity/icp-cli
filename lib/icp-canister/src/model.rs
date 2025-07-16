@@ -16,7 +16,7 @@ use serde::Deserialize;
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum AdapterBuild {
+pub enum BuildStep {
     /// Represents a canister built using the Rust programming language.
     /// This variant holds the configuration specific to Rust-based builds.
     Rust(RustAdapter),
@@ -36,31 +36,10 @@ pub enum AdapterBuild {
 }
 
 /// Describes how the canister should be built into WebAssembly,
-/// including the adapter responsible for the build.
+/// including the adapters and build steps responsible for the build.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Build {
-    pub adapter: AdapterBuild,
-}
-
-/// Represents one or more build steps.
-/// This enum allows the `build` field in `canister.yaml` to be either
-/// a single build configuration or a list of them.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum BuildSteps {
-    Single(Build),
-    Sequence(Vec<Build>),
-}
-
-impl BuildSteps {
-    /// Consumes the enum and returns a `Vec<Build>`, ensuring
-    /// the build logic can uniformly handle both single and multiple build steps.
-    pub fn into_vec(self) -> Vec<Build> {
-        match self {
-            BuildSteps::Single(build) => vec![build],
-            BuildSteps::Sequence(builds) => builds,
-        }
-    }
+pub struct BuildSteps {
+    pub steps: Vec<BuildStep>,
 }
 
 /// Identifies the type of adapter used to sync the canister,
@@ -75,7 +54,7 @@ impl BuildSteps {
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum AdapterSync {
+pub enum SyncStep {
     /// Represents a canister synced using a custom script or command.
     /// This variant allows for flexible sync processes defined by the user.
     Script(ScriptAdapter),
@@ -85,37 +64,10 @@ pub enum AdapterSync {
 }
 
 /// Describes how the canister should be synced,
-/// including the adapter responsible for the sync.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Sync {
-    pub adapter: AdapterSync,
-}
-
-/// Represents one or more sync steps.
-/// This enum allows the `sync` field in `canister.yaml` to be either
-/// a single sync configuration or a list of them.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum SyncSteps {
-    Single(Sync),
-    Sequence(Vec<Sync>),
-}
-
-impl SyncSteps {
-    /// Consumes the enum and returns a `Vec<Sync>`, ensuring
-    /// the sync logic can uniformly handle both single and multiple sync steps.
-    pub fn into_vec(self) -> Vec<Sync> {
-        match self {
-            SyncSteps::Single(sync) => vec![sync],
-            SyncSteps::Sequence(syncs) => syncs,
-        }
-    }
-}
-
-impl Default for SyncSteps {
-    fn default() -> Self {
-        Self::Sequence(vec![])
-    }
+/// including the adapters and steps responsible for the sync.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct SyncSteps {
+    pub steps: Vec<SyncStep>,
 }
 
 /// Canister settings, such as compute and memory allocation.
@@ -148,14 +100,14 @@ pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
-    /// The build configuration specifying how to compile the canister's source
-    /// code into a WebAssembly module, including the adapter to use.
-    pub build: BuildSteps,
-
     /// The configuration specifying the various settings when
     /// creating the canister.
     #[serde(default)]
     pub settings: CanisterSettings,
+
+    /// The build configuration specifying how to compile the canister's source
+    /// code into a WebAssembly module, including the adapter to use.
+    pub build: BuildSteps,
 
     /// The configuration specifying how to sync the canister
     #[serde(default)]

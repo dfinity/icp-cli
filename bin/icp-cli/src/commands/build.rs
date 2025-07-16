@@ -5,7 +5,7 @@ use crate::{env::Env, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
-use icp_canister::model::AdapterBuild;
+use icp_canister::model::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
 
@@ -54,25 +54,25 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // Prepare a path for our output wasm
         let wasm_output_path = build_dir.path().join("out.wasm");
 
-        for step in c.build.into_vec() {
-            match step.adapter {
+        for step in c.build.steps {
+            match step {
                 // Compile using the custom script adapter.
-                AdapterBuild::Script(adapter) => {
+                BuildStep::Script(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
 
                 // Compile using the Motoko adapter.
-                AdapterBuild::Motoko(adapter) => {
+                BuildStep::Motoko(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
 
                 // Compile using the Rust adapter.
-                AdapterBuild::Rust(adapter) => {
+                BuildStep::Rust(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
 
                 // Compile using the Pre-built adapter.
-                AdapterBuild::Prebuilt(adapter) => {
+                BuildStep::Prebuilt(adapter) => {
                     adapter.compile(&canister_path, &wasm_output_path).await?
                 }
             };

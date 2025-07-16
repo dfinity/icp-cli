@@ -1,14 +1,17 @@
-use crate::directory::ProjectDirectory;
-use crate::model::{CanistersField, default_networks};
+use std::collections::HashMap;
+use std::str::FromStr;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
+use pathdiff::diff_utf8_paths;
+use snafu::{ResultExt, Snafu};
+
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NetworkConfig, NetworkName};
-use pathdiff::diff_utf8_paths;
-use snafu::{ResultExt, Snafu};
-use std::collections::HashMap;
-use std::str::FromStr;
+
+use crate::directory::ProjectDirectory;
+use crate::model::{CanistersField, default_networks};
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -403,14 +406,16 @@ pub struct NoSuchNetworkError {
 
 #[cfg(test)]
 mod tests {
-    use crate::directory::ProjectDirectory;
-    use crate::project::{LoadProjectManifestError, Project};
     use camino_tempfile::tempdir;
+
     use icp_adapter::script::{CommandField, ScriptAdapter};
     use icp_canister::model::{
-        AdapterBuild, Build, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
+        BuildStep, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
     };
     use icp_network::{BindPort, NetworkConfig};
+
+    use crate::directory::ProjectDirectory;
+    use crate::project::{LoadProjectManifestError, Project};
 
     #[test]
     fn empty_project() {
@@ -442,9 +447,9 @@ mod tests {
         canister:
           name: canister-1
           build:
-            adapter:
-              type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
         std::fs::write(
@@ -462,13 +467,13 @@ mod tests {
             project_dir.path().to_owned(),
             CanisterManifest {
                 name: "canister-1".into(),
-                build: BuildSteps::Single(Build {
-                    adapter: AdapterBuild::Script(ScriptAdapter {
+                build: BuildSteps {
+                    steps: vec![BuildStep::Script(ScriptAdapter {
                         command: CommandField::Command(
                             "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
-                    }),
-                }),
+                    })],
+                },
                 settings: CanisterSettings::default(),
                 sync: SyncSteps::default(),
             },
@@ -490,9 +495,9 @@ mod tests {
         let cm = r#"
         name: canister-1
         build:
-          adapter:
-            type: script
-            command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+          steps:
+            - type: script
+              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
         std::fs::write(
@@ -522,13 +527,13 @@ mod tests {
             project_dir.path().join("canister-1"),
             CanisterManifest {
                 name: "canister-1".into(),
-                build: BuildSteps::Single(Build {
-                    adapter: AdapterBuild::Script(ScriptAdapter {
+                build: BuildSteps {
+                    steps: vec![BuildStep::Script(ScriptAdapter {
                         command: CommandField::Command(
                             "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
-                    }),
-                }),
+                    })],
+                },
                 settings: CanisterSettings::default(),
                 sync: SyncSteps::default(),
             },

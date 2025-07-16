@@ -186,6 +186,8 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
                 .or(c.settings.wasm_memory_threshold),
         );
 
+        // Canister Environment
+
         // Logs
         builder = builder.with_optional_log_visibility(
             Some(LogVisibility::Public), //

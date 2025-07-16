@@ -7,6 +7,7 @@ use icp_network::{NetworkConfig, NetworkDirectory};
 use snafu::{ResultExt, Snafu};
 use std::io;
 
+#[derive(Debug)]
 pub struct ProjectDirectory {
     structure: ProjectDirectoryStructure,
 }

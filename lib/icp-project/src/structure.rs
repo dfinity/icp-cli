@@ -1,5 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
+#[derive(Debug)]
 pub struct ProjectDirectoryStructure {
     root: Utf8PathBuf,
 }

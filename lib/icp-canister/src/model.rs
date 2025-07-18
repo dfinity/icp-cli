@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use icp_adapter::{
     assets::AssetsAdapter, motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter,
     script::ScriptAdapter,
@@ -70,12 +72,6 @@ pub struct SyncSteps {
     pub steps: Vec<SyncStep>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Variable {
-    pub key: String,
-    pub value: String,
-}
-
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct CanisterSettings {
@@ -97,7 +93,7 @@ pub struct CanisterSettings {
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
     pub wasm_memory_threshold: Option<u64>,
 
-    pub environment: Option<Vec<Variable>>,
+    pub environment_variables: Option<HashMap<String, String>>,
 }
 
 /// Represents the manifest describing a single canister.

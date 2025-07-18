@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 pub type NetworkName = String;
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case")]
 pub enum NetworkConfig {
     Managed(ManagedNetworkModel),

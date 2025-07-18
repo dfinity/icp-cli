@@ -1,5 +1,7 @@
-use icp_canister::model::CanisterManifest;
 use serde::Deserialize;
+
+use icp_canister::model::CanisterManifest;
+use icp_network::NetworkConfig;
 
 /// Provides the default glob pattern for locating canister manifests
 /// when no `canisters` are explicitly specified in the YAML.
@@ -14,10 +16,11 @@ pub fn default_canisters() -> CanistersField {
 
 /// Provides the default glob pattern for locating network definition files
 /// when the `networks` field is not explicitly specified in the YAML.
-pub fn default_networks() -> Vec<String> {
+pub fn default_networks() -> Vec<NetworkField> {
     ["networks/*"]
         .into_iter()
         .map(String::from)
+        .map(NetworkField::Path)
         .collect::<Vec<_>>()
 }
 
@@ -26,6 +29,21 @@ pub fn default_networks() -> Vec<String> {
 pub enum CanistersField {
     Canister(CanisterManifest),
     Canisters(Vec<String>),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct NetworkManifest {
+    pub name: String,
+
+    #[serde(flatten)]
+    pub config: NetworkConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum NetworkField {
+    Path(String),
+    Definition(NetworkManifest),
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -43,5 +61,5 @@ pub struct ProjectManifest {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: Option<Vec<String>>,
+    pub networks: Option<Vec<NetworkField>>,
 }

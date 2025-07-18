@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
-use icp_canister::model::CanisterManifest;
+use icp_canister::model::{CanisterManifest, CanisterSettings};
 use icp_network::NetworkConfig;
 
 /// Provides the default glob pattern for locating canister manifests
@@ -46,6 +48,21 @@ pub enum NetworkField {
     Definition(NetworkManifest),
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct EnvironmentManifest {
+    // environment name
+    pub name: String,
+
+    // target network for canister deployment
+    pub network: Option<String>,
+
+    // canisters the environment should contain
+    pub canisters: Option<Vec<String>>,
+
+    // canister settings overrides
+    pub settings: Option<HashMap<String, CanisterSettings>>,
+}
+
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
 #[derive(Debug, Deserialize)]
@@ -62,4 +79,8 @@ pub struct ProjectManifest {
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
     pub networks: Option<Vec<NetworkField>>,
+
+    // Projects define environments to which canisters can be deployed
+    // An environment is always associated with a project-defined network
+    pub environments: Option<Vec<EnvironmentManifest>>,
 }

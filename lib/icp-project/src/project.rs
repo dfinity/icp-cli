@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -12,7 +12,7 @@ use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NetworkConfig, NetworkName};
 
 use crate::directory::ProjectDirectory;
-use crate::model::{CanistersField, NetworkField, default_networks};
+use crate::model::{CanistersField, EnvironmentManifest, NetworkField, default_networks};
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -30,6 +30,9 @@ pub struct Project {
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
     pub networks: HashMap<NetworkName, NetworkConfig>,
+
+    // List of environment definitions as defined by the project.
+    pub environments: Vec<EnvironmentManifest>,
 }
 
 impl Project {
@@ -180,7 +183,7 @@ impl Project {
                 // Duplicate
                 Entry::Occupied(e) => {
                     return Err(LoadProjectManifestError::DuplicateNetwork {
-                        name: e.key().to_owned(),
+                        network: e.key().to_owned(),
                     });
                 }
 
@@ -196,6 +199,43 @@ impl Project {
             .entry("local".to_string())
             .or_insert(NetworkConfig::local_default());
 
+        // Environments
+        let environments = pm.environments.unwrap_or(vec![EnvironmentManifest {
+            name: "local".to_string(),
+            network: None,
+            canisters: None,
+            settings: None,
+        }]);
+
+        // Complain about environments that point to non-existent networks
+        for e in &environments {
+            if let Some(network) = &e.network {
+                if !networks.contains_key(network) {
+                    return Err(LoadProjectManifestError::EnvironmentNetworkDoesntExist {
+                        environment: e.name.to_owned(),
+                        network: network.to_owned(),
+                    });
+                }
+            }
+        }
+
+        // Complain about environments that point to non-existent canisters
+        let cnames: HashSet<String> = canisters.iter().map(|(_, c)| c.name.to_owned()).collect();
+
+        for e in &environments {
+            if let Some(cs) = &e.canisters {
+                for cname in cs {
+                    // Check against project's canisters
+                    if !cnames.contains(cname) {
+                        return Err(LoadProjectManifestError::EnvironmentCanisterDoesntExist {
+                            environment: e.name.to_owned(),
+                            canister: cname.to_owned(),
+                        });
+                    }
+                }
+            }
+        }
+
         Ok(Project {
             // The project directory.
             directory: pd,
@@ -205,6 +245,9 @@ impl Project {
 
             // Network definitions for the project.
             networks,
+
+            // Environment definitions for the project.
+            environments,
         })
     }
 
@@ -358,8 +401,19 @@ pub enum LoadProjectManifestError {
         source: LoadNetworkConfigurationsError,
     },
 
-    #[snafu(display("project defines two similarly named networks: '{name}'"))]
-    DuplicateNetwork { name: String },
+    #[snafu(display("project contains two similarly named networks: '{network}'"))]
+    DuplicateNetwork { network: String },
+
+    #[snafu(display("environment '{environment}' targets non-existent network '{network}'"))]
+    EnvironmentNetworkDoesntExist {
+        environment: String,
+        network: String,
+    },
+    #[snafu(display("environment '{environment}' deploys non-existent canistrer '{canister}'"))]
+    EnvironmentCanisterDoesntExist {
+        environment: String,
+        canister: String,
+    },
 }
 
 #[derive(Debug, Snafu)]

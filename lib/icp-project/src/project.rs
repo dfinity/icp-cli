@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::str::FromStr;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -11,7 +12,7 @@ use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NetworkConfig, NetworkName};
 
 use crate::directory::ProjectDirectory;
-use crate::model::{CanistersField, default_networks};
+use crate::model::{CanistersField, NetworkField, default_networks};
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -150,7 +151,50 @@ impl Project {
 
         // Networks
         let networks = pm.networks.unwrap_or(default_networks());
-        let networks = Self::load_networks(&pd, networks)?;
+
+        let (paths, mut networks) = (
+            //
+            // Paths
+            networks
+                .iter()
+                .filter_map(|v| match v {
+                    NetworkField::Path(path) => Some(path.to_owned()),
+                    NetworkField::Definition(_) => None,
+                })
+                .collect::<Vec<String>>(),
+            //
+            // Manifests
+            networks
+                .iter()
+                .filter_map(|v| match v {
+                    NetworkField::Path(_) => None,
+                    NetworkField::Definition(m) => Some((m.name.to_owned(), m.config.clone())),
+                })
+                .collect::<HashMap<String, NetworkConfig>>(),
+        );
+
+        // Load network paths
+        let paths = Project::gather_network_paths(&pd, paths)?;
+        for (name, cfg) in Project::load_network_configurations(&pd, paths)? {
+            match networks.entry(name) {
+                // Duplicate
+                Entry::Occupied(e) => {
+                    return Err(LoadProjectManifestError::DuplicateNetwork {
+                        name: e.key().to_owned(),
+                    });
+                }
+
+                // Ok
+                Entry::Vacant(e) => {
+                    e.insert(cfg);
+                }
+            }
+        }
+
+        // Ensure a `local` network is defined
+        networks
+            .entry("local".to_string())
+            .or_insert(NetworkConfig::local_default());
 
         Ok(Project {
             // The project directory.
@@ -162,25 +206,6 @@ impl Project {
             // Network definitions for the project.
             networks,
         })
-    }
-
-    fn load_networks(
-        pd: &ProjectDirectory,
-        network_paths: Vec<String>,
-    ) -> Result<HashMap<NetworkName, NetworkConfig>, LoadNetworksError> {
-        let network_paths = Self::gather_network_paths(pd, network_paths)?;
-
-        let mut networks = Self::load_network_configurations(pd, network_paths)?;
-
-        // If no local network is defined, add a default one
-        if !networks.contains_key("local") {
-            networks.insert(
-                NetworkName::from_str("local").unwrap(),
-                NetworkConfig::local_default(),
-            );
-        }
-
-        Ok(networks)
     }
 
     // For network paths that are glob patterns, it's ok if they don't match any files.
@@ -326,7 +351,15 @@ pub enum LoadProjectManifestError {
     },
 
     #[snafu(transparent)]
-    LoadNetworks { source: LoadNetworksError },
+    GatherNetworkPaths { source: GatherNetworkPathsError },
+
+    #[snafu(transparent)]
+    LoadNetworkConfigurations {
+        source: LoadNetworkConfigurationsError,
+    },
+
+    #[snafu(display("project defines two similarly named networks: '{name}'"))]
+    DuplicateNetwork { name: String },
 }
 
 #[derive(Debug, Snafu)]
@@ -353,17 +386,6 @@ pub enum LoadNetworkConfigurationsError {
 
     #[snafu(display("unable to determine network name from path '{network_path}'"))]
     NoNetworkName { network_path: Utf8PathBuf },
-}
-
-#[derive(Debug, Snafu)]
-pub enum LoadNetworksError {
-    #[snafu(transparent)]
-    GatherNetworkPaths { source: GatherNetworkPathsError },
-
-    #[snafu(transparent)]
-    LoadNetworkConfigurations {
-        source: LoadNetworkConfigurationsError,
-    },
 }
 
 #[derive(Debug, Snafu)]

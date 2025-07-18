@@ -1,12 +1,12 @@
 use serde::{Deserialize, Deserializer};
 
 /// A "managed network" is a network that we start, configure, stop.
-#[derive(Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default)]
 pub struct ManagedNetworkModel {
     pub gateway: GatewayModel,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct GatewayModel {
     #[serde(default = "default_host")]
     pub host: String,

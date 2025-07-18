@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum RouteField {
     /// Single url
@@ -12,7 +12,7 @@ pub enum RouteField {
 
 /// A "connected network" is a network that we connect to but don't manage.
 /// Typical examples are mainnet or testnets.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConnectedNetworkModel {
     /// The URL(s) this network can be reached at.

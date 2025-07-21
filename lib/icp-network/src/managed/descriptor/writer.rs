@@ -1,4 +1,4 @@
-use crate::config::model::network_descriptor::NetworkDescriptorModel;
+use crate::config::NetworkDescriptorModel;
 use camino::Utf8PathBuf;
 use fd_lock::RwLockWriteGuard;
 use icp_fs::fs::remove_file;

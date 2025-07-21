@@ -1,4 +1,4 @@
-use crate::config::model::network_descriptor::NetworkDescriptorModel;
+use crate::config::NetworkDescriptorModel;
 use crate::managed::descriptor::fixed_port_lock::FixedPortLock;
 use crate::managed::descriptor::network_lock::NetworkLock;
 use crate::managed::descriptor::writer::NetworkDescriptorWriter;

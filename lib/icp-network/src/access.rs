@@ -1,6 +1,6 @@
 use crate::access::GetNetworkAccessError::{CreateRouteProvider, DecodeRootKey};
 use crate::access::NetworkAccessRouting::{RouteProvider, SingleUrl};
-use crate::config::model::connected::RouteField;
+use crate::config::RouteField;
 use crate::{NetworkConfig, NetworkDirectory};
 use camino::Utf8PathBuf;
 use ic_agent::agent::route_provider::RoundRobinRouteProvider;

@@ -14,13 +14,10 @@ pub struct CanisterStartCmd {
     identity: IdentityOpt,
 
     #[clap(flatten)]
-    network: EnvironmentOpt,
+    environment: EnvironmentOpt,
 }
 
 pub async fn exec(ctx: &Context, cmd: CanisterStartCmd) -> Result<(), CanisterStartError> {
-    ctx.require_identity(cmd.identity.name());
-    ctx.require_network(cmd.network.name());
-
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
 
@@ -31,9 +28,46 @@ pub async fn exec(ctx: &Context, cmd: CanisterStartCmd) -> Result<(), CanisterSt
         .find(|(_, c)| cmd.name == c.name)
         .ok_or(CanisterStartError::CanisterNotFound { name: cmd.name })?;
 
+    // Load target environment
+    let env = pm
+        .environments
+        .iter()
+        .find(|&v| v.name == cmd.environment.name())
+        .ok_or(CanisterStartError::EnvironmentNotFound {
+            name: cmd.environment.name().to_owned(),
+        })?;
+
+    // Collect environment canisters
+    let ecs = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
+
+    // Ensure canister is included in the environment
+    if !ecs.contains(&c.name) {
+        return Err(CanisterStartError::EnvironmentCanister {
+            environment: env.name.to_owned(),
+            canister: c.name.to_owned(),
+        });
+    }
+
     // Lookup the canister id
     let cid = ctx.id_store.lookup(&c.name)?;
 
+    // Load identity
+    ctx.require_identity(cmd.identity.name());
+
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    ctx.require_network(
+        env.network
+            .as_ref()
+            .expect("no network specified in environment"),
+    );
+
+    // Prepare agent
     let agent = ctx.agent()?;
 
     // Management Interface
@@ -50,14 +84,23 @@ pub enum CanisterStartError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
-    #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
-
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
 
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
+    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
+
     #[snafu(transparent)]
     LookupCanisterId { source: LookupIdError },
+
+    #[snafu(transparent)]
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(transparent)]
     Agent { source: AgentError },

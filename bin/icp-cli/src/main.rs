@@ -6,7 +6,6 @@ use context::Context;
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
-mod candid;
 mod commands;
 mod context;
 mod options;

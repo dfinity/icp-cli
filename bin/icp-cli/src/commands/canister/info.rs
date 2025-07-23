@@ -23,6 +23,13 @@ pub async fn exec(ctx: &Context, cmd: CanisterInfoCmd) -> Result<(), CanisterInf
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
 
+    // Select canister to query
+    let (_, c) = pm
+        .canisters
+        .iter()
+        .find(|(_, c)| cmd.name == c.name)
+        .ok_or(CanisterInfoError::CanisterNotFound { name: cmd.name })?;
+
     // Load target environment
     let env = pm
         .environments
@@ -39,13 +46,6 @@ pub async fn exec(ctx: &Context, cmd: CanisterInfoCmd) -> Result<(), CanisterInf
             .map(|(_, c)| c.name.to_owned())
             .collect(),
     );
-
-    // Select canister to query
-    let (_, c) = pm
-        .canisters
-        .iter()
-        .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CanisterInfoError::CanisterNotFound { name: cmd.name })?;
 
     // Ensure canister is included in the environment
     if !ecs.contains(&c.name) {
@@ -69,6 +69,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInfoCmd) -> Result<(), CanisterInf
             .expect("no network specified in environment"),
     );
 
+    // Prepare agent
     let agent = ctx.agent()?;
 
     // Management Interface
@@ -88,14 +89,11 @@ pub enum CanisterInfoError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
-
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
 
     #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
     EnvironmentCanister {
@@ -105,6 +103,9 @@ pub enum CanisterInfoError {
 
     #[snafu(transparent)]
     LookupCanisterId { source: LookupIdError },
+
+    #[snafu(transparent)]
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(transparent)]
     Agent { source: AgentError },

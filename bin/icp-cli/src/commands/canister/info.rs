@@ -23,6 +23,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInfoCmd) -> Result<(), CanisterInf
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
 
+    // Load target environment
     let env = pm
         .environments
         .iter()
@@ -31,13 +32,6 @@ pub async fn exec(ctx: &Context, cmd: CanisterInfoCmd) -> Result<(), CanisterInf
             name: cmd.environment.name().to_owned(),
         })?;
 
-    // Select canister to query
-    let (_, c) = pm
-        .canisters
-        .iter()
-        .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CanisterInfoError::CanisterNotFound { name: cmd.name })?;
-
     // Collect environment canisters
     let ecs = env.canisters.clone().unwrap_or(
         pm.canisters
@@ -45,6 +39,13 @@ pub async fn exec(ctx: &Context, cmd: CanisterInfoCmd) -> Result<(), CanisterInf
             .map(|(_, c)| c.name.to_owned())
             .collect(),
     );
+
+    // Select canister to query
+    let (_, c) = pm
+        .canisters
+        .iter()
+        .find(|(_, c)| cmd.name == c.name)
+        .ok_or(CanisterInfoError::CanisterNotFound { name: cmd.name })?;
 
     // Ensure canister is included in the environment
     if !ecs.contains(&c.name) {

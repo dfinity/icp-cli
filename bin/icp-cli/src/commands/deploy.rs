@@ -1,6 +1,6 @@
 use crate::commands::canister::create::DEFAULT_EFFECTIVE_ID;
 use crate::context::GetProjectError;
-use crate::options::{IdentityOpt, EnvironmentOpt};
+use crate::options::{EnvironmentOpt, IdentityOpt};
 use crate::{
     commands::{
         build,
@@ -31,7 +31,7 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: EnvironmentOpt,
+    pub environment: EnvironmentOpt,
 
     /// The effective canister ID to use when calling the management canister.
     #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
@@ -95,7 +95,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             CanisterCreateCmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
-                network: cmd.network.clone(),
+                environment: cmd.environment.clone(),
 
                 // Ids
                 ids: CanisterIDs {
@@ -137,7 +137,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 name: Some(c.name.to_owned()),
                 mode: cmd.mode.to_owned(),
                 identity: cmd.identity.clone(),
-                network: cmd.network.clone(),
+                network: cmd.environment.clone(),
             },
         )
         .await;
@@ -162,7 +162,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             sync::Cmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
-                network: cmd.network.clone(),
+                network: cmd.environment.clone(),
             },
         )
         .await;

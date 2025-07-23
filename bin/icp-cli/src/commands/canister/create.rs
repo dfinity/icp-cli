@@ -55,7 +55,7 @@ pub struct CanisterCreateCmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: EnvironmentOpt,
+    pub environment: EnvironmentOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
@@ -75,18 +75,28 @@ pub struct CanisterCreateCmd {
 }
 
 pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
-    ctx.require_identity(cmd.identity.name());
-    ctx.require_network(cmd.network.name());
-
+    // Load project
     let pm = ctx.project()?;
 
-    let agent = ctx.agent()?;
+    // Load target environment
+    let env = pm
+        .environments
+        .iter()
+        .find(|&v| v.name == cmd.environment.name())
+        .ok_or(CanisterCreateError::EnvironmentNotFound {
+            name: cmd.environment.name().to_owned(),
+        })?;
 
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+    // Collect environment canisters
+    let ecs = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
 
     // Choose canisters to create
-    let canisters = pm
+    let cs = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -96,14 +106,32 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
         .collect::<Vec<_>>();
 
     // Check if selected canister exists
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CanisterCreateError::CanisterNotFound { name });
+    if let Some(name) = &cmd.name {
+        if cs.is_empty() {
+            return Err(CanisterCreateError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+    }
+
+    // Filter for environment canisters
+    let cs = cs
+        .iter()
+        .filter(|(_, c)| ecs.contains(&c.name))
+        .collect::<Vec<_>>();
+
+    // Ensure canister is included in the environment
+    if let Some(name) = &cmd.name {
+        if !ecs.contains(name) {
+            return Err(CanisterCreateError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
         }
     }
 
     // Skip created canisters
-    let canisters = canisters
+    let cs = cs
         .into_iter()
         .filter(|&(_, c)| {
             match ctx.id_store.lookup(&c.name) {
@@ -120,11 +148,28 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
         .collect::<Vec<_>>();
 
     // Verify at least one canister is available to create
-    if canisters.is_empty() {
+    if cs.is_empty() {
         return Err(CanisterCreateError::NoCanisters);
     }
 
-    for (_, c) in canisters {
+    // Load identity
+    ctx.require_identity(cmd.identity.name());
+
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    ctx.require_network(
+        env.network
+            .as_ref()
+            .expect("no network specified in environment"),
+    );
+
+    // Prepare agent
+    let agent = ctx.agent()?;
+
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+
+    for (_, c) in cs {
         // Create canister
         let mut builder = mgmt.create_canister();
 
@@ -212,11 +257,20 @@ pub enum CanisterCreateError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
     #[snafu(transparent)]
     GetAgent { source: ContextGetAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
 
     #[snafu(display("no canisters available to create"))]
     NoCanisters,

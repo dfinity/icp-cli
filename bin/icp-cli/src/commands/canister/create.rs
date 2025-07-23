@@ -1,4 +1,4 @@
-use crate::env::{Env, EnvGetAgentError, GetProjectError};
+use crate::context::{Context, EnvGetAgentError, GetProjectError};
 use crate::options::{IdentityOpt, NetworkOpt};
 use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
@@ -74,13 +74,13 @@ pub struct CanisterCreateCmd {
     pub quiet: bool,
 }
 
-pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
-    env.require_identity(cmd.identity.name());
-    env.require_network(cmd.network.name());
+pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
+    ctx.require_identity(cmd.identity.name());
+    ctx.require_network(cmd.network.name());
 
-    let pm = env.project()?;
+    let pm = ctx.project()?;
 
-    let agent = env.agent()?;
+    let agent = ctx.agent()?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
@@ -106,7 +106,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
     let canisters = canisters
         .into_iter()
         .filter(|&(_, c)| {
-            match env.id_store.lookup(&c.name) {
+            match ctx.id_store.lookup(&c.name) {
                 // Exists (skip)
                 Ok(_) => false,
 
@@ -195,7 +195,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         let (cid,) = builder.await?;
 
         // Register the canister ID
-        env.id_store.register(&c.name, &cid)?;
+        ctx.id_store.register(&c.name, &cid)?;
 
         if cmd.quiet {
             println!("{}", cid);

@@ -1,6 +1,6 @@
-use crate::common::guard::ChildGuard;
-use crate::common::network::{TestNetwork, TestNetworkForDfx};
-use crate::common::os::PATH_SEPARATOR;
+use crate::common::ChildGuard;
+use crate::common::PATH_SEPARATOR;
+use crate::common::{TestNetwork, TestNetworkForDfx};
 use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::Utf8TempDir;
@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::fs::create_dir_all;
 
-pub struct TestEnv {
+pub struct TestContext {
     home_dir: Utf8TempDir,
     bin_dir: Utf8PathBuf,
     asset_dir: Utf8PathBuf,
@@ -18,7 +18,7 @@ pub struct TestEnv {
     os_path: OsString,
 }
 
-impl TestEnv {
+impl TestContext {
     pub fn new() -> Self {
         let home_dir = camino_tempfile::tempdir().expect("failed to create temp home dir");
         let bin_dir = home_dir.path().join("bin");

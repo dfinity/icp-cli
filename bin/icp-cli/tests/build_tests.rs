@@ -1,4 +1,4 @@
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::write;
 
@@ -6,10 +6,10 @@ mod common;
 
 #[test]
 fn build_adapter_script_single() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
@@ -34,7 +34,7 @@ fn build_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -43,10 +43,10 @@ fn build_adapter_script_single() {
 
 #[test]
 fn build_adapter_script_multiple() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
@@ -75,7 +75,7 @@ fn build_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()

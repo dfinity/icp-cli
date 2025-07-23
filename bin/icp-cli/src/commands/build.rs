@@ -1,7 +1,7 @@
 use std::io;
 
-use crate::env::GetProjectError;
-use crate::{env::Env, store_artifact::SaveError};
+use crate::context::GetProjectError;
+use crate::{context::Context, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
@@ -24,9 +24,9 @@ pub struct Cmd {
 /// 3. Normalizes the canister definitions into a unified list.
 /// 4. Iterates through each defined canister and invokes its respective build adapter
 ///    (Rust, Motoko, or custom script) to compile it into WebAssembly.
-pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = env.project()?;
+    let pm = ctx.project()?;
 
     // Choose canisters to build
     let canisters = pm
@@ -89,7 +89,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
         // Save the wasm artifact
-        env.artifact_store.save(&c.name, &wasm)?;
+        ctx.artifact_store.save(&c.name, &wasm)?;
     }
 
     Ok(())

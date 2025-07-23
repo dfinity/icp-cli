@@ -1,4 +1,4 @@
-use crate::env::Env;
+use crate::context::Context;
 use bip39::{Language, Mnemonic};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{ArgGroup, Parser};
@@ -40,10 +40,10 @@ pub struct ImportCmd {
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
-pub fn exec(env: &Env, cmd: ImportCmd) -> Result<(), ImportCmdError> {
+pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
     if let Some(from_pem) = cmd.from_pem {
         import_from_pem(
-            env,
+            ctx,
             &cmd.name,
             &from_pem,
             cmd.decryption_password_from_file.as_deref(),
@@ -51,14 +51,14 @@ pub fn exec(env: &Env, cmd: ImportCmd) -> Result<(), ImportCmdError> {
         )?;
     } else if let Some(path) = &cmd.from_seed_file {
         let phrase = fs::read_to_string(path).map_err(DeriveKeyError::from)?;
-        import_from_seed_phrase(env, &cmd.name, &phrase)?;
+        import_from_seed_phrase(ctx, &cmd.name, &phrase)?;
     } else if cmd.read_seed_phrase {
         let phrase = Password::new()
             .with_prompt("Enter seed phrase")
             .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(env, &cmd.name, &phrase)?;
+        import_from_seed_phrase(ctx, &cmd.name, &phrase)?;
     } else {
         unreachable!();
     }
@@ -76,7 +76,7 @@ pub enum ImportCmdError {
 }
 
 fn import_from_pem(
-    env: &Env,
+    ctx: &Context,
     name: &str,
     path: &Utf8Path,
     decryption_password_file: Option<&Utf8Path>,
@@ -129,7 +129,7 @@ fn import_from_pem(
         )?,
         _ => unreachable!(),
     };
-    create_identity(env.dirs(), name, key, CreateFormat::Plaintext)?;
+    create_identity(ctx.dirs(), name, key, CreateFormat::Plaintext)?;
     Ok(())
 }
 
@@ -264,11 +264,11 @@ fn import_sec1(
     }
 }
 
-fn import_from_seed_phrase(env: &Env, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {
+fn import_from_seed_phrase(ctx: &Context, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
     let key = derive_default_key_from_seed(&mnemonic);
     create_identity(
-        env.dirs(),
+        ctx.dirs(),
         name,
         IdentityKey::Secp256k1(key),
         CreateFormat::Plaintext,

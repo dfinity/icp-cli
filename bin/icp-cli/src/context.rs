@@ -1,4 +1,4 @@
-use crate::env::GetProjectError::ProjectNotFound;
+use crate::context::GetProjectError::ProjectNotFound;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -10,7 +10,7 @@ use icp_project::project::{LoadProjectManifestError, NoSuchNetworkError, Project
 use snafu::Snafu;
 use std::sync::{Arc, OnceLock};
 
-pub struct Env {
+pub struct Context {
     dirs: IcpCliDirs,
 
     /// The name of the identity to use, set from the command line.
@@ -35,7 +35,7 @@ pub struct Env {
     agent: TryOnceLock<Agent>,
 }
 
-impl Env {
+impl Context {
     pub fn new(dirs: IcpCliDirs, id_store: IdStore, artifact_store: ArtifactStore) -> Self {
         Self {
             dirs,
@@ -125,7 +125,7 @@ impl Env {
     }
 }
 
-impl Env {
+impl Context {
     fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
         let identity_name = self
             .identity_name

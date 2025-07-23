@@ -1,6 +1,6 @@
-use crate::env::EnvGetAgentError;
+use crate::context::EnvGetAgentError;
 use crate::options::{IdentityOpt, NetworkOpt};
-use crate::{candid::print_candid_for_term, env::Env};
+use crate::{candid::print_candid_for_term, context::Context};
 use candid_parser::IDLArgs;
 use clap::Parser;
 use dialoguer::console::Term;
@@ -20,16 +20,16 @@ pub struct CanisterCallCmd {
     pub args: String,
 }
 
-pub async fn exec(env: &Env, cmd: CanisterCallCmd) -> Result<(), CanisterCallError> {
-    env.require_identity(cmd.identity.name());
-    env.require_network(cmd.network.name());
+pub async fn exec(ctx: &Context, cmd: CanisterCallCmd) -> Result<(), CanisterCallError> {
+    ctx.require_identity(cmd.identity.name());
+    ctx.require_network(cmd.network.name());
 
-    let agent = env.agent()?;
+    let agent = ctx.agent()?;
 
     let canister_id = if let Ok(principal) = cmd.canister.parse() {
         principal
     } else {
-        env.id_store.lookup(&cmd.canister)?
+        ctx.id_store.lookup(&cmd.canister)?
     };
     let args = candid_parser::parse_idl_args(&cmd.args).context(DecodeArgsSnafu)?;
     let arg_bytes = args.to_bytes().context(EncodeArgsSnafu)?;

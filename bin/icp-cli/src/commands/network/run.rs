@@ -1,4 +1,4 @@
-use crate::env::{Env, GetProjectError};
+use crate::context::{Context, GetProjectError};
 use clap::Parser;
 use icp_network::{NetworkConfig, RunNetworkError, run_network};
 use icp_project::project::NoSuchNetworkError;
@@ -8,8 +8,8 @@ use snafu::Snafu;
 #[derive(Parser, Debug)]
 pub struct Cmd {}
 
-pub async fn exec(env: &Env, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
-    let project = env.project()?;
+pub async fn exec(ctx: &Context, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
+    let project = ctx.project()?;
     let pd = &project.directory;
     let network_name = "local";
     let config = project.get_network_config(network_name)?;
@@ -18,7 +18,7 @@ pub async fn exec(env: &Env, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
             network_name: network_name.to_string(),
         });
     };
-    let nd = pd.network(network_name, env.dirs().port_descriptor_dir());
+    let nd = pd.network(network_name, ctx.dirs().port_descriptor_dir());
     let project_root = pd.structure().root();
 
     eprintln!("Project root: {project_root}");

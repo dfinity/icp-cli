@@ -1,6 +1,6 @@
 mod common;
 
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::str::contains;
 use predicates::{ord::eq, str::PredicateStrExt};
@@ -9,18 +9,17 @@ use serial_test::file_serial;
 #[test]
 #[file_serial(default_local_network)]
 fn hello() {
-    let testenv = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
-    let icp_project_dir = testenv.create_project_dir("icp");
+    let icp_project_dir = ctx.create_project_dir("icp");
 
-    let _child_guard = testenv.start_network_in(&icp_project_dir);
+    let _child_guard = ctx.start_network_in(&icp_project_dir);
 
-    testenv.configure_dfx_local_network();
+    ctx.configure_dfx_local_network();
 
-    testenv.ping_until_healthy(&icp_project_dir);
+    ctx.ping_until_healthy(&icp_project_dir);
 
-    testenv
-        .dfx()
+    ctx.dfx()
         .arg("new")
         .arg("hello")
         .arg("--type")
@@ -32,17 +31,15 @@ fn hello() {
         .assert()
         .success();
 
-    let project_dir = testenv.home_path().join("hello");
-    testenv
-        .dfx()
+    let project_dir = ctx.home_path().join("hello");
+    ctx.dfx()
         .current_dir(&project_dir)
         .arg("deploy")
         .arg("--no-wallet")
         .assert()
         .success();
 
-    testenv
-        .dfx()
+    ctx.dfx()
         .current_dir(&project_dir)
         .arg("canister")
         .arg("call")
@@ -53,7 +50,7 @@ fn hello() {
         .success()
         .stdout(contains(r#"("Hello, test!")"#));
 
-    let output = testenv
+    let output = ctx
         .dfx()
         .current_dir(&project_dir)
         .arg("canister")
@@ -82,26 +79,25 @@ fn hello() {
 
 #[test]
 fn network_random_port() {
-    let testenv = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
-    let project_dir = testenv.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
-    testenv.configure_icp_local_network_random_port(&project_dir);
+    ctx.configure_icp_local_network_random_port(&project_dir);
 
-    let _child_guard = testenv.start_network_in(&project_dir);
+    let _child_guard = ctx.start_network_in(&project_dir);
 
     // "icp network start" will wait for the local network to be healthy,
     // but for now we need to wait for the descriptor to be created.
-    testenv.wait_for_local_network_descriptor(&project_dir);
+    ctx.wait_for_local_network_descriptor(&project_dir);
 
-    let test_network = testenv.configure_dfx_network(&project_dir, "local");
+    let test_network = ctx.configure_dfx_network(&project_dir, "local");
     let dfx_network_name = test_network.dfx_network_name;
     let gateway_port = test_network.gateway_port;
 
-    testenv.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
-    testenv
-        .dfx()
+    ctx.dfx()
         .arg("new")
         .arg("hello")
         .arg("--type")
@@ -113,9 +109,8 @@ fn network_random_port() {
         .assert()
         .success();
 
-    let project_dir = testenv.home_path().join("hello");
-    testenv
-        .dfx()
+    let project_dir = ctx.home_path().join("hello");
+    ctx.dfx()
         .current_dir(&project_dir)
         .arg("deploy")
         .arg("--no-wallet")
@@ -123,8 +118,7 @@ fn network_random_port() {
         .assert()
         .success();
 
-    testenv
-        .dfx()
+    ctx.dfx()
         .current_dir(&project_dir)
         .arg("canister")
         .arg("call")
@@ -136,7 +130,7 @@ fn network_random_port() {
         .success()
         .stdout(contains(r#"("Hello, test!")"#));
 
-    let output = testenv
+    let output = ctx
         .dfx()
         .current_dir(&project_dir)
         .arg("canister")
@@ -169,19 +163,18 @@ fn network_random_port() {
 #[test]
 #[file_serial(default_local_network)]
 fn network_same_port() {
-    let testenv = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
-    let project_dir_a = testenv.create_project_dir("a");
-    let project_dir_b = testenv.create_project_dir("b");
+    let project_dir_a = ctx.create_project_dir("a");
+    let project_dir_b = ctx.create_project_dir("b");
 
-    let _child_guard = testenv.start_network_in(&project_dir_a);
+    let _child_guard = ctx.start_network_in(&project_dir_a);
 
     eprintln!("wait for network healthy");
-    testenv.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&project_dir_a);
 
     eprintln!("second network run attempt");
-    testenv
-        .icp()
+    ctx.icp()
         .current_dir(&project_dir_a)
         .args(["network", "run"])
         .assert()
@@ -191,8 +184,7 @@ fn network_same_port() {
         ));
 
     eprintln!("second network run attempt in another project");
-    testenv
-        .icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["network", "run"])
         .assert()
@@ -205,36 +197,36 @@ fn network_same_port() {
 #[test]
 #[file_serial(port8001, port8002)]
 fn two_projects_different_fixed_ports() {
-    let testenv = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
-    let project_dir_a = testenv.create_project_dir("a");
-    let project_dir_b = testenv.create_project_dir("b");
+    let project_dir_a = ctx.create_project_dir("a");
+    let project_dir_b = ctx.create_project_dir("b");
 
-    testenv.configure_icp_local_network_port(&project_dir_a, 8001);
-    testenv.configure_icp_local_network_port(&project_dir_b, 8002);
+    ctx.configure_icp_local_network_port(&project_dir_a, 8001);
+    ctx.configure_icp_local_network_port(&project_dir_b, 8002);
 
-    let _a_guard = testenv.start_network_in(&project_dir_a);
+    let _a_guard = ctx.start_network_in(&project_dir_a);
 
     eprintln!("wait for network A healthy");
-    testenv.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&project_dir_a);
 
-    let _b_guard = testenv.start_network_in(&project_dir_b);
+    let _b_guard = ctx.start_network_in(&project_dir_b);
 
     eprintln!("wait for network B healthy");
-    testenv.ping_until_healthy(&project_dir_b);
+    ctx.ping_until_healthy(&project_dir_b);
 }
 
 #[test]
 fn deploy_to_other_projects_network() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project that runs a network
-    let project_dir_a = env.create_project_dir("icp-a");
-    env.configure_icp_local_network_random_port(&project_dir_a);
-    let _g = env.start_network_in(&project_dir_a);
-    let test_network = env.wait_for_local_network_descriptor(&project_dir_a);
+    let project_dir_a = ctx.create_project_dir("icp-a");
+    ctx.configure_icp_local_network_random_port(&project_dir_a);
+    let _g = ctx.start_network_in(&project_dir_a);
+    let test_network = ctx.wait_for_local_network_descriptor(&project_dir_a);
 
-    let project_dir_b = env.create_project_dir("icp-b");
+    let project_dir_b = ctx.create_project_dir("icp-b");
     let project_dir_b_networks = project_dir_b.join("networks");
     std::fs::create_dir_all(&project_dir_b_networks)
         .expect("Failed to create networks directory for project B");
@@ -255,7 +247,7 @@ fn deploy_to_other_projects_network() {
     .expect("Failed to write network config for project B");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -276,10 +268,10 @@ fn deploy_to_other_projects_network() {
     )
     .expect("failed to write project manifest");
 
-    env.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&project_dir_a);
 
     // Deploy project (first time)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .args(["--network", "project-a"])
@@ -287,7 +279,7 @@ fn deploy_to_other_projects_network() {
         .success();
 
     // Deploy project (second time)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .args(["--network", "project-a"])
@@ -295,7 +287,7 @@ fn deploy_to_other_projects_network() {
         .success();
 
     // Query canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
         .args(["--network", "project-a"])
@@ -306,15 +298,15 @@ fn deploy_to_other_projects_network() {
 
 #[test]
 fn round_robin_routing() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project that runs a network
-    let project_dir_a = env.create_project_dir("icp-a");
-    env.configure_icp_local_network_random_port(&project_dir_a);
-    let _g = env.start_network_in(&project_dir_a);
-    let test_network = env.wait_for_local_network_descriptor(&project_dir_a);
+    let project_dir_a = ctx.create_project_dir("icp-a");
+    ctx.configure_icp_local_network_random_port(&project_dir_a);
+    let _g = ctx.start_network_in(&project_dir_a);
+    let test_network = ctx.wait_for_local_network_descriptor(&project_dir_a);
 
-    let project_dir_b = env.create_project_dir("icp-b");
+    let project_dir_b = ctx.create_project_dir("icp-b");
     let project_dir_b_networks = project_dir_b.join("networks");
     std::fs::create_dir_all(&project_dir_b_networks)
         .expect("Failed to create networks directory for project B");
@@ -337,7 +329,7 @@ fn round_robin_routing() {
     .expect("Failed to write network config for project B");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -358,10 +350,10 @@ fn round_robin_routing() {
     )
     .expect("failed to write project manifest");
 
-    env.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&project_dir_a);
 
     // Deploy project (first time)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .args(["--network", "project-a"])
@@ -369,7 +361,7 @@ fn round_robin_routing() {
         .success();
 
     // Deploy project (second time)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .args(["--network", "project-a"])
@@ -377,7 +369,7 @@ fn round_robin_routing() {
         .success();
 
     // Query canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir_b)
         .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
         .args(["--network", "project-a"])

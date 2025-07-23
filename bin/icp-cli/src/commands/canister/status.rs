@@ -1,6 +1,6 @@
-use crate::env::{EnvGetAgentError, GetProjectError};
+use crate::context::{EnvGetAgentError, GetProjectError};
 use crate::options::{IdentityOpt, NetworkOpt};
-use crate::{env::Env, store_id::LookupError as LookupIdError};
+use crate::{context::Context, store_id::LookupError as LookupIdError};
 use clap::Parser;
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::StatusCallResult;
@@ -18,12 +18,12 @@ pub struct CanisterStatusCmd {
     network: NetworkOpt,
 }
 
-pub async fn exec(env: &Env, cmd: CanisterStatusCmd) -> Result<(), CanisterStatusError> {
-    env.require_identity(cmd.identity.name());
-    env.require_network(cmd.network.name());
+pub async fn exec(ctx: &Context, cmd: CanisterStatusCmd) -> Result<(), CanisterStatusError> {
+    ctx.require_identity(cmd.identity.name());
+    ctx.require_network(cmd.network.name());
 
     // Load the project manifest, which defines the canisters to be built.
-    let pm = env.project()?;
+    let pm = ctx.project()?;
 
     // Select canister to query
     let (_, c) = pm
@@ -33,9 +33,9 @@ pub async fn exec(env: &Env, cmd: CanisterStatusCmd) -> Result<(), CanisterStatu
         .ok_or(CanisterStatusError::CanisterNotFound { name: cmd.name })?;
 
     // Lookup the canister id
-    let cid = env.id_store.lookup(&c.name)?;
+    let cid = ctx.id_store.lookup(&c.name)?;
 
-    let agent = env.agent()?;
+    let agent = ctx.agent()?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);

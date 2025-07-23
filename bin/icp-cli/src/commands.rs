@@ -1,6 +1,6 @@
 use crate::{
     commands::{canister::CanisterCommandError, network::NetworkCommandError},
-    env::Env,
+    context::Context,
 };
 use clap::{Parser, Subcommand};
 use identity::IdentityCommandError;
@@ -29,14 +29,14 @@ pub enum Subcmd {
     Sync(sync::Cmd),
 }
 
-pub async fn dispatch(env: &Env, cli: Cmd) -> Result<(), DispatchError> {
+pub async fn dispatch(ctx: &Context, cli: Cmd) -> Result<(), DispatchError> {
     match cli.subcommand {
-        Subcmd::Build(opts) => build::exec(env, opts).await?,
-        Subcmd::Canister(opts) => canister::dispatch(env, opts).await?,
-        Subcmd::Deploy(opts) => deploy::exec(env, opts).await?,
-        Subcmd::Identity(opts) => identity::dispatch(env, opts).await?,
-        Subcmd::Network(opts) => network::dispatch(env, opts).await?,
-        Subcmd::Sync(opts) => sync::exec(env, opts).await?,
+        Subcmd::Build(opts) => build::exec(ctx, opts).await?,
+        Subcmd::Canister(opts) => canister::dispatch(ctx, opts).await?,
+        Subcmd::Deploy(opts) => deploy::exec(ctx, opts).await?,
+        Subcmd::Identity(opts) => identity::dispatch(ctx, opts).await?,
+        Subcmd::Network(opts) => network::dispatch(ctx, opts).await?,
+        Subcmd::Sync(opts) => sync::exec(ctx, opts).await?,
     }
     Ok(())
 }

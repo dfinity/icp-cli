@@ -1,4 +1,4 @@
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::{create_dir_all, write};
 use predicates::{ord::eq, str::PredicateStrExt};
@@ -7,10 +7,10 @@ mod common;
 
 #[test]
 fn single_canister_project() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
@@ -35,7 +35,7 @@ fn single_canister_project() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -44,10 +44,10 @@ fn single_canister_project() {
 
 #[test]
 fn multi_canister_project() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
     let pm = r#"
@@ -85,7 +85,7 @@ fn multi_canister_project() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -94,10 +94,10 @@ fn multi_canister_project() {
 
 #[test]
 fn glob_path() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
     let pm = r#"
@@ -136,7 +136,7 @@ fn glob_path() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -145,10 +145,10 @@ fn glob_path() {
 
 #[test]
 fn explicit_path_missing() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
     let pm = r#"
@@ -163,7 +163,7 @@ fn explicit_path_missing() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -173,10 +173,10 @@ fn explicit_path_missing() {
 
 #[test]
 fn redefine_ic_network_disallowed() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     write(
         project_dir.join("icp.yaml"), // path
@@ -194,7 +194,7 @@ fn redefine_ic_network_disallowed() {
     std::fs::write(networks_dir.join("ic.yaml"), network).unwrap();
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
@@ -204,10 +204,10 @@ fn redefine_ic_network_disallowed() {
 
 #[test]
 fn missing_specific_network() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     write(
         project_dir.join("icp.yaml"), // path
@@ -227,7 +227,7 @@ fn missing_specific_network() {
         expected_network_path.display()
     );
 
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()

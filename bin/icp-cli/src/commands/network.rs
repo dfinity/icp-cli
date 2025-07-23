@@ -1,6 +1,6 @@
 use crate::{
     commands::network::{ping::PingNetworkCommandError, run::RunNetworkCommandError},
-    env::Env,
+    context::Context,
 };
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
@@ -20,10 +20,10 @@ pub enum NetworkSubcmd {
     Run(run::Cmd),
 }
 
-pub async fn dispatch(env: &Env, cmd: NetworkCmd) -> Result<(), NetworkCommandError> {
+pub async fn dispatch(ctx: &Context, cmd: NetworkCmd) -> Result<(), NetworkCommandError> {
     match cmd.subcmd {
-        NetworkSubcmd::Ping(cmd) => ping::exec(env, cmd).await?,
-        NetworkSubcmd::Run(cmd) => run::exec(env, cmd).await?,
+        NetworkSubcmd::Ping(cmd) => ping::exec(ctx, cmd).await?,
+        NetworkSubcmd::Run(cmd) => run::exec(ctx, cmd).await?,
     }
     Ok(())
 }

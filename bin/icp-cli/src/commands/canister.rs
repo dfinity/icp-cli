@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
-use crate::env::Env;
+use crate::context::Context;
 
 pub mod call;
 pub mod create;
@@ -30,16 +30,16 @@ pub enum CanisterSubcmd {
     Stop(stop::CanisterStopCmd),
 }
 
-pub async fn dispatch(env: &Env, cmd: Cmd) -> Result<(), CanisterCommandError> {
+pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandError> {
     match cmd.subcmd {
-        CanisterSubcmd::Call(subcmd) => call::exec(env, subcmd).await?,
-        CanisterSubcmd::Create(subcmd) => create::exec(env, subcmd).await?,
-        CanisterSubcmd::Delete(subcmd) => delete::exec(env, subcmd).await?,
-        CanisterSubcmd::Info(subcmd) => info::exec(env, subcmd).await?,
-        CanisterSubcmd::Install(subcmd) => install::exec(env, subcmd).await?,
-        CanisterSubcmd::Start(subcmd) => start::exec(env, subcmd).await?,
-        CanisterSubcmd::Status(subcmd) => status::exec(env, subcmd).await?,
-        CanisterSubcmd::Stop(subcmd) => stop::exec(env, subcmd).await?,
+        CanisterSubcmd::Call(subcmd) => call::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Create(subcmd) => create::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Delete(subcmd) => delete::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Info(subcmd) => info::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Install(subcmd) => install::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Start(subcmd) => start::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Status(subcmd) => status::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Stop(subcmd) => stop::exec(ctx, subcmd).await?,
     }
     Ok(())
 }

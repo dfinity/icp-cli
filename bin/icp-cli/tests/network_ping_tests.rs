@@ -1,6 +1,6 @@
 mod common;
 
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use assert_cmd::assert::Assert;
 use camino::Utf8Path;
 use predicates::str::contains;
@@ -10,21 +10,21 @@ use serial_test::file_serial;
 
 #[test]
 fn ping_local() {
-    let testenv = TestEnv::new();
+    let ctx = TestContext::new();
 
-    let project_dir = testenv.create_project_dir("icp");
-    testenv.configure_icp_local_network_random_port(&project_dir);
+    let project_dir = ctx.create_project_dir("icp");
+    ctx.configure_icp_local_network_random_port(&project_dir);
 
-    let _child_guard = testenv.start_network_in(&project_dir);
+    let _child_guard = ctx.start_network_in(&project_dir);
 
-    let network_descriptor = testenv.wait_for_local_network_descriptor(&project_dir);
+    let network_descriptor = ctx.wait_for_local_network_descriptor(&project_dir);
     let expected_root_key = hex::decode(&network_descriptor.root_key)
         .expect("Failed to decode root key from hex")
         .into_iter()
         .map(|byte| Value::Number(serde_json::Number::from(byte)))
         .collect::<Vec<Value>>();
 
-    let output = testenv
+    let output = ctx
         .icp()
         .current_dir(&project_dir)
         .args(["network", "ping"])
@@ -61,19 +61,19 @@ fn ping_cli_options() {
     // Test that the `--network <network>` and `ICP_NETWORK` options work as expected
     // in addition to the positional argument.
 
-    let testenv = TestEnv::new();
+    let ctx = TestContext::new();
 
-    let project_dir_a = testenv.create_project_dir("project-a");
-    testenv.configure_icp_local_network_random_port(&project_dir_a);
-    let mut child_guard_a = Some(testenv.start_network_in(&project_dir_a));
-    let network_descriptor_a = testenv.wait_for_local_network_descriptor(&project_dir_a);
+    let project_dir_a = ctx.create_project_dir("project-a");
+    ctx.configure_icp_local_network_random_port(&project_dir_a);
+    let mut child_guard_a = Some(ctx.start_network_in(&project_dir_a));
+    let network_descriptor_a = ctx.wait_for_local_network_descriptor(&project_dir_a);
 
-    let project_dir_b = testenv.create_project_dir("project-b");
-    testenv.configure_icp_local_network_random_port(&project_dir_b);
-    let _child_guard_b = Some(testenv.start_network_in(&project_dir_b));
-    let network_descriptor_b = testenv.wait_for_local_network_descriptor(&project_dir_b);
+    let project_dir_b = ctx.create_project_dir("project-b");
+    ctx.configure_icp_local_network_random_port(&project_dir_b);
+    let _child_guard_b = Some(ctx.start_network_in(&project_dir_b));
+    let network_descriptor_b = ctx.wait_for_local_network_descriptor(&project_dir_b);
 
-    let no_network_project_dir = testenv.create_project_dir("icp");
+    let no_network_project_dir = ctx.create_project_dir("icp");
     let networks_dir = no_network_project_dir.join("networks");
     std::fs::create_dir_all(&networks_dir).unwrap();
 
@@ -108,7 +108,7 @@ fn ping_cli_options() {
         Environment(&'a str),
     }
     let assert_ping = |dir: &Utf8Path, param_type: NetworkArg| -> Assert {
-        let mut cmd = testenv.icp();
+        let mut cmd = ctx.icp();
         let cmd = cmd.current_dir(dir).args(["network", "ping"]);
         let cmd = match param_type {
             NetworkArg::DefaultLocal => cmd,
@@ -166,17 +166,17 @@ fn ping_cli_options() {
 #[file_serial(default_local_network)]
 #[test]
 fn attempt_ping_other_project() {
-    let testenv = TestEnv::new();
+    let ctx = TestContext::new();
 
-    let project_dir_a = testenv.create_project_dir("a");
+    let project_dir_a = ctx.create_project_dir("a");
 
     // Start project a's local network, then stop it, but write the
     // network descriptor as if the network were killed
     let network_descriptor = {
-        let _g = testenv.start_network_in(&project_dir_a);
+        let _g = ctx.start_network_in(&project_dir_a);
 
         // load network descriptor
-        let network_descriptor = testenv.read_network_descriptor(&project_dir_a, "local");
+        let network_descriptor = ctx.read_network_descriptor(&project_dir_a, "local");
         eprintln!(
             "Network descriptor for project 'a': {}",
             serde_json::to_string_pretty(&network_descriptor).unwrap()
@@ -185,20 +185,20 @@ fn attempt_ping_other_project() {
         network_descriptor
     };
 
-    testenv.write_network_descriptor(&project_dir_a, "local", &network_descriptor);
+    ctx.write_network_descriptor(&project_dir_a, "local", &network_descriptor);
 
-    let project_dir_b = testenv.create_project_dir("b");
+    let project_dir_b = ctx.create_project_dir("b");
 
-    let _child_guard_b = testenv.start_network_in(&project_dir_b);
+    let _child_guard_b = ctx.start_network_in(&project_dir_b);
 
-    let network_descriptor = testenv.wait_for_local_network_descriptor(&project_dir_b);
+    let network_descriptor = ctx.wait_for_local_network_descriptor(&project_dir_b);
     let expected_root_key = hex::decode(&network_descriptor.root_key)
         .expect("Failed to decode root key from hex")
         .into_iter()
         .map(|byte| Value::Number(serde_json::Number::from(byte)))
         .collect::<Vec<Value>>();
 
-    let output = testenv
+    let output = ctx
         .icp()
         .current_dir(&project_dir_b)
         .args(["network", "ping"])
@@ -234,8 +234,7 @@ fn attempt_ping_other_project() {
         project_dir_b.canonicalize().unwrap().display()
     );
 
-    testenv
-        .icp()
+    ctx.icp()
         .current_dir(&project_dir_a)
         .args(["network", "ping"])
         .assert()
@@ -245,12 +244,11 @@ fn attempt_ping_other_project() {
 
 #[test]
 fn ping_not_running() {
-    let testenv = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
-    let icp_project_dir = testenv.create_project_dir("icp");
+    let icp_project_dir = ctx.create_project_dir("icp");
 
-    testenv
-        .icp()
+    ctx.icp()
         .current_dir(&icp_project_dir)
         .args(["network", "ping"])
         .assert()
@@ -262,10 +260,9 @@ fn ping_not_running() {
 
 #[test]
 fn ping_not_in_project() {
-    let testenv = TestEnv::new();
+    let ctx = TestContext::new();
 
-    testenv
-        .icp()
+    ctx.icp()
         .args(["network", "ping"])
         .assert()
         .failure()

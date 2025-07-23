@@ -1,4 +1,4 @@
-use crate::env::{Env, EnvGetAgentError};
+use crate::context::{Context, EnvGetAgentError};
 use crate::options::NetworkOpt;
 use clap::Parser;
 use ic_agent::agent::status::Status;
@@ -21,14 +21,14 @@ pub struct PingCmd {
     wait_healthy: bool,
 }
 
-pub async fn exec(env: &Env, cmd: PingCmd) -> Result<(), PingNetworkCommandError> {
-    env.require_identity(Some("anonymous"));
+pub async fn exec(ctx: &Context, cmd: PingCmd) -> Result<(), PingNetworkCommandError> {
+    ctx.require_identity(Some("anonymous"));
     let network = cmd
         .positional_network_name
         .unwrap_or(cmd.network.name().to_string());
-    env.require_network(&network);
+    ctx.require_network(&network);
 
-    let agent = env.agent()?;
+    let agent = ctx.agent()?;
 
     let status = if cmd.wait_healthy {
         ping_until_healthy(agent).await?

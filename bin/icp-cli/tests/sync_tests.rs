@@ -1,4 +1,4 @@
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{
     ord::eq,
@@ -11,13 +11,13 @@ mod common;
 #[test]
 #[serial]
 fn sync_adapter_script_single() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -42,13 +42,13 @@ fn sync_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Deploy project (it should sync as well)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
@@ -56,7 +56,7 @@ fn sync_adapter_script_single() {
         .stdout(contains("syncing").trim());
 
     // Invoke sync
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["sync"])
         .assert()
@@ -67,13 +67,13 @@ fn sync_adapter_script_single() {
 #[test]
 #[serial]
 fn sync_adapter_script_multiple() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -100,13 +100,13 @@ fn sync_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Deploy project (it should sync as well)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
@@ -114,7 +114,7 @@ fn sync_adapter_script_multiple() {
         .stdout(contains("first\nsecond").trim());
 
     // Invoke sync
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["sync"])
         .assert()
@@ -125,10 +125,10 @@ fn sync_adapter_script_multiple() {
 #[tokio::test]
 #[serial]
 async fn sync_adapter_static_assets() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
     let assets_dir = project_dir.join("www");
 
     // Create assets directory
@@ -163,23 +163,23 @@ async fn sync_adapter_static_assets() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Canister ID
     let cid = "uqqxf-5h777-77774-qaaaa-cai";
 
     // Deploy project
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", cid])
         .assert()
         .success();
 
     // Invoke sync
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["sync"])
         .assert()

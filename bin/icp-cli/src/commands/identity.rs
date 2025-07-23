@@ -1,4 +1,4 @@
-use crate::env::Env;
+use crate::context::Context;
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
@@ -23,13 +23,13 @@ pub enum IdentitySubcmd {
     Principal(principal::PrincipalCmd),
 }
 
-pub async fn dispatch(env: &Env, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
+pub async fn dispatch(ctx: &Context, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
     match cmd.subcmd {
-        IdentitySubcmd::Default(subcmd) => default::exec(env, subcmd)?,
-        IdentitySubcmd::Import(subcmd) => import::exec(env, subcmd)?,
-        IdentitySubcmd::List(subcmd) => list::exec(env, subcmd)?,
-        IdentitySubcmd::New(subcmd) => new::exec(env, subcmd)?,
-        IdentitySubcmd::Principal(subcmd) => principal::exec(env, subcmd)?,
+        IdentitySubcmd::Default(subcmd) => default::exec(ctx, subcmd)?,
+        IdentitySubcmd::Import(subcmd) => import::exec(ctx, subcmd)?,
+        IdentitySubcmd::List(subcmd) => list::exec(ctx, subcmd)?,
+        IdentitySubcmd::New(subcmd) => new::exec(ctx, subcmd)?,
+        IdentitySubcmd::Principal(subcmd) => principal::exec(ctx, subcmd)?,
     }
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::env::Env;
+use crate::context::Context;
 use clap::Parser;
 use icp_identity::manifest::{change_default_identity, load_identity_defaults, load_identity_list};
 use snafu::Snafu;
@@ -8,8 +8,8 @@ pub struct DefaultCmd {
     name: Option<String>,
 }
 
-pub fn exec(env: &Env, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> {
-    let dirs = env.dirs();
+pub fn exec(ctx: &Context, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> {
+    let dirs = ctx.dirs();
     if let Some(name) = cmd.name {
         let list = load_identity_list(dirs)?;
         change_default_identity(dirs, &list, &name)?;

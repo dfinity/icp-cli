@@ -1,4 +1,4 @@
-use crate::env::Env;
+use crate::context::Context;
 use crate::options::IdentityOpt;
 use clap::Parser;
 use icp_identity::key::LoadIdentityInContextError;
@@ -10,10 +10,10 @@ pub struct PrincipalCmd {
     pub identity: IdentityOpt,
 }
 
-pub fn exec(env: &Env, cmd: PrincipalCmd) -> Result<(), PrincipalError> {
-    env.require_identity(cmd.identity.name());
+pub fn exec(ctx: &Context, cmd: PrincipalCmd) -> Result<(), PrincipalError> {
+    ctx.require_identity(cmd.identity.name());
 
-    let identity = env.identity()?;
+    let identity = ctx.identity()?;
     let principal = identity
         .sender()
         .map_err(|message| PrincipalError::IdentityError { message })?;

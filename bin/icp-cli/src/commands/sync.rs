@@ -1,5 +1,5 @@
 use crate::{
-    env::{Env, EnvGetAgentError, GetProjectError},
+    context::{Context, EnvGetAgentError, GetProjectError},
     options::{IdentityOpt, NetworkOpt},
     store_id::LookupError,
 };
@@ -20,12 +20,12 @@ pub struct Cmd {
     pub network: NetworkOpt,
 }
 
-pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
-    env.require_identity(cmd.identity.name());
-    env.require_network(cmd.network.name());
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    ctx.require_identity(cmd.identity.name());
+    ctx.require_network(cmd.network.name());
 
     // Load the project manifest, which defines the canisters to be synced.
-    let pm = env.project()?;
+    let pm = ctx.project()?;
 
     // Choose canisters to sync
     let canisters = pm
@@ -51,12 +51,12 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Prepare agent
-    let agent = env.agent()?;
+    let agent = ctx.agent()?;
 
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in canisters {
         // Get canister principal ID
-        let cid = env.id_store.lookup(&c.name)?;
+        let cid = ctx.id_store.lookup(&c.name)?;
 
         for step in c.sync.steps {
             match step {

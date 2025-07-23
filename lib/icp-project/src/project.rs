@@ -9,7 +9,7 @@ use snafu::{ResultExt, Snafu};
 
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
-use icp_network::{NetworkConfig, NetworkName};
+use icp_network::NetworkConfig;
 
 use crate::directory::ProjectDirectory;
 use crate::model::{CanistersField, EnvironmentManifest, NetworkField, default_networks};
@@ -29,7 +29,7 @@ pub struct Project {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: HashMap<NetworkName, NetworkConfig>,
+    pub networks: HashMap<String, NetworkConfig>,
 
     // List of environment definitions as defined by the project.
     pub environments: Vec<EnvironmentManifest>,
@@ -276,7 +276,7 @@ impl Project {
     fn load_network_configurations(
         pd: &ProjectDirectory,
         network_paths: Vec<Utf8PathBuf>,
-    ) -> Result<HashMap<NetworkName, NetworkConfig>, LoadNetworkConfigurationsError> {
+    ) -> Result<HashMap<String, NetworkConfig>, LoadNetworkConfigurationsError> {
         let mut networks = HashMap::new();
 
         for network_path in network_paths {
@@ -433,7 +433,7 @@ pub enum LoadNetworkConfigurationsError {
     CannotRedefineIcNetwork { network_path: Utf8PathBuf },
 
     #[snafu(display("duplicate network name found: '{name}'"))]
-    DuplicateNetworkName { name: NetworkName },
+    DuplicateNetworkName { name: String },
 
     #[snafu(transparent)]
     LoadYamlFile { source: LoadYamlFileError },

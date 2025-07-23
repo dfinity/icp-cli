@@ -9,8 +9,9 @@ canister:
 
 networks:
   - name: my-network
-    mode: connected
-    url: http://example.com
+    mode: managed
+    gateway:
+      host: 127.0.0.1
 
 environments:
   - name: my-environment

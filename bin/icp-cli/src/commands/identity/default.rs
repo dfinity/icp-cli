@@ -9,15 +9,22 @@ pub struct DefaultCmd {
 }
 
 pub fn exec(ctx: &Context, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> {
+    // Load project directories
     let dirs = ctx.dirs();
-    if let Some(name) = cmd.name {
-        let list = load_identity_list(dirs)?;
-        change_default_identity(dirs, &list, &name)?;
-        println!("Set default identity to {name}");
-    } else {
-        let defaults = load_identity_defaults(dirs)?;
-        println!("{}", defaults.default);
+
+    match cmd.name {
+        Some(name) => {
+            let list = load_identity_list(dirs)?;
+            change_default_identity(dirs, &list, &name)?;
+            println!("Set default identity to {name}");
+        }
+
+        None => {
+            let defaults = load_identity_defaults(dirs)?;
+            println!("{}", defaults.default);
+        }
     }
+
     Ok(())
 }
 

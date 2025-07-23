@@ -1,5 +1,5 @@
-use crate::context::{Context, EnvGetAgentError, GetProjectError};
-use crate::options::{IdentityOpt, NetworkOpt};
+use crate::context::{Context, ContextGetAgentError, GetProjectError};
+use crate::options::{EnvironmentOpt, IdentityOpt};
 use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
@@ -55,7 +55,7 @@ pub struct CanisterCreateCmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: NetworkOpt,
+    pub network: EnvironmentOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
@@ -213,7 +213,7 @@ pub enum CanisterCreateError {
     GetProject { source: GetProjectError },
 
     #[snafu(transparent)]
-    EnvGetAgent { source: EnvGetAgentError },
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },

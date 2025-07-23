@@ -1,5 +1,5 @@
-use crate::context::{EnvGetAgentError, GetProjectError};
-use crate::options::{IdentityOpt, NetworkOpt};
+use crate::context::{ContextGetAgentError, GetProjectError};
+use crate::options::{IdentityOpt, EnvironmentOpt};
 use crate::{
     context::Context, store_artifact::LookupError as LookupArtifactError,
     store_id::LookupError as LookupIdError,
@@ -22,7 +22,7 @@ pub struct CanisterInstallCmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: NetworkOpt,
+    pub network: EnvironmentOpt,
 }
 
 pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
@@ -110,7 +110,7 @@ pub enum CanisterInstallError {
     GetProject { source: GetProjectError },
 
     #[snafu(transparent)]
-    EnvGetAgent { source: EnvGetAgentError },
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },

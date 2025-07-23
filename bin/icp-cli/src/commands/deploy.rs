@@ -1,6 +1,6 @@
 use crate::commands::canister::create::DEFAULT_EFFECTIVE_ID;
 use crate::context::GetProjectError;
-use crate::options::{IdentityOpt, NetworkOpt};
+use crate::options::{IdentityOpt, EnvironmentOpt};
 use crate::{
     commands::{
         build,
@@ -31,7 +31,7 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: NetworkOpt,
+    pub network: EnvironmentOpt,
 
     /// The effective canister ID to use when calling the management canister.
     #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]

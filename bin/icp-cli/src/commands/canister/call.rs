@@ -1,5 +1,5 @@
-use crate::context::EnvGetAgentError;
-use crate::options::{IdentityOpt, NetworkOpt};
+use crate::context::ContextGetAgentError;
+use crate::options::{IdentityOpt, EnvironmentOpt};
 use crate::{candid::print_candid_for_term, context::Context};
 use candid_parser::IDLArgs;
 use clap::Parser;
@@ -13,7 +13,7 @@ pub struct CanisterCallCmd {
     identity: IdentityOpt,
 
     #[clap(flatten)]
-    network: NetworkOpt,
+    network: EnvironmentOpt,
 
     pub canister: String,
     pub method: String,
@@ -48,7 +48,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterCallCmd) -> Result<(), CanisterCal
 #[derive(Debug, Snafu)]
 pub enum CanisterCallError {
     #[snafu(transparent)]
-    EnvCreateAgent { source: EnvGetAgentError },
+    EnvCreateAgent { source: ContextGetAgentError },
 
     #[snafu(transparent)]
     LookupError {

@@ -1,6 +1,6 @@
 use crate::{
-    context::{Context, EnvGetAgentError, GetProjectError},
-    options::{IdentityOpt, NetworkOpt},
+    context::{Context, ContextGetAgentError, GetProjectError},
+    options::{IdentityOpt, EnvironmentOpt},
     store_id::LookupError,
 };
 use clap::Parser;
@@ -17,7 +17,7 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: NetworkOpt,
+    pub network: EnvironmentOpt,
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -84,7 +84,7 @@ pub enum CommandError {
     NoCanisters,
 
     #[snafu(transparent)]
-    GetAgent { source: EnvGetAgentError },
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(transparent)]
     IdLookup { source: LookupError },

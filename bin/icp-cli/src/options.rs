@@ -14,23 +14,30 @@ impl IdentityOpt {
 }
 
 #[derive(Args, Clone, Debug, Default)]
-#[clap(group(ArgGroup::new("network-select").multiple(false)))]
-pub struct NetworkOpt {
-    /// Override the compute network to connect to. By default, the local network is used.
-    #[arg(long, env = "ICP_NETWORK", global(true), group = "network-select")]
-    network: Option<String>,
+#[clap(group(ArgGroup::new("environment-select").multiple(false)))]
+pub struct EnvironmentOpt {
+    /// Override the environment to connect to. By default, the local environment is used.
+    #[arg(
+        long,
+        env = "ICP_ENVIRONMENT",
+        global(true),
+        group = "environment-select"
+    )]
+    environment: Option<String>,
 
-    /// Shorthand for --network=ic.
-    #[clap(long, global(true), group = "network-select")]
+    /// Shorthand for --environment=ic.
+    #[clap(long, global(true), group = "environment-select")]
     ic: bool,
 }
 
-impl NetworkOpt {
+impl EnvironmentOpt {
     pub fn name(&self) -> &str {
+        // Support --ic
         if self.ic {
-            "ic"
-        } else {
-            self.network.as_deref().unwrap_or("local")
+            return "ic";
         }
+
+        // Otherwise, default to `local`
+        self.environment.as_deref().unwrap_or("local")
     }
 }

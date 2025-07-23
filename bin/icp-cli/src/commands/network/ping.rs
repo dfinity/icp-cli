@@ -1,5 +1,5 @@
-use crate::context::{Context, EnvGetAgentError};
-use crate::options::NetworkOpt;
+use crate::context::{Context, ContextGetAgentError};
+use crate::options::EnvironmentOpt;
 use clap::Parser;
 use ic_agent::agent::status::Status;
 use ic_agent::{Agent, AgentError};
@@ -10,7 +10,7 @@ use std::time::Duration;
 #[derive(Parser, Debug)]
 pub struct PingCmd {
     #[clap(flatten)]
-    network: NetworkOpt,
+    network: EnvironmentOpt,
 
     /// The compute network to connect to. By default, ping the local network.
     #[clap(group = "network-select", value_name = "NETWORK")]
@@ -72,7 +72,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, TimeoutWaitingForHe
 #[derive(Debug, Snafu)]
 pub enum PingNetworkCommandError {
     #[snafu(transparent)]
-    GetAgent { source: EnvGetAgentError },
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(display("failed to ping the network"))]
     Status { source: AgentError },

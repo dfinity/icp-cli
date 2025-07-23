@@ -15,6 +15,7 @@ pub struct Context {
 
     /// The name of the identity to use, set from the command line.
     identity_name: OnceLock<Option<String>>,
+
     /// The identity to use for the agent, instantiated on-demand.
     identity: TryOnceLock<Arc<dyn Identity>>,
 
@@ -120,7 +121,7 @@ impl Context {
             .cloned()
     }
 
-    pub fn agent(&self) -> Result<&Agent, EnvGetAgentError> {
+    pub fn agent(&self) -> Result<&Agent, ContextGetAgentError> {
         self.agent.get_or_try_init(|| self.create_agent())
     }
 }
@@ -131,17 +132,18 @@ impl Context {
             .identity_name
             .get()
             .cloned()
-            .expect("call require_identity before load_identity");
+            .expect("identity has not been set");
+
         if let Some(identity) = identity_name {
-            Ok(icp_identity::key::load_identity(
+            return Ok(icp_identity::key::load_identity(
                 &self.dirs,
                 &icp_identity::manifest::load_identity_list(&self.dirs)?,
                 &identity,
                 || todo!(),
-            )?)
-        } else {
-            icp_identity::key::load_identity_in_context(&self.dirs, || todo!())
+            )?);
         }
+
+        icp_identity::key::load_identity_in_context(&self.dirs, || todo!())
     }
 
     fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
@@ -181,7 +183,7 @@ impl Context {
         Ok(ac)
     }
 
-    fn create_agent(&self) -> Result<Agent, EnvGetAgentError> {
+    fn create_agent(&self) -> Result<Agent, ContextGetAgentError> {
         let network_access = self.create_network_access()?;
         let identity = self.identity()?;
         let agent = network_access.create_agent(identity)?;
@@ -206,7 +208,7 @@ pub enum EnvGetNetworkAccessError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum EnvGetAgentError {
+pub enum ContextGetAgentError {
     #[snafu(transparent)]
     EnvGetNetworkAccess { source: EnvGetNetworkAccessError },
 

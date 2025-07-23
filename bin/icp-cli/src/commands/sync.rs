@@ -1,6 +1,6 @@
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
-    options::{IdentityOpt, EnvironmentOpt},
+    options::{EnvironmentOpt, IdentityOpt},
     store_id::LookupError,
 };
 use clap::Parser;
@@ -17,18 +17,15 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: EnvironmentOpt,
+    pub environment: EnvironmentOpt,
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    ctx.require_identity(cmd.identity.name());
-    ctx.require_network(cmd.network.name());
-
     // Load the project manifest, which defines the canisters to be synced.
     let pm = ctx.project()?;
 
     // Choose canisters to sync
-    let canisters = pm
+    let cs = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -39,32 +36,78 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .collect::<Vec<_>>();
 
     // Check if selected canister exists
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CommandError::CanisterNotFound { name });
+    if let Some(name) = &cmd.name {
+        if cs.is_empty() {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+    }
+
+    // Load target environment
+    let env = pm
+        .environments
+        .iter()
+        .find(|&v| v.name == cmd.environment.name())
+        .ok_or(CommandError::EnvironmentNotFound {
+            name: cmd.environment.name().to_owned(),
+        })?;
+
+    // Collect environment canisters
+    let ecs = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
+
+    // Filter for environment canisters
+    let cs = cs
+        .iter()
+        .filter(|(_, c)| ecs.contains(&c.name))
+        .collect::<Vec<_>>();
+
+    // Ensure canister is included in the environment
+    if let Some(name) = &cmd.name {
+        if !ecs.contains(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
         }
     }
 
     // Verify at least one canister is available to sync
-    if canisters.is_empty() {
+    if cs.is_empty() {
         return Err(CommandError::NoCanisters);
     }
+
+    // Load identity
+    ctx.require_identity(cmd.identity.name());
+
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    ctx.require_network(
+        env.network
+            .as_ref()
+            .expect("no network specified in environment"),
+    );
 
     // Prepare agent
     let agent = ctx.agent()?;
 
     // Iterate through each resolved canister and trigger its sync process.
-    for (canister_path, c) in canisters {
+    for (canister_path, c) in cs {
         // Get canister principal ID
         let cid = ctx.id_store.lookup(&c.name)?;
 
-        for step in c.sync.steps {
+        for step in &c.sync.steps {
             match step {
                 // Synchronize the canister using the custom script adapter.
-                SyncStep::Script(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
+                SyncStep::Script(adapter) => adapter.sync(canister_path, &cid, agent).await?,
 
                 // Synchronize the canister using the assets adapter.
-                SyncStep::Assets(adapter) => adapter.sync(&canister_path, &cid, agent).await?,
+                SyncStep::Assets(adapter) => adapter.sync(canister_path, &cid, agent).await?,
             };
         }
     }
@@ -79,6 +122,15 @@ pub enum CommandError {
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
+    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
 
     #[snafu(display("no canisters available to sync"))]
     NoCanisters,

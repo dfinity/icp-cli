@@ -87,14 +87,6 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
             name: cmd.environment.name().to_owned(),
         })?;
 
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
-
     // Choose canisters to create
     let cs = pm
         .canisters
@@ -113,6 +105,14 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
             });
         }
     }
+
+    // Collect environment canisters
+    let ecs = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
 
     // Filter for environment canisters
     let cs = cs

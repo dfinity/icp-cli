@@ -137,7 +137,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 name: Some(c.name.to_owned()),
                 mode: cmd.mode.to_owned(),
                 identity: cmd.identity.clone(),
-                network: cmd.environment.clone(),
+                environment: cmd.environment.clone(),
             },
         )
         .await;
@@ -162,7 +162,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             sync::Cmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
-                network: cmd.environment.clone(),
+                environment: cmd.environment.clone(),
             },
         )
         .await;

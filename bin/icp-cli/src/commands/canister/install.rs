@@ -1,5 +1,5 @@
 use crate::context::{ContextGetAgentError, GetProjectError};
-use crate::options::{IdentityOpt, EnvironmentOpt};
+use crate::options::{EnvironmentOpt, IdentityOpt};
 use crate::{
     context::Context, store_artifact::LookupError as LookupArtifactError,
     store_id::LookupError as LookupIdError,
@@ -22,22 +22,15 @@ pub struct CanisterInstallCmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: EnvironmentOpt,
+    pub environment: EnvironmentOpt,
 }
 
 pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
-    ctx.require_identity(cmd.identity.name());
-    ctx.require_network(cmd.network.name());
-
+    // Load project
     let pm = ctx.project()?;
 
-    let agent = ctx.agent()?;
-
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
-
     // Choose canisters to install
-    let canisters = pm
+    let cs = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -46,18 +39,71 @@ pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), Canister
         })
         .collect::<Vec<_>>();
 
-    // Ensure at least one canister has been selected
-    if canisters.is_empty() {
-        return Err(match cmd.name {
-            // Selected canister not found
-            Some(name) => CanisterInstallError::CanisterNotFound { name },
-
-            // No canisters found at all
-            None => CanisterInstallError::NoCanisters,
-        });
+    // Check if selected canister exists
+    if let Some(name) = &cmd.name {
+        if cs.is_empty() {
+            return Err(CanisterInstallError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
     }
 
-    for (_, c) in canisters {
+    // Load target environment
+    let env = pm
+        .environments
+        .iter()
+        .find(|&v| v.name == cmd.environment.name())
+        .ok_or(CanisterInstallError::EnvironmentNotFound {
+            name: cmd.environment.name().to_owned(),
+        })?;
+
+    // Collect environment canisters
+    let ecs = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
+
+    // Filter for environment canisters
+    let cs = cs
+        .iter()
+        .filter(|(_, c)| ecs.contains(&c.name))
+        .collect::<Vec<_>>();
+
+    // Ensure canister is included in the environment
+    if let Some(name) = &cmd.name {
+        if !ecs.contains(name) {
+            return Err(CanisterInstallError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
+
+    // Ensure at least one canister has been selected
+    if cs.is_empty() {
+        return Err(CanisterInstallError::NoCanisters);
+    }
+
+    // Load identity
+    ctx.require_identity(cmd.identity.name());
+
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    ctx.require_network(
+        env.network
+            .as_ref()
+            .expect("no network specified in environment"),
+    );
+
+    // Prepare agent
+    let agent = ctx.agent()?;
+
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+
+    for (_, c) in cs {
         // Lookup the canister id
         let cid = ctx.id_store.lookup(&c.name)?;
 
@@ -109,6 +155,9 @@ pub enum CanisterInstallError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
     #[snafu(transparent)]
     GetAgent { source: ContextGetAgentError },
 
@@ -117,6 +166,12 @@ pub enum CanisterInstallError {
 
     #[snafu(display("no canisters available to install"))]
     NoCanisters,
+
+    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
 
     #[snafu(transparent)]
     LookupCanisterId { source: LookupIdError },

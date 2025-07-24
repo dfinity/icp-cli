@@ -16,8 +16,8 @@ use crate::{
 };
 
 pub struct NetworkDirectory {
-    network_name: String,
-    structure: NetworkDirectoryStructure,
+    pub network_name: String,
+    pub structure: NetworkDirectoryStructure,
 }
 
 impl NetworkDirectory {
@@ -37,17 +37,13 @@ impl NetworkDirectory {
 }
 
 impl NetworkDirectory {
-    pub fn network_name(&self) -> &str {
-        &self.network_name
-    }
-
     pub fn structure(&self) -> &NetworkDirectoryStructure {
         &self.structure
     }
 
     pub fn ensure_exists(&self) -> Result<(), CreateDirAllError> {
-        create_dir_all(self.structure.network_root())?;
-        create_dir_all(self.structure.port_descriptor_dir())
+        create_dir_all(&self.structure.network_root)?;
+        create_dir_all(&self.structure.port_descriptor_dir)
     }
 
     pub fn load_network_descriptor(

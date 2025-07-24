@@ -75,7 +75,7 @@ pub fn get_network_access(
             let desc =
                 nd.load_network_descriptor()?
                     .ok_or(GetNetworkAccessError::NetworkNotRunning {
-                        network: nd.network_name().to_string(),
+                        network: nd.network_name.to_owned(),
                     })?;
 
             // Specify port

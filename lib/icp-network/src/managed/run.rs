@@ -114,8 +114,8 @@ async fn run_pocketic(
         let descriptor = NetworkDescriptorModel {
             id: Uuid::new_v4(),
             project_dir: project_root.to_path_buf(),
-            network: nd.network_name().to_string(),
-            network_dir: nd.structure().network_root().to_path_buf(),
+            network: nd.network_name.to_owned(),
+            network_dir: nd.structure().network_root.to_path_buf(),
             gateway,
             default_effective_canister_id,
             pid: Some(child.id().unwrap()),

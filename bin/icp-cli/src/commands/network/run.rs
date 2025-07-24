@@ -39,7 +39,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), RunNetworkCommandError>
     );
 
     eprintln!("Project root: {}", pd.structure().root());
-    eprintln!("Network root: {}", nd.structure().network_root());
+    eprintln!("Network root: {}", nd.structure().network_root);
 
     run_network(
         cfg,                   // config

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
-
 use icp_canister::model::{CanisterManifest, CanisterSettings};
 use icp_network::NetworkConfig;
+use serde::Deserialize;
 
 /// Provides the default glob pattern for locating canister manifests
 /// when no `canisters` are explicitly specified in the YAML.

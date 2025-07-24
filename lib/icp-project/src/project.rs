@@ -207,6 +207,21 @@ impl Project {
             settings: None,
         }]);
 
+        // Default environments network
+        let environments = environments
+            .into_iter()
+            .map(|mut v| match v.network {
+                // Explicitly-specified network
+                Some(_) => v,
+
+                // Default network for an environment is `local`
+                None => {
+                    v.network = Some("local".into());
+                    v
+                }
+            })
+            .collect::<Vec<EnvironmentManifest>>();
+
         // Complain about environments that point to non-existent networks
         for e in &environments {
             if let Some(network) = &e.network {

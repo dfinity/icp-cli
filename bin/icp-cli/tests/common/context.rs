@@ -1,14 +1,15 @@
-use crate::common::ChildGuard;
-use crate::common::PATH_SEPARATOR;
-use crate::common::{TestNetwork, TestNetworkForDfx};
+use std::{
+    env,
+    ffi::OsString,
+    fs::{self, create_dir_all},
+};
+
 use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
-use camino_tempfile::Utf8TempDir;
+use camino_tempfile::{Utf8TempDir, tempdir};
 use serde_json::{Value, json};
-use std::env;
-use std::ffi::OsString;
-use std::fs;
-use std::fs::create_dir_all;
+
+use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx};
 
 pub struct TestContext {
     home_dir: Utf8TempDir,
@@ -20,13 +21,21 @@ pub struct TestContext {
 
 impl TestContext {
     pub fn new() -> Self {
-        let home_dir = camino_tempfile::tempdir().expect("failed to create temp home dir");
+        // Home
+        let home_dir = tempdir().expect("failed to create temp home dir");
+
+        // Binaries
         let bin_dir = home_dir.path().join("bin");
-        let asset_dir = home_dir.path().join("share");
         fs::create_dir(&bin_dir).expect("failed to create bin dir");
+
+        // Assets
+        let asset_dir = home_dir.path().join("share");
         fs::create_dir(&asset_dir).expect("failed to create asset dir");
-        let os_path = Self::build_os_path(&bin_dir);
+
         eprintln!("Test environment home directory: {}", home_dir.path());
+
+        // OS Path
+        let os_path = TestContext::build_os_path(&bin_dir);
 
         Self {
             home_dir,
@@ -41,6 +50,7 @@ impl TestContext {
     pub fn with_dfx(mut self) -> Self {
         let dfx_path = std::env::var("ICPTEST_DFX_PATH")
             .expect("ICPTEST_DFX_PATH must be set to use with_dfx()");
+
         let src = Utf8PathBuf::from(dfx_path);
         assert!(
             src.exists(),
@@ -68,7 +78,6 @@ impl TestContext {
         self.home_dir.path()
     }
 
-    #[allow(dead_code)]
     pub fn icp(&self) -> Command {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
         self.isolate(&mut cmd);

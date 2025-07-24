@@ -1,10 +1,12 @@
-mod common;
-
-use crate::common::TestContext;
 use icp_fs::fs::write;
-use predicates::str::contains;
-use predicates::{ord::eq, str::PredicateStrExt};
+use predicates::{
+    ord::eq,
+    str::{PredicateStrExt, contains},
+};
 use serial_test::file_serial;
+
+mod common;
+use crate::common::{TestContext, TestNetwork};
 
 #[test]
 fn network_random_port() {
@@ -149,36 +151,25 @@ fn two_projects_different_fixed_ports() {
 fn deploy_to_other_projects_network() {
     let ctx = TestContext::new().with_dfx();
 
-    // Setup project that runs a network
-    let project_dir_a = ctx.create_project_dir("icp-a");
-    ctx.configure_icp_local_network_random_port(&project_dir_a);
-    let _g = ctx.start_network_in(&project_dir_a);
-    let test_network = ctx.wait_for_local_network_descriptor(&project_dir_a);
+    // Project A
+    let proja = ctx.create_project_dir("project-a");
+    ctx.configure_icp_local_network_random_port(&proja);
 
-    let project_dir_b = ctx.create_project_dir("icp-b");
-    let project_dir_b_networks = project_dir_b.join("networks");
-    std::fs::create_dir_all(&project_dir_b_networks)
-        .expect("Failed to create networks directory for project B");
+    // Start network
+    let _g = ctx.start_network_in(&proja);
 
-    // Configure a network for project B to use the project A's network
-    let network_config = format!(
-        r#"
-        mode: connected
-        url: http://localhost:{}
-        root-key: "{}"
-        "#,
-        test_network.gateway_port, test_network.root_key,
-    );
-    std::fs::write(
-        project_dir_b_networks.join("project-a.yaml"),
-        network_config,
-    )
-    .expect("Failed to write network config for project B");
+    let TestNetwork {
+        gateway_port,
+        root_key,
+    } = ctx.wait_for_local_network_descriptor(&proja);
 
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
-    // Project manifest
+    // Project B
+    let projb = ctx.create_project_dir("project-b");
+
+    // Connect to Project A's network
     let pm = format!(
         r#"
         canister:
@@ -186,40 +177,49 @@ fn deploy_to_other_projects_network() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+
+        networks:
+          - name: network-a
+            mode: connected
+            url: http://localhost:{gateway_port}
+            root-key: "{root_key}"
+
+        environments:
+          - name: environment-1
+            network: network-a
         "#,
-        wasm,
     );
 
     write(
-        project_dir_b.join("icp.yaml"), // path
-        pm,                             // contents
+        projb.join("icp.yaml"), // path
+        pm,                     // contents
     )
     .expect("failed to write project manifest");
 
-    ctx.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&proja);
 
     // Deploy project (first time)
     ctx.icp()
-        .current_dir(&project_dir_b)
+        .current_dir(&projb)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
-        .args(["--network", "project-a"])
+        .args(["--environment", "environment-1"])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
-        .current_dir(&project_dir_b)
+        .current_dir(&projb)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
-        .args(["--network", "project-a"])
+        .args(["--environment", "environment-1"])
         .assert()
         .success();
 
     // Query canister
     ctx.icp()
-        .current_dir(&project_dir_b)
+        .current_dir(&projb)
         .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
-        .args(["--network", "project-a"])
+        .args(["--environment", "environment-1"])
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());

@@ -3,24 +3,13 @@ use candid::Principal;
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum RouteField {
-    /// Single url
-    Url(String),
-
-    /// More than one url (route round-robin)
-    Urls(Vec<String>),
-}
-
 /// A "connected network" is a network that we connect to but don't manage.
 /// Typical examples are mainnet or testnets.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConnectedNetworkModel {
-    /// The URL(s) this network can be reached at.
-    #[serde(flatten)]
-    pub route: RouteField,
+    /// The URL this network can be reached at.
+    pub url: String,
 
     /// The root key of this network
     pub root_key: Option<String>,
@@ -36,11 +25,9 @@ fn deserialize_port<'de, D>(deserializer: D) -> Result<BindPort, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let raw = u16::deserialize(deserializer)?;
-    Ok(if raw == 0 {
-        BindPort::Random
-    } else {
-        BindPort::Fixed(raw)
+    Ok(match u16::deserialize(deserializer)? {
+        0 => BindPort::Random,
+        p => BindPort::Fixed(p),
     })
 }
 
@@ -116,9 +103,9 @@ pub struct NetworkDescriptorModel {
 impl NetworkDescriptorModel {
     pub fn gateway_port(&self) -> Option<u16> {
         if self.gateway.fixed {
-            Some(self.gateway.port)
-        } else {
-            None
+            return Some(self.gateway.port);
         }
+
+        None
     }
 }

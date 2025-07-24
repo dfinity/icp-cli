@@ -1,7 +1,4 @@
-use std::env::var;
-use std::fs::read_to_string;
-use std::process::ExitStatus;
-use std::time::Duration;
+use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::{
@@ -17,24 +14,21 @@ use snafu::prelude::*;
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
-use crate::RunNetworkError::NoPocketIcPath;
-use crate::config::{
-    BindPort, ManagedNetworkModel, NetworkDescriptorGatewayPort, NetworkDescriptorModel,
-};
-use crate::directory::SaveNetworkDescriptorError;
-use crate::managed::{
-    descriptor::{
-        fixed_port_lock::AnotherProjectRunningOnSamePortError,
-        network_lock::ProjectNetworkAlreadyRunningError,
+use crate::{
+    NetworkDirectory,
+    RunNetworkError::NoPocketIcPath,
+    config::{BindPort, ManagedNetworkModel, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
+    directory::SaveNetworkDescriptorError,
+    managed::{
+        descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
+        pocketic::{
+            CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
+            spawn_pocketic,
+        },
+        run::InitializePocketicError::NoRootKey,
     },
-    pocketic::{
-        admin::{CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface},
-        instance::PocketIcInstance,
-        native::spawn_pocketic,
-    },
-    run::InitializePocketicError::NoRootKey,
+    status,
 };
-use crate::{NetworkDirectory, status};
 
 pub async fn run_network(
     config: &ManagedNetworkModel,

@@ -1,17 +1,19 @@
-use crate::config::NetworkDescriptorModel;
-use crate::managed::descriptor::fixed_port_lock::FixedPortLock;
-use crate::managed::descriptor::network_lock::NetworkLock;
-use crate::managed::descriptor::writer::NetworkDescriptorWriter;
-use crate::managed::descriptor::{
-    cleaner::NetworkDescriptorCleaner,
-    writer::{TruncateFileError, WriteDescriptorError},
-};
-use crate::structure::NetworkDirectoryStructure;
 use camino::{Utf8Path, Utf8PathBuf};
-use icp_fs::fs::{CreateDirAllError, create_dir_all};
-use icp_fs::lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock};
-use icp_fs::lockedjson::{LoadJsonWithLockError, load_json_with_lock};
+use icp_fs::{
+    fs::{CreateDirAllError, create_dir_all},
+    lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
+    lockedjson::{LoadJsonWithLockError, load_json_with_lock},
+};
 use snafu::prelude::*;
+
+use crate::{
+    config::NetworkDescriptorModel,
+    managed::descriptor::{
+        FixedPortLock, NetworkDescriptorCleaner, NetworkDescriptorWriter, NetworkLock,
+        TruncateFileError, WriteDescriptorError,
+    },
+    structure::NetworkDirectoryStructure,
+};
 
 pub struct NetworkDirectory {
     network_name: String,
@@ -32,7 +34,9 @@ impl NetworkDirectory {
             structure,
         }
     }
+}
 
+impl NetworkDirectory {
     pub fn network_name(&self) -> &str {
         &self.network_name
     }

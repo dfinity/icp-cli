@@ -1,12 +1,15 @@
-use crate::context::{ContextGetAgentError, GetProjectError};
-use crate::options::{EnvironmentOpt, IdentityOpt};
-use crate::{context::Context, store_id::LookupError as LookupIdError};
 use clap::Parser;
 use ic_agent::AgentError;
 use snafu::Snafu;
 
+use crate::{
+    context::{Context, ContextGetAgentError, GetProjectError},
+    options::{EnvironmentOpt, IdentityOpt},
+    store_id::LookupError as LookupIdError,
+};
+
 #[derive(Debug, Parser)]
-pub struct CanisterStartCmd {
+pub struct Cmd {
     /// The name of the canister within the current project
     pub name: String,
 
@@ -17,7 +20,7 @@ pub struct CanisterStartCmd {
     environment: EnvironmentOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: CanisterStartCmd) -> Result<(), CanisterStartError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
 
@@ -26,14 +29,14 @@ pub async fn exec(ctx: &Context, cmd: CanisterStartCmd) -> Result<(), CanisterSt
         .canisters
         .iter()
         .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CanisterStartError::CanisterNotFound { name: cmd.name })?;
+        .ok_or(CommandError::CanisterNotFound { name: cmd.name })?;
 
     // Load target environment
     let env = pm
         .environments
         .iter()
         .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CanisterStartError::EnvironmentNotFound {
+        .ok_or(CommandError::EnvironmentNotFound {
             name: cmd.environment.name().to_owned(),
         })?;
 
@@ -47,7 +50,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterStartCmd) -> Result<(), CanisterSt
 
     // Ensure canister is included in the environment
     if !ecs.contains(&c.name) {
-        return Err(CanisterStartError::EnvironmentCanister {
+        return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
             canister: c.name.to_owned(),
         });
@@ -80,7 +83,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterStartCmd) -> Result<(), CanisterSt
 }
 
 #[derive(Debug, Snafu)]
-pub enum CanisterStartError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 

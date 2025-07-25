@@ -1,10 +1,13 @@
-use crate::context::{Context, ContextGetAgentError, GetProjectError};
-use crate::options::{EnvironmentOpt, IdentityOpt};
-use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
 use snafu::Snafu;
+
+use crate::{
+    context::{Context, ContextGetAgentError, GetProjectError},
+    options::{EnvironmentOpt, IdentityOpt},
+    store_id::{LookupError, RegisterError},
+};
 
 pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
 
@@ -47,7 +50,7 @@ pub struct CanisterSettings {
 }
 
 #[derive(Debug, Parser)]
-pub struct CanisterCreateCmd {
+pub struct Cmd {
     /// The name of the canister within the current project
     pub name: Option<String>,
 
@@ -74,7 +77,7 @@ pub struct CanisterCreateCmd {
     pub quiet: bool,
 }
 
-pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
     let pm = ctx.project()?;
 
@@ -83,7 +86,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
         .environments
         .iter()
         .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CanisterCreateError::EnvironmentNotFound {
+        .ok_or(CommandError::EnvironmentNotFound {
             name: cmd.environment.name().to_owned(),
         })?;
 
@@ -100,7 +103,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
     // Check if selected canister exists
     if let Some(name) = &cmd.name {
         if cs.is_empty() {
-            return Err(CanisterCreateError::CanisterNotFound {
+            return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
             });
         }
@@ -123,7 +126,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
     // Ensure canister is included in the environment
     if let Some(name) = &cmd.name {
         if !ecs.contains(name) {
-            return Err(CanisterCreateError::EnvironmentCanister {
+            return Err(CommandError::EnvironmentCanister {
                 environment: env.name.to_owned(),
                 canister: name.to_owned(),
             });
@@ -149,7 +152,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
 
     // Verify at least one canister is available to create
     if cs.is_empty() {
-        return Err(CanisterCreateError::NoCanisters);
+        return Err(CommandError::NoCanisters);
     }
 
     // Load identity
@@ -253,7 +256,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterCreateCmd) -> Result<(), CanisterC
 }
 
 #[derive(Debug, Snafu)]
-pub enum CanisterCreateError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 

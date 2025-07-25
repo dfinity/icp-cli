@@ -1,16 +1,17 @@
-use crate::context::{ContextGetAgentError, GetProjectError};
-use crate::options::{EnvironmentOpt, IdentityOpt};
-use crate::{
-    context::Context, store_artifact::LookupError as LookupArtifactError,
-    store_id::LookupError as LookupIdError,
-};
 use clap::Parser;
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::InstallMode;
 use snafu::Snafu;
 
+use crate::{
+    context::{Context, ContextGetAgentError, GetProjectError},
+    options::{EnvironmentOpt, IdentityOpt},
+    store_artifact::LookupError as LookupArtifactError,
+    store_id::LookupError as LookupIdError,
+};
+
 #[derive(Debug, Parser)]
-pub struct CanisterInstallCmd {
+pub struct Cmd {
     /// The name of the canister within the current project
     pub name: Option<String>,
 
@@ -25,7 +26,7 @@ pub struct CanisterInstallCmd {
     pub environment: EnvironmentOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), CanisterInstallError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
     let pm = ctx.project()?;
 
@@ -42,7 +43,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), Canister
     // Check if selected canister exists
     if let Some(name) = &cmd.name {
         if cs.is_empty() {
-            return Err(CanisterInstallError::CanisterNotFound {
+            return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
             });
         }
@@ -53,7 +54,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), Canister
         .environments
         .iter()
         .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CanisterInstallError::EnvironmentNotFound {
+        .ok_or(CommandError::EnvironmentNotFound {
             name: cmd.environment.name().to_owned(),
         })?;
 
@@ -74,7 +75,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), Canister
     // Ensure canister is included in the environment
     if let Some(name) = &cmd.name {
         if !ecs.contains(name) {
-            return Err(CanisterInstallError::EnvironmentCanister {
+            return Err(CommandError::EnvironmentCanister {
                 environment: env.name.to_owned(),
                 canister: name.to_owned(),
             });
@@ -83,7 +84,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), Canister
 
     // Ensure at least one canister has been selected
     if cs.is_empty() {
-        return Err(CanisterInstallError::NoCanisters);
+        return Err(CommandError::NoCanisters);
     }
 
     // Load identity
@@ -151,7 +152,7 @@ pub async fn exec(ctx: &Context, cmd: CanisterInstallCmd) -> Result<(), Canister
 }
 
 #[derive(Debug, Snafu)]
-pub enum CanisterInstallError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 

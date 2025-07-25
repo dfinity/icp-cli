@@ -8,6 +8,7 @@ pub mod create;
 pub mod delete;
 pub mod info;
 pub mod install;
+pub mod list;
 pub mod start;
 pub mod status;
 pub mod stop;
@@ -20,14 +21,15 @@ pub struct Cmd {
 
 #[derive(Debug, Subcommand)]
 pub enum CanisterSubcmd {
-    Call(call::CanisterCallCmd),
-    Create(create::CanisterCreateCmd),
-    Delete(delete::CanisterDeleteCmd),
-    Info(info::CanisterInfoCmd),
-    Install(install::CanisterInstallCmd),
-    Start(start::CanisterStartCmd),
-    Status(status::CanisterStatusCmd),
-    Stop(stop::CanisterStopCmd),
+    Call(call::Cmd),
+    Create(create::Cmd),
+    Delete(delete::Cmd),
+    Info(info::Cmd),
+    Install(install::Cmd),
+    List(list::Cmd),
+    Start(start::Cmd),
+    Status(status::Cmd),
+    Stop(stop::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandError> {
@@ -37,6 +39,7 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandErro
         CanisterSubcmd::Delete(subcmd) => delete::exec(ctx, subcmd).await?,
         CanisterSubcmd::Info(subcmd) => info::exec(ctx, subcmd).await?,
         CanisterSubcmd::Install(subcmd) => install::exec(ctx, subcmd).await?,
+        CanisterSubcmd::List(subcmd) => list::exec(ctx, subcmd).await?,
         CanisterSubcmd::Start(subcmd) => start::exec(ctx, subcmd).await?,
         CanisterSubcmd::Status(subcmd) => status::exec(ctx, subcmd).await?,
         CanisterSubcmd::Stop(subcmd) => stop::exec(ctx, subcmd).await?,
@@ -47,28 +50,29 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandErro
 #[derive(Debug, Snafu)]
 pub enum CanisterCommandError {
     #[snafu(transparent)]
-    Call { source: call::CanisterCallError },
+    Call { source: call::CommandError },
 
     #[snafu(transparent)]
-    Create { source: create::CanisterCreateError },
+    Create { source: create::CommandError },
 
     #[snafu(transparent)]
-    Delete { source: delete::CanisterDeleteError },
+    Delete { source: delete::CommandError },
 
     #[snafu(transparent)]
-    Start { source: start::CanisterStartError },
+    Start { source: start::CommandError },
 
     #[snafu(transparent)]
-    Info { source: info::CanisterInfoError },
+    Info { source: info::CommandError },
 
     #[snafu(transparent)]
-    Install {
-        source: install::CanisterInstallError,
-    },
+    Install { source: install::CommandError },
 
     #[snafu(transparent)]
-    Status { source: status::CanisterStatusError },
+    List { source: list::CommandError },
 
     #[snafu(transparent)]
-    Stop { source: stop::CanisterStopError },
+    Status { source: status::CommandError },
+
+    #[snafu(transparent)]
+    Stop { source: stop::CommandError },
 }

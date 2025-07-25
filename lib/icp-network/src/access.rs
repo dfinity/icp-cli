@@ -50,8 +50,8 @@ impl NetworkAccess {
 
         // Create agent
         let agent = builder
-            .with_arc_identity(identity)
-            .with_ingress_expiry(Duration::from_secs(4 * MINUTE))
+            .with_arc_identity(identity) // TODO would come from the command line or config
+            .with_ingress_expiry(Duration::from_secs(4 * MINUTE))  // TODO would come from the network descriptor
             .build()
             .map_err(|err| CreateAgentError { source: err })?;
 

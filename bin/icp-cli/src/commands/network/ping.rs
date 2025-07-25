@@ -8,7 +8,7 @@ use std::time::Duration;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Parser, Debug)]
-pub struct PingCmd {
+pub struct Cmd {
     #[clap(flatten)]
     network: EnvironmentOpt,
 
@@ -21,7 +21,7 @@ pub struct PingCmd {
     wait_healthy: bool,
 }
 
-pub async fn exec(ctx: &Context, cmd: PingCmd) -> Result<(), PingNetworkCommandError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     ctx.require_identity(Some("anonymous"));
     let network = cmd
         .positional_network_name
@@ -36,7 +36,7 @@ pub async fn exec(ctx: &Context, cmd: PingCmd) -> Result<(), PingNetworkCommandE
         agent
             .status()
             .await
-            .map_err(|source| PingNetworkCommandError::Status { source })?
+            .map_err(|source| CommandError::Status { source })?
     };
 
     println!("{}", status);
@@ -70,7 +70,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, TimeoutWaitingForHe
 }
 
 #[derive(Debug, Snafu)]
-pub enum PingNetworkCommandError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetAgent { source: ContextGetAgentError },
 

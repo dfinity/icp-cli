@@ -1,10 +1,11 @@
-use crate::context::{Context, GetProjectError};
 use clap::Parser;
 use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
 use icp_project::project::NoSuchNetworkError;
 use snafu::Snafu;
 
-/// Run the local network
+use crate::context::{Context, GetProjectError};
+
+/// Run a given network
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to run
@@ -12,7 +13,7 @@ pub struct Cmd {
     name: String,
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), RunNetworkCommandError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
     let project = ctx.project()?;
 
@@ -23,7 +24,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), RunNetworkCommandError>
 
         // Non-managed networks cannot be started
         NetworkConfig::Connected(_) => {
-            return Err(RunNetworkCommandError::NetworkConfigMustBeManaged {
+            return Err(CommandError::NetworkConfigMustBeManaged {
                 network_name: cmd.name,
             });
         }
@@ -52,7 +53,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), RunNetworkCommandError>
 }
 
 #[derive(Debug, Snafu)]
-pub enum RunNetworkCommandError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 

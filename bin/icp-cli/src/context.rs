@@ -1,14 +1,21 @@
-use crate::context::GetProjectError::ProjectNotFound;
-use crate::{store_artifact::ArtifactStore, store_id::IdStore};
+use std::sync::{Arc, OnceLock};
+
 use candid::Principal;
 use ic_agent::{Agent, Identity};
 use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
-use icp_network::access::{CreateAgentError, GetNetworkAccessError, NetworkAccess};
-use icp_project::directory::{FindProjectError, ProjectDirectory};
-use icp_project::project::{LoadProjectManifestError, NoSuchNetworkError, Project};
+use icp_network::{
+    NETWORK_IC,
+    access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
+};
+use icp_project::{
+    directory::{FindProjectError, ProjectDirectory},
+    project::{LoadProjectManifestError, NoSuchNetworkError, Project},
+};
 use snafu::Snafu;
-use std::sync::{Arc, OnceLock};
+
+use crate::context::GetProjectError::ProjectNotFound;
+use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub struct Context {
     dirs: IcpCliDirs,
@@ -160,7 +167,7 @@ impl Context {
             .cloned()
             .expect("call set_network_opt before get_network_access");
 
-        if network_name == "ic" {
+        if network_name == NETWORK_IC {
             return Ok(NetworkAccess::mainnet());
         }
 

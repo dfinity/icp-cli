@@ -7,7 +7,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
-use icp_network::{NETWORK_LOCAL, NetworkConfig};
+use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 use pathdiff::diff_utf8_paths;
 use snafu::{ResultExt, Snafu};
 
@@ -304,14 +304,17 @@ impl Project {
                     network_path: network_path.clone(),
                 })?
                 .to_string();
-            if name == "ic" {
+
+            if name == NETWORK_IC {
                 return Err(LoadNetworkConfigurationsError::CannotRedefineIcNetwork {
                     network_path: network_path.clone(),
                 });
             }
+
             if networks.contains_key(&name) {
                 return Err(LoadNetworkConfigurationsError::DuplicateNetworkName { name });
             }
+
             // Load the network config from the path
             let network_config = pd.load_network_config(&network_path)?;
 

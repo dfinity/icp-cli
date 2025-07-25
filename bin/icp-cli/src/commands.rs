@@ -9,6 +9,7 @@ use snafu::Snafu;
 mod build;
 mod canister;
 mod deploy;
+mod environment;
 mod identity;
 mod network;
 mod sync;
@@ -24,6 +25,7 @@ pub enum Subcmd {
     Build(build::Cmd),
     Canister(canister::Cmd),
     Deploy(deploy::Cmd),
+    Environment(environment::Cmd),
     Identity(identity::IdentityCmd),
     Network(network::NetworkCmd),
     Sync(sync::Cmd),
@@ -34,6 +36,7 @@ pub async fn dispatch(ctx: &Context, cli: Cmd) -> Result<(), DispatchError> {
         Subcmd::Build(opts) => build::exec(ctx, opts).await?,
         Subcmd::Canister(opts) => canister::dispatch(ctx, opts).await?,
         Subcmd::Deploy(opts) => deploy::exec(ctx, opts).await?,
+        Subcmd::Environment(opts) => environment::exec(ctx, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(ctx, opts).await?,
         Subcmd::Network(opts) => network::dispatch(ctx, opts).await?,
         Subcmd::Sync(opts) => sync::exec(ctx, opts).await?,
@@ -51,6 +54,9 @@ pub enum DispatchError {
 
     #[snafu(transparent)]
     Deploy { source: deploy::CommandError },
+
+    #[snafu(transparent)]
+    Environment { source: environment::CommandError },
 
     #[snafu(transparent)]
     Identity { source: IdentityCommandError },

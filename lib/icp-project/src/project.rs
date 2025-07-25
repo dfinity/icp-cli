@@ -5,11 +5,12 @@ use std::{
 
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
+use pathdiff::diff_utf8_paths;
+use snafu::{ResultExt, Snafu};
+
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
-use pathdiff::diff_utf8_paths;
-use snafu::{ResultExt, Snafu};
 
 use crate::{
     ENVIRONMENT_LOCAL,

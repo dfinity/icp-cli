@@ -7,6 +7,7 @@ use std::{
 use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{Utf8TempDir, tempdir};
+use icp_network::NETWORK_LOCAL;
 use serde_json::{Value, json};
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx};
@@ -203,7 +204,7 @@ impl TestContext {
 
     // wait up to 30 seconds for descriptor path to contain valid json
     pub fn wait_for_local_network_descriptor(&self, project_dir: &Utf8Path) -> TestNetwork {
-        self.wait_for_network_descriptor(project_dir, "local")
+        self.wait_for_network_descriptor(project_dir, NETWORK_LOCAL)
     }
 
     pub fn wait_for_network_descriptor(

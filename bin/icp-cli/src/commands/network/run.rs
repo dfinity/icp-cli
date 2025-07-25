@@ -1,6 +1,6 @@
 use crate::context::{Context, GetProjectError};
 use clap::Parser;
-use icp_network::{NetworkConfig, RunNetworkError, run_network};
+use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
 use icp_project::project::NoSuchNetworkError;
 use snafu::Snafu;
 
@@ -8,7 +8,7 @@ use snafu::Snafu;
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to run
-    #[clap(default_value = "local")]
+    #[clap(default_value = NETWORK_LOCAL)]
     name: String,
 }
 

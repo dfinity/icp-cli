@@ -1,18 +1,21 @@
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
+use std::{
+    collections::{HashMap, HashSet, hash_map::Entry},
+    str::FromStr,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
+use icp_canister::model::CanisterManifest;
+use icp_fs::yaml::LoadYamlFileError;
+use icp_network::{NETWORK_LOCAL, NetworkConfig};
 use pathdiff::diff_utf8_paths;
 use snafu::{ResultExt, Snafu};
 
-use icp_canister::model::CanisterManifest;
-use icp_fs::yaml::LoadYamlFileError;
-use icp_network::NetworkConfig;
-
-use crate::directory::ProjectDirectory;
-use crate::model::{CanistersField, EnvironmentManifest, NetworkField, default_networks};
+use crate::{
+    ENVIRONMENT_LOCAL,
+    directory::ProjectDirectory,
+    model::{CanistersField, EnvironmentManifest, NetworkField, default_networks},
+};
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -196,12 +199,12 @@ impl Project {
 
         // Ensure a `local` network is defined
         networks
-            .entry("local".to_string())
+            .entry(NETWORK_LOCAL.to_string())
             .or_insert(NetworkConfig::local_default());
 
         // Environments
         let environments = pm.environments.unwrap_or(vec![EnvironmentManifest {
-            name: "local".to_string(),
+            name: ENVIRONMENT_LOCAL.to_string(),
             network: None,
             canisters: None,
             settings: None,
@@ -216,7 +219,7 @@ impl Project {
 
                 // Default network for an environment is `local`
                 None => {
-                    v.network = Some("local".into());
+                    v.network = Some(NETWORK_LOCAL.into());
                     v
                 }
             })
@@ -503,7 +506,7 @@ mod tests {
     use icp_canister::model::{
         BuildStep, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
     };
-    use icp_network::{BindPort, NetworkConfig};
+    use icp_network::{BindPort, NETWORK_LOCAL, NetworkConfig};
 
     use crate::directory::ProjectDirectory;
     use crate::project::{LoadProjectManifestError, Project};
@@ -804,11 +807,13 @@ mod tests {
         let pm = Project::load(pd).unwrap();
 
         let local_network = pm
-            .get_network_config("local")
+            .get_network_config(NETWORK_LOCAL)
             .expect("local network should be defined");
+
         let NetworkConfig::Managed(managed) = local_network else {
             panic!("Expected local network to be managed");
         };
+
         // Check that the local network has the default configuration
         assert_eq!(managed.gateway.host, "127.0.0.1");
         assert!(matches!(managed.gateway.port, BindPort::Fixed(8000)));

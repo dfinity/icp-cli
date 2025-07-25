@@ -1,4 +1,5 @@
 use icp_fs::fs::write;
+use icp_network::NETWORK_LOCAL;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -22,7 +23,7 @@ fn network_random_port() {
     // but for now we need to wait for the descriptor to be created.
     ctx.wait_for_local_network_descriptor(&project_dir);
 
-    let test_network = ctx.configure_dfx_network(&project_dir, "local");
+    let test_network = ctx.configure_dfx_network(&project_dir, NETWORK_LOCAL);
     let dfx_network_name = test_network.dfx_network_name;
     let gateway_port = test_network.gateway_port;
 

@@ -15,7 +15,7 @@ use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 use crate::{
     ENVIRONMENT_LOCAL,
     directory::ProjectDirectory,
-    model::{CanistersField, EnvironmentManifest, NetworkField, default_networks},
+    model::{CanisterItem, CanistersField, EnvironmentManifest, NetworkItem, default_networks},
 };
 
 fn is_glob(s: &str) -> bool {
@@ -83,9 +83,52 @@ impl Project {
 
             // Case 2: Multi-canister project, where 'canisters' key was used (or default applied).
             CanistersField::Canisters(cs) => {
-                let mut out = vec![];
+                // Collect paths and inline-canister definitions
+                let (paths, mut cs) = (
+                    //
+                    // Paths
+                    cs.iter()
+                        .filter_map(|v| match v {
+                            CanisterItem::Path(path) => Some(path.to_owned()),
+                            CanisterItem::Definition(_) => None,
+                        })
+                        .collect::<Vec<String>>(),
+                    //
+                    // Manifests
+                    cs.iter()
+                        .filter_map(|v| match v {
+                            CanisterItem::Path(_) => None,
+                            CanisterItem::Definition(c) => {
+                                Some((
+                                    pds.root().to_owned(), // path
+                                    c.to_owned(),          // canister
+                                ))
+                            }
+                        })
+                        .collect::<Vec<(Utf8PathBuf, CanisterManifest)>>(),
+                );
 
-                for pattern in cs {
+                // Track names
+                let mut cnames: HashMap<String, ()> = HashMap::new();
+
+                for c in &cs {
+                    match cnames.entry(c.1.name.to_owned()) {
+                        // Duplicate
+                        Entry::Occupied(e) => {
+                            return Err(LoadProjectManifestError::DuplicateCanister {
+                                canister: e.key().to_owned(),
+                            });
+                        }
+
+                        // Ok
+                        Entry::Vacant(e) => {
+                            e.insert(());
+                        }
+                    }
+                }
+
+                // Process paths and globs
+                for pattern in paths {
                     let dirs = match is_glob(&pattern) {
                         // Glob
                         true => {
@@ -145,14 +188,29 @@ impl Project {
                             .load_canister_manifest(&cpath)
                             .context(CanisterLoadSnafu { path: &cpath })?;
 
-                        out.push((
+                        // Check for duplicates
+                        match cnames.entry(cm.name.to_owned()) {
+                            // Duplicate
+                            Entry::Occupied(e) => {
+                                return Err(LoadProjectManifestError::DuplicateCanister {
+                                    canister: e.key().to_owned(),
+                                });
+                            }
+
+                            // Ok
+                            Entry::Vacant(e) => {
+                                e.insert(());
+                            }
+                        }
+
+                        cs.push((
                             cpath, // path
                             cm,    // manifest
                         ))
                     }
                 }
 
-                out
+                cs
             }
         };
 
@@ -165,8 +223,8 @@ impl Project {
             networks
                 .iter()
                 .filter_map(|v| match v {
-                    NetworkField::Path(path) => Some(path.to_owned()),
-                    NetworkField::Definition(_) => None,
+                    NetworkItem::Path(path) => Some(path.to_owned()),
+                    NetworkItem::Definition(_) => None,
                 })
                 .collect::<Vec<String>>(),
             //
@@ -174,14 +232,15 @@ impl Project {
             networks
                 .iter()
                 .filter_map(|v| match v {
-                    NetworkField::Path(_) => None,
-                    NetworkField::Definition(m) => Some((m.name.to_owned(), m.config.clone())),
+                    NetworkItem::Path(_) => None,
+                    NetworkItem::Definition(m) => Some((m.name.to_owned(), m.config.clone())),
                 })
                 .collect::<HashMap<String, NetworkConfig>>(),
         );
 
         // Load network paths
         let paths = Project::gather_network_paths(&pd, paths)?;
+
         for (name, cfg) in Project::load_network_configurations(&pd, paths)? {
             match networks.entry(name) {
                 // Duplicate
@@ -422,6 +481,9 @@ pub enum LoadProjectManifestError {
     LoadNetworkConfigurations {
         source: LoadNetworkConfigurationsError,
     },
+
+    #[snafu(display("project contains two similarly named canisters: '{canister}'"))]
+    DuplicateCanister { canister: String },
 
     #[snafu(display("project contains two similarly named networks: '{network}'"))]
     DuplicateNetwork { network: String },

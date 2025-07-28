@@ -294,6 +294,25 @@ impl Project {
             settings: None,
         }]);
 
+        // Check for duplicate environments
+        let mut enames: HashMap<String, ()> = HashMap::new();
+
+        for v in &environments {
+            match enames.entry(v.name.to_owned()) {
+                // Duplicate
+                Entry::Occupied(e) => {
+                    return Err(LoadProjectManifestError::DuplicateEnvironment {
+                        environment: e.key().to_owned(),
+                    });
+                }
+
+                // Ok
+                Entry::Vacant(e) => {
+                    e.insert(());
+                }
+            }
+        }
+
         // Default environments network
         let environments = environments
             .into_iter()
@@ -511,6 +530,9 @@ pub enum LoadProjectManifestError {
 
     #[snafu(display("project contains two similarly named networks: '{network}'"))]
     DuplicateNetwork { network: String },
+
+    #[snafu(display("project contains two similarly named environments: '{environment}'"))]
+    DuplicateEnvironment { environment: String },
 
     #[snafu(display("environment '{environment}' targets non-existent network '{network}'"))]
     EnvironmentNetworkDoesntExist {

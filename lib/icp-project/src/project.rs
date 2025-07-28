@@ -235,6 +235,7 @@ impl Project {
                     NetworkItem::Path(_) => None,
                     NetworkItem::Definition(m) => Some((m.name.to_owned(), m.config.clone())),
                 })
+                // TODO(or.ricon): note that this will swallow duplicates
                 .collect::<HashMap<String, NetworkConfig>>(),
         );
 

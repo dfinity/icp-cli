@@ -1,4 +1,4 @@
-use crate::env::Env;
+use crate::context::Context;
 use clap::Parser;
 use icp_identity::manifest::{load_identity_defaults, load_identity_list};
 use snafu::Snafu;
@@ -6,8 +6,8 @@ use snafu::Snafu;
 #[derive(Debug, Parser)]
 pub struct ListCmd;
 
-pub fn exec(env: &Env, _cmd: ListCmd) -> Result<(), ListKeysError> {
-    let dirs = env.dirs();
+pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
+    let dirs = ctx.dirs();
     let list = load_identity_list(dirs)?;
     let defaults = load_identity_defaults(dirs)?;
     for id in list.identities.keys() {

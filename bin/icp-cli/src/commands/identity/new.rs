@@ -1,4 +1,4 @@
-use crate::env::Env;
+use crate::context::Context;
 use bip39::{Language, Mnemonic, MnemonicType};
 use camino::Utf8PathBuf;
 use clap::Parser;
@@ -16,11 +16,11 @@ pub struct NewCmd {
     output_seed: Option<Utf8PathBuf>,
 }
 
-pub fn exec(env: &Env, cmd: NewCmd) -> Result<(), NewIdentityError> {
+pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
     let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
     let key = derive_default_key_from_seed(&mnemonic);
     create_identity(
-        env.dirs(),
+        ctx.dirs(),
         &cmd.name,
         IdentityKey::Secp256k1(key),
         CreateFormat::Plaintext,

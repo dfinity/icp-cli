@@ -1,36 +1,59 @@
-use crate::env::{Env, GetProjectError};
 use clap::Parser;
-use icp_network::{NetworkConfig, RunNetworkError, run_network};
+use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
 use icp_project::project::NoSuchNetworkError;
 use snafu::Snafu;
 
-/// Run the local network
+use crate::context::{Context, GetProjectError};
+
+/// Run a given network
 #[derive(Parser, Debug)]
-pub struct Cmd {}
+pub struct Cmd {
+    /// Name of the network to run
+    #[clap(default_value = NETWORK_LOCAL)]
+    name: String,
+}
 
-pub async fn exec(env: &Env, _cmd: Cmd) -> Result<(), RunNetworkCommandError> {
-    let project = env.project()?;
-    let pd = &project.directory;
-    let network_name = "local";
-    let config = project.get_network_config(network_name)?;
-    let NetworkConfig::Managed(config) = config else {
-        return Err(RunNetworkCommandError::NetworkConfigMustBeManaged {
-            network_name: network_name.to_string(),
-        });
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    // Load project
+    let project = ctx.project()?;
+
+    // Obtain network configuration
+    let cfg = match project.get_network_config(&cmd.name)? {
+        // Locally-managed network
+        NetworkConfig::Managed(cfg) => cfg,
+
+        // Non-managed networks cannot be started
+        NetworkConfig::Connected(_) => {
+            return Err(CommandError::NetworkConfigMustBeManaged {
+                network_name: cmd.name,
+            });
+        }
     };
-    let nd = pd.network(network_name, env.dirs().port_descriptor_dir());
-    let project_root = pd.structure().root();
 
-    eprintln!("Project root: {project_root}");
-    eprintln!("Network root: {}", nd.structure().network_root());
+    // Project directory
+    let pd = &project.directory;
 
-    run_network(config, nd, project_root).await?;
+    // Network directory
+    let nd = pd.network(
+        &cmd.name,                        // network_name
+        ctx.dirs().port_descriptor_dir(), // port_descriptor
+    );
+
+    eprintln!("Project root: {}", pd.structure().root());
+    eprintln!("Network root: {}", nd.structure().network_root);
+
+    run_network(
+        cfg,                   // config
+        nd,                    // nd
+        pd.structure().root(), // project_root
+    )
+    .await?;
 
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
-pub enum RunNetworkCommandError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 

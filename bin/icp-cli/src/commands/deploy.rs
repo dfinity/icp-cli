@@ -1,22 +1,20 @@
-use crate::commands::canister::create::DEFAULT_EFFECTIVE_ID;
-use crate::env::GetProjectError;
-use crate::options::{IdentityOpt, NetworkOpt};
-use crate::{
-    commands::{
-        build,
-        canister::{
-            self,
-            create::{CanisterCreateCmd, CanisterCreateError, CanisterIDs, CanisterSettings},
-            install::{CanisterInstallCmd, CanisterInstallError},
-        },
-        sync,
-    },
-    env::Env,
-};
 use clap::Parser;
 use ic_agent::export::Principal;
 use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
+
+use crate::{
+    commands::{
+        build,
+        canister::{
+            create::{self, CanisterIDs, CanisterSettings, DEFAULT_EFFECTIVE_ID},
+            install,
+        },
+        sync,
+    },
+    context::{Context, GetProjectError},
+    options::{EnvironmentOpt, IdentityOpt},
+};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -31,7 +29,7 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: NetworkOpt,
+    pub environment: EnvironmentOpt,
 
     /// The effective canister ID to use when calling the management canister.
     #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
@@ -42,9 +40,9 @@ pub struct Cmd {
     pub controller: Vec<Principal>,
 }
 
-pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = env.project()?;
+    let pm = ctx.project()?;
 
     // Choose canisters to create
     let canisters = pm
@@ -74,7 +72,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         //                 Currently we simply invoke the adjacent `build` command.
         //                 We should consider refactoring `build` to use library code instead.
         build::exec(
-            env,
+            ctx,
             build::Cmd {
                 name: Some(c.name.to_owned()),
             },
@@ -90,12 +88,12 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // TODO(or.ricon): Temporary approach that can be revisited.
         //                 Currently we simply invoke the adjacent `canister::create` command.
         //                 We should consider refactoring `canister::create` to use library code instead.
-        let out = canister::create::exec(
-            env,
-            CanisterCreateCmd {
+        let out = create::exec(
+            ctx,
+            create::Cmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
-                network: cmd.network.clone(),
+                environment: cmd.environment.clone(),
 
                 // Ids
                 ids: CanisterIDs {
@@ -117,7 +115,7 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         .await;
 
         if let Err(err) = out {
-            if !matches!(err, CanisterCreateError::NoCanisters) {
+            if !matches!(err, create::CommandError::NoCanisters) {
                 return Err(CommandError::Create { source: err });
             }
         }
@@ -131,19 +129,19 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         // TODO(or.ricon): Temporary approach that can be revisited.
         //                 Currently we simply invoke the adjacent `canister::create` command.
         //                 We should consider refactoring `canister::create` to use library code instead.
-        let out = canister::install::exec(
-            env,
-            CanisterInstallCmd {
+        let out = install::exec(
+            ctx,
+            install::Cmd {
                 name: Some(c.name.to_owned()),
                 mode: cmd.mode.to_owned(),
                 identity: cmd.identity.clone(),
-                network: cmd.network.clone(),
+                environment: cmd.environment.clone(),
             },
         )
         .await;
 
         if let Err(err) = out {
-            if !matches!(err, CanisterInstallError::NoCanisters) {
+            if !matches!(err, install::CommandError::NoCanisters) {
                 return Err(CommandError::Install { source: err });
             }
         }
@@ -158,11 +156,11 @@ pub async fn exec(env: &Env, cmd: Cmd) -> Result<(), CommandError> {
         //                 Currently we simply invoke the adjacent `canister::sync` command.
         //                 We should consider refactoring `canister::sync` to use library code instead.
         let out = sync::exec(
-            env,
+            ctx,
             sync::Cmd {
                 name: Some(c.name.to_owned()),
                 identity: cmd.identity.clone(),
-                network: cmd.network.clone(),
+                environment: cmd.environment.clone(),
             },
         )
         .await;
@@ -192,14 +190,10 @@ pub enum CommandError {
     Build { source: build::CommandError },
 
     #[snafu(transparent)]
-    Create {
-        source: canister::create::CanisterCreateError,
-    },
+    Create { source: create::CommandError },
 
     #[snafu(transparent)]
-    Install {
-        source: canister::install::CanisterInstallError,
-    },
+    Install { source: install::CommandError },
 
     #[snafu(transparent)]
     Sync { source: sync::CommandError },

@@ -7,22 +7,14 @@ pub struct NetworkDirectoryStructure {
 
 impl NetworkDirectoryStructure {
     pub fn new(network_root: &Utf8Path, port_descriptor_dir: &Utf8Path) -> Self {
-        let network_root = network_root.to_path_buf();
-        let port_descriptor_dir = port_descriptor_dir.to_path_buf();
         Self {
-            network_root,
-            port_descriptor_dir,
+            network_root: network_root.to_path_buf(),
+            port_descriptor_dir: port_descriptor_dir.to_path_buf(),
         }
     }
+}
 
-    pub fn network_root(&self) -> &Utf8Path {
-        &self.network_root
-    }
-
-    pub fn port_descriptor_dir(&self) -> &Utf8Path {
-        &self.port_descriptor_dir
-    }
-
+impl NetworkDirectoryStructure {
     pub fn network_lock_path(&self) -> Utf8PathBuf {
         self.network_root.join("lock")
     }

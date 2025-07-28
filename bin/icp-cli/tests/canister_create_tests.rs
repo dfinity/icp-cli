@@ -1,4 +1,4 @@
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use camino_tempfile::NamedUtf8TempFile;
 use icp_fs::fs::write;
 use predicates::{
@@ -12,10 +12,10 @@ mod common;
 #[test]
 #[serial]
 fn canister_create() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
     let pm = r#"
@@ -34,13 +34,13 @@ fn canister_create() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Create canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -55,10 +55,10 @@ fn canister_create() {
 #[test]
 #[serial]
 fn canister_create_with_settings() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
@@ -90,13 +90,13 @@ fn canister_create_with_settings() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Create canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -108,7 +108,7 @@ fn canister_create_with_settings() {
         .success();
 
     // Verify creation settings
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "status", "my-canister"])
         .assert()
@@ -128,10 +128,10 @@ fn canister_create_with_settings() {
 #[test]
 #[serial]
 fn canister_create_with_settings_cmdline_override() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
     let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
@@ -158,13 +158,13 @@ fn canister_create_with_settings_cmdline_override() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Create canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -178,7 +178,7 @@ fn canister_create_with_settings_cmdline_override() {
         .success();
 
     // Verify creation settings
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "status", "my-canister"])
         .assert()

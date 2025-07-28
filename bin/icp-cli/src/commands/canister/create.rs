@@ -1,10 +1,13 @@
-use crate::env::{Env, EnvGetAgentError, GetProjectError};
-use crate::options::{IdentityOpt, NetworkOpt};
-use crate::store_id::{LookupError, RegisterError};
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
 use snafu::Snafu;
+
+use crate::{
+    context::{Context, ContextGetAgentError, GetProjectError},
+    options::{EnvironmentOpt, IdentityOpt},
+    store_id::{LookupError, RegisterError},
+};
 
 pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
 
@@ -47,7 +50,7 @@ pub struct CanisterSettings {
 }
 
 #[derive(Debug, Parser)]
-pub struct CanisterCreateCmd {
+pub struct Cmd {
     /// The name of the canister within the current project
     pub name: Option<String>,
 
@@ -55,7 +58,7 @@ pub struct CanisterCreateCmd {
     pub identity: IdentityOpt,
 
     #[clap(flatten)]
-    pub network: NetworkOpt,
+    pub environment: EnvironmentOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
     #[clap(flatten)]
@@ -74,19 +77,21 @@ pub struct CanisterCreateCmd {
     pub quiet: bool,
 }
 
-pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreateError> {
-    env.require_identity(cmd.identity.name());
-    env.require_network(cmd.network.name());
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    // Load project
+    let pm = ctx.project()?;
 
-    let pm = env.project()?;
-
-    let agent = env.agent()?;
-
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+    // Load target environment
+    let env = pm
+        .environments
+        .iter()
+        .find(|&v| v.name == cmd.environment.name())
+        .ok_or(CommandError::EnvironmentNotFound {
+            name: cmd.environment.name().to_owned(),
+        })?;
 
     // Choose canisters to create
-    let canisters = pm
+    let cs = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.name {
@@ -96,17 +101,43 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         .collect::<Vec<_>>();
 
     // Check if selected canister exists
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CanisterCreateError::CanisterNotFound { name });
+    if let Some(name) = &cmd.name {
+        if cs.is_empty() {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+    }
+
+    // Collect environment canisters
+    let ecs = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
+
+    // Filter for environment canisters
+    let cs = cs
+        .iter()
+        .filter(|(_, c)| ecs.contains(&c.name))
+        .collect::<Vec<_>>();
+
+    // Ensure canister is included in the environment
+    if let Some(name) = &cmd.name {
+        if !ecs.contains(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
         }
     }
 
     // Skip created canisters
-    let canisters = canisters
+    let cs = cs
         .into_iter()
         .filter(|&(_, c)| {
-            match env.id_store.lookup(&c.name) {
+            match ctx.id_store.lookup(&c.name) {
                 // Exists (skip)
                 Ok(_) => false,
 
@@ -120,11 +151,28 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         .collect::<Vec<_>>();
 
     // Verify at least one canister is available to create
-    if canisters.is_empty() {
-        return Err(CanisterCreateError::NoCanisters);
+    if cs.is_empty() {
+        return Err(CommandError::NoCanisters);
     }
 
-    for (_, c) in canisters {
+    // Load identity
+    ctx.require_identity(cmd.identity.name());
+
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    ctx.require_network(
+        env.network
+            .as_ref()
+            .expect("no network specified in environment"),
+    );
+
+    // Prepare agent
+    let agent = ctx.agent()?;
+
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+
+    for (_, c) in cs {
         // Create canister
         let mut builder = mgmt.create_canister();
 
@@ -195,7 +243,7 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
         let (cid,) = builder.await?;
 
         // Register the canister ID
-        env.id_store.register(&c.name, &cid)?;
+        ctx.id_store.register(&c.name, &cid)?;
 
         if cmd.quiet {
             println!("{}", cid);
@@ -208,15 +256,24 @@ pub async fn exec(env: &Env, cmd: CanisterCreateCmd) -> Result<(), CanisterCreat
 }
 
 #[derive(Debug, Snafu)]
-pub enum CanisterCreateError {
+pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
     #[snafu(transparent)]
-    EnvGetAgent { source: EnvGetAgentError },
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
 
     #[snafu(display("no canisters available to create"))]
     NoCanisters,

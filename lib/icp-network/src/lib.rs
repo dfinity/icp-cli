@@ -5,9 +5,9 @@ mod managed;
 pub mod status;
 pub mod structure;
 
-pub use config::model::managed::BindPort;
-pub use config::model::managed::ManagedNetworkModel;
-pub use config::model::network_config::{NetworkConfig, NetworkName};
+pub use config::{BindPort, ManagedNetworkModel, NetworkConfig};
 pub use directory::NetworkDirectory;
-pub use managed::run::RunNetworkError;
-pub use managed::run::run_network;
+pub use managed::run::{RunNetworkError, run_network};
+
+pub const NETWORK_LOCAL: &str = "local";
+pub const NETWORK_IC: &str = "ic";

@@ -1,5 +1,5 @@
-use crate::env::{Env, EnvGetAgentError};
-use crate::options::NetworkOpt;
+use crate::context::{Context, ContextGetAgentError};
+use crate::options::EnvironmentOpt;
 use clap::Parser;
 use ic_agent::agent::status::Status;
 use ic_agent::{Agent, AgentError};
@@ -8,9 +8,9 @@ use std::time::Duration;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Parser, Debug)]
-pub struct PingCmd {
+pub struct Cmd {
     #[clap(flatten)]
-    network: NetworkOpt,
+    network: EnvironmentOpt,
 
     /// The compute network to connect to. By default, ping the local network.
     #[clap(group = "network-select", value_name = "NETWORK")]
@@ -21,14 +21,14 @@ pub struct PingCmd {
     wait_healthy: bool,
 }
 
-pub async fn exec(env: &Env, cmd: PingCmd) -> Result<(), PingNetworkCommandError> {
-    env.require_identity(Some("anonymous"));
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    ctx.require_identity(Some("anonymous"));
     let network = cmd
         .positional_network_name
         .unwrap_or(cmd.network.name().to_string());
-    env.require_network(&network);
+    ctx.require_network(&network);
 
-    let agent = env.agent()?;
+    let agent = ctx.agent()?;
 
     let status = if cmd.wait_healthy {
         ping_until_healthy(agent).await?
@@ -36,7 +36,7 @@ pub async fn exec(env: &Env, cmd: PingCmd) -> Result<(), PingNetworkCommandError
         agent
             .status()
             .await
-            .map_err(|source| PingNetworkCommandError::Status { source })?
+            .map_err(|source| CommandError::Status { source })?
     };
 
     println!("{}", status);
@@ -70,9 +70,9 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, TimeoutWaitingForHe
 }
 
 #[derive(Debug, Snafu)]
-pub enum PingNetworkCommandError {
+pub enum CommandError {
     #[snafu(transparent)]
-    GetAgent { source: EnvGetAgentError },
+    GetAgent { source: ContextGetAgentError },
 
     #[snafu(display("failed to ping the network"))]
     Status { source: AgentError },

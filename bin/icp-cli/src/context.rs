@@ -1,20 +1,28 @@
-use crate::env::GetProjectError::ProjectNotFound;
-use crate::{store_artifact::ArtifactStore, store_id::IdStore};
+use std::sync::{Arc, OnceLock};
+
 use candid::Principal;
 use ic_agent::{Agent, Identity};
 use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
-use icp_network::access::{CreateAgentError, GetNetworkAccessError, NetworkAccess};
-use icp_project::directory::{FindProjectError, ProjectDirectory};
-use icp_project::project::{LoadProjectManifestError, NoSuchNetworkError, Project};
+use icp_network::{
+    NETWORK_IC,
+    access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
+};
+use icp_project::{
+    directory::{FindProjectError, ProjectDirectory},
+    project::{LoadProjectManifestError, NoSuchNetworkError, Project},
+};
 use snafu::Snafu;
-use std::sync::{Arc, OnceLock};
 
-pub struct Env {
+use crate::context::GetProjectError::ProjectNotFound;
+use crate::{store_artifact::ArtifactStore, store_id::IdStore};
+
+pub struct Context {
     dirs: IcpCliDirs,
 
     /// The name of the identity to use, set from the command line.
     identity_name: OnceLock<Option<String>>,
+
     /// The identity to use for the agent, instantiated on-demand.
     identity: TryOnceLock<Arc<dyn Identity>>,
 
@@ -35,7 +43,7 @@ pub struct Env {
     agent: TryOnceLock<Agent>,
 }
 
-impl Env {
+impl Context {
     pub fn new(dirs: IcpCliDirs, id_store: IdStore, artifact_store: ArtifactStore) -> Self {
         Self {
             dirs,
@@ -120,28 +128,29 @@ impl Env {
             .cloned()
     }
 
-    pub fn agent(&self) -> Result<&Agent, EnvGetAgentError> {
+    pub fn agent(&self) -> Result<&Agent, ContextGetAgentError> {
         self.agent.get_or_try_init(|| self.create_agent())
     }
 }
 
-impl Env {
+impl Context {
     fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
         let identity_name = self
             .identity_name
             .get()
             .cloned()
-            .expect("call require_identity before load_identity");
+            .expect("identity has not been set");
+
         if let Some(identity) = identity_name {
-            Ok(icp_identity::key::load_identity(
+            return Ok(icp_identity::key::load_identity(
                 &self.dirs,
                 &icp_identity::manifest::load_identity_list(&self.dirs)?,
                 &identity,
                 || todo!(),
-            )?)
-        } else {
-            icp_identity::key::load_identity_in_context(&self.dirs, || todo!())
+            )?);
         }
+
+        icp_identity::key::load_identity_in_context(&self.dirs, || todo!())
     }
 
     fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
@@ -158,7 +167,7 @@ impl Env {
             .cloned()
             .expect("call set_network_opt before get_network_access");
 
-        if network_name == "ic" {
+        if network_name == NETWORK_IC {
             return Ok(NetworkAccess::mainnet());
         }
 
@@ -181,7 +190,7 @@ impl Env {
         Ok(ac)
     }
 
-    fn create_agent(&self) -> Result<Agent, EnvGetAgentError> {
+    fn create_agent(&self) -> Result<Agent, ContextGetAgentError> {
         let network_access = self.create_network_access()?;
         let identity = self.identity()?;
         let agent = network_access.create_agent(identity)?;
@@ -206,7 +215,7 @@ pub enum EnvGetNetworkAccessError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum EnvGetAgentError {
+pub enum ContextGetAgentError {
     #[snafu(transparent)]
     EnvGetNetworkAccess { source: EnvGetNetworkAccessError },
 

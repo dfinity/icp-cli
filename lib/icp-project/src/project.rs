@@ -1,6 +1,7 @@
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-use std::str::FromStr;
+use std::{
+    collections::{HashMap, HashSet, hash_map::Entry},
+    str::FromStr,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
@@ -9,10 +10,16 @@ use snafu::{ResultExt, Snafu};
 
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
-use icp_network::{NetworkConfig, NetworkName};
+use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 
-use crate::directory::ProjectDirectory;
-use crate::model::{CanistersField, NetworkField, default_networks};
+use crate::{
+    ENVIRONMENT_LOCAL,
+    directory::ProjectDirectory,
+    model::{
+        CanisterItem, CanistersField, EnvironmentManifest, NetworkItem, NetworkManifest,
+        default_networks,
+    },
+};
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -29,7 +36,10 @@ pub struct Project {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: HashMap<NetworkName, NetworkConfig>,
+    pub networks: HashMap<String, NetworkConfig>,
+
+    // List of environment definitions as defined by the project.
+    pub environments: Vec<EnvironmentManifest>,
 }
 
 impl Project {
@@ -76,9 +86,52 @@ impl Project {
 
             // Case 2: Multi-canister project, where 'canisters' key was used (or default applied).
             CanistersField::Canisters(cs) => {
-                let mut out = vec![];
+                // Collect paths and inline-canister definitions
+                let (paths, mut cs) = (
+                    //
+                    // Paths
+                    cs.iter()
+                        .filter_map(|v| match v {
+                            CanisterItem::Path(path) => Some(path.to_owned()),
+                            CanisterItem::Definition(_) => None,
+                        })
+                        .collect::<Vec<String>>(),
+                    //
+                    // Manifests
+                    cs.iter()
+                        .filter_map(|v| match v {
+                            CanisterItem::Path(_) => None,
+                            CanisterItem::Definition(c) => {
+                                Some((
+                                    pds.root().to_owned(), // path
+                                    c.to_owned(),          // canister
+                                ))
+                            }
+                        })
+                        .collect::<Vec<(Utf8PathBuf, CanisterManifest)>>(),
+                );
 
-                for pattern in cs {
+                // Track names
+                let mut cnames: HashMap<String, ()> = HashMap::new();
+
+                for c in &cs {
+                    match cnames.entry(c.1.name.to_owned()) {
+                        // Duplicate
+                        Entry::Occupied(e) => {
+                            return Err(LoadProjectManifestError::DuplicateCanister {
+                                canister: e.key().to_owned(),
+                            });
+                        }
+
+                        // Ok
+                        Entry::Vacant(e) => {
+                            e.insert(());
+                        }
+                    }
+                }
+
+                // Process paths and globs
+                for pattern in paths {
                     let dirs = match is_glob(&pattern) {
                         // Glob
                         true => {
@@ -138,28 +191,43 @@ impl Project {
                             .load_canister_manifest(&cpath)
                             .context(CanisterLoadSnafu { path: &cpath })?;
 
-                        out.push((
+                        // Check for duplicates
+                        match cnames.entry(cm.name.to_owned()) {
+                            // Duplicate
+                            Entry::Occupied(e) => {
+                                return Err(LoadProjectManifestError::DuplicateCanister {
+                                    canister: e.key().to_owned(),
+                                });
+                            }
+
+                            // Ok
+                            Entry::Vacant(e) => {
+                                e.insert(());
+                            }
+                        }
+
+                        cs.push((
                             cpath, // path
                             cm,    // manifest
                         ))
                     }
                 }
 
-                out
+                cs
             }
         };
 
         // Networks
         let networks = pm.networks.unwrap_or(default_networks());
 
-        let (paths, mut networks) = (
+        let (paths, nms) = (
             //
             // Paths
             networks
                 .iter()
                 .filter_map(|v| match v {
-                    NetworkField::Path(path) => Some(path.to_owned()),
-                    NetworkField::Definition(_) => None,
+                    NetworkItem::Path(path) => Some(path.to_owned()),
+                    NetworkItem::Definition(_) => None,
                 })
                 .collect::<Vec<String>>(),
             //
@@ -167,20 +235,42 @@ impl Project {
             networks
                 .iter()
                 .filter_map(|v| match v {
-                    NetworkField::Path(_) => None,
-                    NetworkField::Definition(m) => Some((m.name.to_owned(), m.config.clone())),
+                    NetworkItem::Path(_) => None,
+                    NetworkItem::Definition(m) => Some(m.to_owned()),
                 })
-                .collect::<HashMap<String, NetworkConfig>>(),
+                .collect::<Vec<NetworkManifest>>(),
         );
+
+        // Collect network definitions
+        let mut networks: HashMap<String, NetworkConfig> = HashMap::new();
+
+        // Check for duplicates among inline-defined networks
+        for v in &nms {
+            match networks.entry(v.name.to_owned()) {
+                // Duplicate
+                Entry::Occupied(e) => {
+                    return Err(LoadProjectManifestError::DuplicateNetwork {
+                        network: e.key().to_owned(),
+                    });
+                }
+
+                // Ok
+                Entry::Vacant(e) => {
+                    e.insert(v.config.to_owned());
+                }
+            }
+        }
 
         // Load network paths
         let paths = Project::gather_network_paths(&pd, paths)?;
+
+        // Check for duplicates among path-based networks
         for (name, cfg) in Project::load_network_configurations(&pd, paths)? {
             match networks.entry(name) {
                 // Duplicate
                 Entry::Occupied(e) => {
                     return Err(LoadProjectManifestError::DuplicateNetwork {
-                        name: e.key().to_owned(),
+                        network: e.key().to_owned(),
                     });
                 }
 
@@ -193,8 +283,79 @@ impl Project {
 
         // Ensure a `local` network is defined
         networks
-            .entry("local".to_string())
+            .entry(NETWORK_LOCAL.to_string())
             .or_insert(NetworkConfig::local_default());
+
+        // Environments
+        let environments = pm.environments.unwrap_or(vec![EnvironmentManifest {
+            name: ENVIRONMENT_LOCAL.to_string(),
+            network: None,
+            canisters: None,
+            settings: None,
+        }]);
+
+        // Check for duplicate environments
+        let mut enames: HashMap<String, ()> = HashMap::new();
+
+        for v in &environments {
+            match enames.entry(v.name.to_owned()) {
+                // Duplicate
+                Entry::Occupied(e) => {
+                    return Err(LoadProjectManifestError::DuplicateEnvironment {
+                        environment: e.key().to_owned(),
+                    });
+                }
+
+                // Ok
+                Entry::Vacant(e) => {
+                    e.insert(());
+                }
+            }
+        }
+
+        // Default environments network
+        let environments = environments
+            .into_iter()
+            .map(|mut v| match v.network {
+                // Explicitly-specified network
+                Some(_) => v,
+
+                // Default network for an environment is `local`
+                None => {
+                    v.network = Some(NETWORK_LOCAL.into());
+                    v
+                }
+            })
+            .collect::<Vec<EnvironmentManifest>>();
+
+        // Complain about environments that point to non-existent networks
+        for e in &environments {
+            if let Some(network) = &e.network {
+                if !networks.contains_key(network) {
+                    return Err(LoadProjectManifestError::EnvironmentNetworkDoesntExist {
+                        environment: e.name.to_owned(),
+                        network: network.to_owned(),
+                    });
+                }
+            }
+        }
+
+        // Complain about environments that point to non-existent canisters
+        let cnames: HashSet<String> = canisters.iter().map(|(_, c)| c.name.to_owned()).collect();
+
+        for e in &environments {
+            if let Some(cs) = &e.canisters {
+                for cname in cs {
+                    // Check against project's canisters
+                    if !cnames.contains(cname) {
+                        return Err(LoadProjectManifestError::EnvironmentCanisterDoesntExist {
+                            environment: e.name.to_owned(),
+                            canister: cname.to_owned(),
+                        });
+                    }
+                }
+            }
+        }
 
         Ok(Project {
             // The project directory.
@@ -205,6 +366,9 @@ impl Project {
 
             // Network definitions for the project.
             networks,
+
+            // Environment definitions for the project.
+            environments,
         })
     }
 
@@ -233,7 +397,7 @@ impl Project {
     fn load_network_configurations(
         pd: &ProjectDirectory,
         network_paths: Vec<Utf8PathBuf>,
-    ) -> Result<HashMap<NetworkName, NetworkConfig>, LoadNetworkConfigurationsError> {
+    ) -> Result<HashMap<String, NetworkConfig>, LoadNetworkConfigurationsError> {
         let mut networks = HashMap::new();
 
         for network_path in network_paths {
@@ -243,14 +407,17 @@ impl Project {
                     network_path: network_path.clone(),
                 })?
                 .to_string();
-            if name == "ic" {
+
+            if name == NETWORK_IC {
                 return Err(LoadNetworkConfigurationsError::CannotRedefineIcNetwork {
                     network_path: network_path.clone(),
                 });
             }
+
             if networks.contains_key(&name) {
                 return Err(LoadNetworkConfigurationsError::DuplicateNetworkName { name });
             }
+
             // Load the network config from the path
             let network_config = pd.load_network_config(&network_path)?;
 
@@ -358,8 +525,25 @@ pub enum LoadProjectManifestError {
         source: LoadNetworkConfigurationsError,
     },
 
-    #[snafu(display("project defines two similarly named networks: '{name}'"))]
-    DuplicateNetwork { name: String },
+    #[snafu(display("project contains two similarly named canisters: '{canister}'"))]
+    DuplicateCanister { canister: String },
+
+    #[snafu(display("project contains two similarly named networks: '{network}'"))]
+    DuplicateNetwork { network: String },
+
+    #[snafu(display("project contains two similarly named environments: '{environment}'"))]
+    DuplicateEnvironment { environment: String },
+
+    #[snafu(display("environment '{environment}' targets non-existent network '{network}'"))]
+    EnvironmentNetworkDoesntExist {
+        environment: String,
+        network: String,
+    },
+    #[snafu(display("environment '{environment}' deploys non-existent canistrer '{canister}'"))]
+    EnvironmentCanisterDoesntExist {
+        environment: String,
+        canister: String,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -379,7 +563,7 @@ pub enum LoadNetworkConfigurationsError {
     CannotRedefineIcNetwork { network_path: Utf8PathBuf },
 
     #[snafu(display("duplicate network name found: '{name}'"))]
-    DuplicateNetworkName { name: NetworkName },
+    DuplicateNetworkName { name: String },
 
     #[snafu(transparent)]
     LoadYamlFile { source: LoadYamlFileError },
@@ -434,7 +618,7 @@ mod tests {
     use icp_canister::model::{
         BuildStep, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
     };
-    use icp_network::{BindPort, NetworkConfig};
+    use icp_network::{BindPort, NETWORK_LOCAL, NetworkConfig};
 
     use crate::directory::ProjectDirectory;
     use crate::project::{LoadProjectManifestError, Project};
@@ -735,11 +919,13 @@ mod tests {
         let pm = Project::load(pd).unwrap();
 
         let local_network = pm
-            .get_network_config("local")
+            .get_network_config(NETWORK_LOCAL)
             .expect("local network should be defined");
+
         let NetworkConfig::Managed(managed) = local_network else {
             panic!("Expected local network to be managed");
         };
+
         // Check that the local network has the default configuration
         assert_eq!(managed.gateway.host, "127.0.0.1");
         assert!(matches!(managed.gateway.port, BindPort::Fixed(8000)));

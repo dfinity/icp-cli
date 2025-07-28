@@ -1,36 +1,34 @@
-use crate::RunNetworkError::NoPocketIcPath;
-use crate::config::model::managed::{BindPort, ManagedNetworkModel};
-use crate::config::model::network_descriptor::{
-    NetworkDescriptorGatewayPort, NetworkDescriptorModel,
-};
-use crate::directory::SaveNetworkDescriptorError;
-use crate::managed::descriptor::fixed_port_lock::AnotherProjectRunningOnSamePortError;
-use crate::managed::descriptor::network_lock::ProjectNetworkAlreadyRunningError;
-use crate::managed::pocketic::admin::{
-    CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
-};
-use crate::managed::pocketic::instance::PocketIcInstance;
-use crate::managed::pocketic::native::spawn_pocketic;
-use crate::managed::run::InitializePocketicError::NoRootKey;
-use crate::{NetworkDirectory, status};
+use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
+
 use camino::{Utf8Path, Utf8PathBuf};
-use icp_fs::fs::{
-    CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
-    remove_file,
+use icp_fs::{
+    fs::{
+        CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
+        remove_file,
+    },
+    lock::OpenFileForWriteLockError,
 };
-use icp_fs::lock::OpenFileForWriteLockError;
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
-use std::env::var;
-use std::fs::read_to_string;
-use std::process::ExitStatus;
-use std::time::Duration;
-use tokio::process::Child;
-use tokio::select;
-use tokio::signal::ctrl_c;
-use tokio::time::sleep;
+use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
+
+use crate::{
+    NetworkDirectory,
+    RunNetworkError::NoPocketIcPath,
+    config::{BindPort, ManagedNetworkModel, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
+    directory::SaveNetworkDescriptorError,
+    managed::{
+        descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
+        pocketic::{
+            CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
+            spawn_pocketic,
+        },
+        run::InitializePocketicError::NoRootKey,
+    },
+    status,
+};
 
 pub async fn run_network(
     config: &ManagedNetworkModel,
@@ -116,8 +114,8 @@ async fn run_pocketic(
         let descriptor = NetworkDescriptorModel {
             id: Uuid::new_v4(),
             project_dir: project_root.to_path_buf(),
-            network: nd.network_name().to_string(),
-            network_dir: nd.structure().network_root().to_path_buf(),
+            network: nd.network_name.to_owned(),
+            network_dir: nd.structure().network_root.to_path_buf(),
             gateway,
             default_effective_canister_id,
             pid: Some(child.id().unwrap()),

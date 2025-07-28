@@ -1,4 +1,4 @@
-use crate::common::{TestEnv, test_server::spawn_test_server};
+use crate::common::{TestContext, spawn_test_server};
 use icp_fs::fs::{read, write};
 use k256::sha2::{Digest, Sha256};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
@@ -7,13 +7,13 @@ mod common;
 
 #[test]
 fn build_adapter_pre_built_path() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -34,7 +34,7 @@ fn build_adapter_pre_built_path() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -43,13 +43,13 @@ fn build_adapter_pre_built_path() {
 
 #[test]
 fn build_adapter_pre_built_path_invalid_checksum() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
     let bs = read(&wasm).expect("failed to load wasm test-file");
 
     // Calculate checksum
@@ -79,7 +79,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -93,13 +93,13 @@ fn build_adapter_pre_built_path_invalid_checksum() {
 
 #[test]
 fn build_adapter_pre_built_path_valid_checksum() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
     let bs = read(&wasm).expect("failed to load wasm test-file");
 
     // Calculate checksum
@@ -129,7 +129,7 @@ fn build_adapter_pre_built_path_valid_checksum() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -138,13 +138,13 @@ fn build_adapter_pre_built_path_valid_checksum() {
 
 #[test]
 fn build_adapter_pre_built_url() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
     let bs = read(wasm).expect("failed to load wasm test-file");
 
     // Spawn HTTP server
@@ -170,7 +170,7 @@ fn build_adapter_pre_built_url() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -179,13 +179,13 @@ fn build_adapter_pre_built_url() {
 
 #[test]
 fn build_adapter_pre_built_url_invalid_checksum() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
     let bs = read(wasm).expect("failed to load wasm test-file");
 
     // Calculate checksum
@@ -219,7 +219,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()
@@ -233,13 +233,13 @@ fn build_adapter_pre_built_url_invalid_checksum() {
 
 #[test]
 fn build_adapter_pre_built_url_valid_checksum() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
     let bs = read(wasm).expect("failed to load wasm test-file");
 
     // Calculate checksum
@@ -273,7 +273,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
     .expect("failed to write project manifest");
 
     // Invoke build
-    env.icp()
+    ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
         .assert()

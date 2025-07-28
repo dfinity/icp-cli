@@ -1,4 +1,4 @@
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -11,13 +11,13 @@ mod common;
 #[test]
 #[serial]
 fn canister_start() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -39,27 +39,27 @@ fn canister_start() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
         .success();
 
     // Stop canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "stop", "my-canister"])
         .assert()
         .success();
 
     // Query status
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "status", "my-canister"])
         .assert()
@@ -71,14 +71,14 @@ fn canister_start() {
         );
 
     // Start canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "start", "my-canister"])
         .assert()
         .success();
 
     // Query status
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "status", "my-canister"])
         .assert()

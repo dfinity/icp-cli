@@ -1,4 +1,4 @@
-use crate::common::TestEnv;
+use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
 use serial_test::serial;
@@ -7,10 +7,10 @@ mod common;
 
 #[test]
 fn deploy_empty() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
     let pm = r#"
@@ -25,7 +25,7 @@ fn deploy_empty() {
     .expect("failed to write project manifest");
 
     // Deploy project
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
@@ -34,10 +34,10 @@ fn deploy_empty() {
 
 #[test]
 fn deploy_canister_not_found() {
-    let env = TestEnv::new();
+    let ctx = TestContext::new();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
     let pm = r#"
@@ -52,7 +52,7 @@ fn deploy_canister_not_found() {
     .expect("failed to write project manifest");
 
     // Deploy project
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args([
             "deploy",
@@ -68,13 +68,13 @@ fn deploy_canister_not_found() {
 #[test]
 #[serial]
 fn deploy() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -96,20 +96,20 @@ fn deploy() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
         .success();
 
     // Query canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
         .assert()
@@ -120,13 +120,13 @@ fn deploy() {
 #[test]
 #[serial]
 fn deploy_twice_should_succeed() {
-    let env = TestEnv::new().with_dfx();
+    let ctx = TestContext::new().with_dfx();
 
     // Setup project
-    let project_dir = env.create_project_dir("icp");
+    let project_dir = ctx.create_project_dir("icp");
 
     // Use vendored WASM
-    let wasm = env.make_asset("example_icp_mo.wasm");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
     let pm = format!(
@@ -148,27 +148,27 @@ fn deploy_twice_should_succeed() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = env.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
-    env.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir);
 
     // Deploy project (first time)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
         .success();
 
     // Deploy project (second time)
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
         .assert()
         .success();
 
     // Query canister
-    env.icp()
+    ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
         .assert()

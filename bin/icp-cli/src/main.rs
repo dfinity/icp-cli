@@ -2,13 +2,12 @@ use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
-use env::Env;
+use context::Context;
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
-mod candid;
 mod commands;
-mod env;
+mod context;
 mod options;
 mod store_artifact;
 mod store_id;
@@ -40,13 +39,13 @@ async fn main() -> Result<(), ProgramError> {
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
     // Setup environment
-    let env = Env::new(
+    let ctx = Context::new(
         dirs,      // dirs
         ids,       // id_store
         artifacts, // artifact_store
     );
 
-    commands::dispatch(&env, cli.command).await?;
+    commands::dispatch(&ctx, cli.command).await?;
 
     Ok(())
 }

@@ -1,11 +1,13 @@
-use crate::model::ProjectManifest;
-use crate::structure::ProjectDirectoryStructure;
+use std::io;
+
 use camino::{Utf8Path, Utf8PathBuf};
+use snafu::{ResultExt, Snafu};
+
 use icp_canister::model::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use icp_network::{NetworkConfig, NetworkDirectory};
-use snafu::{ResultExt, Snafu};
-use std::io;
+
+use crate::{model::ProjectManifest, structure::ProjectDirectoryStructure};
 
 pub struct ProjectDirectory {
     structure: ProjectDirectoryStructure,

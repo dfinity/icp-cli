@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
-use icp_canister::model::CanisterManifest;
+use icp_canister::model::{CanisterManifest, CanisterSettings};
 use icp_network::NetworkConfig;
 
 /// Provides the default glob pattern for locating canister manifests
@@ -10,25 +12,33 @@ pub fn default_canisters() -> CanistersField {
         ["canisters/*"]
             .into_iter()
             .map(String::from)
+            .map(CanisterItem::Path)
             .collect::<Vec<_>>(),
     )
 }
 
 /// Provides the default glob pattern for locating network definition files
 /// when the `networks` field is not explicitly specified in the YAML.
-pub fn default_networks() -> Vec<NetworkField> {
+pub fn default_networks() -> Vec<NetworkItem> {
     ["networks/*"]
         .into_iter()
         .map(String::from)
-        .map(NetworkField::Path)
+        .map(NetworkItem::Path)
         .collect::<Vec<_>>()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CanisterItem {
+    Path(String),
+    Definition(CanisterManifest),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CanistersField {
     Canister(CanisterManifest),
-    Canisters(Vec<String>),
+    Canisters(Vec<CanisterItem>),
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -41,9 +51,24 @@ pub struct NetworkManifest {
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum NetworkField {
+pub enum NetworkItem {
     Path(String),
     Definition(NetworkManifest),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct EnvironmentManifest {
+    // environment name
+    pub name: String,
+
+    // target network for canister deployment
+    pub network: Option<String>,
+
+    // canisters the environment should contain
+    pub canisters: Option<Vec<String>>,
+
+    // canister settings overrides
+    pub settings: Option<HashMap<String, CanisterSettings>>,
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -61,5 +86,9 @@ pub struct ProjectManifest {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: Option<Vec<NetworkField>>,
+    pub networks: Option<Vec<NetworkItem>>,
+
+    // Projects define environments to which canisters can be deployed
+    // An environment is always associated with a project-defined network
+    pub environments: Option<Vec<EnvironmentManifest>>,
 }

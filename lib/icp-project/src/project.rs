@@ -15,7 +15,10 @@ use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 use crate::{
     ENVIRONMENT_LOCAL,
     directory::ProjectDirectory,
-    model::{CanisterItem, CanistersField, EnvironmentManifest, NetworkItem, default_networks},
+    model::{
+        CanisterItem, CanistersField, EnvironmentManifest, NetworkItem, NetworkManifest,
+        default_networks,
+    },
 };
 
 fn is_glob(s: &str) -> bool {
@@ -217,7 +220,7 @@ impl Project {
         // Networks
         let networks = pm.networks.unwrap_or(default_networks());
 
-        let (paths, mut networks) = (
+        let (paths, nms) = (
             //
             // Paths
             networks
@@ -233,15 +236,35 @@ impl Project {
                 .iter()
                 .filter_map(|v| match v {
                     NetworkItem::Path(_) => None,
-                    NetworkItem::Definition(m) => Some((m.name.to_owned(), m.config.clone())),
+                    NetworkItem::Definition(m) => Some(m.to_owned()),
                 })
-                // TODO(or.ricon): note that this will swallow duplicates
-                .collect::<HashMap<String, NetworkConfig>>(),
+                .collect::<Vec<NetworkManifest>>(),
         );
+
+        // Collect network definitions
+        let mut networks: HashMap<String, NetworkConfig> = HashMap::new();
+
+        // Check for duplicates among inline-defined networks
+        for v in &nms {
+            match networks.entry(v.name.to_owned()) {
+                // Duplicate
+                Entry::Occupied(e) => {
+                    return Err(LoadProjectManifestError::DuplicateNetwork {
+                        network: e.key().to_owned(),
+                    });
+                }
+
+                // Ok
+                Entry::Vacant(e) => {
+                    e.insert(v.config.to_owned());
+                }
+            }
+        }
 
         // Load network paths
         let paths = Project::gather_network_paths(&pd, paths)?;
 
+        // Check for duplicates among path-based networks
         for (name, cfg) in Project::load_network_configurations(&pd, paths)? {
             match networks.entry(name) {
                 // Duplicate

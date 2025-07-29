@@ -1,7 +1,7 @@
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::LookupError,
+    store_id::{Key, LookupError},
 };
 use clap::Parser;
 use icp_adapter::sync::{Adapter, AdapterSyncError};
@@ -87,11 +87,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // TODO(or.ricon): Support default networks (`local` and `ic`)
     //
-    ctx.require_network(
-        env.network
-            .as_ref()
-            .expect("no network specified in environment"),
-    );
+    let network = env
+        .network
+        .as_ref()
+        .expect("no network specified in environment");
+
+    // Setup network
+    ctx.require_network(network);
 
     // Prepare agent
     let agent = ctx.agent()?;
@@ -99,7 +101,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in cs {
         // Get canister principal ID
-        let cid = ctx.id_store.lookup(&c.name)?;
+        let cid = ctx.id_store.lookup(&Key {
+            network: network.to_owned(),
+            environment: env.name.to_owned(),
+            canister: c.name.to_owned(),
+        })?;
 
         for step in &c.sync.steps {
             match step {

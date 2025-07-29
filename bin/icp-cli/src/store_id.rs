@@ -4,9 +4,22 @@ use icp_fs::lockedjson;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
+/// An association-key, used for associating an existing canister to an ID on a network
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Key {
+    /// Network name
+    pub network: String,
+
+    /// Environment name
+    pub environment: String,
+
+    /// Canister name
+    pub canister: String,
+}
+
 /// Association of a canister name and an ID
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Association(String, Principal);
+struct Association(Key, Principal);
 
 #[derive(Debug, Snafu)]
 pub enum RegisterError {
@@ -15,8 +28,11 @@ pub enum RegisterError {
         source: lockedjson::LoadJsonWithLockError,
     },
 
-    #[snafu(display("canister '{name}' is already registered with id '{id}'"))]
-    AlreadyRegistered { name: String, id: Principal },
+    #[snafu(display(
+        "canister '{}' in environment '{}', associated with network '{}' is already registered with id '{id}'",
+        key.canister, key.environment, key.network,
+    ))]
+    AlreadyRegistered { key: Key, id: Principal },
 
     #[snafu(display("failed to save canister id store"))]
     RegisterSaveStore {
@@ -31,8 +47,11 @@ pub enum LookupError {
         source: lockedjson::LoadJsonWithLockError,
     },
 
-    #[snafu(display("could not find ID for canister '{name}'"))]
-    IdNotFound { name: String },
+    #[snafu(display(
+        "could not find ID for canister '{}' in environment '{}', associated with network '{}'",
+        key.canister, key.environment, key.network
+    ))]
+    IdNotFound { key: Key },
 }
 
 pub struct IdStore(Utf8PathBuf);
@@ -44,24 +63,24 @@ impl IdStore {
 }
 
 impl IdStore {
-    pub fn register(&self, name: &str, cid: &Principal) -> Result<(), RegisterError> {
+    pub fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Load JSON
         let mut cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
             .context(RegisterLoadStoreSnafu)?
             .unwrap_or_default();
 
         // Check for existence
-        for Association(cname, cid) in cs.iter() {
-            if name == cname {
+        for Association(k, cid) in cs.iter() {
+            if k.canister == key.canister {
                 return Err(RegisterError::AlreadyRegistered {
-                    name: name.to_owned(),
+                    key: key.to_owned(),
                     id: *cid,
                 });
             }
         }
 
         // Append
-        cs.push(Association(name.to_owned(), cid.to_owned()));
+        cs.push(Association(key.to_owned(), cid.to_owned()));
 
         // Store JSON
         lockedjson::save_json_with_lock(&self.0, &cs).context(RegisterSaveStoreSnafu)?;
@@ -69,22 +88,22 @@ impl IdStore {
         Ok(())
     }
 
-    pub fn lookup(&self, name: &str) -> Result<Principal, LookupError> {
+    pub fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Load JSON
         let cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
             .context(LookupLoadStoreSnafu)?
             .unwrap_or_default();
 
         // Search for association
-        for Association(cname, cid) in cs {
-            if name == cname {
+        for Association(k, cid) in cs {
+            if k.canister == key.canister {
                 return Ok(cid.to_owned());
             }
         }
 
         // Not Found
         Err(LookupError::IdNotFound {
-            name: name.to_owned(),
+            key: key.to_owned(),
         })
     }
 }

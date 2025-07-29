@@ -1,10 +1,9 @@
 use clap::Parser;
-use ic_agent::AgentError;
 use snafu::Snafu;
 
 use crate::{
-    context::{Context, ContextGetAgentError, GetProjectError},
-    options::{EnvironmentOpt, IdentityOpt},
+    context::{Context, GetProjectError},
+    options::EnvironmentOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
 
@@ -14,9 +13,6 @@ pub struct Cmd {
     pub name: String,
 
     #[clap(flatten)]
-    identity: IdentityOpt,
-
-    #[clap(flatten)]
     environment: EnvironmentOpt,
 }
 
@@ -24,7 +20,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest
     let pm = ctx.project()?;
 
-    // Select canister to query
+    // Select canister to show
     let (_, c) = pm
         .canisters
         .iter()
@@ -70,20 +66,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         canister: c.name.to_owned(),
     })?;
 
-    // Load identity
-    ctx.require_identity(cmd.identity.name());
+    println!("{cid}");
 
-    // Setup network
-    ctx.require_network(network);
-
-    // Prepare agent
-    let agent = ctx.agent()?;
-
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
-
-    // Instruct management canister to stop canister
-    mgmt.stop_canister(&cid).await?;
+    // TODO(or.ricon): Show canister details
+    //  Things we might want to show (do we need to sub-command this?)
+    //  - canister manifest (e.g resulting canister manifest after recipe definitions are processed)
+    //  - canister deployment details (this canister is deployed to network X as part of environment Y)
 
     Ok(())
 }
@@ -107,10 +95,4 @@ pub enum CommandError {
 
     #[snafu(transparent)]
     LookupCanisterId { source: LookupIdError },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
-
-    #[snafu(transparent)]
-    Agent { source: AgentError },
 }

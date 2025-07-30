@@ -6,7 +6,7 @@ use snafu::Snafu;
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::{LookupError, RegisterError},
+    store_id::{Key, LookupError, RegisterError},
 };
 
 pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
@@ -133,11 +133,24 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    let network = env
+        .network
+        .as_ref()
+        .expect("no network specified in environment");
+
     // Skip created canisters
     let cs = cs
         .into_iter()
         .filter(|&(_, c)| {
-            match ctx.id_store.lookup(&c.name) {
+            let cid = ctx.id_store.lookup(&Key {
+                network: network.to_owned(),
+                environment: env.name.to_owned(),
+                canister: c.name.to_owned(),
+            });
+
+            match cid {
                 // Exists (skip)
                 Ok(_) => false,
 
@@ -242,8 +255,15 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Create the canister
         let (cid,) = builder.await?;
 
+        // Create canister-network association-key
+        let k = Key {
+            network: network.to_owned(),
+            environment: env.name.to_owned(),
+            canister: c.name.to_owned(),
+        };
+
         // Register the canister ID
-        ctx.id_store.register(&c.name, &cid)?;
+        ctx.id_store.register(&k, &cid)?;
 
         if cmd.quiet {
             println!("{}", cid);

@@ -5,7 +5,7 @@ use snafu::Snafu;
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::LookupError as LookupIdError,
+    store_id::{Key, LookupError as LookupIdError},
 };
 
 #[derive(Debug, Parser)]
@@ -56,19 +56,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         });
     }
 
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    let network = env
+        .network
+        .as_ref()
+        .expect("no network specified in environment");
+
     // Lookup the canister id
-    let cid = ctx.id_store.lookup(&c.name)?;
+    let cid = ctx.id_store.lookup(&Key {
+        network: network.to_owned(),
+        environment: env.name.to_owned(),
+        canister: c.name.to_owned(),
+    })?;
 
     // Load identity
     ctx.require_identity(cmd.identity.name());
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    ctx.require_network(
-        env.network
-            .as_ref()
-            .expect("no network specified in environment"),
-    );
+    // Setup network
+    ctx.require_network(network);
 
     // Prepare agent
     let agent = ctx.agent()?;
@@ -78,6 +84,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Instruct management canister to delete canister
     mgmt.delete_canister(&cid).await?;
+
+    // TODO(or.ricon): Remove the canister association with the network/environment
 
     Ok(())
 }

@@ -9,6 +9,7 @@ use snafu::{ResultExt, Snafu};
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
+    store_id::Key,
 };
 
 #[derive(Parser, Debug)]
@@ -65,19 +66,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         });
     }
 
+    // TODO(or.ricon): Support default networks (`local` and `ic`)
+    //
+    let network = env
+        .network
+        .as_ref()
+        .expect("no network specified in environment");
+
     // Lookup the canister id
-    let cid = ctx.id_store.lookup(&c.name)?;
+    let cid = ctx.id_store.lookup(&Key {
+        network: network.to_owned(),
+        environment: env.name.to_owned(),
+        canister: c.name.to_owned(),
+    })?;
 
     // Load identity
     ctx.require_identity(cmd.identity.name());
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    ctx.require_network(
-        env.network
-            .as_ref()
-            .expect("no network specified in environment"),
-    );
+    // Setup network
+    ctx.require_network(network);
 
     // Prepare agent
     let agent = ctx.agent()?;

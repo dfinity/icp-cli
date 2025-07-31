@@ -1,6 +1,6 @@
 use clap::Parser;
 use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
-use icp_project::project::NoSuchNetworkError;
+use icp_project::NoSuchNetworkError;
 use snafu::Snafu;
 
 use crate::context::{Context, GetProjectError};

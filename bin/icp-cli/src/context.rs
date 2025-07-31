@@ -9,8 +9,8 @@ use icp_network::{
     access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
 };
 use icp_project::{
+    LoadProjectManifestError, NoSuchNetworkError, Project,
     directory::{FindProjectError, ProjectDirectory},
-    project::{LoadProjectManifestError, NoSuchNetworkError, Project},
 };
 use snafu::Snafu;
 

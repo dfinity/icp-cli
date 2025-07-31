@@ -5,7 +5,7 @@ use crate::{context::Context, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
-use icp_canister::model::BuildStep;
+use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
 

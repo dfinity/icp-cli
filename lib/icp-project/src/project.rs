@@ -5,12 +5,11 @@ use std::{
 
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
-use pathdiff::diff_utf8_paths;
-use snafu::{ResultExt, Snafu};
-
-use icp_canister::model::CanisterManifest;
+use icp_canister::manifest::CanisterManifest;
 use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
+use pathdiff::diff_utf8_paths;
+use snafu::{ResultExt, Snafu};
 
 use crate::{
     ENVIRONMENT_LOCAL,
@@ -615,8 +614,8 @@ mod tests {
     use camino_tempfile::tempdir;
 
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::model::{
-        BuildStep, BuildSteps, CanisterManifest, CanisterSettings, SyncSteps,
+    use icp_canister::{
+        BuildStep, BuildSteps, CanisterInstructions, CanisterManifest, CanisterSettings, SyncSteps,
     };
     use icp_network::{BindPort, NETWORK_LOCAL, NetworkConfig};
 
@@ -673,15 +672,17 @@ mod tests {
             project_dir.path().to_owned(),
             CanisterManifest {
                 name: "canister-1".into(),
-                build: BuildSteps {
-                    steps: vec![BuildStep::Script(ScriptAdapter {
-                        command: CommandField::Command(
-                            "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
-                        ),
-                    })],
-                },
                 settings: CanisterSettings::default(),
-                sync: SyncSteps::default(),
+                instructions: CanisterInstructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(ScriptAdapter {
+                            command: CommandField::Command(
+                                "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
+                            ),
+                        })],
+                    },
+                    sync: SyncSteps::default(),
+                },
             },
         )];
 
@@ -733,15 +734,17 @@ mod tests {
             project_dir.path().join("canister-1"),
             CanisterManifest {
                 name: "canister-1".into(),
-                build: BuildSteps {
-                    steps: vec![BuildStep::Script(ScriptAdapter {
-                        command: CommandField::Command(
-                            "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
-                        ),
-                    })],
-                },
                 settings: CanisterSettings::default(),
-                sync: SyncSteps::default(),
+                instructions: CanisterInstructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(ScriptAdapter {
+                            command: CommandField::Command(
+                                "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
+                            ),
+                        })],
+                    },
+                    sync: SyncSteps::default(),
+                },
             },
         )];
 

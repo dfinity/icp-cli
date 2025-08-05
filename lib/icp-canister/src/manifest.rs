@@ -5,11 +5,23 @@ use serde::Deserialize;
 use crate::{BuildSteps, CanisterSettings, SyncSteps};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", from = "String")]
 pub enum RecipeType {
     Assets,
     Motoko,
     Rust,
+    Unknown(String),
+}
+
+impl From<String> for RecipeType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "assets" => Self::Assets,
+            "motoko" => Self::Rust,
+            "rust" => Self::Rust,
+            other => Self::Unknown(other.to_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

@@ -1,11 +1,16 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
 use context::Context;
-use icp_canister::recipe;
+use icp_canister::{
+    handlebars::{
+        ASSETS_CANISTER_TEMPLATE, Handlebars, MOTOKO_CANISTER_TEMPLATE, RUST_CANISTER_TEMPLATE,
+    },
+    recipe,
+};
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
@@ -42,7 +47,24 @@ async fn main() -> Result<(), ProgramError> {
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
     // Recipes
-    let recipe_resolver = Arc::new(recipe::Resolver);
+    let recipe_resolver = Arc::new(recipe::Resolver {
+        handlebars_resolver: Arc::new(Handlebars {
+            recipes: HashMap::from_iter(vec![
+                (
+                    "handlebars-assets".to_string(),
+                    ASSETS_CANISTER_TEMPLATE.to_string(),
+                ),
+                (
+                    "handlebars-motoko".to_string(),
+                    MOTOKO_CANISTER_TEMPLATE.to_string(),
+                ),
+                (
+                    "handlebars-rust".to_string(),
+                    RUST_CANISTER_TEMPLATE.to_string(),
+                ),
+            ]),
+        }),
+    });
 
     // Setup environment
     let ctx = Context::new(

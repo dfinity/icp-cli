@@ -379,7 +379,7 @@ impl Project {
 
                         // resolve the recipe into build/sync steps
                         let (build, sync) = r.resolve(&recipe).context(ResolveRecipeSnafu {
-                            kind: recipe.recipe_type,
+                            kind: format!("{:?}", recipe.recipe_type),
                         })?;
 
                         (build, sync)

@@ -2058,6 +2058,7 @@ dependencies = [
  "icp-fs",
  "mockall",
  "serde",
+ "serde_yaml",
  "snafu",
 ]
 

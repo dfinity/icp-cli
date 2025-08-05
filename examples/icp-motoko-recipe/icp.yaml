@@ -1,0 +1,7 @@
+canister:
+  name: my-canister
+  recipe:
+    type: motoko
+
+    # main motoko entry point (defaults to main.mo)
+    entry: src/main.mo

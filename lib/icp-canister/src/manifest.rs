@@ -1,11 +1,24 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 use crate::{BuildSteps, CanisterSettings, SyncSteps};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RecipeType {
+    Assets,
+    Motoko,
+    Rust,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Recipe {
     #[serde(rename = "type")]
-    pub recipe_type: String,
+    pub recipe_type: RecipeType,
+
+    #[serde(flatten)]
+    pub instructions: HashMap<String, serde_yaml::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

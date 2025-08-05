@@ -12,13 +12,13 @@ use snafu::Snafu;
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct LocalSource {
     /// Local path on-disk to read a WASM file from
-    path: Utf8PathBuf,
+    pub path: Utf8PathBuf,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct RemoteSource {
     /// Url to fetch the remote WASM file from
-    url: String,
+    pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -35,10 +35,10 @@ pub enum SourceField {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct PrebuiltAdapter {
     #[serde(flatten)]
-    source: SourceField,
+    pub source: SourceField,
 
     /// Optional sha256 checksum of the WASM
-    sha256: Option<String>,
+    pub sha256: Option<String>,
 }
 
 #[async_trait]

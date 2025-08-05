@@ -162,17 +162,3 @@ impl Resolve for Rust {
         Ok((build, sync))
     }
 }
-
-pub struct Handlebars;
-
-impl Resolve for Handlebars {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-        // Build
-        let build = BuildSteps { steps: vec![] };
-
-        // Sync
-        let sync = SyncSteps { steps: vec![] };
-
-        Ok((build, sync))
-    }
-}

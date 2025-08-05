@@ -14,6 +14,9 @@ pub enum ResolveError {
     #[snafu(display("field '{field}' contains an invalid value"))]
     InvalidField { field: String },
 
+    #[snafu(display("field '{field}' is required"))]
+    RequiredField { field: String },
+
     #[snafu(display("failed to resolve recipe into build/sync steps"))]
     Resolve,
 }
@@ -43,7 +46,7 @@ impl Resolve for Assets {
     fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // Version
         let version = match recipe.instructions.get("version") {
-            // parse provided valuer
+            // parse provided value
             Some(v) => Value::as_str(v).ok_or(ResolveError::InvalidField {
                 field: "version".to_string(),
             })?,
@@ -54,7 +57,7 @@ impl Resolve for Assets {
 
         // Directory
         let dir = match recipe.instructions.get("dir") {
-            // parse provided valuer
+            // parse provided value
             Some(v) => Value::as_str(v).ok_or(ResolveError::InvalidField {
                 field: "dir".to_string(),
             })?,
@@ -92,7 +95,7 @@ impl Resolve for Motoko {
     fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // main entry point for the motoko program
         let entry = match recipe.instructions.get("entry") {
-            // parse provided valuer
+            // parse provided value
             Some(v) => Value::as_str(v).ok_or(ResolveError::InvalidField {
                 field: "entry".to_string(),
             })?,
@@ -123,8 +126,35 @@ pub struct Rust;
 
 impl Resolve for Rust {
     fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+        // Canister's cargo package
+        let package = match recipe.instructions.get("package") {
+            // parse provided value
+            Some(v) => Value::as_str(v).ok_or(ResolveError::InvalidField {
+                field: "package".to_string(),
+            })?,
+
+            // raise error otherwise
+            None => Err(ResolveError::RequiredField {
+                field: "package".to_string(),
+            })?,
+        };
+
         // Build
-        let build = BuildSteps { steps: vec![] };
+        let package_arg = format!("--package {package}");
+        let output_name = format!("{}.wasm", package.replace("-", "_"));
+
+        let build = BuildSteps {
+            steps: vec![BuildStep::Script(ScriptAdapter {
+                command: CommandField::Commands(vec![
+                    format!(
+                        r#"cargo build {package_arg} --target wasm32-unknown-unknown --release"#
+                    ),
+                    format!(
+                        r#"sh -c 'mv target/wasm32-unknown-unknown/release/{output_name} "$ICP_WASM_OUTPUT_PATH"'"#
+                    ),
+                ]),
+            })],
+        };
 
         // Sync
         let sync = SyncSteps { steps: vec![] };

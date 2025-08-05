@@ -1,0 +1,7 @@
+canister:
+  name: my-canister
+  recipe:
+    type: rust
+
+    # cargo package for canister (required field)
+    package: icp-canister

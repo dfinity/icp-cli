@@ -10,7 +10,7 @@ members = [
     "lib/icp-project",
 ]
 
-exclude = ["examples/icp-rust"]
+exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
 resolver = "3"
 
 [workspace.dependencies]

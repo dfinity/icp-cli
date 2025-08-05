@@ -1,11 +1,12 @@
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     str::FromStr,
+    sync::Arc,
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::GlobError;
-use icp_canister::{BuildSteps, CanisterSettings, SyncSteps};
+use icp_canister::{BuildSteps, CanisterSettings, SyncSteps, recipe};
 use icp_canister::{CanisterInstructions, manifest::CanisterManifest};
 use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
@@ -69,7 +70,10 @@ pub struct Project {
 impl Project {
     /// Loads the project manifest (`icp.yaml`) and resolves canister paths.
     ///
-    pub fn load(pd: ProjectDirectory) -> Result<Self, LoadProjectManifestError> {
+    pub fn load(
+        pd: ProjectDirectory,
+        recipe_resolver: Option<Arc<dyn recipe::Resolve>>,
+    ) -> Result<Self, LoadProjectManifestError> {
         let pds = pd.structure();
         let pm = pd.load_project_manifest()?;
 
@@ -364,24 +368,37 @@ impl Project {
         let canisters = canisters
             .into_iter()
             .map(|(path, c)| {
-                let c = match c.instructions {
+                let (build, sync) = match c.instructions {
                     // Recipe
-                    CanisterInstructions::Recipe { .. } => {
-                        unimplemented!("canister recipes are not yet supported")
+                    CanisterInstructions::Recipe { recipe } => {
+                        // Check if a recipe resolver is available
+                        let r = match &recipe_resolver {
+                            Some(r) => Ok(r),
+                            None => Err(LoadProjectManifestError::MissingRecipeResolver),
+                        }?;
+
+                        // resolve the recipe into build/sync steps
+                        let (build, sync) = r.resolve(&recipe).context(ResolveRecipeSnafu {
+                            kind: recipe.recipe_type,
+                        })?;
+
+                        (build, sync)
                     }
 
                     // Build/Sync
-                    CanisterInstructions::BuildSync { build, sync } => Canister {
-                        name: c.name,
-                        settings: c.settings,
-                        build,
-                        sync,
-                    },
+                    CanisterInstructions::BuildSync { build, sync } => (build, sync),
                 };
 
-                (path, c)
+                let c = Canister {
+                    name: c.name,
+                    settings: c.settings,
+                    build,
+                    sync,
+                };
+
+                Ok::<_, LoadProjectManifestError>((path, c))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Project {
             // The project directory.
@@ -551,6 +568,15 @@ pub enum LoadProjectManifestError {
         source: LoadNetworkConfigurationsError,
     },
 
+    #[snafu(display("cannot resolve canister recipe as a resolver is not available"))]
+    MissingRecipeResolver,
+
+    #[snafu(display("failed to resolve canister recipe of type: '{kind}'"))]
+    ResolveRecipe {
+        source: recipe::ResolveError,
+        kind: String,
+    },
+
     #[snafu(display("project contains two similarly named canisters: '{canister}'"))]
     DuplicateCanister { canister: String },
 
@@ -659,7 +685,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd).expect("failed to load project manifest");
+        let pm = Project::load(pd, None).expect("failed to load project manifest");
 
         // Verify no canisters were found
         assert!(pm.canisters.is_empty());
@@ -688,7 +714,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd).expect("failed to load project manifest");
+        let pm = Project::load(pd, None).expect("failed to load project manifest");
 
         // Verify canister was loaded
         let canisters = vec![(
@@ -748,7 +774,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd).expect("failed to load project manifest");
+        let pm = Project::load(pd, None).expect("failed to load project manifest");
 
         // Verify canister was loaded
         let canisters = vec![(
@@ -784,7 +810,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd);
+        let pm = Project::load(pd, None);
 
         // Assert failure
         assert!(matches!(pm, Err(LoadProjectManifestError::Parse { .. })));
@@ -820,7 +846,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd);
+        let pm = Project::load(pd, None);
 
         // Assert failure
         assert!(matches!(
@@ -855,7 +881,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd).expect("failed to load project manifest");
+        let pm = Project::load(pd, None).expect("failed to load project manifest");
 
         // Verify no canisters were found
         assert!(pm.canisters.is_empty());
@@ -887,7 +913,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd);
+        let pm = Project::load(pd, None);
 
         // Assert failure
         assert!(matches!(
@@ -915,7 +941,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd);
+        let pm = Project::load(pd, None);
 
         // Assert failure
         assert!(matches!(
@@ -938,7 +964,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd).unwrap();
+        let pm = Project::load(pd, None).unwrap();
 
         let local_network = pm
             .get_network_config(NETWORK_LOCAL)

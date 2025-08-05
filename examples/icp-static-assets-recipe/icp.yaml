@@ -1,0 +1,5 @@
+canister:
+  name: my-canister
+  recipe:
+    type: assets
+    dir: www

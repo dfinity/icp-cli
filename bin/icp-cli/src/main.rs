@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
 use context::Context;
+use icp_canister::recipe;
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
@@ -38,11 +41,15 @@ async fn main() -> Result<(), ProgramError> {
     // Canister Artifact Store (wasm)
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
+    // Recipes
+    let recipe_resolver = Arc::new(recipe::Resolver);
+
     // Setup environment
     let ctx = Context::new(
         dirs,      // dirs
         ids,       // id_store
         artifacts, // artifact_store
+        recipe_resolver,
     );
 
     commands::dispatch(&ctx, cli.command).await?;

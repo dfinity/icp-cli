@@ -4,8 +4,10 @@ use icp_adapter::{
 };
 use serde::Deserialize;
 
-pub mod manifest;
 pub use manifest::{CanisterInstructions, CanisterManifest, Recipe};
+
+pub mod manifest;
+pub mod recipe;
 
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]

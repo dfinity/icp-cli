@@ -70,6 +70,7 @@ pub struct Project {
 impl Project {
     /// Loads the project manifest (`icp.yaml`) and resolves canister paths.
     ///
+    #[allow(clippy::result_large_err)]
     pub fn load(
         pd: ProjectDirectory,
         recipe_resolver: Option<Arc<dyn recipe::Resolve>>,

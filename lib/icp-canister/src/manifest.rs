@@ -17,7 +17,7 @@ pub struct Recipe {
     #[serde(rename = "type")]
     pub recipe_type: RecipeType,
 
-    #[serde(flatten)]
+    #[serde(rename = "configuration")]
     pub instructions: HashMap<String, serde_yaml::Value>,
 }
 

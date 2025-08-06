@@ -9,6 +9,7 @@ use mockall::automock;
 use serde_yaml::Value;
 use snafu::Snafu;
 
+pub use crate::handlebars::TEMPLATES;
 use crate::{BuildStep, BuildSteps, Recipe, SyncStep, SyncSteps, manifest::RecipeType};
 
 #[derive(Debug, Snafu)]

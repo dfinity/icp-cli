@@ -128,3 +128,9 @@ build:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
         - sh -c 'mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"'
 "#;
+
+pub const TEMPLATES: [(&str, &str); 3] = [
+    ("handlebars-assets", ASSETS_CANISTER_TEMPLATE),
+    ("handlebars-motoko", MOTOKO_CANISTER_TEMPLATE),
+    ("handlebars-rust", RUST_CANISTER_TEMPLATE),
+];

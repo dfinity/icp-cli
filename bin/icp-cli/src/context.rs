@@ -2,6 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use candid::Principal;
 use ic_agent::{Agent, Identity};
+use icp_canister::recipe;
 use icp_dirs::IcpCliDirs;
 use icp_identity::key::LoadIdentityInContextError;
 use icp_network::{
@@ -9,8 +10,8 @@ use icp_network::{
     access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
 };
 use icp_project::{
+    LoadProjectManifestError, NoSuchNetworkError, Project,
     directory::{FindProjectError, ProjectDirectory},
-    project::{LoadProjectManifestError, NoSuchNetworkError, Project},
 };
 use snafu::Snafu;
 
@@ -26,9 +27,6 @@ pub struct Context {
     /// The identity to use for the agent, instantiated on-demand.
     identity: TryOnceLock<Arc<dyn Identity>>,
 
-    pub id_store: IdStore,
-    pub artifact_store: ArtifactStore,
-
     /// The current project, instantiated on-demand.
     project: TryOnceLock<Project>,
 
@@ -41,20 +39,35 @@ pub struct Context {
 
     /// The agent used to access the network, instantiated on-demand.
     agent: TryOnceLock<Agent>,
+
+    /// Canisters ID Store for lookup and storage
+    pub id_store: IdStore,
+
+    /// An artifact store for canister build artifacts
+    pub artifact_store: ArtifactStore,
+
+    /// A recipe resolver for resolving canister recipes into build/sync steps
+    pub recipe_resolver: Arc<dyn recipe::Resolve>,
 }
 
 impl Context {
-    pub fn new(dirs: IcpCliDirs, id_store: IdStore, artifact_store: ArtifactStore) -> Self {
+    pub fn new(
+        dirs: IcpCliDirs,
+        id_store: IdStore,
+        artifact_store: ArtifactStore,
+        recipe_resolver: Arc<dyn recipe::Resolve>,
+    ) -> Self {
         Self {
             dirs,
             identity_name: OnceLock::new(),
             identity: TryOnceLock::new(),
-            id_store,
-            artifact_store,
             project: TryOnceLock::new(),
             network_name: OnceLock::new(),
             default_effective_canister_id: OnceLock::new(),
             agent: TryOnceLock::new(),
+            id_store,
+            artifact_store,
+            recipe_resolver,
         }
     }
 
@@ -156,7 +169,7 @@ impl Context {
     fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
         let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
 
-        let project = Project::load(pd)?;
+        let project = Project::load(pd, Some(self.recipe_resolver.to_owned()))?;
         Ok(project)
     }
 

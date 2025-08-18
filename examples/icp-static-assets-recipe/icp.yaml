@@ -1,0 +1,10 @@
+canister:
+  name: my-canister
+  recipe:
+    type: assets
+    configuration:
+      # assets canister version (default is 0.27.0)
+      version: 0.27.0
+
+      # assets directory (default is www)
+      dir: www

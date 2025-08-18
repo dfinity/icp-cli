@@ -8,4 +8,6 @@ camino = { workspace = true }
 icp-adapter = { "path" = "../icp-adapter" }
 icp-fs = { "path" = "../icp-fs" }
 serde = { workspace = true }
+serde_yaml = { workspace = true }
 snafu = { workspace = true }
+mockall = { workspace = true }

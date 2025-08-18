@@ -66,7 +66,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         canister: c.name.to_owned(),
     })?;
 
-    println!("{cid}");
+    println!("{cid} => {c:?}");
 
     // TODO(or.ricon): Show canister details
     //  Things we might want to show (do we need to sub-command this?)

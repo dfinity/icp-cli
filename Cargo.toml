@@ -10,7 +10,7 @@ members = [
     "lib/icp-project",
 ]
 
-exclude = ["examples/icp-rust"]
+exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
 resolver = "3"
 
 [workspace.dependencies]
@@ -42,6 +42,7 @@ icp-network = { path = "lib/icp-network" }
 icp-project = { path = "lib/icp-project" }
 itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
+mockall = "0.13.1"
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 pem = "3.0.5"

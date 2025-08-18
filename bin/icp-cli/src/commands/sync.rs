@@ -5,7 +5,7 @@ use crate::{
 };
 use clap::Parser;
 use icp_adapter::sync::{Adapter, AdapterSyncError};
-use icp_canister::model::SyncStep;
+use icp_canister::SyncStep;
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]

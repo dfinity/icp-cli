@@ -15,9 +15,9 @@ use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
 use crate::{
-    NetworkDirectory,
+    BindPort, ManagedNetworkModel, NetworkDirectory,
     RunNetworkError::NoPocketIcPath,
-    config::{BindPort, ManagedNetworkModel, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
+    config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
     directory::SaveNetworkDescriptorError,
     managed::{
         descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},

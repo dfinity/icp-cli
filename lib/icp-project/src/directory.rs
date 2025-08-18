@@ -3,11 +3,11 @@ use std::io;
 use camino::{Utf8Path, Utf8PathBuf};
 use snafu::{ResultExt, Snafu};
 
-use icp_canister::model::CanisterManifest;
+use icp_canister::manifest::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use icp_network::{NetworkConfig, NetworkDirectory};
 
-use crate::{model::ProjectManifest, structure::ProjectDirectoryStructure};
+use crate::{manifest::ProjectManifest, structure::ProjectDirectoryStructure};
 
 pub struct ProjectDirectory {
     structure: ProjectDirectoryStructure,

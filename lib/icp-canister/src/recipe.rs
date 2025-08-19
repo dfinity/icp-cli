@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use icp_adapter::{
     assets::{AssetsAdapter, DirField},
     pre_built::{PrebuiltAdapter, RemoteSource, SourceField},
@@ -7,7 +9,28 @@ use mockall::automock;
 use serde_yaml::Value;
 use snafu::Snafu;
 
+pub use crate::handlebars::TEMPLATES;
 use crate::{BuildStep, BuildSteps, Recipe, SyncStep, SyncSteps, manifest::RecipeType};
+
+#[derive(Debug, Snafu)]
+pub enum HandlebarsError {
+    #[snafu(display("no recipe found for recipe type '{recipe}'"))]
+    Unknown { recipe: String },
+
+    #[snafu(display("the recipe template for recipe type '{recipe}' appears to be invalid"))]
+    Invalid {
+        source: handlebars::TemplateError,
+        recipe: String,
+        template: String,
+    },
+
+    #[snafu(display("the recipe template for recipe type '{recipe}' failed to be rendered"))]
+    Render {
+        source: handlebars::RenderError,
+        recipe: String,
+        template: String,
+    },
+}
 
 #[derive(Debug, Snafu)]
 pub enum ResolveError {
@@ -19,16 +42,22 @@ pub enum ResolveError {
 
     #[snafu(display("failed to resolve recipe into build/sync steps"))]
     Resolve,
+
+    #[snafu(display("failed to resolve handlebars template"))]
+    Handlebars { source: HandlebarsError },
 }
 
 /// A recipe resolver takes a recipe that is specified in a canister manifest
 /// and resolves it into a set of build/sync steps
 #[automock]
 pub trait Resolve: Sync + Send {
+    #[allow(clippy::result_large_err)]
     fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError>;
 }
 
-pub struct Resolver;
+pub struct Resolver {
+    pub handlebars_resolver: Arc<dyn Resolve>,
+}
 
 impl Resolve for Resolver {
     fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
@@ -36,6 +65,7 @@ impl Resolve for Resolver {
             RecipeType::Assets => (Assets).resolve(recipe),
             RecipeType::Motoko => (Motoko).resolve(recipe),
             RecipeType::Rust => (Rust).resolve(recipe),
+            RecipeType::Unknown(_) => self.handlebars_resolver.resolve(recipe),
         }
     }
 }

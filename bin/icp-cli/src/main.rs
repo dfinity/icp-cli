@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
 use context::Context;
-use icp_canister::recipe;
+use icp_canister::{handlebars::Handlebars, recipe};
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 
@@ -41,8 +41,15 @@ async fn main() -> Result<(), ProgramError> {
     // Canister Artifact Store (wasm)
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
+    // Handlebar Templates (for recipes)
+    let tmpls = recipe::TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
+
     // Recipes
-    let recipe_resolver = Arc::new(recipe::Resolver);
+    let recipe_resolver = Arc::new(recipe::Resolver {
+        handlebars_resolver: Arc::new(Handlebars {
+            recipes: HashMap::from_iter(tmpls),
+        }),
+    });
 
     // Setup environment
     let ctx = Context::new(

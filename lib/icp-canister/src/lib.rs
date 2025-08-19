@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 pub use manifest::{CanisterInstructions, CanisterManifest, Recipe};
 
+pub mod handlebars;
 pub mod manifest;
 pub mod recipe;
 

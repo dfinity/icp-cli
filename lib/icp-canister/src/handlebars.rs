@@ -166,18 +166,20 @@ build:
       path: {{ path }}
       sha256: {{ sha256 }}
 
+    {{> wasm-inject-metadata name="template:type" value="pre-built" }}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata name=name value=value }}
+    {{/each}}
+    {{/if}}
+
     {{#if shrink }}
     {{> wasm-shrink }}
     {{/if}}
 
     {{#if compress }}
     {{> wasm-compress }}
-    {{/if}}
-
-    {{#if metadata }}
-    {{#each metadata }}
-    {{> wasm-inject-metadata }}
-    {{/each}}
     {{/if}}
 "#;
 
@@ -189,18 +191,20 @@ build:
     - type: pre-built
       url: https://github.com/dfinity/sdk/raw/refs/tags/{{ version }}/src/distributed/assetstorage.wasm.gz
 
+    {{> wasm-inject-metadata name="template:type" value="assets" }}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata name=name value=value }}
+    {{/each}}
+    {{/if}}
+
     {{#if shrink }}
     {{> wasm-shrink }}
     {{/if}}
 
     {{#if compress }}
     {{> wasm-compress }}
-    {{/if}}
-
-    {{#if metadata }}
-    {{#each metadata }}
-    {{> wasm-inject-metadata }}
-    {{/each}}
     {{/if}}
 
 sync:
@@ -224,18 +228,20 @@ build:
       commands:
         - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "moc:version" -d "$(moc --version)" --keep-name-section'
 
+    {{> wasm-inject-metadata name="template:type" value="motoko" }}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata name=name value=value }}
+    {{/each}}
+    {{/if}}
+
     {{#if shrink }}
     {{> wasm-shrink }}
     {{/if}}
 
     {{#if compress }}
     {{> wasm-compress }}
-    {{/if}}
-
-    {{#if metadata }}
-    {{#each metadata }}
-    {{> wasm-inject-metadata }}
-    {{/each}}
     {{/if}}
 "#;
 
@@ -253,18 +259,20 @@ build:
       commands:
         - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "cargo:version" -d "$(cargo --version)" --keep-name-section'
 
+    {{> wasm-inject-metadata name="template:type" value="rust" }}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata name=name value=value }}
+    {{/each}}
+    {{/if}}
+
     {{#if shrink }}
     {{> wasm-shrink }}
     {{/if}}
 
     {{#if compress }}
     {{> wasm-compress }}
-    {{/if}}
-
-    {{#if metadata }}
-    {{#each metadata }}
-    {{> wasm-inject-metadata }}
-    {{/each}}
     {{/if}}
 "#;
 

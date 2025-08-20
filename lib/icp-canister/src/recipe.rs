@@ -17,8 +17,15 @@ pub enum HandlebarsError {
     #[snafu(display("no recipe found for recipe type '{recipe}'"))]
     Unknown { recipe: String },
 
+    #[snafu(display("the partrial template for partial '{partial}' appears to be invalid"))]
+    PartialInvalid {
+        source: handlebars::TemplateError,
+        partial: String,
+        template: String,
+    },
+
     #[snafu(display("the recipe template for recipe type '{recipe}' appears to be invalid"))]
-    Invalid {
+    RecipeInvalid {
         source: handlebars::TemplateError,
         recipe: String,
         template: String,
@@ -65,6 +72,9 @@ impl Resolve for Resolver {
             RecipeType::Assets => (Assets).resolve(recipe),
             RecipeType::Motoko => (Motoko).resolve(recipe),
             RecipeType::Rust => (Rust).resolve(recipe),
+
+            // For unknown recipe types, delegate to the Handlebars resolver
+            // This allows for extensible recipe types defined via templates
             RecipeType::Unknown(_) => self.handlebars_resolver.resolve(recipe),
         }
     }

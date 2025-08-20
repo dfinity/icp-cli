@@ -43,7 +43,8 @@ impl Resolve for Handlebars {
         // Register helpers
         reg.register_helper("replace", Box::new(ReplaceHelper));
 
-        // Register partials
+        // Register partials for reusable template components
+        // These partials provide common functionality like WASM optimization and metadata injection
         for (name, partial) in PARTIALS {
             reg.register_partial(name, partial)
                 .map_err(|err| ResolveError::Handlebars {
@@ -86,6 +87,8 @@ impl Resolve for Handlebars {
     }
 }
 
+/// Handlebars helper for string replacement operations
+/// Usage: {{ replace "from" "to" value }}
 #[derive(Clone, Copy)]
 struct ReplaceHelper;
 
@@ -110,6 +113,8 @@ impl HelperDef for ReplaceHelper {
     }
 }
 
+/// Handlebars partial for shrinking WASM modules using ic-wasm
+/// Reduces module size by removing unnecessary sections while preserving name sections
 pub const WASM_SHRINK_PARTIAL: &str = r#"
 - type: script
   commands:
@@ -117,6 +122,8 @@ pub const WASM_SHRINK_PARTIAL: &str = r#"
     - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" shrink --keep-name-section'
 "#;
 
+/// Handlebars partial for compressing WASM modules using gzip
+/// Reduces deployment size and costs by applying gzip compression
 pub const WASM_COMPRESS_PARTIAL: &str = r#"
 - type: script
   commands:
@@ -125,11 +132,15 @@ pub const WASM_COMPRESS_PARTIAL: &str = r#"
     - sh -c 'mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"'
 "#;
 
+/// Handlebars partial that combines shrinking and compression optimizations
+/// Provides a convenient way to apply both wasm-shrink and wasm-compress operations
 pub const WASM_OPTIMIZE_PARTIAL: &str = r#"
 {{> wasm-shrink }}
 {{> wasm-compress }}
 "#;
 
+/// Handlebars partial for injecting custom metadata into WASM modules
+/// Expects 'name' and 'value' variables to be set in the template context
 pub const WASM_INJECT_METADATA_PARTIAL: &str = r#"
 - type: script
   commands:
@@ -137,6 +148,8 @@ pub const WASM_INJECT_METADATA_PARTIAL: &str = r#"
     - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section'
 "#;
 
+/// Collection of reusable Handlebars partials for WASM processing
+/// These partials can be included in templates using {{> partial-name}} syntax
 pub const PARTIALS: [(&str, &str); 4] = [
     ("wasm-shrink", WASM_SHRINK_PARTIAL),
     ("wasm-compress", WASM_COMPRESS_PARTIAL),
@@ -144,6 +157,8 @@ pub const PARTIALS: [(&str, &str); 4] = [
     ("wasm-inject-metadata", WASM_INJECT_METADATA_PARTIAL),
 ];
 
+/// Template for pre-built canister recipes
+/// Supports optional shrink, compress, and metadata configuration
 pub const PREBUILT_CANISTER_TEMPLATE: &str = r#"
 build:
   steps:
@@ -166,6 +181,8 @@ build:
     {{/if}}
 "#;
 
+/// Template for assets canister recipes
+/// Downloads the official assets canister WASM and configures asset synchronization
 pub const ASSETS_CANISTER_TEMPLATE: &str = r#"
 build:
   steps:
@@ -192,6 +209,8 @@ sync:
       dir: {{ dir }}
 "#;
 
+/// Template for Motoko canister recipes
+/// Compiles Motoko source code using the moc compiler
 pub const MOTOKO_CANISTER_TEMPLATE: &str = r#"
 build:
   steps:
@@ -201,6 +220,10 @@ build:
         - sh -c 'moc {{ entry }}'
         - sh -c 'mv main.wasm "$ICP_WASM_OUTPUT_PATH"'
 
+    - type: script
+      commands:
+        - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "moc:version" -d "$(moc --version)" --keep-name-section'
+
     {{#if shrink }}
     {{> wasm-shrink }}
     {{/if}}
@@ -216,6 +239,8 @@ build:
     {{/if}}
 "#;
 
+/// Template for Rust canister recipes
+/// Builds Rust canisters using Cargo with WASM target
 pub const RUST_CANISTER_TEMPLATE: &str = r#"
 build:
   steps:
@@ -224,6 +249,10 @@ build:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
         - sh -c 'mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"'
 
+    - type: script
+      commands:
+        - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "cargo:version" -d "$(cargo --version)" --keep-name-section'
+
     {{#if shrink }}
     {{> wasm-shrink }}
     {{/if}}
@@ -239,6 +268,8 @@ build:
     {{/if}}
 "#;
 
+/// Collection of available Handlebars templates for different canister types
+/// Maps recipe type names to their corresponding template definitions
 pub const TEMPLATES: [(&str, &str); 4] = [
     ("prebuilt", PREBUILT_CANISTER_TEMPLATE),
     ("handlebars-assets", ASSETS_CANISTER_TEMPLATE),

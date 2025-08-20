@@ -43,6 +43,18 @@ impl Resolve for Handlebars {
         // Register helpers
         reg.register_helper("replace", Box::new(ReplaceHelper));
 
+        // Register partials
+        for (name, partial) in PARTIALS {
+            reg.register_partial(name, partial)
+                .map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::PartialInvalid {
+                        source: err,
+                        partial: name.to_owned(),
+                        template: partial.to_owned(),
+                    },
+                })?;
+        }
+
         // Reject unset template variables
         reg.set_strict_mode(true);
 
@@ -98,11 +110,81 @@ impl HelperDef for ReplaceHelper {
     }
 }
 
+pub const WASM_SHRINK_PARTIAL: &str = r#"
+- type: script
+  commands:
+    - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
+    - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" shrink --keep-name-section'
+"#;
+
+pub const WASM_COMPRESS_PARTIAL: &str = r#"
+- type: script
+  commands:
+    - sh -c 'command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }'
+    - sh -c 'gzip --no-name "$ICP_WASM_OUTPUT_PATH"'
+    - sh -c 'mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"'
+"#;
+
+pub const WASM_OPTIMIZE_PARTIAL: &str = r#"
+{{> wasm-shrink }}
+{{> wasm-compress }}
+"#;
+
+pub const WASM_INJECT_METADATA_PARTIAL: &str = r#"
+- type: script
+  commands:
+    - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
+    - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section'
+"#;
+
+pub const PARTIALS: [(&str, &str); 4] = [
+    ("wasm-shrink", WASM_SHRINK_PARTIAL),
+    ("wasm-compress", WASM_COMPRESS_PARTIAL),
+    ("wasm-optimize", WASM_OPTIMIZE_PARTIAL),
+    ("wasm-inject-metadata", WASM_INJECT_METADATA_PARTIAL),
+];
+
+pub const PREBUILT_CANISTER_TEMPLATE: &str = r#"
+build:
+  steps:
+    - type: pre-built
+      path: {{ path }}
+      sha256: {{ sha256 }}
+
+    {{#if shrink }}
+    {{> wasm-shrink }}
+    {{/if}}
+
+    {{#if compress }}
+    {{> wasm-compress }}
+    {{/if}}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata }}
+    {{/each}}
+    {{/if}}
+"#;
+
 pub const ASSETS_CANISTER_TEMPLATE: &str = r#"
 build:
   steps:
     - type: pre-built
       url: https://github.com/dfinity/sdk/raw/refs/tags/{{ version }}/src/distributed/assetstorage.wasm.gz
+
+    {{#if shrink }}
+    {{> wasm-shrink }}
+    {{/if}}
+
+    {{#if compress }}
+    {{> wasm-compress }}
+    {{/if}}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata }}
+    {{/each}}
+    {{/if}}
 
 sync:
   steps:
@@ -118,6 +200,20 @@ build:
         - sh -c 'command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }'
         - sh -c 'moc {{ entry }}'
         - sh -c 'mv main.wasm "$ICP_WASM_OUTPUT_PATH"'
+
+    {{#if shrink }}
+    {{> wasm-shrink }}
+    {{/if}}
+
+    {{#if compress }}
+    {{> wasm-compress }}
+    {{/if}}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata }}
+    {{/each}}
+    {{/if}}
 "#;
 
 pub const RUST_CANISTER_TEMPLATE: &str = r#"
@@ -127,9 +223,24 @@ build:
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
         - sh -c 'mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"'
+
+    {{#if shrink }}
+    {{> wasm-shrink }}
+    {{/if}}
+
+    {{#if compress }}
+    {{> wasm-compress }}
+    {{/if}}
+
+    {{#if metadata }}
+    {{#each metadata }}
+    {{> wasm-inject-metadata }}
+    {{/each}}
+    {{/if}}
 "#;
 
-pub const TEMPLATES: [(&str, &str); 3] = [
+pub const TEMPLATES: [(&str, &str); 4] = [
+    ("prebuilt", PREBUILT_CANISTER_TEMPLATE),
     ("handlebars-assets", ASSETS_CANISTER_TEMPLATE),
     ("handlebars-motoko", MOTOKO_CANISTER_TEMPLATE),
     ("handlebars-rust", RUST_CANISTER_TEMPLATE),

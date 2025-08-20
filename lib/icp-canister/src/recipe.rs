@@ -17,8 +17,14 @@ pub enum HandlebarsError {
     #[snafu(display("no recipe found for recipe type '{recipe}'"))]
     Unknown { recipe: String },
 
+    PartialInvalid {
+        source: handlebars::TemplateError,
+        partial: String,
+        template: String,
+    },
+
     #[snafu(display("the recipe template for recipe type '{recipe}' appears to be invalid"))]
-    Invalid {
+    RecipeInvalid {
         source: handlebars::TemplateError,
         recipe: String,
         template: String,

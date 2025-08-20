@@ -41,4 +41,14 @@ impl EnvironmentOpt {
         // Otherwise, default to `local`
         self.environment.as_deref().unwrap_or(ENVIRONMENT_LOCAL)
     }
+
+    pub fn is_mainnet(&self) -> bool {
+        self.name() == ENVIRONMENT_IC
+    }
+
+    /// Refers to `aaaaa-aa:provisional_create_canister_with_cycles` and `aaaaa-aa:provisional_top_up_canister`
+    pub fn supports_provisional_api(&self) -> bool {
+        // Provisional API is not supported on mainnet. In the future, maybe it is also not supported on e.g. UTOPIA networks.
+        !self.is_mainnet()
+    }
 }

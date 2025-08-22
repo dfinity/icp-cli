@@ -25,6 +25,9 @@ pub enum TemplateSource {
     BuiltIn(String),
     LocalPath(String),
     RemoteUrl(String),
+
+    /// Template originating in a remote registry, e.g `@dfinity/rust@v1.0.2`
+    Registry(String, String, String),
 }
 
 #[derive(Debug, Snafu)]
@@ -81,20 +84,50 @@ impl Resolve for Handlebars {
         // Infer source for recipe template (local, remote, built-in, etc)
         let tmpl = (|recipe_type: String| {
             if recipe_type.starts_with("file://") {
-                return TemplateSource::LocalPath(
-                    recipe_type
-                        .strip_prefix("file://")
-                        .expect("prefix missing")
-                        .to_owned(),
-                );
+                let path = recipe_type
+                    .strip_prefix("file://")
+                    .expect("prefix missing")
+                    .to_owned();
+
+                return TemplateSource::LocalPath(path);
             }
 
             if recipe_type.starts_with("http://") || recipe_type.starts_with("https://") {
                 return TemplateSource::RemoteUrl(recipe_type);
             }
 
+            if recipe_type.starts_with("@") {
+                let (v, version) = recipe_type.rsplit_once("@").expect("delimiter missing");
+
+                let (registry, recipe) = v
+                    .strip_prefix("@")
+                    .expect("prefix missing")
+                    .split_once("/")
+                    .expect("delimiter missing");
+
+                return TemplateSource::Registry(
+                    registry.to_owned(),
+                    recipe.to_owned(),
+                    version.to_owned(),
+                );
+            }
+
             TemplateSource::BuiltIn(recipe_type)
         })(recipe_type.clone());
+
+        // TMP(or.ricon): Temporarily hardcode a dfinity registry
+        let tmpl = match tmpl {
+            TemplateSource::Registry(registry, recipe, version) => {
+                if registry != "dfinity" {
+                    panic!("only the dfinity registry is currently supported");
+                }
+
+                TemplateSource::RemoteUrl(format!(
+                    "https://github.com/rikonor/icp-recipes/releases/download/{recipe}-{version}/recipe.hbs"
+                ))
+            }
+            _ => tmpl,
+        };
 
         // Retrieve the template for the recipe from its respective source
         let tmpl = match tmpl {
@@ -114,6 +147,11 @@ impl Resolve for Handlebars {
                         recipe: typ.to_owned(),
                     },
                 })?,
+
+            // TMP(or.ricon): Support multiple registries
+            TemplateSource::Registry(_, _, _) => panic!(
+                "registry source should have been converted to a dfinity-specific remote url"
+            ),
 
             // Attempt to load template from local file-system
             TemplateSource::LocalPath(path) => {

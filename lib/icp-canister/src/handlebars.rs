@@ -1,8 +1,11 @@
-use std::{collections::HashMap, string::FromUtf8Error};
+use std::{collections::HashMap, str::FromStr, string::FromUtf8Error};
 
+use async_trait::async_trait;
 use handlebars::*;
 use icp_fs::fs::{ReadFileError, read};
+use reqwest::{Method, Request, Url};
 use snafu::Snafu;
+use url::ParseError;
 
 use crate::{
     BuildSteps, CanisterInstructions, Recipe, SyncSteps,
@@ -11,7 +14,11 @@ use crate::{
 };
 
 pub struct Handlebars {
+    /// Built-in recipe templates
     pub recipes: HashMap<String, String>,
+
+    /// Http client for fetching remote recipe templates
+    pub http_client: reqwest::Client,
 }
 
 pub enum TemplateSource {
@@ -30,6 +37,15 @@ pub enum HandlebarsError {
 
     #[snafu(display("failed to decode UTF-8 string"))]
     DecodeUtf8 { source: FromUtf8Error },
+
+    #[snafu(display("failed to parse user-provided url"))]
+    UrlParse { source: ParseError },
+
+    #[snafu(display("failed to execute http request"))]
+    HttpRequest { source: reqwest::Error },
+
+    #[snafu(display("request returned non-ok status-code"))]
+    HttpStatus { status: u16 },
 
     #[snafu(display("the partrial template for partial '{partial}' appears to be invalid"))]
     PartialInvalid {
@@ -53,8 +69,9 @@ pub enum HandlebarsError {
     },
 }
 
+#[async_trait]
 impl Resolve for Handlebars {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // Sanity check recipe type
         let recipe_type = match &recipe.recipe_type {
             RecipeType::Unknown(typ) => typ.to_owned(),
@@ -110,7 +127,31 @@ impl Resolve for Handlebars {
             }
 
             // Attempt to fetch template from remote resource url
-            TemplateSource::RemoteUrl(_u) => todo!(),
+            TemplateSource::RemoteUrl(u) => {
+                let u = Url::from_str(&u).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::UrlParse { source: err },
+                })?;
+
+                let resp = self
+                    .http_client
+                    .execute(Request::new(Method::GET, u))
+                    .await
+                    .map_err(|err| ResolveError::Handlebars {
+                        source: HandlebarsError::HttpRequest { source: err },
+                    })?;
+
+                if !resp.status().is_success() {
+                    return Err(ResolveError::Handlebars {
+                        source: HandlebarsError::HttpStatus {
+                            status: resp.status().as_u16(),
+                        },
+                    });
+                }
+
+                resp.text().await.map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::HttpRequest { source: err },
+                })?
+            }
         };
 
         // Load the template via handlebars

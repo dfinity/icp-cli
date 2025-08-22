@@ -14,6 +14,7 @@ use icp_project::{
     directory::{FindProjectError, ProjectDirectory},
 };
 use snafu::Snafu;
+use tokio::task::JoinError;
 
 use crate::context::GetProjectError::ProjectNotFound;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
@@ -168,9 +169,21 @@ impl Context {
 
     fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
         let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
+        let recipe_resolver = self.recipe_resolver.to_owned();
 
-        let project = Project::load(pd, Some(self.recipe_resolver.to_owned()))?;
-        Ok(project)
+        let handle = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Runtime::new()
+                .expect("failed to create runtime")
+                .block_on(async move {
+                    let p = Project::load(pd, Some(recipe_resolver))
+                        .await
+                        .map_err(|err| GetProjectError::LoadProjectManifest { source: err })?;
+
+                    Ok(p)
+                })
+        });
+
+        futures::executor::block_on(handle)?
     }
 
     fn create_network_access(&self) -> Result<NetworkAccess, EnvGetNetworkAccessError> {
@@ -246,6 +259,9 @@ pub enum GetProjectError {
 
     #[snafu(transparent)]
     LoadProjectManifest { source: LoadProjectManifestError },
+
+    #[snafu(transparent)]
+    Join { source: JoinError },
 
     #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
     ProjectNotFound,

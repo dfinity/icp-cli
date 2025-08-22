@@ -5,6 +5,7 @@ use std::{
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
+use futures::{StreamExt, TryStreamExt, stream};
 use glob::GlobError;
 use icp_canister::{BuildSteps, CanisterSettings, SyncSteps, recipe};
 use icp_canister::{CanisterInstructions, manifest::CanisterManifest};
@@ -71,7 +72,7 @@ impl Project {
     /// Loads the project manifest (`icp.yaml`) and resolves canister paths.
     ///
     #[allow(clippy::result_large_err)]
-    pub fn load(
+    pub async fn load(
         pd: ProjectDirectory,
         recipe_resolver: Option<Arc<dyn recipe::Resolve>>,
     ) -> Result<Self, LoadProjectManifestError> {
@@ -366,9 +367,8 @@ impl Project {
         }
 
         // Convert canister manifests to concrete canister instructions
-        let canisters = canisters
-            .into_iter()
-            .map(|(path, c)| {
+        let canisters = stream::iter(canisters.into_iter())
+            .then(|(path, c)| async {
                 let (build, sync) = match c.instructions {
                     // Recipe
                     CanisterInstructions::Recipe { recipe } => {
@@ -379,9 +379,10 @@ impl Project {
                         }?;
 
                         // resolve the recipe into build/sync steps
-                        let (build, sync) = r.resolve(&recipe).context(ResolveRecipeSnafu {
-                            kind: format!("{:?}", recipe.recipe_type),
-                        })?;
+                        let (build, sync) =
+                            r.resolve(&recipe).await.context(ResolveRecipeSnafu {
+                                kind: format!("{:?}", recipe.recipe_type),
+                            })?;
 
                         (build, sync)
                     }
@@ -399,7 +400,8 @@ impl Project {
 
                 Ok::<_, LoadProjectManifestError>((path, c))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .try_collect::<Vec<_>>()
+            .await?;
 
         Ok(Project {
             // The project directory.
@@ -672,8 +674,8 @@ mod tests {
 
     use crate::{Canister, LoadProjectManifestError, Project, directory::ProjectDirectory};
 
-    #[test]
-    fn empty_project() {
+    #[tokio::test]
+    async fn empty_project() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -686,14 +688,16 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None).expect("failed to load project manifest");
+        let pm = Project::load(pd, None)
+            .await
+            .expect("failed to load project manifest");
 
         // Verify no canisters were found
         assert!(pm.canisters.is_empty());
     }
 
-    #[test]
-    fn single_canister_project() {
+    #[tokio::test]
+    async fn single_canister_project() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -715,7 +719,9 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None).expect("failed to load project manifest");
+        let pm = Project::load(pd, None)
+            .await
+            .expect("failed to load project manifest");
 
         // Verify canister was loaded
         let canisters = vec![(
@@ -737,8 +743,8 @@ mod tests {
         assert_eq!(pm.canisters, canisters);
     }
 
-    #[test]
-    fn multi_canister_project() {
+    #[tokio::test]
+    async fn multi_canister_project() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -775,7 +781,9 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None).expect("failed to load project manifest");
+        let pm = Project::load(pd, None)
+            .await
+            .expect("failed to load project manifest");
 
         // Verify canister was loaded
         let canisters = vec![(
@@ -797,8 +805,8 @@ mod tests {
         assert_eq!(pm.canisters, canisters);
     }
 
-    #[test]
-    fn invalid_project_manifest() {
+    #[tokio::test]
+    async fn invalid_project_manifest() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -811,14 +819,14 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None);
+        let pm = Project::load(pd, None).await;
 
         // Assert failure
         assert!(matches!(pm, Err(LoadProjectManifestError::Parse { .. })));
     }
 
-    #[test]
-    fn invalid_canister_manifest() {
+    #[tokio::test]
+    async fn invalid_canister_manifest() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -847,7 +855,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None);
+        let pm = Project::load(pd, None).await;
 
         // Assert failure
         assert!(matches!(
@@ -856,8 +864,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn glob_path_non_canister() {
+    #[tokio::test]
+    async fn glob_path_non_canister() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -882,14 +890,16 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None).expect("failed to load project manifest");
+        let pm = Project::load(pd, None)
+            .await
+            .expect("failed to load project manifest");
 
         // Verify no canisters were found
         assert!(pm.canisters.is_empty());
     }
 
-    #[test]
-    fn explicit_path_non_canister() {
+    #[tokio::test]
+    async fn explicit_path_non_canister() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -914,7 +924,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None);
+        let pm = Project::load(pd, None).await;
 
         // Assert failure
         assert!(matches!(
@@ -923,8 +933,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn invalid_glob_pattern() {
+    #[tokio::test]
+    async fn invalid_glob_pattern() {
         // Setup
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
@@ -942,7 +952,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None);
+        let pm = Project::load(pd, None).await;
 
         // Assert failure
         assert!(matches!(
@@ -951,8 +961,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn default_local_network() {
+    #[tokio::test]
+    async fn default_local_network() {
         let project_dir = tempdir().expect("failed to create temporary project directory");
 
         let pm = r#""#;
@@ -965,7 +975,7 @@ mod tests {
 
         // Load Project
         let pd = ProjectDirectory::new(project_dir.path());
-        let pm = Project::load(pd, None).unwrap();
+        let pm = Project::load(pd, None).await.unwrap();
 
         let local_network = pm
             .get_network_config(NETWORK_LOCAL)

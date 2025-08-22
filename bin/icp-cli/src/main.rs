@@ -44,10 +44,14 @@ async fn main() -> Result<(), ProgramError> {
     // Handlebar Templates (for recipes)
     let tmpls = recipe::TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
 
+    // Prepare http client
+    let http_client = reqwest::Client::new();
+
     // Recipes
     let recipe_resolver = Arc::new(recipe::Resolver {
         handlebars_resolver: Arc::new(Handlebars {
             recipes: HashMap::from_iter(tmpls),
+            http_client,
         }),
     });
 

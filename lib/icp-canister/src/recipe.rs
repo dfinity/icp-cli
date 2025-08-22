@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use icp_adapter::{
     assets::{AssetsAdapter, DirField},
     pre_built::{PrebuiltAdapter, RemoteSource, SourceField},
@@ -33,17 +34,19 @@ pub enum ResolveError {
 /// A recipe resolver takes a recipe that is specified in a canister manifest
 /// and resolves it into a set of build/sync steps
 #[automock]
+#[async_trait]
 pub trait Resolve: Sync + Send {
     #[allow(clippy::result_large_err)]
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError>;
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError>;
 }
 
 pub struct Resolver {
     pub handlebars_resolver: Arc<dyn Resolve>,
 }
 
+#[async_trait]
 impl Resolve for Resolver {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         match recipe.recipe_type {
             RecipeType::Assets => (Assets).resolve(recipe),
             RecipeType::Motoko => (Motoko).resolve(recipe),
@@ -53,13 +56,15 @@ impl Resolve for Resolver {
             // This allows for extensible recipe types defined via templates
             RecipeType::Unknown(_) => self.handlebars_resolver.resolve(recipe),
         }
+        .await
     }
 }
 
 pub struct Assets;
 
+#[async_trait]
 impl Resolve for Assets {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // Version
         let version = match recipe.instructions.get("version") {
             // parse provided value
@@ -107,8 +112,9 @@ impl Resolve for Assets {
 
 pub struct Motoko;
 
+#[async_trait]
 impl Resolve for Motoko {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // main entry point for the motoko program
         let entry = match recipe.instructions.get("entry") {
             // parse provided value
@@ -140,8 +146,9 @@ impl Resolve for Motoko {
 
 pub struct Rust;
 
+#[async_trait]
 impl Resolve for Rust {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // Canister's cargo package
         let package = match recipe.instructions.get("package") {
             // parse provided value

@@ -17,6 +17,7 @@ candid.workspace = true
 clap.workspace = true
 dialoguer.workspace = true
 elliptic-curve.workspace = true
+futures.workspace = true
 hex.workspace = true
 httptest.workspace = true
 ic-agent.workspace = true
@@ -32,9 +33,10 @@ itertools.workspace = true
 k256.workspace = true
 pem.workspace = true
 pkcs8.workspace = true
+reqwest = { workspace = true }
 sec1.workspace = true
-serde.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 snafu.workspace = true
 tiny-bip39.workspace = true
 tokio.workspace = true
@@ -44,7 +46,6 @@ assert_cmd = "2"
 camino-tempfile = "1"
 nix = { version = "0.30.1", features = ["process", "signal"] }
 predicates = "3"
-reqwest = { workspace = true }
 serde_yaml.workspace = true
 serial_test = { version = "3.2.0", features = ["file_locks"] }
 

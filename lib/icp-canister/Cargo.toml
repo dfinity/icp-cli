@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+async-trait = { workspace = true }
 camino = { workspace = true }
 handlebars = { workspace = true }
 icp-adapter = { "path" = "../icp-adapter" }
 icp-fs = { "path" = "../icp-fs" }
+mockall = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 snafu = { workspace = true }
-mockall = { workspace = true }
+url = { workspace = true }

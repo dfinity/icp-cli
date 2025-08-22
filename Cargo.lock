@@ -2135,14 +2135,17 @@ dependencies = [
 name = "icp-canister"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "camino",
  "handlebars 6.3.2",
  "icp-adapter",
  "icp-fs",
  "mockall",
+ "reqwest",
  "serde",
  "serde_yaml",
  "snafu",
+ "url",
 ]
 
 [[package]]
@@ -2158,6 +2161,7 @@ dependencies = [
  "clap",
  "dialoguer",
  "elliptic-curve 0.13.8",
+ "futures",
  "hex",
  "httptest",
  "ic-agent",
@@ -2262,6 +2266,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "camino-tempfile",
+ "futures",
  "glob",
  "icp-adapter",
  "icp-canister",
@@ -2272,6 +2277,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "snafu",
+ "tokio",
 ]
 
 [[package]]

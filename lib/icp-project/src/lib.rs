@@ -5,6 +5,7 @@ use std::{
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
+// Async stream processing utilities for concurrent recipe resolution
 use futures::{StreamExt, TryStreamExt, stream};
 use glob::GlobError;
 use icp_canister::{BuildSteps, CanisterSettings, SyncSteps, recipe};
@@ -71,6 +72,8 @@ pub struct Project {
 impl Project {
     /// Loads the project manifest (`icp.yaml`) and resolves canister paths.
     ///
+    /// This function is async because recipe resolution may require network requests
+    /// (e.g., fetching remote Handlebars templates via HTTP).
     #[allow(clippy::result_large_err)]
     pub async fn load(
         pd: ProjectDirectory,
@@ -367,10 +370,12 @@ impl Project {
         }
 
         // Convert canister manifests to concrete canister instructions
+        // Using async streams to allow concurrent recipe resolution, particularly important
+        // when recipes involve network requests (e.g., fetching remote templates)
         let canisters = stream::iter(canisters.into_iter())
             .then(|(path, c)| async {
                 let (build, sync) = match c.instructions {
-                    // Recipe
+                    // Recipe - requires async resolution for remote templates
                     CanisterInstructions::Recipe { recipe } => {
                         // Check if a recipe resolver is available
                         let r = match &recipe_resolver {
@@ -378,7 +383,7 @@ impl Project {
                             None => Err(LoadProjectManifestError::MissingRecipeResolver),
                         }?;
 
-                        // resolve the recipe into build/sync steps
+                        // Resolve the recipe into build/sync steps (async for HTTP requests)
                         let (build, sync) =
                             r.resolve(&recipe).await.context(ResolveRecipeSnafu {
                                 kind: format!("{:?}", recipe.recipe_type),
@@ -387,7 +392,7 @@ impl Project {
                         (build, sync)
                     }
 
-                    // Build/Sync
+                    // Build/Sync - direct instructions, no async resolution needed
                     CanisterInstructions::BuildSync { build, sync } => (build, sync),
                 };
 

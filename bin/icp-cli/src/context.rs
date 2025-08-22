@@ -171,6 +171,9 @@ impl Context {
         let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
         let recipe_resolver = self.recipe_resolver.to_owned();
 
+        // Bridge between sync and async worlds: Project::load is async because
+        // recipe resolution may require HTTP requests for remote templates.
+        // We spawn a blocking task with its own runtime to handle this.
         let handle = tokio::task::spawn_blocking(move || {
             tokio::runtime::Runtime::new()
                 .expect("failed to create runtime")

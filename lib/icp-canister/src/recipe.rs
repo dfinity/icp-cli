@@ -10,34 +10,10 @@ use serde_yaml::Value;
 use snafu::Snafu;
 
 pub use crate::handlebars::TEMPLATES;
-use crate::{BuildStep, BuildSteps, Recipe, SyncStep, SyncSteps, manifest::RecipeType};
-
-#[derive(Debug, Snafu)]
-pub enum HandlebarsError {
-    #[snafu(display("no recipe found for recipe type '{recipe}'"))]
-    Unknown { recipe: String },
-
-    #[snafu(display("the partrial template for partial '{partial}' appears to be invalid"))]
-    PartialInvalid {
-        source: handlebars::TemplateError,
-        partial: String,
-        template: String,
-    },
-
-    #[snafu(display("the recipe template for recipe type '{recipe}' appears to be invalid"))]
-    RecipeInvalid {
-        source: handlebars::TemplateError,
-        recipe: String,
-        template: String,
-    },
-
-    #[snafu(display("the recipe template for recipe type '{recipe}' failed to be rendered"))]
-    Render {
-        source: handlebars::RenderError,
-        recipe: String,
-        template: String,
-    },
-}
+use crate::{
+    BuildStep, BuildSteps, Recipe, SyncStep, SyncSteps, handlebars::HandlebarsError,
+    manifest::RecipeType,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ResolveError {

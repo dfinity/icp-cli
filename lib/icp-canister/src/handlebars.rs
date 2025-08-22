@@ -1,15 +1,56 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, string::FromUtf8Error};
 
 use handlebars::*;
+use icp_fs::fs::{ReadFileError, read};
+use snafu::Snafu;
 
 use crate::{
     BuildSteps, CanisterInstructions, Recipe, SyncSteps,
     manifest::RecipeType,
-    recipe::{HandlebarsError, Resolve, ResolveError},
+    recipe::{Resolve, ResolveError},
 };
 
 pub struct Handlebars {
     pub recipes: HashMap<String, String>,
+}
+
+pub enum TemplateSource {
+    BuiltIn(String),
+    LocalPath(String),
+    RemoteUrl(String),
+}
+
+#[derive(Debug, Snafu)]
+pub enum HandlebarsError {
+    #[snafu(display("no recipe found for recipe type '{recipe}'"))]
+    Unknown { recipe: String },
+
+    #[snafu(display("failed to read local recipe template file"))]
+    ReadFile { source: ReadFileError },
+
+    #[snafu(display("failed to decode UTF-8 string"))]
+    DecodeUtf8 { source: FromUtf8Error },
+
+    #[snafu(display("the partrial template for partial '{partial}' appears to be invalid"))]
+    PartialInvalid {
+        source: handlebars::TemplateError,
+        partial: String,
+        template: String,
+    },
+
+    #[snafu(display("the recipe template for recipe type '{recipe}' appears to be invalid"))]
+    RecipeInvalid {
+        source: handlebars::TemplateError,
+        recipe: String,
+        template: String,
+    },
+
+    #[snafu(display("the recipe template for recipe type '{recipe}' failed to be rendered"))]
+    Render {
+        source: handlebars::RenderError,
+        recipe: String,
+        template: String,
+    },
 }
 
 impl Resolve for Handlebars {
@@ -20,22 +61,57 @@ impl Resolve for Handlebars {
             _ => panic!("expected unknown recipe"),
         };
 
-        // Search for recipe template
-        let tmpl = self
-            .recipes
-            .iter()
-            .find_map(|(name, tmpl)| {
-                if name == &recipe_type {
-                    Some(tmpl.to_owned())
-                } else {
-                    None
-                }
-            })
-            .ok_or(ResolveError::Handlebars {
-                source: HandlebarsError::Unknown {
-                    recipe: recipe_type.to_owned(),
-                },
-            })?;
+        // Infer source for recipe template (local, remote, built-in, etc)
+        let tmpl = (|recipe_type: String| {
+            if recipe_type.starts_with("file://") {
+                return TemplateSource::LocalPath(
+                    recipe_type
+                        .strip_prefix("file://")
+                        .expect("prefix missing")
+                        .to_owned(),
+                );
+            }
+
+            if recipe_type.starts_with("http://") || recipe_type.starts_with("https://") {
+                return TemplateSource::RemoteUrl(recipe_type);
+            }
+
+            TemplateSource::BuiltIn(recipe_type)
+        })(recipe_type.clone());
+
+        // Retrieve the template for the recipe from its respective source
+        let tmpl = match tmpl {
+            // Search for built-in recipe template
+            TemplateSource::BuiltIn(typ) => self
+                .recipes
+                .iter()
+                .find_map(|(name, tmpl)| {
+                    if name == &typ {
+                        Some(tmpl.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .ok_or(ResolveError::Handlebars {
+                    source: HandlebarsError::Unknown {
+                        recipe: typ.to_owned(),
+                    },
+                })?,
+
+            // Attempt to load template from local file-system
+            TemplateSource::LocalPath(path) => {
+                let bs = read(path).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::ReadFile { source: err },
+                })?;
+
+                String::from_utf8(bs).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::DecodeUtf8 { source: err },
+                })?
+            }
+
+            // Attempt to fetch template from remote resource url
+            TemplateSource::RemoteUrl(_u) => todo!(),
+        };
 
         // Load the template via handlebars
         let mut reg = handlebars::Handlebars::new();

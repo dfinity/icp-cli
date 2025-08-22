@@ -97,13 +97,18 @@ impl Resolve for Handlebars {
             }
 
             if recipe_type.starts_with("@") {
-                let (v, version) = recipe_type.rsplit_once("@").expect("delimiter missing");
+                let recipe_type = recipe_type.strip_prefix("@").expect("prefix missing");
 
-                let (registry, recipe) = v
-                    .strip_prefix("@")
-                    .expect("prefix missing")
-                    .split_once("/")
-                    .expect("delimiter missing");
+                // Check for version delimiter
+                let (v, version) = if recipe_type.contains("@") {
+                    // Version is specified
+                    recipe_type.rsplit_once("@").expect("delimiter missing")
+                } else {
+                    // Assume latest
+                    (recipe_type, "latest")
+                };
+
+                let (registry, recipe) = v.split_once("/").expect("delimiter missing");
 
                 return TemplateSource::Registry(
                     registry.to_owned(),

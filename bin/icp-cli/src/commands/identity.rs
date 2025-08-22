@@ -2,6 +2,7 @@ use crate::context::Context;
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
+mod account_id;
 mod default;
 mod import;
 mod list;
@@ -16,6 +17,7 @@ pub struct IdentityCmd {
 
 #[derive(Debug, Subcommand)]
 pub enum IdentitySubcmd {
+    AccountId(account_id::AccountIdCmd),
     Default(default::DefaultCmd),
     Import(import::ImportCmd),
     List(list::ListCmd),
@@ -25,6 +27,7 @@ pub enum IdentitySubcmd {
 
 pub async fn dispatch(ctx: &Context, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
     match cmd.subcmd {
+        IdentitySubcmd::AccountId(subcmd) => account_id::exec(ctx, subcmd)?,
         IdentitySubcmd::Default(subcmd) => default::exec(ctx, subcmd)?,
         IdentitySubcmd::Import(subcmd) => import::exec(ctx, subcmd)?,
         IdentitySubcmd::List(subcmd) => list::exec(ctx, subcmd)?,
@@ -36,6 +39,9 @@ pub async fn dispatch(ctx: &Context, cmd: IdentityCmd) -> Result<(), IdentityCom
 
 #[derive(Debug, Snafu)]
 pub enum IdentityCommandError {
+    #[snafu(transparent)]
+    AccountId { source: account_id::AccountIdError },
+
     #[snafu(transparent)]
     Default {
         source: default::DefaultIdentityError,

@@ -2,8 +2,8 @@ use camino::Utf8Path;
 use candid::Principal;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet,
-    HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig, InstanceId, RawTime,
-    SubnetSpec, Topology,
+    HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, IcpFeatures, InstanceConfig,
+    InstanceId, RawTime, SubnetSpec, Topology,
 };
 use reqwest::Url;
 use snafu::prelude::*;
@@ -38,7 +38,7 @@ pub fn spawn_pocketic(pocketic_path: &Utf8Path, port_file: &Utf8Path) -> tokio::
 
 pub struct PocketIcAdminInterface {
     client: reqwest::Client,
-    base_url: Url,
+    pub base_url: Url,
 }
 
 impl PocketIcAdminInterface {
@@ -73,6 +73,16 @@ impl PocketIcAdminInterface {
                 nonmainnet_features: true,
                 log_level: Some("ERROR".to_string()),
                 bitcoind_addr: None, // bitcoind_addr.clone(),
+                icp_features: Some(IcpFeatures {
+                    cycles_minting: true,
+                    registry: false,
+                    icp_token: true,
+                    cycles_token: true,
+                    nns_governance: false,
+                    sns: false,
+                }),
+                allow_incomplete_state: None,
+                initial_time: None,
             })
             .send()
             .await?

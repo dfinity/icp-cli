@@ -13,6 +13,7 @@ mod environment;
 mod identity;
 mod network;
 mod sync;
+mod token;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -29,6 +30,7 @@ pub enum Subcmd {
     Identity(identity::IdentityCmd),
     Network(network::NetworkCmd),
     Sync(sync::Cmd),
+    Token(token::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cli: Cmd) -> Result<(), DispatchError> {
@@ -40,6 +42,7 @@ pub async fn dispatch(ctx: &Context, cli: Cmd) -> Result<(), DispatchError> {
         Subcmd::Identity(opts) => identity::dispatch(ctx, opts).await?,
         Subcmd::Network(opts) => network::dispatch(ctx, opts).await?,
         Subcmd::Sync(opts) => sync::exec(ctx, opts).await?,
+        Subcmd::Token(opts) => token::dispatch(ctx, opts).await?,
     }
     Ok(())
 }
@@ -66,4 +69,7 @@ pub enum DispatchError {
 
     #[snafu(transparent)]
     Sync { source: sync::CommandError },
+
+    #[snafu(transparent)]
+    Token { source: token::CommandError },
 }

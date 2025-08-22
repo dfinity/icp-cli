@@ -120,6 +120,8 @@ async fn run_pocketic(
             default_effective_canister_id,
             pid: Some(child.id().unwrap()),
             root_key: instance.root_key,
+            pocketic_url: instance.admin.base_url.to_string(),
+            pocketic_instance_id: instance.instance_id,
         };
 
         let _cleaner = nd.save_network_descriptors(&descriptor)?;

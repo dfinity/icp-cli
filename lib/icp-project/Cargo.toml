@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 camino = { workspace = true }
 glob = { workspace = true }
+futures = { workspace = true }
 icp-canister = { path = "../icp-canister" }
 icp-fs = { "path" = "../icp-fs" }
 icp-network = { path = "../icp-network" }
@@ -18,3 +19,4 @@ icp-adapter = { path = "../icp-adapter" }
 camino-tempfile = { workspace = true }
 serde_yaml.workspace = true
 serde_json.workspace = true
+tokio.workspace = true

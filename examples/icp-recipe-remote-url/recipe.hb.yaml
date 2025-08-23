@@ -1,0 +1,5 @@
+build:
+  steps:
+    - type: pre-built
+      path: {{ path }}
+      sha256: {{ sha256 }}

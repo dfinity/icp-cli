@@ -1,41 +1,201 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr, string::FromUtf8Error};
 
+use async_trait::async_trait;
 use handlebars::*;
+use icp_fs::fs::{ReadFileError, read};
+use reqwest::{Method, Request, Url};
+use snafu::Snafu;
+use url::ParseError;
 
 use crate::{
     BuildSteps, CanisterInstructions, Recipe, SyncSteps,
     manifest::RecipeType,
-    recipe::{HandlebarsError, Resolve, ResolveError},
+    recipe::{Resolve, ResolveError},
 };
 
 pub struct Handlebars {
+    /// Built-in recipe templates
     pub recipes: HashMap<String, String>,
+
+    /// Http client for fetching remote recipe templates
+    pub http_client: reqwest::Client,
 }
 
+pub enum TemplateSource {
+    BuiltIn(String),
+    LocalPath(String),
+    RemoteUrl(String),
+
+    /// Template originating in a remote registry, e.g `@dfinity/rust@v1.0.2`
+    Registry(String, String, String),
+}
+
+#[derive(Debug, Snafu)]
+pub enum HandlebarsError {
+    #[snafu(display("no recipe found for recipe type '{recipe}'"))]
+    Unknown { recipe: String },
+
+    #[snafu(display("failed to read local recipe template file"))]
+    ReadFile { source: ReadFileError },
+
+    #[snafu(display("failed to decode UTF-8 string"))]
+    DecodeUtf8 { source: FromUtf8Error },
+
+    #[snafu(display("failed to parse user-provided url"))]
+    UrlParse { source: ParseError },
+
+    #[snafu(display("failed to execute http request"))]
+    HttpRequest { source: reqwest::Error },
+
+    #[snafu(display("request returned non-ok status-code"))]
+    HttpStatus { status: u16 },
+
+    #[snafu(display("the partrial template for partial '{partial}' appears to be invalid"))]
+    PartialInvalid {
+        source: handlebars::TemplateError,
+        partial: String,
+        template: String,
+    },
+
+    #[snafu(display("the recipe template for recipe type '{recipe}' appears to be invalid"))]
+    RecipeInvalid {
+        source: handlebars::TemplateError,
+        recipe: String,
+        template: String,
+    },
+
+    #[snafu(display("the recipe template for recipe type '{recipe}' failed to be rendered"))]
+    Render {
+        source: handlebars::RenderError,
+        recipe: String,
+        template: String,
+    },
+}
+
+#[async_trait]
 impl Resolve for Handlebars {
-    fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         // Sanity check recipe type
         let recipe_type = match &recipe.recipe_type {
             RecipeType::Unknown(typ) => typ.to_owned(),
             _ => panic!("expected unknown recipe"),
         };
 
-        // Search for recipe template
-        let tmpl = self
-            .recipes
-            .iter()
-            .find_map(|(name, tmpl)| {
-                if name == &recipe_type {
-                    Some(tmpl.to_owned())
+        // Infer source for recipe template (local, remote, built-in, etc)
+        let tmpl = (|recipe_type: String| {
+            if recipe_type.starts_with("file://") {
+                let path = recipe_type
+                    .strip_prefix("file://")
+                    .expect("prefix missing")
+                    .to_owned();
+
+                return TemplateSource::LocalPath(path);
+            }
+
+            if recipe_type.starts_with("http://") || recipe_type.starts_with("https://") {
+                return TemplateSource::RemoteUrl(recipe_type);
+            }
+
+            if recipe_type.starts_with("@") {
+                let recipe_type = recipe_type.strip_prefix("@").expect("prefix missing");
+
+                // Check for version delimiter
+                let (v, version) = if recipe_type.contains("@") {
+                    // Version is specified
+                    recipe_type.rsplit_once("@").expect("delimiter missing")
                 } else {
-                    None
+                    // Assume latest
+                    (recipe_type, "latest")
+                };
+
+                let (registry, recipe) = v.split_once("/").expect("delimiter missing");
+
+                return TemplateSource::Registry(
+                    registry.to_owned(),
+                    recipe.to_owned(),
+                    version.to_owned(),
+                );
+            }
+
+            TemplateSource::BuiltIn(recipe_type)
+        })(recipe_type.clone());
+
+        // TMP(or.ricon): Temporarily hardcode a dfinity registry
+        let tmpl = match tmpl {
+            TemplateSource::Registry(registry, recipe, version) => {
+                if registry != "dfinity" {
+                    panic!("only the dfinity registry is currently supported");
                 }
-            })
-            .ok_or(ResolveError::Handlebars {
-                source: HandlebarsError::Unknown {
-                    recipe: recipe_type.to_owned(),
-                },
-            })?;
+
+                TemplateSource::RemoteUrl(format!(
+                    "https://github.com/rikonor/icp-recipes/releases/download/{recipe}-{version}/recipe.hbs"
+                ))
+            }
+            _ => tmpl,
+        };
+
+        // Retrieve the template for the recipe from its respective source
+        let tmpl = match tmpl {
+            // Search for built-in recipe template
+            TemplateSource::BuiltIn(typ) => self
+                .recipes
+                .iter()
+                .find_map(|(name, tmpl)| {
+                    if name == &typ {
+                        Some(tmpl.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .ok_or(ResolveError::Handlebars {
+                    source: HandlebarsError::Unknown {
+                        recipe: typ.to_owned(),
+                    },
+                })?,
+
+            // TMP(or.ricon): Support multiple registries
+            TemplateSource::Registry(_, _, _) => panic!(
+                "registry source should have been converted to a dfinity-specific remote url"
+            ),
+
+            // Attempt to load template from local file-system
+            TemplateSource::LocalPath(path) => {
+                let bs = read(path).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::ReadFile { source: err },
+                })?;
+
+                String::from_utf8(bs).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::DecodeUtf8 { source: err },
+                })?
+            }
+
+            // Attempt to fetch template from remote resource url
+            TemplateSource::RemoteUrl(u) => {
+                let u = Url::from_str(&u).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::UrlParse { source: err },
+                })?;
+
+                let resp = self
+                    .http_client
+                    .execute(Request::new(Method::GET, u))
+                    .await
+                    .map_err(|err| ResolveError::Handlebars {
+                        source: HandlebarsError::HttpRequest { source: err },
+                    })?;
+
+                if !resp.status().is_success() {
+                    return Err(ResolveError::Handlebars {
+                        source: HandlebarsError::HttpStatus {
+                            status: resp.status().as_u16(),
+                        },
+                    });
+                }
+
+                resp.text().await.map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::HttpRequest { source: err },
+                })?
+            }
+        };
 
         // Load the template via handlebars
         let mut reg = handlebars::Handlebars::new();

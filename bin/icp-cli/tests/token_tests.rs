@@ -47,14 +47,14 @@ fn token_balance() {
         .current_dir(&project_dir)
         .args(["token", "balance"])
         .assert()
-        .stdout(contains("Balance: 0"))
+        .stdout(contains("Balance: 0 ICP"))
         .success();
 
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "cycles", "balance"])
         .assert()
-        .stdout(contains("Balance: 0"))
+        .stdout(contains("Balance: 0 TCYCLES"))
         .success();
 
     // mint icp to identity
@@ -65,6 +65,6 @@ fn token_balance() {
         .current_dir(&project_dir)
         .args(["token", "icp", "balance"])
         .assert()
-        .stdout(contains("Balance: 1.23456789"))
+        .stdout(contains("Balance: 1.23456789 ICP"))
         .success();
 }

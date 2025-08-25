@@ -85,25 +85,33 @@ pub async fn exec(
         .query(&token_address, "icrc1_decimals")
         .with_arg(Encode!(&()).unwrap())
         .call();
+    let symbol_future = agent
+        .query(&token_address, "icrc1_symbol")
+        .with_arg(Encode!(&()).unwrap())
+        .call();
 
-    let (balance, decimals) = tokio::join!(balance_future, decimals_future);
+    let (balance, decimals, symbol) = tokio::join!(balance_future, decimals_future, symbol_future);
     let balance_bytes = balance
         .map_err(|e| CommandError::TokenCanisterError { source: e })
         .unwrap();
     let decimals_bytes = decimals
         .map_err(|e| CommandError::TokenCanisterError { source: e })
         .unwrap();
+    let symbol_bytes = symbol
+        .map_err(|e| CommandError::TokenCanisterError { source: e })
+        .unwrap();
 
     let balance = Decode!(&balance_bytes, Nat).unwrap();
     let decimals = Decode!(&decimals_bytes, u8).unwrap();
+    let symbol = Decode!(&symbol_bytes, String).unwrap();
 
-    print_balance(balance, decimals);
+    print_balance(balance, decimals, symbol);
     Ok(())
 }
 
-fn print_balance(balance: Nat, decimals: u8) {
+fn print_balance(balance: Nat, decimals: u8, symbol: String) {
     let amount = BigDecimal::from_biguint(balance.0, decimals as i64);
-    println!("Balance: {amount}");
+    println!("Balance: {amount} {symbol}");
 }
 
 #[derive(Debug, Snafu)]

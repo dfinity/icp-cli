@@ -1,5 +1,4 @@
 use crate::common::TestContext;
-use candid::Principal;
 use icp_fs::fs::write;
 use predicates::str::contains;
 use serial_test::serial;
@@ -8,7 +7,7 @@ mod common;
 
 #[test]
 #[serial]
-fn token_balance() {
+fn cycles_balance() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -44,26 +43,8 @@ fn token_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance"])
-        .assert()
-        .stdout(contains("Balance: 0 ICP"))
-        .success();
-
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["token", "cycles", "balance"])
+        .args(["cycles", "balance"])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
-        .success();
-
-    // mint icp to identity
-    ctx.icp_ledger()
-        .mint_icp(Principal::anonymous(), None, 123456789_u128);
-
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["token", "icp", "balance"])
-        .assert()
-        .stdout(contains("Balance: 1.23456789 ICP"))
         .success();
 }

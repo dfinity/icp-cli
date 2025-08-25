@@ -1,19 +1,13 @@
-use crate::context::Context;
+use crate::{
+    commands::token::{self, TokenArgs},
+    context::Context,
+};
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
-pub mod balance;
-
-#[derive(Debug, Parser)]
-pub struct TokenArgs {
-    /// Token identifier (name or canister ID). Defaults to "icp" when omitted.
-    #[arg(value_name = "TOKEN")]
-    pub token: Option<String>,
-}
-
-impl TokenArgs {
-    pub fn token(&self) -> &str {
-        self.token.as_deref().unwrap_or("icp")
+fn cycles_token_args() -> TokenArgs {
+    TokenArgs {
+        token: Some(String::from("cycles")),
     }
 }
 
@@ -29,12 +23,14 @@ pub struct Cmd {
 
 #[derive(Debug, Subcommand)]
 pub enum TokenSubcmd {
-    Balance(balance::Cmd),
+    Balance(token::balance::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     match cmd.subcmd {
-        TokenSubcmd::Balance(subcmd) => balance::exec(ctx, cmd.token_args, subcmd).await?,
+        TokenSubcmd::Balance(subcmd) => {
+            token::balance::exec(ctx, cycles_token_args(), subcmd).await?
+        }
     }
     Ok(())
 }
@@ -42,5 +38,7 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    Balance { source: balance::CommandError },
+    Balance {
+        source: token::balance::CommandError,
+    },
 }

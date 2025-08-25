@@ -8,6 +8,7 @@ use snafu::Snafu;
 
 mod build;
 mod canister;
+mod cycles;
 mod deploy;
 mod environment;
 mod identity;
@@ -25,6 +26,7 @@ pub struct Cmd {
 pub enum Subcmd {
     Build(build::Cmd),
     Canister(canister::Cmd),
+    Cycles(cycles::Cmd),
     Deploy(deploy::Cmd),
     Environment(environment::Cmd),
     Identity(identity::IdentityCmd),
@@ -37,6 +39,7 @@ pub async fn dispatch(ctx: &Context, cli: Cmd) -> Result<(), DispatchError> {
     match cli.subcommand {
         Subcmd::Build(opts) => build::exec(ctx, opts).await?,
         Subcmd::Canister(opts) => canister::dispatch(ctx, opts).await?,
+        Subcmd::Cycles(opts) => cycles::dispatch(ctx, opts).await?,
         Subcmd::Deploy(opts) => deploy::exec(ctx, opts).await?,
         Subcmd::Environment(opts) => environment::exec(ctx, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(ctx, opts).await?,
@@ -54,6 +57,9 @@ pub enum DispatchError {
 
     #[snafu(transparent)]
     Canister { source: CanisterCommandError },
+
+    #[snafu(transparent)]
+    Cycles { source: cycles::CommandError },
 
     #[snafu(transparent)]
     Deploy { source: deploy::CommandError },

@@ -5,6 +5,8 @@ use crate::{
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
+mod mint;
+
 fn cycles_token_args() -> TokenArgs {
     TokenArgs {
         token: Some(String::from("cycles")),
@@ -24,6 +26,7 @@ pub struct Cmd {
 #[derive(Debug, Subcommand)]
 pub enum TokenSubcmd {
     Balance(token::balance::Cmd),
+    Mint(mint::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -31,6 +34,7 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         TokenSubcmd::Balance(subcmd) => {
             token::balance::exec(ctx, cycles_token_args(), subcmd).await?
         }
+        TokenSubcmd::Mint(subcmd) => mint::exec(ctx, subcmd).await?,
     }
     Ok(())
 }
@@ -41,4 +45,7 @@ pub enum CommandError {
     Balance {
         source: token::balance::CommandError,
     },
+
+    #[snafu(transparent)]
+    Mint { source: mint::CommandError },
 }

@@ -48,6 +48,7 @@ camino-tempfile = "1"
 nix = { version = "0.30.1", features = ["process", "signal"] }
 pocket-ic.workspace = true
 predicates = "3"
+rand.workspace = true
 reqwest = { workspace = true }
 serde_yaml.workspace = true
 serial_test = { version = "3.2.0", features = ["file_locks"] }

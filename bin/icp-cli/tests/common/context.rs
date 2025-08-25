@@ -8,17 +8,20 @@ use std::{
 use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{Utf8TempDir, tempdir};
+use candid::Principal;
 use icp_network::NETWORK_LOCAL;
 use pocket_ic::PocketIc;
 use serde_json::{Value, json};
 use url::Url;
 
+use crate::common::context::icp_shorthand::IcpShorthand;
 use crate::common::{
     ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx,
     context::icp_ledger::IcpLedgerPocketIcClient,
 };
 
 mod icp_ledger;
+mod icp_shorthand;
 
 pub struct TestContext {
     home_dir: Utf8TempDir,
@@ -93,6 +96,10 @@ impl TestContext {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
         self.isolate(&mut cmd);
         cmd
+    }
+
+    pub fn icp_(&self) -> IcpShorthand<'_> {
+        IcpShorthand::new(&self)
     }
 
     pub fn dfx(&self) -> Command {

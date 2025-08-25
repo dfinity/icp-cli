@@ -1,4 +1,4 @@
-use candid::{Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use icrc_ledger_types::icrc1::account::Subaccount;
 use pocket_ic::PocketIc;
 use std::cell::Ref;
@@ -11,6 +11,23 @@ pub struct IcpLedgerPocketIcClient<'a> {
 }
 
 impl<'a> IcpLedgerPocketIcClient<'a> {
+    pub fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
+        Decode!(
+            &self
+                .pic
+                .query_call(
+                    LEDGER_ID,
+                    Principal::anonymous(),
+                    "icrc1_balance_of",
+                    Encode!(&icrc_ledger_types::icrc1::account::Account { owner, subaccount })
+                        .unwrap(),
+                )
+                .unwrap(),
+            Nat
+        )
+        .unwrap()
+    }
+
     pub fn mint_icp(
         &self,
         owner: Principal,

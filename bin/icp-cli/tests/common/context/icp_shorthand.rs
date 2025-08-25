@@ -38,4 +38,20 @@ impl<'a> IcpShorthand<'a> {
             .assert()
             .success();
     }
+
+    pub fn create_identity(&self, name: &str) {
+        self.ctx
+            .icp()
+            .args(["identity", "new", name])
+            .assert()
+            .success();
+    }
+
+    pub fn use_identity(&self, name: &str) {
+        self.ctx
+            .icp()
+            .args(["identity", "default", name])
+            .assert()
+            .success();
+    }
 }

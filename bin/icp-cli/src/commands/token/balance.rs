@@ -1,5 +1,5 @@
 use bigdecimal::BigDecimal;
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use ic_agent::AgentError;
 use icp_identity::key::LoadIdentityInContextError;
@@ -54,19 +54,11 @@ pub async fn exec(
     // Prepare agent
     let agent = ctx.agent()?;
 
-    let token_address = if let Ok(token_address) = Principal::from_text(parent_cmd.token()) {
-        token_address
-    } else {
-        match parent_cmd.token().to_lowercase().as_str() {
-            "icp" => Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(),
-            "cycles" => Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap(),
-            _ => {
-                return Err(CommandError::InvalidToken {
-                    token: parent_cmd.token().to_string(),
-                });
-            }
-        }
-    };
+    let token_address = parent_cmd
+        .token_address()
+        .ok_or(CommandError::InvalidToken {
+            token: parent_cmd.token().to_string(),
+        })?;
 
     let account = Account {
         owner: ctx

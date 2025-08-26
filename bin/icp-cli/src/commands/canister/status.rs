@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_agent::AgentError;
-use ic_utils::interfaces::management_canister::StatusCallResult;
+use ic_utils::interfaces::management_canister::CanisterStatusResult;
 use snafu::Snafu;
 
 use crate::{
@@ -119,9 +119,9 @@ pub enum CommandError {
     Agent { source: AgentError },
 }
 
-pub fn print_status(result: &StatusCallResult) {
+pub fn print_status(result: &CanisterStatusResult) {
     eprintln!("Canister Status Report:");
-    eprintln!("  Status: {}", result.status);
+    eprintln!("  Status: {:?}", result.status);
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
@@ -130,15 +130,15 @@ pub fn print_status(result: &StatusCallResult) {
     eprintln!("  Memory allocation: {}", settings.memory_allocation);
     eprintln!("  Freezing threshold: {}", settings.freezing_threshold);
 
-    if let Some(limit) = &settings.reserved_cycles_limit {
-        eprintln!("  Reserved cycles limit: {}", limit);
-    }
-    if let Some(limit) = &settings.wasm_memory_limit {
-        eprintln!("  Wasm memory limit: {}", limit);
-    }
-    if let Some(threshold) = &settings.wasm_memory_threshold {
-        eprintln!("  Wasm memory threshold: {}", threshold);
-    }
+    eprintln!(
+        "  Reserved cycles limit: {}",
+        settings.reserved_cycles_limit
+    );
+    eprintln!("  Wasm memory limit: {}", settings.wasm_memory_limit);
+    eprintln!(
+        "  Wasm memory threshold: {}",
+        settings.wasm_memory_threshold
+    );
     eprintln!("  Log visibility: {:?}", settings.log_visibility);
 
     match &result.module_hash {

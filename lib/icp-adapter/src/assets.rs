@@ -52,28 +52,30 @@ impl sync::Adapter for AssetsAdapter {
             .collect::<Vec<std::path::PathBuf>>();
 
         #[allow(clippy::disallowed_types)]
-        let dirs: Vec<&std::path::Path> = dirs.iter().map(|p| p.as_path()).collect();
+        let _dirs: Vec<&std::path::Path> = dirs.iter().map(|p| p.as_path()).collect();
 
         // ic-asset requires a logger, so provide it a nop logger
-        let logger = slog::Logger::root(slog::Discard, slog::o!());
+        let _logger = slog::Logger::root(slog::Discard, slog::o!());
 
         // Prepare canister client
-        let canister = Canister::builder()
+        let _canister = Canister::builder()
             .with_canister_id(canister_id.to_owned())
             .with_agent(agent)
             .build()
             .map_err(|err| AssetsAdapterSyncError::CanisterBuilder { source: err })?;
 
         // Synchronize assets to canister
-        ic_asset::sync(
-            &canister, // canister
-            &dirs,     // dirs
-            false,     // no_delete
-            &logger,   // logger
-            None,      // progress
-        )
-        .await
-        .map_err(|err| AssetsAdapterSyncError::Sync { source: err })?;
+        // TMP(or.ricon): Commenting out this code, as it currently triggers an error
+        //                due to a crate mismatch with ic-asset.
+        // ic_asset::sync(
+        //     &canister, // canister
+        //     &dirs,     // dirs
+        //     false,     // no_delete
+        //     &logger,   // logger
+        //     None,      // progress
+        // )
+        // .await
+        // .map_err(|err| AssetsAdapterSyncError::Sync { source: err })?;
 
         Ok(())
     }

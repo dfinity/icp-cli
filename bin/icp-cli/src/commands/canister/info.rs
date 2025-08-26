@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_agent::AgentError;
-use ic_utils::interfaces::management_canister::StatusCallResult;
+use ic_utils::interfaces::management_canister::CanisterStatusResult;
 use itertools::Itertools;
 use snafu::Snafu;
 
@@ -120,7 +120,7 @@ pub enum CommandError {
     Agent { source: AgentError },
 }
 
-pub fn print_info(result: &StatusCallResult) {
+pub fn print_info(result: &CanisterStatusResult) {
     let controllers: Vec<String> = result
         .settings
         .controllers

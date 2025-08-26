@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
-use ic_utils::interfaces::management_canister::LogVisibility;
+use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
 use snafu::Snafu;
 
 use crate::{
@@ -246,6 +246,23 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 .wasm_memory_threshold
                 .or(c.settings.wasm_memory_threshold),
         );
+
+        // Canister Environment Variables
+        builder = {
+            let environment_variables = c
+                .settings
+                .environment_variables
+                .to_owned()
+                .unwrap_or_default();
+
+            // Convert to expected type
+            let environment_variables = environment_variables
+                .into_iter()
+                .map(|(name, value)| EnvironmentVariable { name, value })
+                .collect::<Vec<_>>();
+
+            builder.with_environment_variables(environment_variables)
+        };
 
         // Logs
         builder = builder.with_optional_log_visibility(

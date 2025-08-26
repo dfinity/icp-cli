@@ -29,6 +29,7 @@ pub fn default_networks() -> Vec<NetworkItem> {
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
 pub enum CanisterItem {
     Path(String),
     Definition(CanisterManifest),
@@ -36,6 +37,7 @@ pub enum CanisterItem {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[allow(clippy::large_enum_variant)]
 pub enum CanistersField {
     Canister(CanisterManifest),
     Canisters(Vec<CanisterItem>),

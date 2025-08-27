@@ -141,6 +141,15 @@ pub fn print_status(result: &CanisterStatusResult) {
     );
     eprintln!("  Log visibility: {:?}", settings.log_visibility);
 
+    if settings.environment_variables.is_empty() {
+        eprintln!("  Environment Variables: N/A",);
+    } else {
+        eprintln!("  Environment Variables:");
+        for v in &settings.environment_variables {
+            eprintln!("    Name: {}, Value: {}", v.name, v.value);
+        }
+    }
+
     match &result.module_hash {
         Some(hash) => {
             let hex_string: String = hash.iter().map(|b| format!("{:02x}", b)).collect();

@@ -141,6 +141,8 @@ pub fn print_status(result: &CanisterStatusResult) {
     );
     eprintln!("  Log visibility: {:?}", settings.log_visibility);
 
+    // Display environment variables configured for this canister
+    // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
         eprintln!("  Environment Variables: N/A",);
     } else {

@@ -247,7 +247,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 .or(c.settings.wasm_memory_threshold),
         );
 
-        // Canister Environment Variables
+        // Configure canister environment variables
+        // Environment variables are key-value pairs that are accessible within the canister
+        // and can be used to configure behavior without hardcoding values in the WASM
         builder = {
             let environment_variables = c
                 .settings
@@ -255,7 +257,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 .to_owned()
                 .unwrap_or_default();
 
-            // Convert to expected type
+            // Convert from HashMap<String, String> to Vec<EnvironmentVariable>
+            // as required by the IC management canister interface
             let environment_variables = environment_variables
                 .into_iter()
                 .map(|(name, value)| EnvironmentVariable { name, value })

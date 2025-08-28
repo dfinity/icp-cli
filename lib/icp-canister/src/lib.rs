@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use icp_adapter::{
     assets::AssetsAdapter, motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter,
     script::ScriptAdapter,
@@ -30,6 +32,11 @@ pub struct CanisterSettings {
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
     pub wasm_memory_threshold: Option<u64>,
+
+    /// Environment variables for the canister as key-value pairs.
+    /// These variables are accessible within the canister and can be used to configure
+    /// behavior without hardcoding values in the WASM module.
+    pub environment_variables: Option<HashMap<String, String>>,
 }
 
 /// Identifies the type of adapter used to build the canister,

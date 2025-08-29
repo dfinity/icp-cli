@@ -1,13 +1,15 @@
 use std::io;
 
-use crate::context::GetProjectError;
-use crate::{context::Context, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
+use futures::{StreamExt, stream::FuturesUnordered};
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
+
+use crate::context::GetProjectError;
+use crate::{context::Context, store_artifact::SaveError};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -46,50 +48,62 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // Prepare a futures set for concurrent canister builds
+    let mut futs = FuturesUnordered::new();
+
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
-        // Create a temporary directory for build artifacts
-        let build_dir = tempdir().context(BuildDirSnafu)?;
+        futs.push(async move {
+            // Create a temporary directory for build artifacts
+            let build_dir = tempdir().context(BuildDirSnafu)?;
 
-        // Prepare a path for our output wasm
-        let wasm_output_path = build_dir.path().join("out.wasm");
+            // Prepare a path for our output wasm
+            let wasm_output_path = build_dir.path().join("out.wasm");
 
-        for step in c.build.steps {
-            match step {
-                // Compile using the custom script adapter.
-                BuildStep::Script(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
-                }
+            for step in c.build.steps {
+                match step {
+                    // Compile using the custom script adapter.
+                    BuildStep::Script(adapter) => {
+                        adapter.compile(&canister_path, &wasm_output_path).await?
+                    }
 
-                // Compile using the Motoko adapter.
-                BuildStep::Motoko(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
-                }
+                    // Compile using the Motoko adapter.
+                    BuildStep::Motoko(adapter) => {
+                        adapter.compile(&canister_path, &wasm_output_path).await?
+                    }
 
-                // Compile using the Rust adapter.
-                BuildStep::Rust(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
-                }
+                    // Compile using the Rust adapter.
+                    BuildStep::Rust(adapter) => {
+                        adapter.compile(&canister_path, &wasm_output_path).await?
+                    }
 
-                // Compile using the Pre-built adapter.
-                BuildStep::Prebuilt(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
-                }
-            };
-        }
+                    // Compile using the Pre-built adapter.
+                    BuildStep::Prebuilt(adapter) => {
+                        adapter.compile(&canister_path, &wasm_output_path).await?
+                    }
+                };
+            }
 
-        // Verify a file exists in the wasm output path
-        if !wasm_output_path.exists() {
-            return Err(CommandError::NoOutput);
-        }
+            // Verify a file exists in the wasm output path
+            if !wasm_output_path.exists() {
+                return Err(CommandError::NoOutput);
+            }
 
-        // Load wasm output
-        let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
+            // Load wasm output
+            let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
 
-        // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
+            // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
-        // Save the wasm artifact
-        ctx.artifact_store.save(&c.name, &wasm)?;
+            // Save the wasm artifact
+            ctx.artifact_store.save(&c.name, &wasm)?;
+
+            Ok::<_, CommandError>(())
+        });
+    }
+
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        res?;
     }
 
     Ok(())

@@ -9,7 +9,6 @@ use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use snafu::{ResultExt, Snafu};
-use tokio::time::sleep;
 
 use crate::context::GetProjectError;
 use crate::{context::Context, store_artifact::SaveError};
@@ -28,7 +27,7 @@ const COLOR_SUCCESS: &str = "green";
 const COLOR_FAILURE: &str = "red";
 
 fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
-    let tmpl = format!("{{spinner:.{color}}} {{msg}}");
+    let tmpl = format!("{{prefix}} {{spinner:.{color}}} {{msg}}");
 
     ProgressStyle::with_template(&tmpl)
         .expect("invalid style template")
@@ -88,67 +87,90 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Auto-tick spinner
         pb.enable_steady_tick(Duration::from_millis(120));
 
+        // Set the progress bar prefix to display the canister name in brackets
+        pb.set_prefix(format!("[{}]", c.name));
+
         // Set progress-bar message
-        pb.set_message(format!("Building canister: {}", c.name));
+        pb.set_message("Building...");
+
+        // Create an async closure that handles the build process for this specific canister
+        let build_fn = {
+            let c = c.clone();
+
+            async move {
+                // Create a temporary directory for build artifacts
+                let build_dir = tempdir().context(BuildDirSnafu)?;
+
+                // Prepare a path for our output wasm
+                let wasm_output_path = build_dir.path().join("out.wasm");
+
+                for step in c.build.steps {
+                    match step {
+                        // Compile using the custom script adapter.
+                        BuildStep::Script(adapter) => {
+                            adapter.compile(&canister_path, &wasm_output_path).await?
+                        }
+
+                        // Compile using the Motoko adapter.
+                        BuildStep::Motoko(adapter) => {
+                            adapter.compile(&canister_path, &wasm_output_path).await?
+                        }
+
+                        // Compile using the Rust adapter.
+                        BuildStep::Rust(adapter) => {
+                            adapter.compile(&canister_path, &wasm_output_path).await?
+                        }
+
+                        // Compile using the Pre-built adapter.
+                        BuildStep::Prebuilt(adapter) => {
+                            adapter.compile(&canister_path, &wasm_output_path).await?
+                        }
+                    };
+                }
+
+                // Verify a file exists in the wasm output path
+                if !wasm_output_path.exists() {
+                    return Err(CommandError::NoOutput);
+                }
+
+                // Load wasm output
+                let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
+
+                // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
+
+                // Save the wasm artifact
+                ctx.artifact_store.save(&c.name, &wasm)?;
+
+                Ok::<_, CommandError>(())
+            }
+        };
 
         futs.push_back(async move {
-            // Create a temporary directory for build artifacts
-            let build_dir = tempdir().context(BuildDirSnafu)?;
+            // Execute the build function and capture the result
+            let out = build_fn.await;
 
-            // Prepare a path for our output wasm
-            let wasm_output_path = build_dir.path().join("out.wasm");
+            // Update the progress bar style based on build result
+            pb.set_style(match &out {
+                Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
+                Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
+            });
 
-            for step in c.build.steps {
-                match step {
-                    // Compile using the custom script adapter.
-                    BuildStep::Script(adapter) => {
-                        adapter.compile(&canister_path, &wasm_output_path).await?
-                    }
+            // Update the progress bar message based on build result
+            pb.set_message(match &out {
+                Ok(_) => "Built successfully".to_string(),
+                Err(err) => format!("Failed to build canister: {err}"),
+            });
 
-                    // Compile using the Motoko adapter.
-                    BuildStep::Motoko(adapter) => {
-                        adapter.compile(&canister_path, &wasm_output_path).await?
-                    }
+            // Stop the progress bar spinner and keep the final state visible
+            pb.finish();
 
-                    // Compile using the Rust adapter.
-                    BuildStep::Rust(adapter) => {
-                        adapter.compile(&canister_path, &wasm_output_path).await?
-                    }
-
-                    // Compile using the Pre-built adapter.
-                    BuildStep::Prebuilt(adapter) => {
-                        adapter.compile(&canister_path, &wasm_output_path).await?
-                    }
-                };
-            }
-
-            // Verify a file exists in the wasm output path
-            if !wasm_output_path.exists() {
-                return Err(CommandError::NoOutput);
-            }
-
-            // Load wasm output
-            let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
-
-            // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
-
-            // Save the wasm artifact
-            ctx.artifact_store.save(&c.name, &wasm)?;
-
-            //
-            pb.set_style(make_style(
-                TICK_SUCCESS,  // end_tick
-                COLOR_SUCCESS, // color
-            ));
-
-            pb.finish_with_message(format!("Built canister: {}", c.name));
-
-            Ok::<_, CommandError>(())
+            out
         });
     }
 
     // Consume the set of futures and abort if an error occurs
     while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister build failures
         res?;
     }
 

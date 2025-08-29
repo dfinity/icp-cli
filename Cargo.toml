@@ -42,6 +42,7 @@ icp-fs = { path = "lib/icp-fs" }
 icp-identity = { path = "lib/icp-identity", features = ["clap"] }
 icp-network = { path = "lib/icp-network" }
 icp-project = { path = "lib/icp-project" }
+indicatif = "0.18.0"
 itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 mockall = "0.13.1"

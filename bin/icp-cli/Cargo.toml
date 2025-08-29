@@ -29,6 +29,7 @@ icp-fs.workspace = true
 icp-identity.workspace = true
 icp-network.workspace = true
 icp-project.workspace = true
+indicatif.workspace = true
 itertools.workspace = true
 k256.workspace = true
 pem.workspace = true

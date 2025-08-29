@@ -1,15 +1,39 @@
 use std::io;
+use std::time::Duration;
 
 use camino_tempfile::tempdir;
 use clap::Parser;
-use futures::{StreamExt, stream::FuturesUnordered};
+use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use snafu::{ResultExt, Snafu};
+use tokio::time::sleep;
 
 use crate::context::GetProjectError;
 use crate::{context::Context, store_artifact::SaveError};
+
+//
+const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
+
+//
+const TICK_EMPTY: &str = " ";
+const TICK_SUCCESS: &str = "✔";
+const TICK_FAILURE: &str = "✘";
+
+//
+const COLOR_REGULAR: &str = "blue";
+const COLOR_SUCCESS: &str = "green";
+const COLOR_FAILURE: &str = "red";
+
+fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
+    let tmpl = format!("{{spinner:.{color}}} {{msg}}");
+
+    ProgressStyle::with_template(&tmpl)
+        .expect("invalid style template")
+        .tick_strings(&[TICKS, &[end_tick]].concat())
+}
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -49,11 +73,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Prepare a futures set for concurrent canister builds
-    let mut futs = FuturesUnordered::new();
+    let mut futs = FuturesOrdered::new();
+
+    let mp = MultiProgress::new();
 
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
-        futs.push(async move {
+        // Attach spinner to multi-progress-bar container
+        let pb = mp.add(ProgressBar::new_spinner().with_style(make_style(
+            TICK_EMPTY,    // end_tick
+            COLOR_REGULAR, // color
+        )));
+
+        // Auto-tick spinner
+        pb.enable_steady_tick(Duration::from_millis(120));
+
+        // Set progress-bar message
+        pb.set_message(format!("Building canister: {}", c.name));
+
+        futs.push_back(async move {
             // Create a temporary directory for build artifacts
             let build_dir = tempdir().context(BuildDirSnafu)?;
 
@@ -96,6 +134,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
             // Save the wasm artifact
             ctx.artifact_store.save(&c.name, &wasm)?;
+
+            //
+            pb.set_style(make_style(
+                TICK_SUCCESS,  // end_tick
+                COLOR_SUCCESS, // color
+            ));
+
+            pb.finish_with_message(format!("Built canister: {}", c.name));
 
             Ok::<_, CommandError>(())
         });

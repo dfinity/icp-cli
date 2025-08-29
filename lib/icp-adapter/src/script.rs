@@ -1,3 +1,5 @@
+use std::process::Stdio;
+
 use crate::build::{self, AdapterCompileError};
 use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
@@ -5,7 +7,7 @@ use camino::Utf8Path;
 use ic_agent::{Agent, export::Principal};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
-use std::process::{Command, Stdio};
+use tokio::process::Command;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -84,7 +86,7 @@ impl build::Adapter for ScriptAdapter {
             cmd.stderr(Stdio::inherit());
 
             // Execute
-            let out = cmd.output().context(CommandInvokeCompileSnafu {
+            let out = cmd.output().await.context(CommandInvokeCompileSnafu {
                 command: &input_cmd,
             })?;
 
@@ -175,7 +177,7 @@ impl sync::Adapter for ScriptAdapter {
             cmd.stderr(Stdio::inherit());
 
             // Execute
-            let out = cmd.output().context(CommandInvokeSyncSnafu {
+            let out = cmd.output().await.context(CommandInvokeSyncSnafu {
                 command: &input_cmd,
             })?;
 

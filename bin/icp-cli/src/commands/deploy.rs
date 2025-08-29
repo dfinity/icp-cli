@@ -109,6 +109,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     ..Default::default()
                 },
 
+                cycles: None,
+
                 quiet: false,
             },
         )

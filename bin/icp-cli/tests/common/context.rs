@@ -16,9 +16,10 @@ use url::Url;
 use crate::common::context::icp_shorthand::IcpShorthand;
 use crate::common::{
     ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx,
-    context::icp_ledger::IcpLedgerPocketIcClient,
+    context::{cycles_ledger::CyclesLedgerPocketIcClient, icp_ledger::IcpLedgerPocketIcClient},
 };
 
+mod cycles_ledger;
 mod icp_ledger;
 mod icp_shorthand;
 
@@ -344,5 +345,12 @@ impl TestContext {
             opt.as_ref().expect("pocketic not started")
         });
         IcpLedgerPocketIcClient { pic: pic_ref }
+    }
+
+    pub fn cycles_ledger(&self) -> CyclesLedgerPocketIcClient<'_> {
+        let pic_ref: Ref<'_, PocketIc> = Ref::map(self.pocketic.borrow(), |opt| {
+            opt.as_ref().expect("pocketic not started")
+        });
+        CyclesLedgerPocketIcClient { pic: pic_ref }
     }
 }

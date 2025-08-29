@@ -1,6 +1,8 @@
+use candid::{CandidType, Decode, Encode, Nat};
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
 use crate::{
@@ -71,6 +73,10 @@ pub struct Cmd {
     // Resource-related settings and thresholds for the new canister.
     #[clap(flatten)]
     pub settings: CanisterSettings,
+
+    /// How many cycles the canister should be created with. Also needs to pay for canister creation cost.
+    #[clap(long)]
+    pub cycles: Option<u128>,
 
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
     #[clap(long, short = 'q')]
@@ -186,89 +192,225 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
     for (_, c) in cs {
-        // Create canister
-        let mut builder = mgmt.create_canister();
+        // TODO: support detecting (non)mainnet
+        if network == "ic" {
+            #[derive(CandidType, Serialize, Clone, Debug, Default)]
+            pub struct CanisterSettings {
+                pub freezing_threshold: Option<Nat>,
+                pub controllers: Option<Vec<Principal>>,
+                pub reserved_cycles_limit: Option<Nat>,
+                pub memory_allocation: Option<Nat>,
+                pub compute_allocation: Option<Nat>,
+            }
 
-        // Cycles amount
-        builder = builder.as_provisional_create_with_amount(None);
+            #[derive(CandidType, Serialize, Clone, Debug, Default)]
+            pub struct SubnetFilter {
+                pub subnet_type: Option<String>,
+            }
 
-        // Canister ID (effective)
-        builder = builder.with_effective_canister_id(cmd.ids.effective_id);
+            #[derive(CandidType, Serialize, Clone, Debug)]
+            pub enum SubnetSelection {
+                Filter(SubnetFilter),
+                Subnet { subnet: Principal },
+            }
 
-        // Canister ID (specific)
-        if let Some(id) = cmd.ids.specific_id {
-            builder = builder.as_provisional_create_with_specified_id(id);
-        }
+            #[derive(CandidType, Serialize, Clone, Debug, Default)]
+            pub struct CmcCreateCanisterArgs {
+                pub subnet_selection: Option<SubnetSelection>,
+                pub settings: Option<CanisterSettings>,
+            }
 
-        // Controllers
-        for c in &cmd.controller {
-            builder = builder.with_controller(c.to_owned());
-        }
+            #[derive(CandidType, Serialize, Clone, Debug, Default)]
+            pub struct CreateCanisterArgs {
+                pub from_subaccount: Option<Vec<u8>>,
+                pub created_at_time: Option<u64>,
+                pub amount: Nat,
+                pub creation_args: Option<CmcCreateCanisterArgs>,
+            }
 
-        // Compute
-        builder = builder.with_optional_compute_allocation(
-            cmd.settings
-                .compute_allocation
-                .or(c.settings.compute_allocation),
-        );
+            let create_canister_arg = CreateCanisterArgs {
+                from_subaccount: None,
+                created_at_time: None,
+                amount: cmd.cycles.unwrap_or(1_500_000_000_000).into(),
+                creation_args: Some(CmcCreateCanisterArgs {
+                    subnet_selection: None,
+                    settings: Some(CanisterSettings {
+                        freezing_threshold: cmd.settings.freezing_threshold.map(|v| v.into()),
+                        controllers: Some(cmd.controller.clone()),
+                        reserved_cycles_limit: cmd.settings.reserved_cycles_limit.map(|v| v.into()),
+                        memory_allocation: cmd.settings.memory_allocation.map(|v| v.into()),
+                        compute_allocation: cmd.settings.compute_allocation.map(|v| v.into()),
+                    }),
+                }),
+            };
 
-        // Memory
-        builder = builder.with_optional_memory_allocation(
-            cmd.settings
-                .memory_allocation
-                .or(c.settings.memory_allocation),
-        );
+            let result_bytes = agent
+                .update(
+                    &Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap(),
+                    "create_canister",
+                )
+                .with_arg(Encode!(&create_canister_arg).unwrap())
+                .call_and_wait()
+                .await?;
 
-        // Freezing Threshold
-        builder = builder.with_optional_freezing_threshold(
-            cmd.settings
-                .freezing_threshold
-                .or(c.settings.freezing_threshold),
-        );
+            // Types for create_canister result
+            pub type BlockIndex = Nat;
 
-        // Reserved Cycles (limit)
-        builder = builder.with_optional_reserved_cycles_limit(
-            cmd.settings
-                .reserved_cycles_limit
-                .or(c.settings.reserved_cycles_limit),
-        );
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub struct CreateCanisterSuccess {
+                pub block_id: BlockIndex,
+                pub canister_id: Principal,
+            }
 
-        // Wasm (memory limit)
-        builder = builder.with_optional_wasm_memory_limit(
-            cmd.settings
-                .wasm_memory_limit
-                .or(c.settings.wasm_memory_limit),
-        );
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub struct CreateCanisterErrorGeneric {
+                pub message: String,
+                pub error_code: Nat,
+            }
 
-        // Wasm (memory threshold)
-        builder = builder.with_optional_wasm_memory_threshold(
-            cmd.settings
-                .wasm_memory_threshold
-                .or(c.settings.wasm_memory_threshold),
-        );
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub struct CreateCanisterErrorDuplicate {
+                pub duplicate_of: Nat,
+                pub canister_id: Option<Principal>,
+            }
 
-        // Logs
-        builder = builder.with_optional_log_visibility(
-            Some(LogVisibility::Public), //
-        );
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub struct CreateCanisterErrorCreatedInFuture {
+                pub ledger_time: u64,
+            }
 
-        // Create the canister
-        let (cid,) = builder.await?;
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub struct CreateCanisterErrorFailedToCreate {
+                pub error: String,
+                pub refund_block: Option<BlockIndex>,
+                pub fee_block: Option<BlockIndex>,
+            }
 
-        // Create canister-network association-key
-        let k = Key {
-            network: network.to_owned(),
-            environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
-        };
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub struct CreateCanisterErrorInsufficientFunds {
+                pub balance: Nat,
+            }
 
-        // Register the canister ID
-        ctx.id_store.register(&k, &cid)?;
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub enum CreateCanisterError {
+                GenericError(CreateCanisterErrorGeneric),
+                TemporarilyUnavailable,
+                Duplicate(CreateCanisterErrorDuplicate),
+                CreatedInFuture(CreateCanisterErrorCreatedInFuture),
+                FailedToCreate(CreateCanisterErrorFailedToCreate),
+                TooOld,
+                InsufficientFunds(CreateCanisterErrorInsufficientFunds),
+            }
 
-        if cmd.quiet {
-            println!("{}", cid);
+            #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+            pub enum CreateCanisterResult {
+                Ok(CreateCanisterSuccess),
+                Err(CreateCanisterError),
+            }
+
+            let result = Decode!(&result_bytes, CreateCanisterResult)
+                .expect("The cycles ledger's create_canister method returned an invalid result");
+
+            match result {
+                CreateCanisterResult::Ok(success) => {
+                    if cmd.quiet {
+                        println!("{}", success.canister_id);
+                    } else {
+                        eprintln!(
+                            "Created canister '{}' with ID: '{}'",
+                            c.name, success.canister_id
+                        );
+                    }
+                }
+                CreateCanisterResult::Err(error) => {
+                    println!("Error creating canister: {:?}", error);
+                }
+            }
         } else {
-            eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
+            // Create canister
+            let mut builder = mgmt.create_canister();
+
+            // Cycles amount
+            builder = builder.as_provisional_create_with_amount(cmd.cycles);
+
+            // Canister ID (effective)
+            builder = builder.with_effective_canister_id(cmd.ids.effective_id);
+
+            // Canister ID (specific)
+            if let Some(id) = cmd.ids.specific_id {
+                builder = builder.as_provisional_create_with_specified_id(id);
+            }
+
+            // Controllers
+            for c in &cmd.controller {
+                builder = builder.with_controller(c.to_owned());
+            }
+
+            // Compute
+            builder = builder.with_optional_compute_allocation(
+                cmd.settings
+                    .compute_allocation
+                    .or(c.settings.compute_allocation),
+            );
+
+            // Memory
+            builder = builder.with_optional_memory_allocation(
+                cmd.settings
+                    .memory_allocation
+                    .or(c.settings.memory_allocation),
+            );
+
+            // Freezing Threshold
+            builder = builder.with_optional_freezing_threshold(
+                cmd.settings
+                    .freezing_threshold
+                    .or(c.settings.freezing_threshold),
+            );
+
+            // Reserved Cycles (limit)
+            builder = builder.with_optional_reserved_cycles_limit(
+                cmd.settings
+                    .reserved_cycles_limit
+                    .or(c.settings.reserved_cycles_limit),
+            );
+
+            // Wasm (memory limit)
+            builder = builder.with_optional_wasm_memory_limit(
+                cmd.settings
+                    .wasm_memory_limit
+                    .or(c.settings.wasm_memory_limit),
+            );
+
+            // Wasm (memory threshold)
+            builder = builder.with_optional_wasm_memory_threshold(
+                cmd.settings
+                    .wasm_memory_threshold
+                    .or(c.settings.wasm_memory_threshold),
+            );
+
+            // Logs
+            builder = builder.with_optional_log_visibility(
+                Some(LogVisibility::Public), //
+            );
+
+            // Create the canister
+            let (cid,) = builder.await?;
+
+            // Create canister-network association-key
+            let k = Key {
+                network: network.to_owned(),
+                environment: env.name.to_owned(),
+                canister: c.name.to_owned(),
+            };
+
+            // Register the canister ID
+            ctx.id_store.register(&k, &cid)?;
+
+            if cmd.quiet {
+                println!("{}", cid);
+            } else {
+                eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
+            }
         }
     }
 

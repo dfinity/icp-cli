@@ -31,6 +31,8 @@ pub async fn exec(
 
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
+    println!("pm.networks: {:?}", pm.networks);
+    println!("pm.environments: {:?}", pm.environments);
 
     // Load target environment
     let env = pm
@@ -50,6 +52,7 @@ pub async fn exec(
 
     // Setup network
     ctx.require_network(network);
+    println!("required network: {:?}", network);
 
     // Prepare agent
     let agent = ctx.agent()?;

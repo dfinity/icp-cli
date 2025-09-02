@@ -31,7 +31,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let pm = ctx.project()?;
 
     // Choose canisters to sync
-    let canisters = pm
+    let cs = pm
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.names.is_empty() {
@@ -46,10 +46,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Check if selected canister exists
     if !cmd.names.is_empty() {
-        let names = canisters
-            .iter()
-            .map(|(_, c)| &c.name)
-            .collect::<HashSet<_>>();
+        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
 
         for name in &cmd.names {
             if !names.contains(name) {
@@ -78,7 +75,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     );
 
     // Filter for environment canisters
-    let cs = canisters
+    let cs = cs
         .iter()
         .filter(|(_, c)| ecs.contains(&c.name))
         .collect::<Vec<_>>();

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use clap::Parser;
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::InstallMode;
@@ -12,8 +14,8 @@ use crate::{
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
-    /// The name of the canister within the current project
-    pub name: Option<String>,
+    /// The names of the canisters within the current project
+    pub names: Vec<String>,
 
     /// Specifies the mode of canister installation.
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
@@ -34,18 +36,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cs = pm
         .canisters
         .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
+        .filter(|(_, c)| match &cmd.names.is_empty() {
+            // If no names specified, create all canisters
+            true => true,
+
+            // If names specified, only create matching canisters
+            false => cmd.names.contains(&c.name),
         })
         .collect::<Vec<_>>();
 
-    // Check if selected canister exists
-    if let Some(name) = &cmd.name {
-        if cs.is_empty() {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+    // Check if selected canisters exists
+    if !cmd.names.is_empty() {
+        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
+
+        for name in &cmd.names {
+            if !names.contains(name) {
+                return Err(CommandError::CanisterNotFound {
+                    name: name.to_owned(),
+                });
+            }
         }
     }
 
@@ -73,12 +82,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .collect::<Vec<_>>();
 
     // Ensure canister is included in the environment
-    if let Some(name) = &cmd.name {
-        if !ecs.contains(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
+    if !cmd.names.is_empty() {
+        for name in &cmd.names {
+            if !ecs.contains(name) {
+                return Err(CommandError::EnvironmentCanister {
+                    environment: env.name.to_owned(),
+                    canister: name.to_owned(),
+                });
+            }
         }
     }
 

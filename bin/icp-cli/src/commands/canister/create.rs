@@ -155,36 +155,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .as_ref()
         .expect("no network specified in environment");
 
-    // Skip created canisters
-    // TODO(or.ricon): Consider moving this check in the subsequent for loop,
-    // so that we can output a message to the user indicating a canister was skipped.
-    let cs = cs
-        .into_iter()
-        .filter(|&(_, c)| {
-            let cid = ctx.id_store.lookup(&Key {
-                network: network.to_owned(),
-                environment: env.name.to_owned(),
-                canister: c.name.to_owned(),
-            });
-
-            match cid {
-                // Exists (skip)
-                Ok(_) => false,
-
-                // Doesn't exist (include)
-                Err(LookupError::IdNotFound { .. }) => true,
-
-                // Lookup failed
-                Err(err) => panic!("{err}"),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    // Verify at least one canister is available to create
-    if cs.is_empty() {
-        return Err(CommandError::NoCanisters);
-    }
-
     // Load identity
     ctx.require_identity(cmd.identity.name());
 
@@ -224,8 +194,32 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         let create_fn = {
             let cmd = cmd.clone();
             let mgmt = mgmt.clone();
+            let pb = pb.clone();
 
             async move {
+                // Indicate to user that the canister is created
+                pb.set_message("Creating...");
+
+                // Create canister-network association-key
+                let k = Key {
+                    network: network.to_owned(),
+                    environment: env.name.to_owned(),
+                    canister: c.name.to_owned(),
+                };
+
+                match ctx.id_store.lookup(&k) {
+                    // Exists (skip)
+                    Ok(_) => {
+                        return Err(CommandError::CanisterExists);
+                    }
+
+                    // Doesn't exist (include)
+                    Err(LookupError::IdNotFound { .. }) => {}
+
+                    // Lookup failed
+                    Err(err) => panic!("{err}"),
+                };
+
                 // Create canister
                 let mut builder = mgmt.create_canister();
 
@@ -295,21 +289,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Create the canister
                 let (cid,) = builder.await?;
 
-                // Create canister-network association-key
-                let k = Key {
-                    network: network.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                };
-
                 // Register the canister ID
                 ctx.id_store.register(&k, &cid)?;
-
-                // if cmd.quiet {
-                //     println!("{}", cid);
-                // } else {
-                //     eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
-                // }
 
                 Ok::<_, CommandError>(())
             }
@@ -317,22 +298,41 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         futs.push_back(async move {
             // Execute the create function and capture the result
-            let out = create_fn.await;
+            let mut out = create_fn.await;
+
+            let (tick, color, msg) = match &out {
+                Ok(_) => (
+                    TICK_SUCCESS,
+                    COLOR_SUCCESS,
+                    "Created successfully".to_string(),
+                ),
+
+                Err(CommandError::CanisterExists) => (
+                    TICK_SUCCESS,
+                    COLOR_SUCCESS,
+                    "Canister already created".to_string(),
+                ),
+
+                Err(err) => (
+                    TICK_FAILURE,
+                    COLOR_FAILURE,
+                    format!("Failed to create canister: {err}"),
+                ),
+            };
 
             // Update the progress bar style based on result
-            pb.set_style(match &out {
-                Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
-                Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
-            });
+            pb.set_style(make_style(tick, color));
 
             // Update the progress bar message based on result
-            pb.set_message(match &out {
-                Ok(_) => "Created successfully".to_string(),
-                Err(err) => format!("Failed to create canister: {err}"),
-            });
+            pb.set_message(msg);
 
             // Stop the progress bar spinner and keep the final state visible
             pb.finish();
+
+            // If canister already exists, it is not considered an error
+            if let Err(CommandError::CanisterExists) = out {
+                out = Ok(());
+            }
 
             out
         });
@@ -369,6 +369,9 @@ pub enum CommandError {
 
     #[snafu(display("no canisters available to create"))]
     NoCanisters,
+
+    #[snafu(display("canister exists already"))]
+    CanisterExists,
 
     #[snafu(transparent)]
     CreateCanister { source: AgentError },

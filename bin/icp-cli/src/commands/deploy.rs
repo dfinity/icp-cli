@@ -70,7 +70,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .collect::<Vec<_>>();
 
     // Build the selected canisters
-    eprintln!("\nBuilding canisters:");
+    eprintln!("Building canisters:");
     build::exec(
         ctx,
         build::Cmd {
@@ -80,7 +80,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     .await?;
 
     // Create the selected canisters
-    eprintln!("\nCreating canisters:");
+    eprintln!("\n\nCreating canisters:");
     let out = create::exec(
         ctx,
         create::Cmd {
@@ -114,7 +114,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Install the selected canisters
-    eprintln!("\nInstalling canisters:");
+    eprintln!("\n\nInstalling canisters:");
     let out = install::exec(
         ctx,
         install::Cmd {
@@ -133,7 +133,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Sync the selected canisters
-    eprintln!("\nSyncing canisters:");
+    eprintln!("\n\nSyncing canisters:");
     let out = sync::exec(
         ctx,
         sync::Cmd {

@@ -143,8 +143,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         let install_fn = {
             let cmd = cmd.clone();
             let mgmt = mgmt.clone();
+            let pb = pb.clone();
 
             async move {
+                // Indicate to user that the canister is being installed
+                pb.set_message("Installing...");
+
                 // Lookup the canister id
                 let cid = ctx.id_store.lookup(&Key {
                     network: network.to_owned(),
@@ -185,11 +189,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 mgmt.install_code(&cid, &wasm)
                     .with_mode(install_mode)
                     .await?;
-
-                // eprintln!(
-                //     "Installed WASM payload to canister '{}' (ID: '{}')",
-                //     c.name, cid,
-                // );
 
                 Ok::<_, CommandError>(())
             }

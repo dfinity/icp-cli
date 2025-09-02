@@ -1,3 +1,4 @@
+use std::fmt;
 use std::process::Stdio;
 
 use crate::build::{self, AdapterCompileError};
@@ -34,6 +35,17 @@ pub struct ScriptAdapter {
     /// Command used to build a canister
     #[serde(flatten)]
     pub command: CommandField,
+}
+
+impl fmt::Display for ScriptAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let cmd = match &self.command {
+            CommandField::Command(c) => format!("command: {c}"),
+            CommandField::Commands(cs) => format!("{} commands", cs.len()),
+        };
+
+        write!(f, "({cmd})")
+    }
 }
 
 #[async_trait]

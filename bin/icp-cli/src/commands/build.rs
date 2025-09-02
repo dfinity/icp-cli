@@ -90,12 +90,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Set the progress bar prefix to display the canister name in brackets
         pb.set_prefix(format!("[{}]", c.name));
 
-        // Set progress-bar message
-        pb.set_message("Building...");
-
         // Create an async closure that handles the build process for this specific canister
         let build_fn = {
             let c = c.clone();
+            let pb = pb.clone();
 
             async move {
                 // Create a temporary directory for build artifacts
@@ -105,6 +103,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
                 for step in c.build.steps {
+                    // Indicate to user the current step being executed
+                    pb.set_message(format!("Building: {step}"));
+
                     match step {
                         // Compile using the custom script adapter.
                         BuildStep::Script(adapter) => {

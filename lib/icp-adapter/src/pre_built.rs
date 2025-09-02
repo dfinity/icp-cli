@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use crate::build::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
@@ -39,6 +39,22 @@ pub struct PrebuiltAdapter {
 
     /// Optional sha256 checksum of the WASM
     pub sha256: Option<String>,
+}
+
+impl fmt::Display for PrebuiltAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let src = match &self.source {
+            SourceField::Local(v) => format!("path: {}", v.path),
+            SourceField::Remote(v) => format!("url: {}", v.url),
+        };
+
+        let sha = match &self.sha256 {
+            Some(v) => v,
+            None => "n/a",
+        };
+
+        write!(f, "({src}, sha: {sha})")
+    }
 }
 
 #[async_trait]

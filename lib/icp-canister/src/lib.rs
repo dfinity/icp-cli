@@ -1,3 +1,5 @@
+use std::fmt;
+
 use icp_adapter::{
     assets::AssetsAdapter, motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter,
     script::ScriptAdapter,
@@ -63,6 +65,21 @@ pub enum BuildStep {
     Prebuilt(PrebuiltAdapter),
 }
 
+impl fmt::Display for BuildStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BuildStep::Rust(_) => "rust".to_string(),
+                BuildStep::Motoko(_) => "motoko".to_string(),
+                BuildStep::Script(v) => format!("script {v}"),
+                BuildStep::Prebuilt(v) => format!("pre-built {v}"),
+            }
+        )
+    }
+}
+
 /// Describes how the canister should be built into WebAssembly,
 /// including the adapters and build steps responsible for the build.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -89,6 +106,19 @@ pub enum SyncStep {
 
     /// Represents syncing of an assets canister
     Assets(AssetsAdapter),
+}
+
+impl fmt::Display for SyncStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SyncStep::Script(v) => format!("script {v}"),
+                SyncStep::Assets(v) => format!("assets {v}"),
+            }
+        )
+    }
 }
 
 /// Describes how the canister should be synced,

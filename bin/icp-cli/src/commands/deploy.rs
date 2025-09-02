@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_agent::export::Principal;
+use ic_agent::{AgentError, export::Principal};
 use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
@@ -12,7 +12,7 @@ use crate::{
         },
         sync,
     },
-    context::{Context, GetProjectError},
+    context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -31,9 +31,9 @@ pub struct Cmd {
     #[clap(flatten)]
     pub environment: EnvironmentOpt,
 
-    /// The effective canister ID to use when calling the management canister.
-    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
-    pub effective_id: Principal,
+    /// The subnet id to use for the canisters being deployed.
+    #[clap(long)]
+    pub subnet_id: Option<Principal>,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[clap(long)]
@@ -43,6 +43,17 @@ pub struct Cmd {
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
+
+    // Infer the effective canister id from the subnet id.
+    let agent = ctx.agent()?;
+    let mut effective_id = Principal::from_text(DEFAULT_EFFECTIVE_ID).unwrap();
+    if let Some(subnet_id) = cmd.subnet_id {
+        let ranges = agent.read_state_subnet_canister_ranges(subnet_id).await?;
+        println!("ranges: {:?}", ranges);
+        if !ranges.is_empty() {
+            effective_id = ranges[0].0 // Use the first start canister id as the effective id.
+        }
+    }
 
     // Choose canisters to create
     let canisters = pm
@@ -97,7 +108,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Ids
                 ids: CanisterIDs {
-                    effective_id: cmd.effective_id.to_owned(),
+                    effective_id: effective_id.to_owned(),
                     specific_id: None,
                 },
 
@@ -197,4 +208,10 @@ pub enum CommandError {
 
     #[snafu(transparent)]
     Sync { source: sync::CommandError },
+
+    #[snafu(transparent)]
+    GetAgent { source: ContextGetAgentError },
+
+    #[snafu(transparent)]
+    Agent { source: AgentError },
 }

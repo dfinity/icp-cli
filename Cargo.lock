@@ -1037,8 +1037,6 @@ dependencies = [
 [[package]]
 name = "dfx-core"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "987bbf331fb0a681426d05e974a84dbc90a58003edd68eab8bf024e64c82ea01"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1966,8 +1964,6 @@ dependencies = [
 [[package]]
 name = "ic-agent"
 version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39d930ac981dd27535b09fb36832c52554ec5acc382ed61bfb5ce91967624259"
 dependencies = [
  "arc-swap",
  "async-channel",
@@ -2016,8 +2012,6 @@ dependencies = [
 [[package]]
 name = "ic-asset"
 version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd09473e4b0eb1f48638de766bc23d0749efcde1a9e0251582c3e99e9810abf4"
 dependencies = [
  "backoff",
  "brotli",
@@ -2075,8 +2069,6 @@ dependencies = [
 [[package]]
 name = "ic-identity-hsm"
 version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "756acc689399fec38eb63a7f84cf0829e778bd85b5589e782a39f2fbf8052ff6"
 dependencies = [
  "hex",
  "ic-agent",
@@ -2129,8 +2121,6 @@ dependencies = [
 [[package]]
 name = "ic-transport-types"
 version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "763b894ca67d2cf606e7ed30d21a851709d53da3488dc7e2f53fd76290e3c859"
 dependencies = [
  "candid",
  "hex",
@@ -2147,8 +2137,6 @@ dependencies = [
 [[package]]
 name = "ic-utils"
 version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a819863dfcf0ec1bc3ecb11e5a82ad86a4064a7eb9502c4d1a6859e48e2de4e0"
 dependencies = [
  "async-trait",
  "candid",

@@ -32,9 +32,9 @@ glob = "0.3.2"
 handlebars = "6.3.2"
 hex = "0.4.3"
 httptest = "0.16.3"
-ic-agent = { version = "0.44.0" }
-ic-asset = { version = "0.25.0" }
-ic-utils = { version = "0.44.0" }
+ic-agent = { path = "../agent-rs/ic-agent", version = "0.44.0" }
+ic-asset = { path = "../sdk-copy/src/canisters/frontend/ic-asset", version = "0.25.0" }
+ic-utils = { path = "../agent-rs/ic-utils", version = "0.44.0" }
 icp-adapter = { path = "lib/icp-adapter" }
 icp-canister = { path = "lib/icp-canister" }
 icp-dirs = { path = "lib/icp-dirs" }

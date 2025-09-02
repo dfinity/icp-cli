@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use crate::{
     COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS,
@@ -16,8 +16,8 @@ use snafu::Snafu;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The name of the canister within the current project
-    pub name: Option<String>,
+    /// The names of the canisters within the current project
+    pub names: Vec<String>,
 
     #[clap(flatten)]
     pub identity: IdentityOpt,
@@ -31,22 +31,32 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let pm = ctx.project()?;
 
     // Choose canisters to sync
-    let cs = pm
+    let canisters = pm
         .canisters
         .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
+        .filter(|(_, c)| match &cmd.names.is_empty() {
+            // If no names specified, sync all canisters
+            true => true,
+
+            // If names specified, only sync matching canisters
+            false => cmd.names.contains(&c.name),
         })
         .cloned()
         .collect::<Vec<_>>();
 
     // Check if selected canister exists
-    if let Some(name) = &cmd.name {
-        if cs.is_empty() {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+    if !cmd.names.is_empty() {
+        let names = canisters
+            .iter()
+            .map(|(_, c)| &c.name)
+            .collect::<HashSet<_>>();
+
+        for name in &cmd.names {
+            if !names.contains(name) {
+                return Err(CommandError::CanisterNotFound {
+                    name: name.to_owned(),
+                });
+            }
         }
     }
 
@@ -68,18 +78,20 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     );
 
     // Filter for environment canisters
-    let cs = cs
+    let cs = canisters
         .iter()
         .filter(|(_, c)| ecs.contains(&c.name))
         .collect::<Vec<_>>();
 
     // Ensure canister is included in the environment
-    if let Some(name) = &cmd.name {
-        if !ecs.contains(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
+    if !cmd.names.is_empty() {
+        for name in &cmd.names {
+            if !ecs.contains(name) {
+                return Err(CommandError::EnvironmentCanister {
+                    environment: env.name.to_owned(),
+                    canister: name.to_owned(),
+                });
+            }
         }
     }
 

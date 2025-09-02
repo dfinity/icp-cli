@@ -19,7 +19,7 @@ use crate::{context::Context, store_artifact::SaveError};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The name of the canister within the current project
+    /// The names of the canisters within the current project
     pub names: Vec<String>,
 }
 

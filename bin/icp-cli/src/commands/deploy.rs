@@ -148,26 +148,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Sync the selected canisters
     eprintln!("\nSyncing canisters:");
-    for (_, c) in &canisters {
-        eprintln!("- {}", c.name);
+    let out = sync::exec(
+        ctx,
+        sync::Cmd {
+            names: cnames.to_owned(),
+            identity: cmd.identity.clone(),
+            environment: cmd.environment.clone(),
+        },
+    )
+    .await;
 
-        // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `canister::sync` command.
-        //                 We should consider refactoring `canister::sync` to use library code instead.
-        let out = sync::exec(
-            ctx,
-            sync::Cmd {
-                name: Some(c.name.to_owned()),
-                identity: cmd.identity.clone(),
-                environment: cmd.environment.clone(),
-            },
-        )
-        .await;
-
-        if let Err(err) = out {
-            if !matches!(err, sync::CommandError::NoCanisters) {
-                return Err(CommandError::Sync { source: err });
-            }
+    if let Err(err) = out {
+        if !matches!(err, sync::CommandError::NoCanisters) {
+            return Err(CommandError::Sync { source: err });
         }
     }
 

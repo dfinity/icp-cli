@@ -169,13 +169,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             // Execute the sync function and capture the result
             let out = sync_fn.await;
 
-            // Update the progress bar style based on sync result
+            // Update the progress bar style based on result
             pb.set_style(match &out {
                 Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
                 Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
             });
 
-            // Update the progress bar message based on build result
+            // Update the progress bar message based on result
             pb.set_message(match &out {
                 Ok(_) => "Synced successfully".to_string(),
                 Err(err) => format!("Failed to sync canister: {err}"),

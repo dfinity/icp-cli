@@ -1,19 +1,23 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use clap::Parser;
+use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::LogVisibility;
+use indicatif::{MultiProgress, ProgressBar};
 use snafu::Snafu;
 
 use crate::{
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS,
     context::{Context, ContextGetAgentError, GetProjectError},
+    make_style,
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError, RegisterError},
 };
 
 pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
 
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct CanisterIDs {
     /// The effective canister ID to use when calling the management canister.
     #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
@@ -24,7 +28,7 @@ pub struct CanisterIDs {
     pub specific_id: Option<Principal>,
 }
 
-#[derive(Debug, Default, Parser)]
+#[derive(Clone, Debug, Default, Parser)]
 pub struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
     #[clap(long)]
@@ -51,7 +55,7 @@ pub struct CanisterSettings {
     pub wasm_memory_threshold: Option<u64>,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct Cmd {
     /// The names of the canister within the current project
     pub names: Vec<String>,
@@ -152,6 +156,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .expect("no network specified in environment");
 
     // Skip created canisters
+    // TODO(or.ricon): Consider moving this check in the subsequent for loop,
+    // so that we can output a message to the user indicating a canister was skipped.
     let cs = cs
         .into_iter()
         .filter(|&(_, c)| {
@@ -196,91 +202,146 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
+    // Prepare a futures set for concurrent operations
+    let mut futs = FuturesOrdered::new();
+
+    let mp = MultiProgress::new();
+
     for (_, c) in cs {
-        // Create canister
-        let mut builder = mgmt.create_canister();
+        // Attach spinner to multi-progress-bar container
+        let pb = mp.add(ProgressBar::new_spinner().with_style(make_style(
+            TICK_EMPTY,    // end_tick
+            COLOR_REGULAR, // color
+        )));
 
-        // Cycles amount
-        builder = builder.as_provisional_create_with_amount(None);
+        // Auto-tick spinner
+        pb.enable_steady_tick(Duration::from_millis(120));
 
-        // Canister ID (effective)
-        builder = builder.with_effective_canister_id(cmd.ids.effective_id);
+        // Set the progress bar prefix to display the canister name in brackets
+        pb.set_prefix(format!("[{}]", c.name));
 
-        // Canister ID (specific)
-        if let Some(id) = cmd.ids.specific_id {
-            builder = builder.as_provisional_create_with_specified_id(id);
-        }
+        // Create an async closure that handles the operation for this specific canister
+        let create_fn = {
+            let cmd = cmd.clone();
+            let mgmt = mgmt.clone();
 
-        // Controllers
-        for c in &cmd.controller {
-            builder = builder.with_controller(c.to_owned());
-        }
+            async move {
+                // Create canister
+                let mut builder = mgmt.create_canister();
 
-        // Compute
-        builder = builder.with_optional_compute_allocation(
-            cmd.settings
-                .compute_allocation
-                .or(c.settings.compute_allocation),
-        );
+                // Cycles amount
+                builder = builder.as_provisional_create_with_amount(None);
 
-        // Memory
-        builder = builder.with_optional_memory_allocation(
-            cmd.settings
-                .memory_allocation
-                .or(c.settings.memory_allocation),
-        );
+                // Canister ID (effective)
+                builder = builder.with_effective_canister_id(cmd.ids.effective_id);
 
-        // Freezing Threshold
-        builder = builder.with_optional_freezing_threshold(
-            cmd.settings
-                .freezing_threshold
-                .or(c.settings.freezing_threshold),
-        );
+                // Canister ID (specific)
+                if let Some(id) = cmd.ids.specific_id {
+                    builder = builder.as_provisional_create_with_specified_id(id);
+                }
 
-        // Reserved Cycles (limit)
-        builder = builder.with_optional_reserved_cycles_limit(
-            cmd.settings
-                .reserved_cycles_limit
-                .or(c.settings.reserved_cycles_limit),
-        );
+                // Controllers
+                for c in &cmd.controller {
+                    builder = builder.with_controller(c.to_owned());
+                }
 
-        // Wasm (memory limit)
-        builder = builder.with_optional_wasm_memory_limit(
-            cmd.settings
-                .wasm_memory_limit
-                .or(c.settings.wasm_memory_limit),
-        );
+                // Compute
+                builder = builder.with_optional_compute_allocation(
+                    cmd.settings
+                        .compute_allocation
+                        .or(c.settings.compute_allocation),
+                );
 
-        // Wasm (memory threshold)
-        builder = builder.with_optional_wasm_memory_threshold(
-            cmd.settings
-                .wasm_memory_threshold
-                .or(c.settings.wasm_memory_threshold),
-        );
+                // Memory
+                builder = builder.with_optional_memory_allocation(
+                    cmd.settings
+                        .memory_allocation
+                        .or(c.settings.memory_allocation),
+                );
 
-        // Logs
-        builder = builder.with_optional_log_visibility(
-            Some(LogVisibility::Public), //
-        );
+                // Freezing Threshold
+                builder = builder.with_optional_freezing_threshold(
+                    cmd.settings
+                        .freezing_threshold
+                        .or(c.settings.freezing_threshold),
+                );
 
-        // Create the canister
-        let (cid,) = builder.await?;
+                // Reserved Cycles (limit)
+                builder = builder.with_optional_reserved_cycles_limit(
+                    cmd.settings
+                        .reserved_cycles_limit
+                        .or(c.settings.reserved_cycles_limit),
+                );
 
-        // Create canister-network association-key
-        let k = Key {
-            network: network.to_owned(),
-            environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
+                // Wasm (memory limit)
+                builder = builder.with_optional_wasm_memory_limit(
+                    cmd.settings
+                        .wasm_memory_limit
+                        .or(c.settings.wasm_memory_limit),
+                );
+
+                // Wasm (memory threshold)
+                builder = builder.with_optional_wasm_memory_threshold(
+                    cmd.settings
+                        .wasm_memory_threshold
+                        .or(c.settings.wasm_memory_threshold),
+                );
+
+                // Logs
+                builder = builder.with_optional_log_visibility(
+                    Some(LogVisibility::Public), //
+                );
+
+                // Create the canister
+                let (cid,) = builder.await?;
+
+                // Create canister-network association-key
+                let k = Key {
+                    network: network.to_owned(),
+                    environment: env.name.to_owned(),
+                    canister: c.name.to_owned(),
+                };
+
+                // Register the canister ID
+                ctx.id_store.register(&k, &cid)?;
+
+                // if cmd.quiet {
+                //     println!("{}", cid);
+                // } else {
+                //     eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
+                // }
+
+                Ok::<_, CommandError>(())
+            }
         };
 
-        // Register the canister ID
-        ctx.id_store.register(&k, &cid)?;
+        futs.push_back(async move {
+            // Execute the create function and capture the result
+            let out = create_fn.await;
 
-        if cmd.quiet {
-            println!("{}", cid);
-        } else {
-            eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
-        }
+            // Update the progress bar style based on result
+            pb.set_style(match &out {
+                Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
+                Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
+            });
+
+            // Update the progress bar message based on result
+            pb.set_message(match &out {
+                Ok(_) => "Created successfully".to_string(),
+                Err(err) => format!("Failed to create canister: {err}"),
+            });
+
+            // Stop the progress bar spinner and keep the final state visible
+            pb.finish();
+
+            out
+        });
+    }
+
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister creation failures
+        res?;
     }
 
     Ok(())

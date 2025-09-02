@@ -1,18 +1,22 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use clap::Parser;
+use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::InstallMode;
+use indicatif::{MultiProgress, ProgressBar};
 use snafu::Snafu;
 
 use crate::{
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS,
     context::{Context, ContextGetAgentError, GetProjectError},
+    make_style,
     options::{EnvironmentOpt, IdentityOpt},
     store_artifact::LookupError as LookupArtifactError,
     store_id::{Key, LookupError as LookupIdError},
 };
 
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct Cmd {
     /// The names of the canisters within the current project
     pub names: Vec<String>,
@@ -117,52 +121,107 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
+    // Prepare a futures set for concurrent operations
+    let mut futs = FuturesOrdered::new();
+
+    let mp = MultiProgress::new();
+
     for (_, c) in cs {
-        // Lookup the canister id
-        let cid = ctx.id_store.lookup(&Key {
-            network: network.to_owned(),
-            environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
-        })?;
+        // Attach spinner to multi-progress-bar container
+        let pb = mp.add(ProgressBar::new_spinner().with_style(make_style(
+            TICK_EMPTY,    // end_tick
+            COLOR_REGULAR, // color
+        )));
 
-        // Lookup the canister build artifact
-        let wasm = ctx.artifact_store.lookup(&c.name)?;
+        // Auto-tick spinner
+        pb.enable_steady_tick(Duration::from_millis(120));
 
-        // Retrieve canister status
-        let (status,) = mgmt.canister_status(&cid).await?;
+        // Set the progress bar prefix to display the canister name in brackets
+        pb.set_prefix(format!("[{}]", c.name));
 
-        let install_mode = match cmd.mode.as_ref() {
-            // Auto
-            "auto" => match status.module_hash {
-                // Canister has had code installed to it.
-                Some(_) => InstallMode::Upgrade(None),
+        // Create an async closure that handles the operation for this specific canister
+        let install_fn = {
+            let cmd = cmd.clone();
+            let mgmt = mgmt.clone();
 
-                // Canister has not had code installed to it.
-                None => InstallMode::Install,
-            },
+            async move {
+                // Lookup the canister id
+                let cid = ctx.id_store.lookup(&Key {
+                    network: network.to_owned(),
+                    environment: env.name.to_owned(),
+                    canister: c.name.to_owned(),
+                })?;
 
-            // Install
-            "install" => InstallMode::Install,
+                // Lookup the canister build artifact
+                let wasm = ctx.artifact_store.lookup(&c.name)?;
 
-            // Reinstall
-            "reinstall" => InstallMode::Reinstall,
+                // Retrieve canister status
+                let (status,) = mgmt.canister_status(&cid).await?;
 
-            // Upgrade
-            "upgrade" => InstallMode::Upgrade(None),
+                let install_mode = match cmd.mode.as_ref() {
+                    // Auto
+                    "auto" => match status.module_hash {
+                        // Canister has had code installed to it.
+                        Some(_) => InstallMode::Upgrade(None),
 
-            // invalid
-            _ => panic!("invalid install mode"),
+                        // Canister has not had code installed to it.
+                        None => InstallMode::Install,
+                    },
+
+                    // Install
+                    "install" => InstallMode::Install,
+
+                    // Reinstall
+                    "reinstall" => InstallMode::Reinstall,
+
+                    // Upgrade
+                    "upgrade" => InstallMode::Upgrade(None),
+
+                    // invalid
+                    _ => panic!("invalid install mode"),
+                };
+
+                // Install code to canister
+                mgmt.install_code(&cid, &wasm)
+                    .with_mode(install_mode)
+                    .await?;
+
+                // eprintln!(
+                //     "Installed WASM payload to canister '{}' (ID: '{}')",
+                //     c.name, cid,
+                // );
+
+                Ok::<_, CommandError>(())
+            }
         };
 
-        // Install code to canister
-        mgmt.install_code(&cid, &wasm)
-            .with_mode(install_mode)
-            .await?;
+        futs.push_back(async move {
+            // Execute the operation and capture the result
+            let out = install_fn.await;
 
-        eprintln!(
-            "Installed WASM payload to canister '{}' (ID: '{}')",
-            c.name, cid,
-        );
+            // Update the progress bar style based on result
+            pb.set_style(match &out {
+                Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
+                Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
+            });
+
+            // Update the progress bar message based on result
+            pb.set_message(match &out {
+                Ok(_) => "Installed successfully".to_string(),
+                Err(err) => format!("Failed to install canister: {err}"),
+            });
+
+            // Stop the progress bar spinner and keep the final state visible
+            pb.finish();
+
+            out
+        });
+    }
+
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister creation failures
+        res?;
     }
 
     Ok(())

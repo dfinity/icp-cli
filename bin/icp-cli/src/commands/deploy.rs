@@ -63,22 +63,21 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // Prepare canister names for subsequent commands
+    let cnames = canisters
+        .iter()
+        .map(|(_, c)| c.name.to_owned())
+        .collect::<Vec<_>>();
+
     // Build the selected canisters
     eprintln!("\nBuilding canisters:");
-    for (_, c) in &canisters {
-        eprintln!("- {}", c.name);
-
-        // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `build` command.
-        //                 We should consider refactoring `build` to use library code instead.
-        build::exec(
-            ctx,
-            build::Cmd {
-                name: Some(c.name.to_owned()),
-            },
-        )
-        .await?;
-    }
+    build::exec(
+        ctx,
+        build::Cmd {
+            names: cnames.to_owned(),
+        },
+    )
+    .await?;
 
     // Create the selected canisters
     eprintln!("\nCreating canisters:");

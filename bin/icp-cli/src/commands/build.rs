@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::time::Duration;
 
@@ -19,18 +20,10 @@ use crate::{context::Context, store_artifact::SaveError};
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// The name of the canister within the current project
-    pub name: Option<String>,
+    pub names: Vec<String>,
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.
-///
-/// This function performs the following steps:
-/// 1. Locates the ICP project directory.
-/// 2. Loads the project manifest (`icp.yaml`), which can define either a single
-///    canister or multiple canisters using glob patterns.
-/// 3. Normalizes the canister definitions into a unified list.
-/// 4. Iterates through each defined canister and invokes its respective build adapter
-///    (Rust, Motoko, or custom script) to compile it into WebAssembly.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
@@ -39,17 +32,29 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let canisters = pm
         .canisters
         .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
+        .filter(|(_, c)| match &cmd.names.is_empty() {
+            // If no names specified, build all canisters
+            true => true,
+
+            // If names specified, only build matching canisters
+            false => cmd.names.contains(&c.name),
         })
         .cloned()
         .collect::<Vec<_>>();
 
-    // Check if selected canister exists
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CommandError::CanisterNotFound { name });
+    // Check if selected canisters exists
+    if !cmd.names.is_empty() {
+        let names = canisters
+            .iter()
+            .map(|(_, c)| &c.name)
+            .collect::<HashSet<_>>();
+
+        for name in &cmd.names {
+            if !names.contains(name) {
+                return Err(CommandError::CanisterNotFound {
+                    name: name.to_owned(),
+                });
+            }
         }
     }
 

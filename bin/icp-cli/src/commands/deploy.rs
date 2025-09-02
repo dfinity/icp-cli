@@ -45,11 +45,31 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let pm = ctx.project()?;
 
     // Infer the effective canister id from the subnet id.
-    let agent = ctx.agent()?;
     let mut effective_id = Principal::from_text(DEFAULT_EFFECTIVE_ID).unwrap();
     if let Some(subnet_id) = cmd.subnet_id {
+        let env = pm
+            .environments
+            .iter()
+            .find(|&v| v.name == cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
+        let network = env
+            .network
+            .as_ref()
+            .expect("no network specified in environment");
+
+        // Load identity
+        ctx.require_identity(cmd.identity.name());
+
+        // Setup network
+        ctx.require_network(network);
+
+        // Prepare agent
+        let agent = ctx.agent()?;
+
         let ranges = agent.read_state_subnet_canister_ranges(subnet_id).await?;
-        println!("ranges: {:?}", ranges);
+        // println!("ranges: {:?}", ranges);
         if !ranges.is_empty() {
             effective_id = ranges[0].0 // Use the first start canister id as the effective id.
         }
@@ -196,6 +216,9 @@ pub enum CommandError {
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
 
     #[snafu(transparent)]
     Build { source: build::CommandError },

@@ -7,32 +7,14 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar};
 use snafu::{ResultExt, Snafu};
 
 use crate::context::GetProjectError;
+use crate::{
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS, make_style,
+};
 use crate::{context::Context, store_artifact::SaveError};
-
-//
-const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
-
-//
-const TICK_EMPTY: &str = " ";
-const TICK_SUCCESS: &str = "✔";
-const TICK_FAILURE: &str = "✘";
-
-//
-const COLOR_REGULAR: &str = "blue";
-const COLOR_SUCCESS: &str = "green";
-const COLOR_FAILURE: &str = "red";
-
-fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
-    let tmpl = format!("{{prefix}} {{spinner:.{color}}} {{msg}}");
-
-    ProgressStyle::with_template(&tmpl)
-        .expect("invalid style template")
-        .tick_strings(&[TICKS, &[end_tick]].concat())
-}
 
 #[derive(Parser, Debug)]
 pub struct Cmd {

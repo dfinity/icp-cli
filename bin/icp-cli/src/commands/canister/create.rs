@@ -3,7 +3,7 @@ use std::{collections::HashSet, time::Duration};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
-use ic_utils::interfaces::management_canister::LogVisibility;
+use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
 use indicatif::{MultiProgress, ProgressBar};
 use snafu::Snafu;
 
@@ -228,6 +228,31 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Canister ID (effective)
                 builder = builder.with_effective_canister_id(cmd.ids.effective_id);
+
+                // Configure canister environment variables
+                // Environment variables are key-value pairs that are accessible within the canister
+                // and can be used to configure behavior without hardcoding values in the WASM
+                builder = {
+                    let environment_variables = c
+                        .settings
+                        .environment_variables
+                        .to_owned()
+                        .unwrap_or_default();
+
+                    // Convert from HashMap<String, String> to Vec<EnvironmentVariable>
+                    // as required by the IC management canister interface
+                    let environment_variables = environment_variables
+                        .into_iter()
+                        .map(|(name, value)| EnvironmentVariable { name, value })
+                        .collect::<Vec<_>>();
+
+                    builder.with_environment_variables(environment_variables)
+                };
+
+                // Logs
+                builder = builder.with_optional_log_visibility(
+                    Some(LogVisibility::Public), //
+                );
 
                 // Canister ID (specific)
                 if let Some(id) = cmd.ids.specific_id {

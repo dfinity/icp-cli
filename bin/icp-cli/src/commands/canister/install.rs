@@ -3,7 +3,7 @@ use std::{collections::HashSet, time::Duration};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
-use ic_utils::interfaces::management_canister::builders::InstallMode;
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use indicatif::{MultiProgress, ProgressBar};
 use snafu::Snafu;
 
@@ -166,20 +166,20 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     // Auto
                     "auto" => match status.module_hash {
                         // Canister has had code installed to it.
-                        Some(_) => InstallMode::Upgrade(None),
+                        Some(_) => CanisterInstallMode::Upgrade(None),
 
                         // Canister has not had code installed to it.
-                        None => InstallMode::Install,
+                        None => CanisterInstallMode::Install,
                     },
 
                     // Install
-                    "install" => InstallMode::Install,
+                    "install" => CanisterInstallMode::Install,
 
                     // Reinstall
-                    "reinstall" => InstallMode::Reinstall,
+                    "reinstall" => CanisterInstallMode::Reinstall,
 
                     // Upgrade
-                    "upgrade" => InstallMode::Upgrade(None),
+                    "upgrade" => CanisterInstallMode::Upgrade(None),
 
                     // invalid
                     _ => panic!("invalid install mode"),

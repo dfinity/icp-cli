@@ -2287,6 +2287,8 @@ dependencies = [
  "snafu",
  "tiny-bip39 2.0.0",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

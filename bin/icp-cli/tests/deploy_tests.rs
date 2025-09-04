@@ -27,7 +27,11 @@ fn deploy_empty() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args([
+            "deploy",
+            "--subnet-id",
+            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
+        ])
         .assert()
         .success();
 }
@@ -57,8 +61,8 @@ fn deploy_canister_not_found() {
         .args([
             "deploy",
             "my-canister",
-            "--effective-id",
-            "ghsi2-tqaaa-aaaan-aaaca-cai",
+            "--subnet-id",
+            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
         ])
         .assert()
         .failure()
@@ -104,7 +108,11 @@ fn deploy() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args([
+            "deploy",
+            "--subnet-id",
+            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
+        ])
         .assert()
         .success();
 
@@ -156,14 +164,22 @@ fn deploy_twice_should_succeed() {
     // Deploy project (first time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args([
+            "deploy",
+            "--subnet-id",
+            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
+        ])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args([
+            "deploy",
+            "--subnet-id",
+            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
+        ])
         .assert()
         .success();
 

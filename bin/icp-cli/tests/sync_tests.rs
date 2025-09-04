@@ -50,7 +50,12 @@ fn sync_adapter_script_single() {
     // Deploy project (it should sync as well)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args([
+            "--debug",
+            "deploy",
+            "--effective-id",
+            "ghsi2-tqaaa-aaaan-aaaca-cai",
+        ])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -58,7 +63,7 @@ fn sync_adapter_script_single() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync"])
+        .args(["--debug", "sync"])
         .assert()
         .success()
         .stdout(eq("syncing").trim());

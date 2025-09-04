@@ -44,9 +44,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
 
-    // Infer the effective canister id from the subnet id.
+    // Infer the effective canister id from the subnet id if provided.
     let mut effective_id = Principal::from_text(DEFAULT_EFFECTIVE_ID).unwrap();
     if let Some(subnet_id) = cmd.subnet_id {
+        // Load environment
         let env = pm
             .environments
             .iter()
@@ -54,6 +55,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             .ok_or(CommandError::EnvironmentNotFound {
                 name: cmd.environment.name().to_owned(),
             })?;
+
+        // Get network
         let network = env
             .network
             .as_ref()
@@ -68,8 +71,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Prepare agent
         let agent = ctx.agent()?;
 
+        // Get subnet canister ranges
         let ranges = agent.read_state_subnet_canister_ranges(subnet_id).await?;
-        // println!("ranges: {:?}", ranges);
         if !ranges.is_empty() {
             effective_id = ranges[0].0 // Use the first start canister id as the effective id.
         }

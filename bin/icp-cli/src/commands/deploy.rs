@@ -44,6 +44,29 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
 
+    // Choose canisters to deploy.
+    let canisters = pm
+        .canisters
+        .iter()
+        .filter(|(_, c)| match &cmd.name {
+            Some(name) => name == &c.name,
+            None => true,
+        })
+        .collect::<Vec<_>>();
+
+    // Check if no canister was selected.
+    if canisters.is_empty() {
+        if let Some(name) = &cmd.name {
+            // If a canister name was specified but not present.
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        } else {
+            // Should we at least warn here?
+            return Ok(());
+        }
+    }
+
     // Infer the effective canister id from the subnet id if provided.
     let mut effective_id = Principal::from_text(DEFAULT_EFFECTIVE_ID).unwrap();
     if let Some(subnet_id) = cmd.subnet_id {
@@ -75,25 +98,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         let ranges = agent.read_state_subnet_canister_ranges(subnet_id).await?;
         if !ranges.is_empty() {
             effective_id = ranges[0].0 // Use the first start canister id as the effective id.
-        }
-    }
-
-    // Choose canisters to create
-    let canisters = pm
-        .canisters
-        .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
-        })
-        .collect::<Vec<_>>();
-
-    // Check if a canister name was specified and is present in the project
-    if let Some(name) = &cmd.name {
-        if canisters.is_empty() {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
         }
     }
 

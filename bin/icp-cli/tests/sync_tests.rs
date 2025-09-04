@@ -50,7 +50,7 @@ fn sync_adapter_script_single() {
     // Deploy project (it should sync as well)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -108,7 +108,7 @@ fn sync_adapter_script_multiple() {
     // Deploy project (it should sync as well)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success()
         .stdout(contains("first\nsecond").trim());
@@ -174,7 +174,7 @@ async fn sync_adapter_static_assets() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", cid])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 

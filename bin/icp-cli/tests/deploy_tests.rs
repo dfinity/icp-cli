@@ -27,11 +27,7 @@ fn deploy_empty() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet-id",
-            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
-        ])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 }
@@ -58,12 +54,7 @@ fn deploy_canister_not_found() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "my-canister",
-            "--subnet-id",
-            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
-        ])
+        .args(["deploy", "my-canister", "--subnet-id", common::SUBNET_ID])
         .assert()
         .failure()
         .stderr(eq("Error: project does not contain a canister named 'my-canister'").trim());
@@ -108,11 +99,7 @@ fn deploy() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet-id",
-            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
-        ])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 
@@ -164,22 +151,14 @@ fn deploy_twice_should_succeed() {
     // Deploy project (first time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet-id",
-            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
-        ])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet-id",
-            "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe",
-        ])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 

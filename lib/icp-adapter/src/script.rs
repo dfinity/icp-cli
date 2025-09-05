@@ -9,6 +9,7 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,
+    sync::mpsc::Sender,
     try_join,
 };
 
@@ -35,11 +36,20 @@ impl CommandField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct ScriptAdapter {
     /// Command used to build a canister
     #[serde(flatten)]
     pub command: CommandField,
+
+    #[serde(skip)]
+    pub stdio_sender: Option<Sender<String>>,
+}
+
+impl PartialEq for ScriptAdapter {
+    fn eq(&self, other: &Self) -> bool {
+        self.command == other.command
+    }
 }
 
 impl fmt::Display for ScriptAdapter {
@@ -123,16 +133,30 @@ impl build::Adapter for ScriptAdapter {
             let (_, _, status) = try_join!(
                 //
                 // Stdout
-                tokio::spawn(async move {
-                    while let Ok(Some(_line)) = stdout.next_line().await {
-                        // TODO(or.ricon): Do something with the output
+                tokio::spawn({
+                    // Clone the stdio sender for use in the stdout handling task
+                    let stdio_sender = self.stdio_sender.clone();
+
+                    async move {
+                        while let Ok(Some(line)) = stdout.next_line().await {
+                            if let Some(sender) = &stdio_sender {
+                                let _ = sender.send(line).await;
+                            }
+                        }
                     }
                 }),
                 //
                 // Stderr
-                tokio::spawn(async move {
-                    while let Ok(Some(_line)) = stderr.next_line().await {
-                        // TODO(or.ricon): Do something with the output
+                tokio::spawn({
+                    // Clone the stdio sender for use in the stderr handling task
+                    let stdio_sender = self.stdio_sender.clone();
+
+                    async move {
+                        while let Ok(Some(line)) = stderr.next_line().await {
+                            if let Some(sender) = &stdio_sender {
+                                let _ = sender.send(line).await;
+                            }
+                        }
                     }
                 }),
                 //
@@ -298,6 +322,7 @@ mod tests {
                 f.path(),
                 f.path()
             )),
+            stdio_sender: None,
         };
 
         // Invoke adapter
@@ -327,6 +352,7 @@ mod tests {
                 format!("sh -c 'echo cmd-3 >> {}'", f.path()),
                 format!("echo {}", f.path()),
             ]),
+            stdio_sender: None,
         };
 
         // Invoke adapter
@@ -348,6 +374,7 @@ mod tests {
         // Define adapter
         let v = ScriptAdapter {
             command: CommandField::Command("".into()),
+            stdio_sender: None,
         };
 
         // Invoke adapter
@@ -367,6 +394,7 @@ mod tests {
         // Define adapter
         let v = ScriptAdapter {
             command: CommandField::Command("invalid-command".into()),
+            stdio_sender: None,
         };
 
         // Invoke adapter
@@ -388,6 +416,7 @@ mod tests {
         // Define adapter
         let v = ScriptAdapter {
             command: CommandField::Command("sh -c 'exit 1'".into()),
+            stdio_sender: None,
         };
 
         // Invoke adapter

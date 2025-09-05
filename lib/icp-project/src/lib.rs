@@ -739,6 +739,7 @@ mod tests {
                         command: CommandField::Command(
                             "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
+                        stdio_sender: None,
                     })],
                 },
                 sync: SyncSteps::default(),
@@ -801,6 +802,7 @@ mod tests {
                         command: CommandField::Command(
                             "sh -c 'cp {} \"$ICP_WASM_OUTPUT_PATH\"'".into(),
                         ),
+                        stdio_sender: None,
                     })],
                 },
                 sync: SyncSteps::default(),

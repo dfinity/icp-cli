@@ -124,14 +124,14 @@ impl build::Adapter for ScriptAdapter {
                 //
                 // Stdout
                 tokio::spawn(async move {
-                    while let Ok(Some(line)) = stdout.next_line().await {
+                    while let Ok(Some(_line)) = stdout.next_line().await {
                         // TODO(or.ricon): Do something with the output
                     }
                 }),
                 //
                 // Stderr
                 tokio::spawn(async move {
-                    while let Ok(Some(line)) = stderr.next_line().await {
+                    while let Ok(Some(_line)) = stderr.next_line().await {
                         // TODO(or.ricon): Do something with the output
                     }
                 }),

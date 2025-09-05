@@ -99,16 +99,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             adapter.compile(&canister_path, &wasm_output_path).await?
                         }
 
-                        // Compile using the Motoko adapter.
-                        BuildStep::Motoko(adapter) => {
-                            adapter.compile(&canister_path, &wasm_output_path).await?
-                        }
-
-                        // Compile using the Rust adapter.
-                        BuildStep::Rust(adapter) => {
-                            adapter.compile(&canister_path, &wasm_output_path).await?
-                        }
-
                         // Compile using the Pre-built adapter.
                         BuildStep::Prebuilt(adapter) => {
                             adapter.compile(&canister_path, &wasm_output_path).await?

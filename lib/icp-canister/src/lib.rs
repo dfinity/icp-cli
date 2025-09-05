@@ -1,9 +1,6 @@
 use std::{collections::HashMap, fmt};
 
-use icp_adapter::{
-    assets::AssetsAdapter, motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter,
-    script::ScriptAdapter,
-};
+use icp_adapter::{assets::AssetsAdapter, pre_built::PrebuiltAdapter, script::ScriptAdapter};
 use serde::Deserialize;
 
 pub use manifest::{CanisterInstructions, CanisterManifest, Recipe};
@@ -52,14 +49,6 @@ pub struct CanisterSettings {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum BuildStep {
-    /// Represents a canister built using the Rust programming language.
-    /// This variant holds the configuration specific to Rust-based builds.
-    Rust(RustAdapter),
-
-    /// Represents a canister built using the Motoko programming language.
-    /// This variant holds the configuration specific to Motoko-based builds.
-    Motoko(MotokoAdapter),
-
     /// Represents a canister built using a custom script or command.
     /// This variant allows for flexible build processes defined by the user.
     Script(ScriptAdapter),
@@ -76,8 +65,6 @@ impl fmt::Display for BuildStep {
             f,
             "{}",
             match self {
-                BuildStep::Rust(_) => "rust".to_string(),
-                BuildStep::Motoko(_) => "motoko".to_string(),
                 BuildStep::Script(v) => format!("script {v}"),
                 BuildStep::Prebuilt(v) => format!("pre-built {v}"),
             }

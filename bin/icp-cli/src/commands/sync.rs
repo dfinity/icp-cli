@@ -16,6 +16,7 @@ use indicatif::{MultiProgress, ProgressBar};
 use itertools::Itertools;
 use snafu::Snafu;
 use tokio::sync::mpsc;
+use tracing::debug;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -175,6 +176,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             // Handle logging from script commands
                             tokio::spawn(async move {
                                 while let Some(line) = rx.recv().await {
+                                    debug!(line);
+
                                     // Update output buffer
                                     lines.push(line);
 

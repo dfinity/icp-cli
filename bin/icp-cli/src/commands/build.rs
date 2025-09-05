@@ -12,6 +12,7 @@ use indicatif::{MultiProgress, ProgressBar};
 use itertools::Itertools;
 use snafu::{ResultExt, Snafu};
 use tokio::sync::mpsc;
+use tracing::debug;
 
 use crate::context::GetProjectError;
 use crate::{
@@ -120,6 +121,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             // Handle logging from script commands
                             tokio::spawn(async move {
                                 while let Some(line) = rx.recv().await {
+                                    debug!(line);
+
                                     // Update output buffer
                                     lines.push(line);
 

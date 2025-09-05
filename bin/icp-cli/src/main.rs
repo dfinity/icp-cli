@@ -24,6 +24,7 @@ use tracing_subscriber::{
 mod commands;
 mod context;
 mod options;
+mod progress;
 mod store_artifact;
 mod store_id;
 mod telemetry;

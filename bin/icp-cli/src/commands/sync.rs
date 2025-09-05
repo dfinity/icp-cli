@@ -1,22 +1,16 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use crate::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, RollingLines, TICK_EMPTY, TICK_FAILURE,
-    TICK_SUCCESS,
     context::{Context, ContextGetAgentError, GetProjectError},
-    make_style,
     options::{EnvironmentOpt, IdentityOpt},
+    progress::{ProgressManager, ScriptProgressHandler},
     store_id::{Key, LookupError},
 };
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::sync::{Adapter, AdapterSyncError};
 use icp_canister::SyncStep;
-use indicatif::{MultiProgress, ProgressBar};
-use itertools::Itertools;
 use snafu::Snafu;
-use tokio::sync::mpsc;
-use tracing::debug;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -120,21 +114,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister syncs
     let mut futs = FuturesOrdered::new();
 
-    let mp = MultiProgress::new();
+    let progress_manager = ProgressManager::new();
 
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in cs {
-        // Attach spinner to multi-progress-bar container
-        let pb = mp.add(ProgressBar::new_spinner().with_style(make_style(
-            TICK_EMPTY,    // end_tick
-            COLOR_REGULAR, // color
-        )));
-
-        // Auto-tick spinner
-        pb.enable_steady_tick(Duration::from_millis(120));
-
-        // Set the progress bar prefix to display the canister name in brackets
-        pb.set_prefix(format!("[{}]", c.name));
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
 
         // Get canister principal ID
         let cid = ctx.id_store.lookup(&Key {
@@ -152,40 +137,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     // Indicate to user the current step being executed
                     let pb_hdr = format!("Syncing: {step}");
 
-                    // Shared progress-bar messaging utility
-                    let set_message = {
-                        let pb = pb.clone();
-                        let pb_hdr = pb_hdr.clone();
-
-                        move |msg: String| {
-                            pb.set_message(format!("{pb_hdr}\n\n{msg}\n"));
-                        }
-                    };
-
-                    pb.set_message(pb_hdr);
+                    let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
 
                     match step {
                         // Synchronize the canister using the custom script adapter.
                         SyncStep::Script(adapter) => {
-                            // Create a channel for the script adapter to pass terminal output to
-                            let (tx, mut rx) = mpsc::channel::<String>(100);
-
-                            // Create a rolling buffer to contain last N lines of terminal output
-                            let mut lines = RollingLines::new(4);
-
-                            // Handle logging from script commands
-                            tokio::spawn(async move {
-                                while let Some(line) = rx.recv().await {
-                                    debug!(line);
-
-                                    // Update output buffer
-                                    lines.push(line);
-
-                                    // Update progress-bar with rolling terminal output
-                                    let msg = lines.iter().join("\n");
-                                    set_message(msg);
-                                }
-                            });
+                            // Setup script progress handling
+                            let tx = script_handler.setup_output_handler();
 
                             adapter
                                 .with_stdio_sender(tx)
@@ -195,6 +153,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                         // Synchronize the canister using the assets adapter.
                         SyncStep::Assets(adapter) => {
+                            pb.set_message(pb_hdr);
                             adapter.sync(canister_path, &cid, agent).await?
                         }
                     };
@@ -205,26 +164,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         };
 
         futs.push_back(async move {
-            // Execute the sync function and capture the result
-            let out = sync_fn.await;
-
-            // Update the progress bar style based on result
-            pb.set_style(match &out {
-                Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
-                Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
-            });
-
-            // Update the progress bar message based on result
-            // TODO: Add instructions for accessing the canister
-            pb.set_message(match &out {
-                Ok(_) => format!("Synced successfully: {cid}"),
-                Err(err) => format!("Failed to sync canister: {err}"),
-            });
-
-            // Stop the progress bar spinner and keep the final state visible
-            pb.finish();
-
-            out
+            // Execute the sync function with progress tracking
+            ProgressManager::execute_with_progress(
+                pb,
+                sync_fn,
+                || format!("Synced successfully: {cid}"),
+                |err| format!("Failed to sync canister: {err}"),
+            )
+            .await
         });
     }
 

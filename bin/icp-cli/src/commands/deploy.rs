@@ -69,6 +69,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .map(|(_, c)| c.name.to_owned())
         .collect::<Vec<_>>();
 
+    // Skip doing any work if no canisters are targeted
+    if cnames.is_empty() {
+        return Ok(());
+    }
+
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
     build::exec(

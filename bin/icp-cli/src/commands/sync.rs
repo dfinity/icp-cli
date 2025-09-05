@@ -1,7 +1,8 @@
 use std::{collections::HashSet, time::Duration};
 
 use crate::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS,
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, RollingLines, TICK_EMPTY, TICK_FAILURE,
+    TICK_SUCCESS,
     context::{Context, ContextGetAgentError, GetProjectError},
     make_style,
     options::{EnvironmentOpt, IdentityOpt},
@@ -12,7 +13,9 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::sync::{Adapter, AdapterSyncError};
 use icp_canister::SyncStep;
 use indicatif::{MultiProgress, ProgressBar};
+use itertools::Itertools;
 use snafu::Snafu;
+use tokio::sync::mpsc;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -146,12 +149,45 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             async move {
                 for step in &c.sync.steps {
                     // Indicate to user the current step being executed
-                    pb.set_message(format!("Syncing: {step}"));
+                    let pb_hdr = format!("Syncing: {step}");
+
+                    // Shared progress-bar messaging utility
+                    let set_message = {
+                        let pb = pb.clone();
+                        let pb_hdr = pb_hdr.clone();
+
+                        move |msg: String| {
+                            pb.set_message(format!("{pb_hdr}\n\n{msg}\n"));
+                        }
+                    };
+
+                    pb.set_message(pb_hdr);
 
                     match step {
                         // Synchronize the canister using the custom script adapter.
                         SyncStep::Script(adapter) => {
-                            adapter.sync(canister_path, &cid, agent).await?
+                            // Create a channel for the script adapter to pass terminal output to
+                            let (tx, mut rx) = mpsc::channel::<String>(100);
+
+                            // Create a rolling buffer to contain last N lines of terminal output
+                            let mut lines = RollingLines::new(4);
+
+                            // Handle logging from script commands
+                            tokio::spawn(async move {
+                                while let Some(line) = rx.recv().await {
+                                    // Update output buffer
+                                    lines.push(line);
+
+                                    // Update progress-bar with rolling terminal output
+                                    let msg = lines.iter().join("\n");
+                                    set_message(msg);
+                                }
+                            });
+
+                            adapter
+                                .with_stdio_sender(tx)
+                                .sync(canister_path, &cid, agent)
+                                .await?
                         }
 
                         // Synchronize the canister using the assets adapter.

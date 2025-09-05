@@ -263,22 +263,74 @@ impl sync::Adapter for ScriptAdapter {
 
             // Output
             cmd.stdin(Stdio::inherit());
-            cmd.stdout(Stdio::inherit());
-            cmd.stderr(Stdio::inherit());
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
 
-            // Execute
-            let out = cmd.output().await.context(CommandInvokeSyncSnafu {
+            // Spawn
+            let mut child = cmd.spawn().context(CommandInvokeSyncSnafu {
                 command: &input_cmd,
             })?;
 
+            // Stdio handles
+            let (stdout, stderr) = (
+                child.stdout.take().unwrap(), //
+                child.stderr.take().unwrap(), //
+            );
+
+            // Create buffered line readers
+            let (mut stdout, mut stderr) = (
+                BufReader::new(stdout).lines(), //
+                BufReader::new(stderr).lines(), //
+            );
+
+            // Spawn command and handle stdio
+            let (_, _, status) = try_join!(
+                //
+                // Stdout
+                tokio::spawn({
+                    // Clone the stdio sender for use in the stdout handling task
+                    let stdio_sender = self.stdio_sender.clone();
+
+                    async move {
+                        while let Ok(Some(line)) = stdout.next_line().await {
+                            if let Some(sender) = &stdio_sender {
+                                let _ = sender.send(line).await;
+                            }
+                        }
+                    }
+                }),
+                //
+                // Stderr
+                tokio::spawn({
+                    // Clone the stdio sender for use in the stderr handling task
+                    let stdio_sender = self.stdio_sender.clone();
+
+                    async move {
+                        while let Ok(Some(line)) = stderr.next_line().await {
+                            if let Some(sender) = &stdio_sender {
+                                let _ = sender.send(line).await;
+                            }
+                        }
+                    }
+                }),
+                //
+                // Status
+                tokio::spawn(async move {
+                    //
+                    child.wait().await
+                }),
+            )
+            .context(JoinSyncSnafu)?;
+
             // Status
-            if !out.status.success() {
+            let status = status.context(CommandInvokeSyncSnafu {
+                command: &input_cmd,
+            })?;
+
+            if !status.success() {
                 return Err(ScriptAdapterSyncError::CommandStatus {
                     command: input_cmd,
-                    code: out
-                        .status
-                        .code()
-                        .map_or("N/A".to_string(), |c| c.to_string()),
+                    code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
                 }
                 .into());
             }
@@ -299,6 +351,9 @@ pub enum ScriptAdapterSyncError {
 
     #[snafu(display("invalid command '{command}': {reason}"))]
     InvalidCommand { command: String, reason: String },
+
+    #[snafu(display("failed to join thread handles"))]
+    Join { source: tokio::task::JoinError },
 
     #[snafu(display("failed to execute command '{command}'"))]
     CommandInvoke {

@@ -10,6 +10,7 @@ use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use indicatif::{MultiProgress, ProgressBar};
 use snafu::{ResultExt, Snafu};
+use tokio::sync::mpsc;
 
 use crate::context::GetProjectError;
 use crate::{
@@ -96,7 +97,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     match step {
                         // Compile using the custom script adapter.
                         BuildStep::Script(adapter) => {
-                            adapter.compile(&canister_path, &wasm_output_path).await?
+                            let (tx, mut rx) = mpsc::channel(100);
+
+                            // Handle logging from script commands
+                            tokio::spawn(async move {
+                                while let Some(line) = rx.recv().await {
+                                    // TODO(or.ricon) handle the incoming log lines
+                                }
+                            });
+
+                            adapter
+                                .with_stdio_sender(tx)
+                                .compile(&canister_path, &wasm_output_path)
+                                .await?
                         }
 
                         // Compile using the Pre-built adapter.

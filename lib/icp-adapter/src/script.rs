@@ -46,6 +46,14 @@ pub struct ScriptAdapter {
     pub stdio_sender: Option<Sender<String>>,
 }
 
+impl ScriptAdapter {
+    pub fn with_stdio_sender(&self, sender: Sender<String>) -> Self {
+        let mut v = self.clone();
+        v.stdio_sender = Some(sender);
+        v
+    }
+}
+
 impl PartialEq for ScriptAdapter {
     fn eq(&self, other: &Self) -> bool {
         self.command == other.command

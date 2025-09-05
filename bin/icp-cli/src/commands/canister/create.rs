@@ -198,8 +198,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 match ctx.id_store.lookup(&k) {
                     // Exists (skip)
-                    Ok(_) => {
-                        return Err(CommandError::CanisterExists);
+                    Ok(principal) => {
+                        return Err(CommandError::CanisterExists { principal });
                     }
 
                     // Doesn't exist (include)
@@ -317,15 +317,17 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 create_fn,
                 || "Created successfully".to_string(),
                 |err| match err {
-                    CommandError::CanisterExists => "Canister already created".to_string(),
+                    CommandError::CanisterExists { principal } => {
+                        format!("Canister already created: {principal}")
+                    }
                     _ => format!("Failed to create canister: {err}"),
                 },
-                |err| matches!(err, CommandError::CanisterExists),
+                |err| matches!(err, CommandError::CanisterExists { .. }),
             )
             .await;
 
             // If canister already exists, it is not considered an error
-            if let Err(CommandError::CanisterExists) = result {
+            if let Err(CommandError::CanisterExists { .. }) = result {
                 result = Ok(());
             }
 
@@ -365,8 +367,8 @@ pub enum CommandError {
     #[snafu(display("no canisters available to create"))]
     NoCanisters,
 
-    #[snafu(display("canister exists already"))]
-    CanisterExists,
+    #[snafu(display("canister exists already: {principal}"))]
+    CanisterExists { principal: Principal },
 
     #[snafu(transparent)]
     CreateCanister { source: AgentError },

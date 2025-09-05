@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 use camino::Utf8PathBuf;
@@ -157,6 +160,40 @@ fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
         .expect("invalid style template")
         // Combine animation frames with the final completion symbol
         .tick_strings(&[TICKS, &[end_tick]].concat())
+}
+
+/// A fixed-capacity rolling buffer that always holds the last `capacity` items.
+#[derive(Debug)]
+pub struct RollingLines {
+    buf: VecDeque<String>,
+    capacity: usize,
+}
+
+impl RollingLines {
+    /// Create a new buffer with a fixed capacity, pre-filled with empty strings.
+    pub fn new(capacity: usize) -> Self {
+        let mut buf = VecDeque::with_capacity(capacity);
+
+        for _ in 0..capacity {
+            buf.push_back(String::new());
+        }
+
+        Self { buf, capacity }
+    }
+
+    /// Push a new line, evicting the oldest if full.
+    pub fn push(&mut self, line: String) {
+        if self.buf.len() == self.capacity {
+            self.buf.pop_front();
+        }
+
+        self.buf.push_back(line);
+    }
+
+    /// Get an iterator over the current contents (in order).
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.buf.iter().map(|s| s.as_str())
+    }
 }
 
 #[cfg(test)]

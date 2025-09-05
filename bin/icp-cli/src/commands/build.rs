@@ -9,12 +9,14 @@ use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use indicatif::{MultiProgress, ProgressBar};
+use itertools::Itertools;
 use snafu::{ResultExt, Snafu};
 use tokio::sync::mpsc;
 
 use crate::context::GetProjectError;
 use crate::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS, make_style,
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, RollingLines, TICK_EMPTY, TICK_FAILURE,
+    TICK_SUCCESS, make_style,
 };
 use crate::{context::Context, store_artifact::SaveError};
 
@@ -90,19 +92,40 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Prepare a path for our output wasm
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
-                for step in c.build.steps {
+                for step in &c.build.steps {
                     // Indicate to user the current step being executed
-                    pb.set_message(format!("Building: {step}"));
+                    let pb_hdr = format!("Building: {step}");
+
+                    // Shared progress-bar messaging utility
+                    let set_message = {
+                        let pb = pb.clone();
+                        let pb_hdr = pb_hdr.clone();
+
+                        move |msg: String| {
+                            pb.set_message(format!("{pb_hdr}\n\n{msg}\n"));
+                        }
+                    };
+
+                    pb.set_message(pb_hdr);
 
                     match step {
                         // Compile using the custom script adapter.
                         BuildStep::Script(adapter) => {
-                            let (tx, mut rx) = mpsc::channel(100);
+                            // Create a channel for the script adapter to pass terminal output to
+                            let (tx, mut rx) = mpsc::channel::<String>(100);
+
+                            // Create a rolling buffer to contain last N lines of terminal output
+                            let mut lines = RollingLines::new(4);
 
                             // Handle logging from script commands
                             tokio::spawn(async move {
                                 while let Some(line) = rx.recv().await {
-                                    // TODO(or.ricon) handle the incoming log lines
+                                    // Update output buffer
+                                    lines.push(line);
+
+                                    // Update progress-bar with rolling terminal output
+                                    let msg = lines.iter().join("\n");
+                                    set_message(msg);
                                 }
                             });
 

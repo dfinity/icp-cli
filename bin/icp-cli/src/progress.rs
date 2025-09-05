@@ -51,22 +51,42 @@ impl ProgressManager {
     where
         F: Future<Output = Result<R, E>>,
     {
+        // Delegate to execute_with_custom_progress with no special error handling
+        Self::execute_with_custom_progress(
+            progress_bar,
+            task,
+            success_message,
+            error_message,
+            |_| false, // No errors are treated as success
+        )
+        .await
+    }
+
+    /// Execute a task with custom progress handling for errors that should display as success
+    pub async fn execute_with_custom_progress<F, R, E>(
+        progress_bar: ProgressBar,
+        task: F,
+        success_message: impl Fn() -> String,
+        error_message: impl Fn(&E) -> String,
+        is_success_error: impl Fn(&E) -> bool,
+    ) -> Result<R, E>
+    where
+        F: Future<Output = Result<R, E>>,
+    {
         // Execute the task and capture the result
         let result = task.await;
 
-        // Update the progress bar style based on result
-        progress_bar.set_style(match &result {
-            Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
-            Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
-        });
+        // Update the progress bar style and message based on result
+        let (style, message) = match &result {
+            Ok(_) => (make_style(TICK_SUCCESS, COLOR_SUCCESS), success_message()),
+            Err(err) if is_success_error(err) => {
+                (make_style(TICK_SUCCESS, COLOR_SUCCESS), error_message(err))
+            }
+            Err(err) => (make_style(TICK_FAILURE, COLOR_FAILURE), error_message(err)),
+        };
 
-        // Update the progress bar message based on result
-        progress_bar.set_message(match &result {
-            Ok(_) => success_message(),
-            Err(err) => error_message(err),
-        });
-
-        // Stop the progress bar spinner and keep the final state visible
+        progress_bar.set_style(style);
+        progress_bar.set_message(message);
         progress_bar.finish();
 
         result

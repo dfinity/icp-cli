@@ -1,17 +1,15 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
-use indicatif::{MultiProgress, ProgressBar};
 use snafu::Snafu;
 
 use crate::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS,
     context::{Context, ContextGetAgentError, GetProjectError},
-    make_style,
     options::{EnvironmentOpt, IdentityOpt},
+    progress::ProgressManager,
     store_artifact::LookupError as LookupArtifactError,
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -124,20 +122,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
-    let mp = MultiProgress::new();
+    let progress_manager = ProgressManager::new();
 
     for (_, c) in cs {
-        // Attach spinner to multi-progress-bar container
-        let pb = mp.add(ProgressBar::new_spinner().with_style(make_style(
-            TICK_EMPTY,    // end_tick
-            COLOR_REGULAR, // color
-        )));
-
-        // Auto-tick spinner
-        pb.enable_steady_tick(Duration::from_millis(120));
-
-        // Set the progress bar prefix to display the canister name in brackets
-        pb.set_prefix(format!("[{}]", c.name));
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
 
         // Create an async closure that handles the operation for this specific canister
         let install_fn = {
@@ -195,25 +184,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         };
 
         futs.push_back(async move {
-            // Execute the operation and capture the result
-            let out = install_fn.await;
-
-            // Update the progress bar style based on result
-            pb.set_style(match &out {
-                Ok(_) => make_style(TICK_SUCCESS, COLOR_SUCCESS),
-                Err(_) => make_style(TICK_FAILURE, COLOR_FAILURE),
-            });
-
-            // Update the progress bar message based on result
-            pb.set_message(match &out {
-                Ok(_) => "Installed successfully".to_string(),
-                Err(err) => format!("Failed to install canister: {err}"),
-            });
-
-            // Stop the progress bar spinner and keep the final state visible
-            pb.finish();
-
-            out
+            // Execute the install function with progress tracking
+            ProgressManager::execute_with_progress(
+                pb,
+                install_fn,
+                || "Installed successfully".to_string(),
+                |err| format!("Failed to install canister: {err}"),
+            )
+            .await
         });
     }
 

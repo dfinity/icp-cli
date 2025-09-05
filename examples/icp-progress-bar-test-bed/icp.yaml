@@ -3,7 +3,13 @@ canisters:
     build:
       steps:
         - type: script
-          command: sleep 3
+          command: lorem.sh 5
+
+        - type: script
+          command: lorem.sh 5
+
+        - type: script
+          command: lorem.sh 5
 
         - type: pre-built
           path: ../icp-pre-built/dist/hello_world.wasm
@@ -12,13 +18,13 @@ canisters:
     sync:
       steps:
         - type: script
-          command: sleep 3
+          command: lorem.sh 20
 
   - name: canister-2
     build:
       steps:
         - type: script
-          command: sleep 2
+          command: lorem.sh 5
 
         - type: pre-built
           path: ../icp-pre-built/dist/hello_world.wasm

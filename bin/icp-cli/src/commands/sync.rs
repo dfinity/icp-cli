@@ -136,16 +136,16 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Set the progress bar prefix to display the canister name in brackets
         pb.set_prefix(format!("[{}]", c.name));
 
+        // Get canister principal ID
+        let cid = ctx.id_store.lookup(&Key {
+            network: network.to_owned(),
+            environment: env.name.to_owned(),
+            canister: c.name.to_owned(),
+        })?;
+
         // Create an async closure that handles the sync process for this specific canister
         let sync_fn = {
             let pb = pb.clone();
-
-            // Get canister principal ID
-            let cid = ctx.id_store.lookup(&Key {
-                network: network.to_owned(),
-                environment: env.name.to_owned(),
-                canister: c.name.to_owned(),
-            })?;
 
             async move {
                 for step in &c.sync.steps {
@@ -215,8 +215,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             });
 
             // Update the progress bar message based on result
+            // TODO: Add instructions for accessing the canister
             pb.set_message(match &out {
-                Ok(_) => "Synced successfully".to_string(),
+                Ok(_) => format!("Synced successfully: {cid}"),
                 Err(err) => format!("Failed to sync canister: {err}"),
             });
 

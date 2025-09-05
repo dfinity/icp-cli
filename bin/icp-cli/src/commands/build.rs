@@ -93,9 +93,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Prepare a path for our output wasm
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
-                for step in &c.build.steps {
+                let stepCount = (&c.build.steps).len();
+                for (i, step) in (&c.build.steps).iter().enumerate() {
                     // Indicate to user the current step being executed
-                    let pb_hdr = format!("Building: {step}");
+                    let currentStep = i+1;
+                    let pb_hdr = format!("Building: {step} {currentStep} of {stepCount}");
 
                     // Shared progress-bar messaging utility
                     let set_message = {

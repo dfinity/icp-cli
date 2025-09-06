@@ -173,7 +173,7 @@ impl ScriptProgressHandler {
             let pb_hdr = self.header.clone();
 
             move |msg: String| {
-                pb.set_message(format!("{pb_hdr}\n\n{msg}\n"));
+                pb.set_message(format!("{pb_hdr}\n{msg}\n"));
             }
         };
 
@@ -189,7 +189,11 @@ impl ScriptProgressHandler {
                 lines.push(line);
 
                 // Update progress-bar with rolling terminal output
-                let msg = lines.iter().join("\n");
+                let msg = lines
+                    .iter()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| format!("> {}", s))
+                    .join("\n");
                 set_message(msg);
             }
         });

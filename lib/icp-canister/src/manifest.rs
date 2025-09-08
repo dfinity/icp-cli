@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{BuildSteps, CanisterSettings, SyncSteps};
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase", from = "String")]
 pub enum RecipeType {
     Assets,
@@ -24,16 +25,17 @@ impl From<String> for RecipeType {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Recipe {
     #[serde(rename = "type")]
     pub recipe_type: RecipeType,
 
     #[serde(rename = "configuration")]
+    #[schemars(with = "HashMap<String, serde_json::Value>")]
     pub instructions: HashMap<String, serde_yaml::Value>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(untagged)]
 pub enum CanisterInstructions {
     Recipe {
@@ -54,7 +56,7 @@ pub enum CanisterInstructions {
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,

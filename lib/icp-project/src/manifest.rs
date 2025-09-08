@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use icp_canister::{CanisterManifest, CanisterSettings};
@@ -27,7 +28,7 @@ pub fn default_networks() -> Vec<NetworkItem> {
         .collect::<Vec<_>>()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterItem {
@@ -35,7 +36,7 @@ pub enum CanisterItem {
     Definition(CanisterManifest),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)]
 pub enum CanistersField {
@@ -43,7 +44,7 @@ pub enum CanistersField {
     Canisters(Vec<CanisterItem>),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct NetworkManifest {
     pub name: String,
 
@@ -51,14 +52,14 @@ pub struct NetworkManifest {
     pub config: NetworkConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum NetworkItem {
     Path(String),
     Definition(NetworkManifest),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct EnvironmentManifest {
     // environment name
     pub name: String,
@@ -75,7 +76,7 @@ pub struct EnvironmentManifest {
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProjectManifest {
     /// Canister manifests belonging to this project.
     /// This field uses `#[serde(flatten)]` to allow deserialization from either

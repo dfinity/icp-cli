@@ -2245,6 +2245,7 @@ dependencies = [
  "ic-utils",
  "icp-fs",
  "reqwest",
+ "schemars",
  "serde",
  "sha2 0.10.9",
  "shellwords",
@@ -2265,7 +2266,9 @@ dependencies = [
  "icp-fs",
  "mockall",
  "reqwest",
+ "schemars",
  "serde",
+ "serde_json",
  "serde_yaml",
  "snafu",
  "url",
@@ -2380,6 +2383,7 @@ dependencies = [
  "icp-fs",
  "pocket-ic",
  "reqwest",
+ "schemars",
  "serde",
  "serde_json",
  "snafu",
@@ -2401,6 +2405,7 @@ dependencies = [
  "icp-fs",
  "icp-network",
  "pathdiff",
+ "schemars",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -4055,6 +4060,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f29ebaa345f945cec9fbbc532eb307f0fdad8161f281b6369539c8d84876b3d"
 dependencies = [
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "schema-gen"
+version = "0.1.0"
+dependencies = [
+ "icp-canister",
+ "icp-network",
+ "icp-project",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

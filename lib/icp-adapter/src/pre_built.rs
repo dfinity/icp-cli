@@ -5,23 +5,25 @@ use async_trait::async_trait;
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
 use reqwest::{Client, Method, Request, StatusCode, Url};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use snafu::Snafu;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct LocalSource {
     /// Local path on-disk to read a WASM file from
+    #[schemars(with = "String")]
     pub path: Utf8PathBuf,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct RemoteSource {
     /// Url to fetch the remote WASM file from
     pub url: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(untagged, rename_all = "lowercase")]
 pub enum SourceField {
     /// Local path on-disk to read a WASM file from
@@ -32,7 +34,7 @@ pub enum SourceField {
 }
 
 /// Configuration for a Pre-built canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct PrebuiltAdapter {
     #[serde(flatten)]
     pub source: SourceField,

@@ -12,6 +12,7 @@ icp-fs = { "path" = "../icp-fs" }
 icp-network = { path = "../icp-network" }
 pathdiff.workspace = true
 serde = { workspace = true }
+schemars = { workspace = true }
 snafu = { workspace = true }
 
 [dev-dependencies]

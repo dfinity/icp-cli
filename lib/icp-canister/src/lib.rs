@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt};
 
 use icp_adapter::{assets::AssetsAdapter, pre_built::PrebuiltAdapter, script::ScriptAdapter};
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 pub use manifest::{CanisterInstructions, CanisterManifest, Recipe};
@@ -10,7 +11,7 @@ pub mod manifest;
 pub mod recipe;
 
 /// Canister settings, such as compute and memory allocation.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub struct CanisterSettings {
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
     pub compute_allocation: Option<u64>,
@@ -46,7 +47,7 @@ pub struct CanisterSettings {
 /// type: rust
 /// package: my_canister
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum BuildStep {
     /// Represents a canister built using a custom script or command.
@@ -74,7 +75,7 @@ impl fmt::Display for BuildStep {
 
 /// Describes how the canister should be built into WebAssembly,
 /// including the adapters and build steps responsible for the build.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct BuildSteps {
     pub steps: Vec<BuildStep>,
 }
@@ -89,7 +90,7 @@ pub struct BuildSteps {
 /// type: script
 /// command: echo "synchronizing canister"
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum SyncStep {
     /// Represents a canister synced using a custom script or command.
@@ -115,7 +116,7 @@ impl fmt::Display for SyncStep {
 
 /// Describes how the canister should be synced,
 /// including the adapters and steps responsible for the sync.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub struct SyncSteps {
     pub steps: Vec<SyncStep>,
 }

@@ -18,7 +18,7 @@ use crate::{
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The names of the canisters within the current project
+    /// The names of the canisters within the current project DUMMY CHANGE
     pub names: Vec<String>,
 }
 

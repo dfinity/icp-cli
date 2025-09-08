@@ -25,7 +25,7 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-cli-ref
 
-      - name: 
+      - name: generate docs
         run: ./scripts/generate-cli-docs.sh
 
       - name: Check for uncommitted changes

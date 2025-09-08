@@ -1,9 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
-use icp_adapter::{
-    assets::AssetsAdapter, motoko::MotokoAdapter, pre_built::PrebuiltAdapter, rust::RustAdapter,
-    script::ScriptAdapter,
-};
+use icp_adapter::{assets::AssetsAdapter, pre_built::PrebuiltAdapter, script::ScriptAdapter};
 use serde::Deserialize;
 
 pub use manifest::{CanisterInstructions, CanisterManifest, Recipe};
@@ -52,14 +49,6 @@ pub struct CanisterSettings {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum BuildStep {
-    /// Represents a canister built using the Rust programming language.
-    /// This variant holds the configuration specific to Rust-based builds.
-    Rust(RustAdapter),
-
-    /// Represents a canister built using the Motoko programming language.
-    /// This variant holds the configuration specific to Motoko-based builds.
-    Motoko(MotokoAdapter),
-
     /// Represents a canister built using a custom script or command.
     /// This variant allows for flexible build processes defined by the user.
     Script(ScriptAdapter),
@@ -68,6 +57,19 @@ pub enum BuildStep {
     /// This variant allows for retrieving a canister WASM from various sources.
     #[serde(rename = "pre-built")]
     Prebuilt(PrebuiltAdapter),
+}
+
+impl fmt::Display for BuildStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BuildStep::Script(v) => format!("script {v}"),
+                BuildStep::Prebuilt(v) => format!("pre-built {v}"),
+            }
+        )
+    }
 }
 
 /// Describes how the canister should be built into WebAssembly,
@@ -96,6 +98,19 @@ pub enum SyncStep {
 
     /// Represents syncing of an assets canister
     Assets(AssetsAdapter),
+}
+
+impl fmt::Display for SyncStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SyncStep::Script(v) => format!("script {v}"),
+                SyncStep::Assets(v) => format!("assets {v}"),
+            }
+        )
+    }
 }
 
 /// Describes how the canister should be synced,

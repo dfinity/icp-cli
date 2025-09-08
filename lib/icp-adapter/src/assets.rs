@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
 use camino::Utf8Path;
@@ -32,6 +34,17 @@ pub struct AssetsAdapter {
     /// Directory used to synchronize an assets canister
     #[serde(flatten)]
     pub dir: DirField,
+}
+
+impl fmt::Display for AssetsAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dir = match &self.dir {
+            DirField::Dir(d) => format!("directory: {d}"),
+            DirField::Dirs(ds) => format!("{} directories", ds.len()),
+        };
+
+        write!(f, "({dir})")
+    }
 }
 
 #[async_trait]

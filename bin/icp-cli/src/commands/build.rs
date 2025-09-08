@@ -1,29 +1,28 @@
+use std::collections::HashSet;
 use std::io;
 
-use crate::context::GetProjectError;
-use crate::{context::Context, store_artifact::SaveError};
 use camino_tempfile::tempdir;
 use clap::Parser;
+use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
 
+use crate::context::GetProjectError;
+use crate::{
+    context::Context,
+    progress::{ProgressManager, ScriptProgressHandler},
+    store_artifact::SaveError,
+};
+
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The name of the canister within the current project
-    pub name: Option<String>,
+    /// The names of the canisters within the current project
+    pub names: Vec<String>,
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.
-///
-/// This function performs the following steps:
-/// 1. Locates the ICP project directory.
-/// 2. Loads the project manifest (`icp.yaml`), which can define either a single
-///    canister or multiple canisters using glob patterns.
-/// 3. Normalizes the canister definitions into a unified list.
-/// 4. Iterates through each defined canister and invokes its respective build adapter
-///    (Rust, Motoko, or custom script) to compile it into WebAssembly.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let pm = ctx.project()?;
@@ -32,64 +31,115 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let canisters = pm
         .canisters
         .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
+        .filter(|(_, c)| match &cmd.names.is_empty() {
+            // If no names specified, build all canisters
+            true => true,
+
+            // If names specified, only build matching canisters
+            false => cmd.names.contains(&c.name),
         })
         .cloned()
         .collect::<Vec<_>>();
 
-    // Check if selected canister exists
-    if let Some(name) = cmd.name {
-        if canisters.is_empty() {
-            return Err(CommandError::CanisterNotFound { name });
+    // Check if selected canisters exists
+    if !cmd.names.is_empty() {
+        let names = canisters
+            .iter()
+            .map(|(_, c)| &c.name)
+            .collect::<HashSet<_>>();
+
+        for name in &cmd.names {
+            if !names.contains(name) {
+                return Err(CommandError::CanisterNotFound {
+                    name: name.to_owned(),
+                });
+            }
         }
     }
 
+    // Prepare a futures set for concurrent canister builds
+    let mut futs = FuturesOrdered::new();
+
+    let progress_manager = ProgressManager::new();
+
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
-        // Create a temporary directory for build artifacts
-        let build_dir = tempdir().context(BuildDirSnafu)?;
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
 
-        // Prepare a path for our output wasm
-        let wasm_output_path = build_dir.path().join("out.wasm");
+        // Create an async closure that handles the build process for this specific canister
+        let build_fn = {
+            let c = c.clone();
+            let pb = pb.clone();
 
-        for step in c.build.steps {
-            match step {
-                // Compile using the custom script adapter.
-                BuildStep::Script(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
+            async move {
+                // Create a temporary directory for build artifacts
+                let build_dir = tempdir().context(BuildDirSnafu)?;
+
+                // Prepare a path for our output wasm
+                let wasm_output_path = build_dir.path().join("out.wasm");
+
+                let step_count = c.build.steps.len();
+                for (i, step) in c.build.steps.iter().enumerate() {
+                    // Indicate to user the current step being executed
+                    let current_step = i + 1;
+                    let pb_hdr = format!("Building: {step} {current_step} of {step_count}");
+
+                    let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
+
+                    match step {
+                        // Compile using the custom script adapter.
+                        BuildStep::Script(adapter) => {
+                            // Setup script progress handling
+                            let tx = script_handler.setup_output_handler();
+
+                            adapter
+                                .with_stdio_sender(tx)
+                                .compile(&canister_path, &wasm_output_path)
+                                .await?
+                        }
+
+                        // Compile using the Pre-built adapter.
+                        BuildStep::Prebuilt(adapter) => {
+                            pb.set_message(pb_hdr);
+                            adapter.compile(&canister_path, &wasm_output_path).await?
+                        }
+                    };
                 }
 
-                // Compile using the Motoko adapter.
-                BuildStep::Motoko(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
+                // Verify a file exists in the wasm output path
+                if !wasm_output_path.exists() {
+                    return Err(CommandError::NoOutput);
                 }
 
-                // Compile using the Rust adapter.
-                BuildStep::Rust(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
-                }
+                // Load wasm output
+                let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
 
-                // Compile using the Pre-built adapter.
-                BuildStep::Prebuilt(adapter) => {
-                    adapter.compile(&canister_path, &wasm_output_path).await?
-                }
-            };
-        }
+                // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
-        // Verify a file exists in the wasm output path
-        if !wasm_output_path.exists() {
-            return Err(CommandError::NoOutput);
-        }
+                // Save the wasm artifact
+                ctx.artifact_store.save(&c.name, &wasm)?;
 
-        // Load wasm output
-        let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
+                Ok::<_, CommandError>(())
+            }
+        };
 
-        // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
+        futs.push_back(async move {
+            // Execute the build function with progress tracking
+            ProgressManager::execute_with_progress(
+                pb,
+                build_fn,
+                || "Built successfully".to_string(),
+                |err| format!("Failed to build canister: {err}"),
+            )
+            .await
+        });
+    }
 
-        // Save the wasm artifact
-        ctx.artifact_store.save(&c.name, &wasm)?;
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister build failures
+        res?;
     }
 
     Ok(())

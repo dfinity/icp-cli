@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use candid::Principal;
+use console::Term;
 use ic_agent::{Agent, Identity};
 use icp_canister::recipe;
 use icp_dirs::IcpCliDirs;
@@ -20,6 +21,9 @@ use crate::context::GetProjectError::ProjectNotFound;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub struct Context {
+    /// Terminal for printing messages for the user to see
+    pub term: Term,
+
     dirs: IcpCliDirs,
 
     /// The name of the identity to use, set from the command line.
@@ -53,12 +57,14 @@ pub struct Context {
 
 impl Context {
     pub fn new(
+        term: Term,
         dirs: IcpCliDirs,
         id_store: IdStore,
         artifact_store: ArtifactStore,
         recipe_resolver: Arc<dyn recipe::Resolve>,
     ) -> Self {
         Self {
+            term,
             dirs,
             identity_name: OnceLock::new(),
             identity: TryOnceLock::new(),

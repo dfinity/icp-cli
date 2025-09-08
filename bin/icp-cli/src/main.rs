@@ -4,6 +4,7 @@ use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLa
 use camino::Utf8PathBuf;
 use clap::Parser;
 use commands::{Cmd, DispatchError};
+use console::Term;
 use context::Context;
 use icp_canister::{handlebars::Handlebars, recipe};
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
@@ -19,6 +20,7 @@ use tracing_subscriber::{
 mod commands;
 mod context;
 mod options;
+mod progress;
 mod store_artifact;
 mod store_id;
 mod telemetry;
@@ -42,6 +44,9 @@ struct Cli {
 #[report]
 async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
+
+    // Printing for user-facing messages
+    let term = Term::stdout();
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
@@ -104,6 +109,7 @@ async fn main() -> Result<(), ProgramError> {
 
     // Setup environment
     let ctx = Context::new(
+        term,      // term
         dirs,      // dirs
         ids,       // id_store
         artifacts, // artifact_store

@@ -1,17 +1,21 @@
+use std::collections::HashSet;
+
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
+    progress::{ProgressManager, ScriptProgressHandler},
     store_id::{Key, LookupError},
 };
 use clap::Parser;
+use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::sync::{Adapter, AdapterSyncError};
 use icp_canister::SyncStep;
 use snafu::Snafu;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The name of the canister within the current project
-    pub name: Option<String>,
+    /// The names of the canisters within the current project
+    pub names: Vec<String>,
 
     #[clap(flatten)]
     pub identity: IdentityOpt,
@@ -28,19 +32,26 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cs = pm
         .canisters
         .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
+        .filter(|(_, c)| match &cmd.names.is_empty() {
+            // If no names specified, sync all canisters
+            true => true,
+
+            // If names specified, only sync matching canisters
+            false => cmd.names.contains(&c.name),
         })
         .cloned()
         .collect::<Vec<_>>();
 
     // Check if selected canister exists
-    if let Some(name) = &cmd.name {
-        if cs.is_empty() {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+    if !cmd.names.is_empty() {
+        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
+
+        for name in &cmd.names {
+            if !names.contains(name) {
+                return Err(CommandError::CanisterNotFound {
+                    name: name.to_owned(),
+                });
+            }
         }
     }
 
@@ -68,12 +79,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .collect::<Vec<_>>();
 
     // Ensure canister is included in the environment
-    if let Some(name) = &cmd.name {
-        if !ecs.contains(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
+    if !cmd.names.is_empty() {
+        for name in &cmd.names {
+            if !ecs.contains(name) {
+                return Err(CommandError::EnvironmentCanister {
+                    environment: env.name.to_owned(),
+                    canister: name.to_owned(),
+                });
+            }
         }
     }
 
@@ -98,8 +111,16 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare agent
     let agent = ctx.agent()?;
 
+    // Prepare a futures set for concurrent canister syncs
+    let mut futs = FuturesOrdered::new();
+
+    let progress_manager = ProgressManager::new();
+
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in cs {
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
+
         // Get canister principal ID
         let cid = ctx.id_store.lookup(&Key {
             network: network.to_owned(),
@@ -107,15 +128,57 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             canister: c.name.to_owned(),
         })?;
 
-        for step in &c.sync.steps {
-            match step {
-                // Synchronize the canister using the custom script adapter.
-                SyncStep::Script(adapter) => adapter.sync(canister_path, &cid, agent).await?,
+        // Create an async closure that handles the sync process for this specific canister
+        let sync_fn = {
+            let pb = pb.clone();
 
-                // Synchronize the canister using the assets adapter.
-                SyncStep::Assets(adapter) => adapter.sync(canister_path, &cid, agent).await?,
-            };
-        }
+            async move {
+                for step in &c.sync.steps {
+                    // Indicate to user the current step being executed
+                    let pb_hdr = format!("Syncing: {step}");
+
+                    let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
+
+                    match step {
+                        // Synchronize the canister using the custom script adapter.
+                        SyncStep::Script(adapter) => {
+                            // Setup script progress handling
+                            let tx = script_handler.setup_output_handler();
+
+                            adapter
+                                .with_stdio_sender(tx)
+                                .sync(canister_path, &cid, agent)
+                                .await?
+                        }
+
+                        // Synchronize the canister using the assets adapter.
+                        SyncStep::Assets(adapter) => {
+                            pb.set_message(pb_hdr);
+                            adapter.sync(canister_path, &cid, agent).await?
+                        }
+                    };
+                }
+
+                Ok::<_, CommandError>(())
+            }
+        };
+
+        futs.push_back(async move {
+            // Execute the sync function with progress tracking
+            ProgressManager::execute_with_progress(
+                pb,
+                sync_fn,
+                || format!("Synced successfully: {cid}"),
+                |err| format!("Failed to sync canister: {err}"),
+            )
+            .await
+        });
+    }
+
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister sync failures
+        res?;
     }
 
     Ok(())

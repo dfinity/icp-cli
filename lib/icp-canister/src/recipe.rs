@@ -134,6 +134,7 @@ impl Resolve for Motoko {
                     format!(r#"sh -c 'moc {entry}'"#),
                     r#"sh -c 'mv main.wasm "$ICP_WASM_OUTPUT_PATH"'"#.to_string(),
                 ]),
+                stdio_sender: None,
             })],
         };
 
@@ -176,6 +177,7 @@ impl Resolve for Rust {
                         r#"sh -c 'mv target/wasm32-unknown-unknown/release/{output_name} "$ICP_WASM_OUTPUT_PATH"'"#
                     ),
                 ]),
+                stdio_sender: None,
             })],
         };
 

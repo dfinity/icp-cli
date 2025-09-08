@@ -63,112 +63,95 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
-    // Build the selected canisters
-    eprintln!("\nBuilding canisters:");
-    for (_, c) in &canisters {
-        eprintln!("- {}", c.name);
+    // Prepare canister names for subsequent commands
+    let cnames = canisters
+        .iter()
+        .map(|(_, c)| c.name.to_owned())
+        .collect::<Vec<_>>();
 
-        // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `build` command.
-        //                 We should consider refactoring `build` to use library code instead.
-        build::exec(
-            ctx,
-            build::Cmd {
-                name: Some(c.name.to_owned()),
-            },
-        )
-        .await?;
+    // Skip doing any work if no canisters are targeted
+    if cnames.is_empty() {
+        return Ok(());
     }
 
+    // Build the selected canisters
+    let _ = ctx.term.write_line("Building canisters:");
+    build::exec(
+        ctx,
+        build::Cmd {
+            names: cnames.to_owned(),
+        },
+    )
+    .await?;
+
     // Create the selected canisters
-    eprintln!("\nCreating canisters:");
-    for (_, c) in &canisters {
-        eprintln!("- {}", c.name);
+    let _ = ctx.term.write_line("\n\nCreating canisters:");
+    let out = create::exec(
+        ctx,
+        create::Cmd {
+            names: cnames.to_owned(),
+            identity: cmd.identity.clone(),
+            environment: cmd.environment.clone(),
 
-        // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `canister::create` command.
-        //                 We should consider refactoring `canister::create` to use library code instead.
-        let out = create::exec(
-            ctx,
-            create::Cmd {
-                name: Some(c.name.to_owned()),
-                identity: cmd.identity.clone(),
-                environment: cmd.environment.clone(),
-
-                // Ids
-                ids: CanisterIDs {
-                    effective_id: cmd.effective_id.to_owned(),
-                    specific_id: None,
-                },
-
-                // Controllers
-                controller: cmd.controller.to_owned(),
-
-                // Settings
-                settings: CanisterSettings {
-                    ..Default::default()
-                },
-
-                quiet: false,
+            // Ids
+            ids: CanisterIDs {
+                effective_id: cmd.effective_id.to_owned(),
+                specific_id: None,
             },
-        )
-        .await;
 
-        if let Err(err) = out {
-            if !matches!(err, create::CommandError::NoCanisters) {
-                return Err(CommandError::Create { source: err });
-            }
+            // Controllers
+            controller: cmd.controller.to_owned(),
+
+            // Settings
+            settings: CanisterSettings {
+                ..Default::default()
+            },
+
+            quiet: false,
+        },
+    )
+    .await;
+
+    if let Err(err) = out {
+        if !matches!(err, create::CommandError::NoCanisters) {
+            return Err(CommandError::Create { source: err });
         }
     }
 
     // Install the selected canisters
-    eprintln!("\nInstalling canisters:");
-    for (_, c) in &canisters {
-        eprintln!("- {}", c.name);
+    let _ = ctx.term.write_line("\n\nInstalling canisters:");
+    let out = install::exec(
+        ctx,
+        install::Cmd {
+            names: cnames.to_owned(),
+            mode: cmd.mode.to_owned(),
+            identity: cmd.identity.clone(),
+            environment: cmd.environment.clone(),
+        },
+    )
+    .await;
 
-        // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `canister::create` command.
-        //                 We should consider refactoring `canister::create` to use library code instead.
-        let out = install::exec(
-            ctx,
-            install::Cmd {
-                name: Some(c.name.to_owned()),
-                mode: cmd.mode.to_owned(),
-                identity: cmd.identity.clone(),
-                environment: cmd.environment.clone(),
-            },
-        )
-        .await;
-
-        if let Err(err) = out {
-            if !matches!(err, install::CommandError::NoCanisters) {
-                return Err(CommandError::Install { source: err });
-            }
+    if let Err(err) = out {
+        if !matches!(err, install::CommandError::NoCanisters) {
+            return Err(CommandError::Install { source: err });
         }
     }
 
     // Sync the selected canisters
-    eprintln!("\nSyncing canisters:");
-    for (_, c) in &canisters {
-        eprintln!("- {}", c.name);
+    let _ = ctx.term.write_line("\n\nSyncing canisters:");
+    let out = sync::exec(
+        ctx,
+        sync::Cmd {
+            names: cnames.to_owned(),
+            identity: cmd.identity.clone(),
+            environment: cmd.environment.clone(),
+        },
+    )
+    .await;
 
-        // TODO(or.ricon): Temporary approach that can be revisited.
-        //                 Currently we simply invoke the adjacent `canister::sync` command.
-        //                 We should consider refactoring `canister::sync` to use library code instead.
-        let out = sync::exec(
-            ctx,
-            sync::Cmd {
-                name: Some(c.name.to_owned()),
-                identity: cmd.identity.clone(),
-                environment: cmd.environment.clone(),
-            },
-        )
-        .await;
-
-        if let Err(err) = out {
-            if !matches!(err, sync::CommandError::NoCanisters) {
-                return Err(CommandError::Sync { source: err });
-            }
+    if let Err(err) = out {
+        if !matches!(err, sync::CommandError::NoCanisters) {
+            return Err(CommandError::Sync { source: err });
         }
     }
 

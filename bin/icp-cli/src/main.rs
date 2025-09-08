@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 use camino::Utf8PathBuf;
 use clap::Parser;
-use commands::{Subcmd, DispatchError};
+use commands::{DispatchError, Subcmd};
 use console::Term;
 use context::Context;
 use icp_canister::{handlebars::Handlebars, recipe};

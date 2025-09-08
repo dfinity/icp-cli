@@ -1,9 +1,9 @@
 #!/bin/bash
 
+#
 # Generate CLI documentation script
 # This script generates markdown documentation for all CLI commands
 #
-# TODO This should run as part of a the CI pipeline and throw an error if the file is not up to date
 
 set -e
 

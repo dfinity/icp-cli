@@ -11,10 +11,10 @@ echo "Generating CLI documentation..."
 
 # Generate the full CLI documentation
 echo "Building the CLI..."
-cargo build --release
+cargo build
 
 echo "Generating markdown documentation..."
-$(git rev-parse --show-toplevel)/target/release/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/cli-reference.md
+$(git rev-parse --show-toplevel)/target/debug/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/cli-reference.md
 
 echo "Documentation generated successfully at docs/cli-reference.md"
 

@@ -17,6 +17,17 @@ jobs:
       - name: Install Rust toolchain from rust-toolchain.toml
         run: rustup show
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

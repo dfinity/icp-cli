@@ -1,17 +1,15 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
-use indicatif::{MultiProgress, ProgressBar};
 use snafu::Snafu;
 
 use crate::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS,
     context::{Context, ContextGetAgentError, GetProjectError},
-    make_style,
     options::{EnvironmentOpt, IdentityOpt},
+    progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
 };
 
@@ -175,20 +173,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
-    let mp = MultiProgress::new();
+    let progress_manager = ProgressManager::new();
 
     for (_, c) in cs {
-        // Attach spinner to multi-progress-bar container
-        let pb = mp.add(ProgressBar::new_spinner().with_style(make_style(
-            TICK_EMPTY,    // end_tick
-            COLOR_REGULAR, // color
-        )));
-
-        // Auto-tick spinner
-        pb.enable_steady_tick(Duration::from_millis(120));
-
-        // Set the progress bar prefix to display the canister name in brackets
-        pb.set_prefix(format!("[{}]", c.name));
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
@@ -209,8 +198,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 match ctx.id_store.lookup(&k) {
                     // Exists (skip)
-                    Ok(_) => {
-                        return Err(CommandError::CanisterExists);
+                    Ok(principal) => {
+                        return Err(CommandError::CanisterExists { principal });
                     }
 
                     // Doesn't exist (include)
@@ -322,44 +311,27 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         };
 
         futs.push_back(async move {
-            // Execute the create function and capture the result
-            let mut out = create_fn.await;
-
-            let (tick, color, msg) = match &out {
-                Ok(_) => (
-                    TICK_SUCCESS,
-                    COLOR_SUCCESS,
-                    "Created successfully".to_string(),
-                ),
-
-                Err(CommandError::CanisterExists) => (
-                    TICK_SUCCESS,
-                    COLOR_SUCCESS,
-                    "Canister already created".to_string(),
-                ),
-
-                Err(err) => (
-                    TICK_FAILURE,
-                    COLOR_FAILURE,
-                    format!("Failed to create canister: {err}"),
-                ),
-            };
-
-            // Update the progress bar style based on result
-            pb.set_style(make_style(tick, color));
-
-            // Update the progress bar message based on result
-            pb.set_message(msg);
-
-            // Stop the progress bar spinner and keep the final state visible
-            pb.finish();
+            // Execute the create function with custom progress tracking
+            let mut result = ProgressManager::execute_with_custom_progress(
+                pb,
+                create_fn,
+                || "Created successfully".to_string(),
+                |err| match err {
+                    CommandError::CanisterExists { principal } => {
+                        format!("Canister already created: {principal}")
+                    }
+                    _ => format!("Failed to create canister: {err}"),
+                },
+                |err| matches!(err, CommandError::CanisterExists { .. }),
+            )
+            .await;
 
             // If canister already exists, it is not considered an error
-            if let Err(CommandError::CanisterExists) = out {
-                out = Ok(());
+            if let Err(CommandError::CanisterExists { .. }) = result {
+                result = Ok(());
             }
 
-            out
+            result
         });
     }
 
@@ -395,8 +367,8 @@ pub enum CommandError {
     #[snafu(display("no canisters available to create"))]
     NoCanisters,
 
-    #[snafu(display("canister exists already"))]
-    CanisterExists,
+    #[snafu(display("canister exists already: {principal}"))]
+    CanisterExists { principal: Principal },
 
     #[snafu(transparent)]
     CreateCanister { source: AgentError },

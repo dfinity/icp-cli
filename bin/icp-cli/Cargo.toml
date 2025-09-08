@@ -15,6 +15,7 @@ camino.workspace = true
 candid_parser.workspace = true
 candid.workspace = true
 clap.workspace = true
+clap-markdown.workspace = true
 console.workspace = true
 dialoguer.workspace = true
 elliptic-curve.workspace = true

@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 use camino::Utf8PathBuf;
 use clap::Parser;
-use commands::{Cmd, DispatchError};
+use commands::{Subcmd, DispatchError};
 use console::Term;
 use context::Context;
 use icp_canister::{handlebars::Handlebars, recipe};
@@ -36,14 +36,29 @@ struct Cli {
     #[clap(long)]
     debug: bool,
 
-    #[command(flatten)]
-    command: Cmd,
+    /// Generate markdown documentation for all commands and exit
+    #[arg(long, hide = true)]
+    markdown_help: bool,
+
+    #[command(subcommand)]
+    command: Option<Subcmd>,
 }
 
 #[tokio::main]
 #[report]
 async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
+
+    // Generate markdown documentation if requested
+    if cli.markdown_help {
+        clap_markdown::print_help_markdown::<Cli>();
+        return Ok(());
+    }
+
+    // Ensure a command was provided
+    let command = cli.command.ok_or_else(|| ProgramError::Unexpected {
+        err: "No subcommand provided. Use --help to see available commands.".to_string(),
+    })?;
 
     // Printing for user-facing messages
     let term = Term::stdout();
@@ -116,7 +131,7 @@ async fn main() -> Result<(), ProgramError> {
         recipe_resolver,
     );
 
-    commands::dispatch(&ctx, cli.command).await?;
+    commands::dispatch(&ctx, command).await?;
 
     Ok(())
 }

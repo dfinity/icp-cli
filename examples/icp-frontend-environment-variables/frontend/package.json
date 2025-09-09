@@ -1,0 +1,6 @@
+{
+  "name": "icp-frontend-environment-variables",
+  "scripts": {
+    "build": "pnpm -r build"
+  }
+}

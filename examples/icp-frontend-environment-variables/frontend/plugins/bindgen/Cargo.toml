@@ -1,0 +1,21 @@
+[package]
+name = "icp-js-bindgen"
+description = "Candid bindgen in JavaScript."
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+path = "./src/lib.rs"
+crate-type = ["cdylib"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-mutable-globals"]
+
+[dependencies]
+candid = { git = "https://github.com/dfinity/candid", branch = "next" }
+candid_parser = { git = "https://github.com/dfinity/candid", branch = "next" }
+
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+wasm-bindgen-console-logger = "0.1"
+log = "0.4"

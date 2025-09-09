@@ -1,0 +1,32 @@
+{
+  "name": "@icp-sdk/bindgen",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/icp-js-bindgen.d.ts",
+        "default": "./dist/icp-js-bindgen.js"
+      },
+      "require": {
+        "types": "./dist/icp-js-bindgen.d.cts",
+        "default": "./dist/icp-js-bindgen.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "icp-js-bindgen": "./dist/icp-js-bindgen.js"
+  },
+  "scripts": {
+    "build": "wasm-pack build --target nodejs --out-name icp-js-bindgen --out-dir ./dist --dev --no-pack",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@tanstack/config": "^0.20.1",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4",
+    "wasm-pack": "^0.13.1"
+  }
+}

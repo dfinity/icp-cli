@@ -1,0 +1,7 @@
+packages:
+  - app
+  - plugins/bindgen
+  - plugins/bindgen-plugin
+
+onlyBuiltDependencies:
+  - esbuild

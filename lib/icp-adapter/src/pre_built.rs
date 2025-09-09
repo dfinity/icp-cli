@@ -63,12 +63,12 @@ impl fmt::Display for PrebuiltAdapter {
 impl Adapter for PrebuiltAdapter {
     async fn compile(
         &self,
-        _: &Utf8Path,
+        canister_path: &Utf8Path,
         wasm_output_path: &Utf8Path,
     ) -> Result<(), AdapterCompileError> {
         let wasm = match &self.source {
             // Local path
-            SourceField::Local(s) => read(&s.path)
+            SourceField::Local(s) => read(canister_path.join(&s.path))
                 .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?,
 
             // Remote url

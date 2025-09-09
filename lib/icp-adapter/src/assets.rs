@@ -51,7 +51,7 @@ impl fmt::Display for AssetsAdapter {
 impl sync::Adapter for AssetsAdapter {
     async fn sync(
         &self,
-        _: &Utf8Path,
+        canister_path: &Utf8Path,
         canister_id: &Principal,
         agent: &Agent,
     ) -> Result<(), AdapterSyncError> {
@@ -61,6 +61,9 @@ impl sync::Adapter for AssetsAdapter {
         #[allow(clippy::disallowed_types)]
         let dirs = dirs
             .iter()
+            // Paths are specified relative to the canister path
+            .map(|p| canister_path.join(p))
+            // Convert to PathBuf
             .map(std::path::PathBuf::from)
             .collect::<Vec<std::path::PathBuf>>();
 

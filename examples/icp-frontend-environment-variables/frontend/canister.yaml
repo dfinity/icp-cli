@@ -13,4 +13,4 @@ sync:
 
     - type: assets
       dirs:
-        - frontend/app/dist
+        - app/dist

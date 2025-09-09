@@ -128,30 +128,6 @@ icp deploy --environment staging
 icp deploy --environment prod
 ```
 
-### Environment-Specific Configuration
-
-Use Handlebars templating for dynamic configuration:
-
-```yaml
-# canister.yaml
-canister:
-  name: api-service
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --target wasm32-unknown-unknown --release {{#if (eq environment "prod")}}--features production{{/if}}
-          - mv target/wasm32-unknown-unknown/release/api.wasm "$ICP_WASM_OUTPUT_PATH"
-  
-  settings:
-    memory_allocation: {{#switch environment}}
-      {{#case "dev"}}1073741824{{/case}}
-      {{#case "staging"}}4294967296{{/case}}
-      {{#case "prod"}}8589934592{{/case}}
-    {{/switch}}
-```
-
-
 ## Recipe Development Workflows
 
 ### Custom Recipe Creation
@@ -190,57 +166,3 @@ canister:
         compute_allocation: 10
         memory_allocation: 4294967296
 ```
-
-## Advanced Build Patterns
-
-### Conditional Compilation
-
-```yaml
-canister:
-  name: my-service
-  build:
-    steps:
-      - type: script
-        commands:
-          # Conditional features based on environment
-          - |
-            FEATURES=""
-            {{#if (eq environment "prod")}}
-            FEATURES="--features production,optimized"
-            {{else if (eq environment "staging")}}
-            FEATURES="--features staging,metrics"
-            {{else}}
-            FEATURES="--features development,debug"
-            {{/if}}
-            cargo build --target wasm32-unknown-unknown --release $FEATURES
-          - mv target/wasm32-unknown-unknown/release/my_service.wasm "$ICP_WASM_OUTPUT_PATH"
-```
-
-### Multi-Stage Builds
-
-```yaml
-canister:
-  name: optimized-frontend
-  build:
-    steps:
-      # Stage 1: Install dependencies
-      - type: script  
-        commands:
-          - npm ci --production=false
-      
-      # Stage 2: Build application
-      - type: script
-        commands:
-          - npm run build:{{environment}}
-          - npm run optimize
-      
-      # Stage 3: Bundle assets
-      - type: assets
-        source: dist
-        target: /
-        exclude_patterns:
-          - "*.map"
-          - "test/**"
-          - "docs/**"
-```
-

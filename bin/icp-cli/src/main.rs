@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 use camino::Utf8PathBuf;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use commands::{DispatchError, Subcmd};
 use console::Term;
 use context::Context;
@@ -55,10 +55,18 @@ async fn main() -> Result<(), ProgramError> {
         return Ok(());
     }
 
-    // Ensure a command was provided
-    let command = cli.command.ok_or_else(|| ProgramError::Unexpected {
-        err: "No subcommand provided. Use --help to see available commands.".to_string(),
-    })?;
+    // If no command was provided, print help and exit
+    let command = match cli.command {
+        Some(cmd) => cmd,
+        None => {
+            Cli::command()
+                .print_help()
+                .map_err(|err| ProgramError::Unexpected {
+                    err: format!("Failed to print help: {}", err),
+                })?;
+            return Ok(());
+        }
+    };
 
     // Printing for user-facing messages
     let term = Term::stdout();

@@ -6,10 +6,11 @@ use camino::Utf8Path;
 use ic_agent::{Agent, export::Principal};
 use ic_asset::error::SyncError;
 use ic_utils::{Canister, canister::CanisterBuilderError};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::Snafu;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum DirField {
     /// Directory used to synchronize an assets canister
@@ -29,7 +30,7 @@ impl DirField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct AssetsAdapter {
     /// Directory used to synchronize an assets canister
     #[serde(flatten)]

@@ -4,12 +4,53 @@ This guide provides a comprehensive reference for configuring ICP projects using
 
 ## Overview
 
-The `icp.yaml` file is the central configuration for your ICP project. It supports:
+The `icp.yaml` file describes the configuration of your ICP project. It supports:
 - Single and multi-canister projects
 - Custom build processes and recipes
 - Environment-specific deployments
 - Network configuration
 - Canister settings and metadata
+
+## Project Lifecycle
+
+When working with ICP projects, your canisters go through several distinct phases during development and deployment:
+
+### Building Canisters
+
+The build phase compiles your source code and generates WASM bytecode files that can run on the Internet Computer. During this phase:
+
+- Build steps defined in your configuration are executed in sequence.
+- The result of this step is compiled WASM and possibly some other assets (for eg, static files in the case of an asset canister serving a frontend).
+- icp-cli does not concern itself with the compilation process, instead it delegates to the appropriate toolchain.
+- Ideally, the WASM and assets produced are reproducible and don't contain any hard coded deployment specific information.
+- The toolchains are responsible for detecting whether building is necessary.
+
+### Creating Canisters
+
+This is a one-time setup phase that occurs automatically when deploying to a network for the first time:
+
+- Empty canister instances are created on the target network.
+- Each canister receives a unique canister ID.
+- Initial cycles are allocated to cover the canister's operations.
+- Canister settings (memory limits, compute allocation, etc.) are applied.
+
+### Deploying Canisters
+
+Deployment updates the WASM code running in your existing canisters:
+
+- The compiled WASM bytecode is installed into the canister.
+- Previous WASM code is replaced with the new version.
+- Canister state persists across deployments (unless explicitly reset).
+- Environment variables and settings are updated if changed.
+
+### Syncing Canisters
+
+The sync phase handles post-deployment operations to synchronize canister state. This is dependent
+on the type of canister itself. A typical case is uploading static assets to an asset canister.
+
+
+These phases work together to provide a complete deployment pipeline from source code to a running canister on the Internet Computer.
+
 
 ## Basic Structure
 
@@ -156,9 +197,17 @@ sync:
 
 ### Recipe System
 
-Recipes provide reusable, templated build configurations:
+Recipes provide reusable, templated build configurations. At the moment there are
+different types of recipes you can use:
+- built-in recipes - Those are hard coded into `icp-cli` itself.
+- local recipes - Those are handlebar templates defined locally in your project.
+- remote recipes - Those are handlebar templates defined in a remote location that
+can be reused and shared across teams or with the community.
 
 #### Built-in Recipes
+
+Those recipes are baked into `icp-cli`, they might be impacted by upgrades to `icp-cli`
+and require a new releast to be modified.
 
 ```yaml
 canister:
@@ -170,9 +219,9 @@ canister:
 ```
 
 **Available Built-in Recipes:**
-- `rust`: Cargo-based Rust canister builds
+- `assets`: Asset canister
 - `motoko`: Motoko compiler integration
-- (More recipes available - check documentation)
+- `rust`: Cargo-based Rust canister builds
 
 #### Custom Local Recipes
 
@@ -181,7 +230,7 @@ canister:
   name: my-canister
   recipe:
     type: file://./recipes/custom-build.hb.yaml
-    configuration:
+    configuration:  # Configuration passed to the template
       source_dir: src
       optimization_level: 3
 ```
@@ -193,9 +242,9 @@ canister:
   name: my-canister
   recipe:
     type: https://recipes.example.com/rust-optimized.hb.yaml
-    configuration:
+    sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+    configuration:  # Configuration passed to the template
       package: my-canister
-      features: ["production"]
 ```
 
 ### Networks
@@ -252,7 +301,7 @@ environments:
       backend:
         compute_allocation: 5
         environment_variables:
-          NODE_ENV: "development"
+          MY_ENV_VAR: "some value"
   
   - name: production
     network: ic-mainnet
@@ -267,8 +316,7 @@ environments:
         compute_allocation: 10
         reserved_cycles_limit: 10000000000000
         environment_variables:
-          NODE_ENV: "production"
-          API_RATE_LIMIT: "1000"
+          MY_ENV_VAR: "some value"
 ```
 
 ## Canister Settings Reference
@@ -281,26 +329,15 @@ settings:
   compute_allocation: 5
   
   # Memory allocation in bytes: Fixed memory reservation
+  # Dynamic allocation is used if memory_allocation is not set
   memory_allocation: 4294967296  # 4GB
   
-  # Dynamic allocation is used if memory_allocation is not set
-```
-
-### Lifecycle Management
-
-```yaml
-settings:
   # Freezing threshold in seconds: Time before canister freezes due to low cycles
   freezing_threshold: 2592000  # 30 days
   
   # Reserved cycles limit: Maximum cycles the canister can consume
   reserved_cycles_limit: 1000000000000  # 1T cycles
-```
 
-### WASM Configuration
-
-```yaml
-settings:
   # WASM memory limit in bytes: Maximum heap size for WASM module
   wasm_memory_limit: 1073741824  # 1GB
   
@@ -365,129 +402,7 @@ environments:
         reserved_cycles_limit: 50000000000000
 ```
 
-### Conditional Builds with Recipes
-
-```yaml
-canister:
-  name: my-canister
-  recipe:
-    type: rust
-    configuration:
-      package: my-canister
-      features:
-        - "{{ environment == 'production' ? 'optimized' : 'debug' }}"
-      profile: "{{ environment == 'production' ? 'release' : 'dev' }}"
-```
-
-### Asset Canister with Build Pipeline
-
-```yaml
-canister:
-  name: frontend
-  build:
-    steps:
-      # Build the web application
-      - type: script
-        commands:
-          - npm ci
-          - npm run build
-      
-      # Bundle assets into canister
-      - type: assets
-        source: dist
-        target: /
-        exclude_patterns:
-          - "*.map"
-          - "test/**"
-  
-  sync:
-    steps:
-      # Upload assets after deployment
-      - type: assets
-        source: dist
-        target: /
-```
-
-## Configuration Validation
-
-ICP CLI validates your configuration and provides helpful error messages:
-
-```bash
-# Validate configuration without building
-icp build --dry-run
-
-# Check specific canister configuration  
-icp build my-canister --dry-run
-```
-
-## Best Practices
-
-### Organization
-- Use external canister files for complex multi-canister projects
-- Group related canisters in subdirectories
-- Use consistent naming conventions
-
-### Security
-- Set appropriate freezing thresholds for production canisters
-- Use reserved cycles limits to prevent runaway consumption
-- Validate pre-built WASM files with SHA256 hashes
-
-### Performance
-- Configure memory allocation based on actual usage patterns
-- Use compute allocation for guaranteed performance in production
-- Monitor WASM memory usage and set appropriate limits
-
-### Development Workflow
-- Use environments for different deployment stages
-- Leverage recipes for consistent build processes
-- Version control your configuration alongside your code
-
-## Troubleshooting Configuration
-
-### Common Issues
-
-**Invalid YAML syntax**
-```bash
-Error: Configuration parsing failed
-Help: Check YAML syntax, proper indentation, and quote strings containing special characters
-```
-
-**Missing build steps**
-```bash
-Error: Canister 'my-canister' has no build steps defined
-Help: Add a build section with at least one build step
-```
-
-**Invalid glob patterns**
-```bash
-Error: No canisters found matching pattern 'canisters/*'
-Help: Verify the directory exists and contains canister configuration files
-```
-
-**Recipe resolution failures**
-```bash
-Error: Failed to resolve recipe 'https://example.com/recipe.yaml'
-Help: Check network connectivity and recipe URL validity
-```
-
-### Debugging Tips
-
-1. Use `--debug` flag for verbose logging
-2. Validate configuration with `--dry-run` before building
-3. Check file paths and glob patterns carefully
-4. Ensure all referenced files and directories exist
-5. Verify network connectivity for remote recipes
-
 ## Migration from dfx.json
 
-If you're migrating from dfx, here's a rough mapping:
+TODO
 
-| dfx.json | icp.yaml |
-|----------|----------|
-| `canisters.*.type` | `build.steps[].type` |
-| `canisters.*.build` | `build.steps[].commands` |
-| `networks.*` | `networks[].config` |
-| `defaults.build.packtool` | Recipe configuration |
-| `defaults.replica.*` | Network configuration |
-
-For detailed migration assistance, see our [migration guide](migration-from-dfx.md).

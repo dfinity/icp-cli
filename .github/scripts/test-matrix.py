@@ -5,10 +5,12 @@ TEST_DIR = "bin/icp-cli/tests"
 
 MACOS_TESTS = ["network_tests"]
 
+
 def test_names():
     all_files = os.listdir(TEST_DIR)
     rust_files = filter(lambda f: f.endswith(".rs"), all_files)
     return [f"{filename[:-3]}" for filename in rust_files]
+
 
 include = []
 for test in test_names():
@@ -22,7 +24,7 @@ for test in test_names():
     if test in MACOS_TESTS:
         include.append({
             "test": test,
-            "os": "macos-13"
+            "os": "macos-15"
         })
 
 

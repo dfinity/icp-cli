@@ -23,10 +23,10 @@ pub struct Cmd {
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub mode: String,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 }
 

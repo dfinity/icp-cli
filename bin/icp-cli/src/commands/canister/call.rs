@@ -23,10 +23,10 @@ pub struct Cmd {
     /// String representation of canister call arguments
     pub args: String,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     identity: IdentityOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     environment: EnvironmentOpt,
 }
 

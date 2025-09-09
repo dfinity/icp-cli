@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
 pub mod access;
@@ -16,7 +17,7 @@ pub const NETWORK_IC: &str = "ic";
 
 /// A "connected network" is a network that we connect to but don't manage.
 /// Typical examples are mainnet or testnets.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConnectedNetworkModel {
     /// The URL this network can be reached at.
@@ -26,7 +27,7 @@ pub struct ConnectedNetworkModel {
     pub root_key: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub enum BindPort {
     Fixed(u16),
     Random,
@@ -50,7 +51,7 @@ fn default_port() -> BindPort {
     BindPort::Fixed(8000)
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct GatewayModel {
     #[serde(default = "default_host")]
     pub host: String,
@@ -60,7 +61,7 @@ pub struct GatewayModel {
 }
 
 /// A "managed network" is a network that we start, configure, stop.
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default, JsonSchema)]
 pub struct ManagedNetworkModel {
     pub gateway: GatewayModel,
 }
@@ -74,7 +75,7 @@ impl Default for GatewayModel {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 #[serde(tag = "mode", rename_all = "kebab-case")]
 pub enum NetworkConfig {
     /// A managed network is one which can be controlled and manipulated.

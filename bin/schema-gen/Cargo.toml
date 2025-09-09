@@ -1,0 +1,16 @@
+[package]
+name = "schema-gen"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "schema-gen"
+path = "src/main.rs"
+
+[dependencies]
+icp-project = { path = "../../lib/icp-project" }
+icp-canister = { path = "../../lib/icp-canister" }
+icp-network = { path = "../../lib/icp-network" }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

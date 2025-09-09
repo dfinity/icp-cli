@@ -4,6 +4,7 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use camino::Utf8Path;
 use ic_agent::{Agent, export::Principal};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{
@@ -16,7 +17,7 @@ use tokio::{
 use crate::build::{self, AdapterCompileError};
 use crate::sync::{self, AdapterSyncError};
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CommandField {
     /// Command used to build a canister
@@ -36,7 +37,7 @@ impl CommandField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct ScriptAdapter {
     /// Command used to build a canister
     #[serde(flatten)]

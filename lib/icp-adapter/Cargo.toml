@@ -13,6 +13,7 @@ ic-asset = { workspace = true }
 ic-utils = { workspace = true }
 icp-fs = { "path" = "../icp-fs" }
 reqwest = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 shellwords = { workspace = true }

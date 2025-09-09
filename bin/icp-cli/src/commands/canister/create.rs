@@ -18,38 +18,38 @@ pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
 #[derive(Clone, Debug, Parser)]
 pub struct CanisterIDs {
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
+    #[arg(long, default_value = DEFAULT_EFFECTIVE_ID)]
     pub effective_id: Principal,
 
     /// The specific canister ID to assign if creating with a fixed principal.
-    #[clap(long)]
+    #[arg(long)]
     pub specific_id: Option<Principal>,
 }
 
 #[derive(Clone, Debug, Default, Parser)]
 pub struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
-    #[clap(long)]
+    #[arg(long)]
     pub compute_allocation: Option<u64>,
 
     /// Optional memory allocation in bytes. If unset, memory is allocated dynamically.
-    #[clap(long)]
+    #[arg(long)]
     pub memory_allocation: Option<u64>,
 
     /// Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
-    #[clap(long)]
+    #[arg(long)]
     pub freezing_threshold: Option<u64>,
 
     /// Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles.
-    #[clap(long)]
+    #[arg(long)]
     pub reserved_cycles_limit: Option<u64>,
 
     /// Optional Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    #[clap(long)]
+    #[arg(long)]
     pub wasm_memory_limit: Option<u64>,
 
     /// Optional Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    #[clap(long)]
+    #[arg(long)]
     pub wasm_memory_threshold: Option<u64>,
 }
 
@@ -58,26 +58,26 @@ pub struct Cmd {
     /// The names of the canister within the current project
     pub names: Vec<String>,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
-    #[clap(flatten)]
+    #[command(flatten)]
     pub ids: CanisterIDs,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
-    #[clap(long)]
+    #[arg(long)]
     pub controller: Vec<Principal>,
 
     // Resource-related settings and thresholds for the new canister.
-    #[clap(flatten)]
+    #[command(flatten)]
     pub settings: CanisterSettings,
 
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
-    #[clap(long, short = 'q')]
+    #[arg(long, short = 'q')]
     pub quiet: bool,
 }
 

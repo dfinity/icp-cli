@@ -6,7 +6,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Parser)]
 pub struct PrincipalCmd {
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
 }
 

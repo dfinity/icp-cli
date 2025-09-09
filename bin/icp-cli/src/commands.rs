@@ -31,8 +31,8 @@ pub enum Subcmd {
     Sync(sync::Cmd),
 }
 
-pub async fn dispatch(ctx: &Context, cli: Cmd) -> Result<(), DispatchError> {
-    match cli.subcommand {
+pub async fn dispatch(ctx: &Context, subcmd: Subcmd) -> Result<(), DispatchError> {
+    match subcmd {
         Subcmd::Build(opts) => build::exec(ctx, opts).await?,
         Subcmd::Canister(opts) => canister::dispatch(ctx, opts).await?,
         Subcmd::Deploy(opts) => deploy::exec(ctx, opts).await?,

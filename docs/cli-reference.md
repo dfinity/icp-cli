@@ -54,7 +54,9 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--artifact-store <ARTIFACT_STORE>`
 
   Default value: `.icp/artifacts`
-* `--debug`
+* `--debug` — Enable debug logging
+
+  Default value: `false`
 
 
 

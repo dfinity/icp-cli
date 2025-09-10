@@ -33,7 +33,8 @@ struct Cli {
     #[arg(long, default_value = ".icp/artifacts")]
     artifact_store: Utf8PathBuf,
 
-    #[arg(long)]
+    /// Enable debug logging
+    #[arg(long, default_value = "false", global=true)]
     debug: bool,
 
     /// Generate markdown documentation for all commands and exit

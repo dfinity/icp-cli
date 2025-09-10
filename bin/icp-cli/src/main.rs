@@ -13,7 +13,6 @@ use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
-    fmt,
     layer::SubscriberExt,
 };
 
@@ -33,7 +32,8 @@ struct Cli {
     #[arg(long, default_value = ".icp/artifacts")]
     artifact_store: Utf8PathBuf,
 
-    #[arg(long)]
+    /// Enable debug logging
+    #[arg(long, default_value = "false", global = true)]
     debug: bool,
 
     /// Generate markdown documentation for all commands and exit
@@ -73,8 +73,8 @@ async fn main() -> Result<(), ProgramError> {
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
-        fmt::layer(), // debug
-        EventLayer,   // event
+        tracing_subscriber::fmt::layer(), // debug
+        EventLayer,                       // event
     );
 
     let reg = Registry::default()

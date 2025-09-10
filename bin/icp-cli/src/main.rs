@@ -74,7 +74,7 @@ async fn main() -> Result<(), ProgramError> {
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
         tracing_subscriber::fmt::layer(), // debug
-        EventLayer,   // event
+        EventLayer,                       // event
     );
 
     let reg = Registry::default()

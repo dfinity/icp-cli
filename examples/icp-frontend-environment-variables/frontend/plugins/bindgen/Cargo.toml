@@ -12,10 +12,18 @@ crate-type = ["cdylib"]
 wasm-opt = ["-Oz", "--enable-mutable-globals"]
 
 [dependencies]
-candid = { git = "https://github.com/dfinity/candid", branch = "next" }
-candid_parser = { git = "https://github.com/dfinity/candid", branch = "next" }
+# candid = { path = "../../../../../../candid/rust/candid" }
+candid = { git = "https://github.com/dfinity/candid", branch = "luca/bindgen" }
+# candid_parser = { path = "../../../../../../candid/rust/candid_parser" }
+candid_parser = { git = "https://github.com/dfinity/candid", branch = "luca/bindgen" }
 
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
 wasm-bindgen-console-logger = "0.1"
 log = "0.4"
+swc_core = { version = "39.0", features = [
+    "__common",
+    "__ecma",
+    "ecma_ast",
+    "ecma_codegen",
+] }

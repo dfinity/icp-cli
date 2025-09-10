@@ -1,6 +1,8 @@
 mod fs;
 mod parser;
 
+use std::path::PathBuf;
+
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -13,10 +15,47 @@ fn start() {
     log::set_max_level(log::LevelFilter::Trace);
 }
 
+#[wasm_bindgen(getter_with_clone)]
+pub struct GenerateResult {
+    pub declarations_js: String,
+    pub declarations_ts: String,
+    pub interface_ts: String,
+    pub service_ts: String,
+}
+
 #[wasm_bindgen]
-pub fn generate(declarations: String) -> Result<String, JsError> {
-    let (env, actor, _) =
-        parser::check_file(std::path::Path::new(&declarations)).map_err(JsError::from)?;
-    let res = candid_parser::bindings::javascript::compile(&env, &actor);
-    Ok(res)
+pub fn generate(declarations: String) -> Result<GenerateResult, JsError> {
+    let input_path = PathBuf::from(declarations);
+    let (env, actor, prog) = parser::check_file(input_path.as_path()).map_err(JsError::from)?;
+
+    let declarations_js = candid_parser::bindings::javascript::compile(&env, &actor);
+    let declarations_ts = candid_parser::bindings::typescript::compile(&env, &actor, &prog);
+
+    let service_name = input_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_else(|| "service"); // fallback
+
+    let interface_ts = candid_parser::bindings::typescript_native::compile::compile(
+        &env,
+        &actor,
+        service_name,
+        "interface",
+        &prog,
+    );
+
+    let service_ts = candid_parser::bindings::typescript_native::compile::compile(
+        &env,
+        &actor,
+        service_name,
+        "wrapper",
+        &prog,
+    );
+
+    Ok(GenerateResult {
+        declarations_js,
+        declarations_ts,
+        interface_ts,
+        service_ts,
+    })
 }

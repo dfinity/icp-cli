@@ -17,6 +17,7 @@ resolver = "3"
 
 [workspace.dependencies]
 async-trait = "0.1.88"
+bigdecimal = "0.4.8"
 bip32 = "0.5.0"
 camino = { version = "1.1.9", features = ["serde1"] }
 camino-tempfile = "1"
@@ -46,6 +47,7 @@ icp-fs = { path = "lib/icp-fs" }
 icp-identity = { path = "lib/icp-identity", features = ["clap"] }
 icp-network = { path = "lib/icp-network" }
 icp-project = { path = "lib/icp-project" }
+icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
 itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }

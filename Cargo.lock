@@ -301,6 +301,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
+name = "base32"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -323,6 +329,19 @@ name = "beef"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
+
+[[package]]
+name = "bigdecimal"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a22f228ab7a1b23027ccc6c350b72868017af7ea8356fbdf19f8d991c690013"
+dependencies = [
+ "autocfg",
+ "libm",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+]
 
 [[package]]
 name = "binread"
@@ -2132,6 +2151,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-stable-structures"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d30d4cf17aff1024e13133897048bcba580e063c9000571ab766ca37e2996f4"
+dependencies = [
+ "ic_principal",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2280,6 +2308,7 @@ name = "icp-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "bigdecimal",
  "bip32 0.5.3",
  "camino",
  "camino-tempfile",
@@ -2302,6 +2331,7 @@ dependencies = [
  "icp-identity",
  "icp-network",
  "icp-project",
+ "icrc-ledger-types",
  "indicatif",
  "itertools 0.14.0",
  "k256 0.13.4",
@@ -2412,6 +2442,42 @@ dependencies = [
  "serde_yaml",
  "snafu",
  "tokio",
+]
+
+[[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90569d2894d9536c5416943556ac6339df249f06611b3c41029196b39e0dd119"
+dependencies = [
+ "candid",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+]
+
+[[package]]
+name = "icrc-ledger-types"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87c31beeee0e5ab964861a3d5ea2b5ed7b688b2b22400367a832b1fcf0db1fa4"
+dependencies = [
+ "base32",
+ "candid",
+ "crc32fast",
+ "hex",
+ "ic-stable-structures",
+ "icrc-cbor",
+ "itertools 0.12.1",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "time",
 ]
 
 [[package]]
@@ -2611,6 +2677,15 @@ dependencies = [
 
 [[package]]
 name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2767,6 +2842,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
+
+[[package]]
 name = "libredox"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2894,6 +2975,26 @@ checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
 dependencies = [
  "mime",
  "unicase",
+]
+
+[[package]]
+name = "minicbor"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7005aaf257a59ff4de471a9d5538ec868a21586534fff7f85dd97d4043a6139"
+dependencies = [
+ "minicbor-derive",
+]
+
+[[package]]
+name = "minicbor-derive"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1154809406efdb7982841adb6311b3d095b46f78342dd646736122fe6b19e267"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3079,6 +3180,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]

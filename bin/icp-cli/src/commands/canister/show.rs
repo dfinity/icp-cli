@@ -12,7 +12,7 @@ pub struct Cmd {
     /// The name of the canister within the current project
     pub name: String,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     environment: EnvironmentOpt,
 }
 

@@ -11,7 +11,9 @@ icp-adapter = { "path" = "../icp-adapter" }
 icp-fs = { "path" = "../icp-fs" }
 mockall = { workspace = true }
 reqwest = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 snafu = { workspace = true }
 url = { workspace = true }

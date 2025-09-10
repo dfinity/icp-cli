@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "bin/icp-cli",
+    "bin/schema-gen",
     "lib/icp-adapter",
     "lib/icp-canister",
     "lib/icp-dirs",
@@ -81,6 +82,10 @@ zeroize = "1.8.1"
 version = "0.12.15"
 default-features = false
 features = ["rustls-tls"]
+
+[workspace.dependencies.schemars]
+version = "0.8.19"
+features = ["derive"]
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"

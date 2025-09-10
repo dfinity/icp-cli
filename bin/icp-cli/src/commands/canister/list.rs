@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 }
 

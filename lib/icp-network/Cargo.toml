@@ -12,6 +12,7 @@ ic-agent = { workspace = true }
 icp-fs = { workspace = true }
 pocket-ic = { workspace = true }
 reqwest = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

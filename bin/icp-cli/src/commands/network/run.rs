@@ -9,7 +9,7 @@ use crate::context::{Context, GetProjectError};
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to run
-    #[clap(default_value = NETWORK_LOCAL)]
+    #[arg(default_value = NETWORK_LOCAL)]
     name: String,
 }
 

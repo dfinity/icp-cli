@@ -1,0 +1,619 @@
+{
+  "$id": "https://dfinity.org/schemas/icp-yaml/v1.0.0",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "BindPort": {
+      "oneOf": [
+        {
+          "enum": [
+            "Random"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Fixed": {
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Fixed"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BuildStep": {
+      "description": "Identifies the type of adapter used to build the canister, along with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file. For example:\n\n```yaml type: rust package: my_canister ```",
+      "oneOf": [
+        {
+          "description": "Represents a canister built using a custom script or command. This variant allows for flexible build processes defined by the user.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Command used to build a canister",
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Set of commands used to build a canister",
+              "properties": {
+                "commands": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "commands"
+              ],
+              "type": "object"
+            }
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "script"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "anyOf": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/LocalSource"
+                }
+              ],
+              "description": "Local path on-disk to read a WASM file from"
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/RemoteSource"
+                }
+              ],
+              "description": "Remote url to fetch a WASM file from"
+            }
+          ],
+          "description": "Represents a pre-built canister. This variant allows for retrieving a canister WASM from various sources.",
+          "properties": {
+            "sha256": {
+              "description": "Optional sha256 checksum of the WASM",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "pre-built"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BuildSteps": {
+      "description": "Describes how the canister should be built into WebAssembly, including the adapters and build steps responsible for the build.",
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/BuildStep"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "type": "object"
+    },
+    "CanisterItem": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/CanisterManifest"
+        }
+      ]
+    },
+    "CanisterManifest": {
+      "anyOf": [
+        {
+          "properties": {
+            "recipe": {
+              "$ref": "#/definitions/Recipe"
+            }
+          },
+          "required": [
+            "recipe"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "build": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/BuildSteps"
+                }
+              ],
+              "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+            },
+            "sync": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SyncSteps"
+                }
+              ],
+              "description": "The configuration specifying how to sync the canister"
+            }
+          },
+          "required": [
+            "build"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Represents the manifest describing a single canister. This struct is typically loaded from a `canister.yaml` file and defines the canister's name and how it should be built into WebAssembly.",
+      "properties": {
+        "name": {
+          "description": "The unique name of the canister as defined in this manifest.",
+          "type": "string"
+        },
+        "settings": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CanisterSettings"
+            }
+          ],
+          "description": "The configuration specifying the various settings when creating the canister."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "CanisterSettings": {
+      "description": "Canister settings, such as compute and memory allocation.",
+      "properties": {
+        "compute_allocation": {
+          "description": "Compute allocation (0 to 100). Represents guaranteed compute capacity.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "environment_variables": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables for the canister as key-value pairs. These variables are accessible within the canister and can be used to configure behavior without hardcoding values in the WASM module.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "freezing_threshold": {
+          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_allocation": {
+          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reserved_cycles_limit": {
+          "description": "Reserved cycles limit. If set, the canister cannot consume more than this many cycles.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wasm_memory_limit": {
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wasm_memory_threshold": {
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "EnvironmentManifest": {
+      "properties": {
+        "canisters": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "network": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settings": {
+          "additionalProperties": {
+            "$ref": "#/definitions/CanisterSettings"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "GatewayModel": {
+      "properties": {
+        "host": {
+          "default": "127.0.0.1",
+          "type": "string"
+        },
+        "port": {
+          "$ref": "#/definitions/BindPort"
+        }
+      },
+      "type": "object"
+    },
+    "LocalSource": {
+      "properties": {
+        "path": {
+          "description": "Local path on-disk to read a WASM file from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "NetworkItem": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/NetworkManifest"
+        }
+      ]
+    },
+    "NetworkManifest": {
+      "oneOf": [
+        {
+          "description": "A managed network is one which can be controlled and manipulated.",
+          "properties": {
+            "gateway": {
+              "$ref": "#/definitions/GatewayModel"
+            },
+            "mode": {
+              "enum": [
+                "managed"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "gateway",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A connected network is one which can be interacted with but cannot be controlled or manipulated.",
+          "properties": {
+            "mode": {
+              "enum": [
+                "connected"
+              ],
+              "type": "string"
+            },
+            "root-key": {
+              "description": "The root key of this network",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "description": "The URL this network can be reached at.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Recipe": {
+      "properties": {
+        "configuration": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "type": {
+          "$ref": "#/definitions/RecipeType"
+        }
+      },
+      "required": [
+        "configuration",
+        "type"
+      ],
+      "type": "object"
+    },
+    "RecipeType": {
+      "oneOf": [
+        {
+          "enum": [
+            "assets",
+            "motoko",
+            "rust"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "unknown": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "unknown"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RemoteSource": {
+      "properties": {
+        "url": {
+          "description": "Url to fetch the remote WASM file from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "SyncStep": {
+      "description": "Identifies the type of adapter used to sync the canister, along with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file. For example:\n\n```yaml type: script command: echo \"synchronizing canister\" ```",
+      "oneOf": [
+        {
+          "description": "Represents a canister synced using a custom script or command. This variant allows for flexible sync processes defined by the user.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Command used to build a canister",
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Set of commands used to build a canister",
+              "properties": {
+                "commands": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "commands"
+              ],
+              "type": "object"
+            }
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "script"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Represents syncing of an assets canister",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Directory used to synchronize an assets canister",
+              "properties": {
+                "dir": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "dir"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Set of directories used to synchronize an assets canister",
+              "properties": {
+                "dirs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "dirs"
+              ],
+              "type": "object"
+            }
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "assets"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SyncSteps": {
+      "description": "Describes how the canister should be synced, including the adapters and steps responsible for the sync.",
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/SyncStep"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "Schema for icp.yaml project configuration files used by the ICP CLI",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "canister": {
+          "$ref": "#/definitions/CanisterManifest"
+        }
+      },
+      "required": [
+        "canister"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "canisters": {
+          "items": {
+            "$ref": "#/definitions/CanisterItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "canisters"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "environments": {
+      "items": {
+        "$ref": "#/definitions/EnvironmentManifest"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "networks": {
+      "description": "List of network definition files relevant to the project. Supports glob patterns to reference multiple network config files.",
+      "items": {
+        "$ref": "#/definitions/NetworkItem"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "ICP Project Configuration",
+  "type": "object"
+}

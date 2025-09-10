@@ -25,18 +25,18 @@ pub struct Cmd {
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub mode: String,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
+    #[arg(long, default_value = DEFAULT_EFFECTIVE_ID)]
     pub effective_id: Principal,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
-    #[clap(long)]
+    #[arg(long)]
     pub controller: Vec<Principal>,
 }
 

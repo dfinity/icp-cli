@@ -17,10 +17,10 @@ pub struct Cmd {
     /// The names of the canisters within the current project
     pub names: Vec<String>,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 }
 

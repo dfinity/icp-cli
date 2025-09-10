@@ -14,10 +14,23 @@
         "default": "./dist/cjs/index.cjs"
       }
     },
+    "./vite": {
+      "import": {
+        "types": "./dist/esm/vite.d.ts",
+        "default": "./dist/esm/vite.js"
+      },
+      "require": {
+        "types": "./dist/cjs/vite.d.cts",
+        "default": "./dist/cjs/vite.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build": "vite build"
+  },
+  "dependencies": {
+    "@icp-sdk/bindgen": "workspace:*"
   },
   "devDependencies": {
     "@tanstack/config": "^0.20.1",

@@ -1,4 +1,5 @@
 import { createVitePlugin } from "unplugin";
+import { unpluginFactory } from "./core/factory";
 
 /**
  * @example
@@ -9,4 +10,4 @@ import { createVitePlugin } from "unplugin";
  * })
  * ```
  */
-export const icpBindgen = createVitePlugin();
+export const icpBindgen = createVitePlugin(unpluginFactory);

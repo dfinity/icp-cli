@@ -14,7 +14,7 @@ members = [
 exclude = [
     "examples/icp-rust",
     "examples/icp-rust-recipe",
-    "examples/icp-frontend-environment-variables/frontend/plugins/bindgen",
+    "examples/icp-frontend-environment-variables/frontend/libs/bindgen",
 ]
 resolver = "3"
 

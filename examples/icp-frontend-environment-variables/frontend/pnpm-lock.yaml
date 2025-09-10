@@ -51,7 +51,7 @@ importers:
         specifier: ^7.1.5
         version: 7.1.5(@types/node@24.3.1)(yaml@2.8.1)
 
-  plugins/bindgen:
+  libs/bindgen:
     devDependencies:
       '@tanstack/config':
         specifier: ^0.20.1
@@ -66,7 +66,11 @@ importers:
         specifier: ^0.13.1
         version: 0.13.1
 
-  plugins/bindgen-plugin:
+  libs/bindgen-plugin:
+    dependencies:
+      '@icp-sdk/bindgen':
+        specifier: workspace:*
+        version: link:../bindgen
     devDependencies:
       '@tanstack/config':
         specifier: ^0.20.1

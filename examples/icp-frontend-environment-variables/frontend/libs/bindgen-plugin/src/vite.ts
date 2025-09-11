@@ -1,13 +1,15 @@
-import { createVitePlugin } from "unplugin";
-import { unpluginFactory } from "./core/factory";
+import { generate } from "./core/generate";
+import type { Options } from "./core/types";
+import { type Plugin } from "vite";
 
-/**
- * @example
- * ```ts
- * export default defineConfig({
- *   plugins: [icpBindgen()],
- *   // ...
- * })
- * ```
- */
-export const icpBindgen = createVitePlugin(unpluginFactory);
+export function icpBindgen(options: Options): Plugin {
+  return {
+    name: "vite-plugin-icp-bindgen",
+    async buildStart() {
+      await generate(options);
+    },
+    sharedDuringBuild: true,
+  };
+}
+
+export type { Options };

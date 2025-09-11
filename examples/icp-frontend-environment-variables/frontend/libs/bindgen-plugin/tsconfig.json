@@ -3,6 +3,5 @@
     "compilerOptions": {
         "verbatimModuleSyntax": false
     },
-    "include": ["src", "vite.config.ts"],
-    "exclude": ["node_modules/", "dist/"]
+    "include": ["src", "vite.config.ts"]
 }

@@ -5,26 +5,15 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      },
-      "require": {
-        "types": "./dist/cjs/index.d.cts",
-        "default": "./dist/cjs/index.cjs"
-      }
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs"
     },
     "./vite": {
-      "import": {
-        "types": "./dist/esm/vite.d.ts",
-        "default": "./dist/esm/vite.js"
-      },
-      "require": {
-        "types": "./dist/cjs/vite.d.cts",
-        "default": "./dist/cjs/vite.cjs"
-      }
-    },
-    "./package.json": "./package.json"
+      "types": "./dist/esm/vite.d.ts",
+      "import": "./dist/esm/vite.js",
+      "require": "./dist/cjs/vite.cjs"
+    }
   },
   "scripts": {
     "build": "vite build"
@@ -35,7 +24,6 @@
   "devDependencies": {
     "@tanstack/config": "^0.20.1",
     "typescript": "~5.8.3",
-    "unplugin": "^2.3.10",
     "vite": "^7.1.5"
   }
 }

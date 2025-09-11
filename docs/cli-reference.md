@@ -17,6 +17,9 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
+* [`icp-cli cycles`↴](#icp-cli-cycles)
+* [`icp-cli cycles balance`↴](#icp-cli-cycles-balance)
+* [`icp-cli cycles mint`↴](#icp-cli-cycles-mint)
 * [`icp-cli deploy`↴](#icp-cli-deploy)
 * [`icp-cli environment`↴](#icp-cli-environment)
 * [`icp-cli environment list`↴](#icp-cli-environment-list)
@@ -31,6 +34,9 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli network ping`↴](#icp-cli-network-ping)
 * [`icp-cli network run`↴](#icp-cli-network-run)
 * [`icp-cli sync`↴](#icp-cli-sync)
+* [`icp-cli token`↴](#icp-cli-token)
+* [`icp-cli token balance`↴](#icp-cli-token-balance)
+* [`icp-cli token transfer`↴](#icp-cli-token-transfer)
 
 ## `icp-cli`
 
@@ -40,11 +46,13 @@ This document contains the help content for the `icp-cli` command-line program.
 
 * `build` — 
 * `canister` — 
+* `cycles` — 
 * `deploy` — 
 * `environment` — 
 * `identity` — 
 * `network` — 
 * `sync` — 
+* `token` — 
 
 ###### **Options:**
 
@@ -263,6 +271,29 @@ This document contains the help content for the `icp-cli` command-line program.
 
 
 
+## `icp-cli cycles`
+
+**Usage:** `icp-cli cycles <COMMAND>`
+
+###### **Subcommands:**
+
+* `balance` — 
+* `mint` — 
+
+
+
+## `icp-cli cycles balance`
+
+**Usage:** `icp-cli cycles balance`
+
+
+
+## `icp-cli cycles mint`
+
+**Usage:** `icp-cli cycles mint`
+
+
+
 ## `icp-cli deploy`
 
 **Usage:** `icp-cli deploy [OPTIONS] [NAME]`
@@ -443,6 +474,41 @@ Run a given network
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli token`
+
+**Usage:** `icp-cli token <COMMAND>`
+
+###### **Subcommands:**
+
+* `balance` — 
+* `transfer` — 
+
+
+
+## `icp-cli token balance`
+
+**Usage:** `icp-cli token balance [OPTIONS] [TOKEN]`
+
+###### **Arguments:**
+
+* `<TOKEN>`
+
+  Default value: `icp`
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli token transfer`
+
+**Usage:** `icp-cli token transfer`
 
 
 

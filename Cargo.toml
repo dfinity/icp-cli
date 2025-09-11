@@ -55,6 +55,7 @@ mockall = "0.13.1"
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 pem = "3.0.5"
+phf = { version = "0.13.1", features = ["macros"] }
 pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
 pocket-ic = "9.0.0"
 rand = "0.9.1"

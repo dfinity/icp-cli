@@ -4,6 +4,7 @@ use clap::Parser;
 use ic_agent::AgentError;
 use icp_identity::key::LoadIdentityInContextError;
 use icrc_ledger_types::icrc1::account::Account;
+use phf::phf_map;
 use snafu::Snafu;
 
 use crate::{
@@ -11,8 +12,17 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
-// const ICP_LEDGER_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
-// const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
+/// A compile-time map of token names to their corresponding ledger canister IDs.
+///
+/// This map provides a quick lookup for well-known tokens on the Internet Computer:
+/// - "icp": The Internet Computer Protocol token ledger canister
+/// - "cycles": The cycles ledger canister for managing computation cycles
+///
+/// The canister IDs are stored as string literals in textual format.
+static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
+    "icp" => "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    "cycles" => "um5iw-rqaaa-aaaaq-qaaba-cai",
+};
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -61,7 +71,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let agent = ctx.agent()?;
 
     // Obtain ledger address
-    let cid = Principal::anonymous();
+    let cid = match TOKEN_LEDGER_CIDS.get(&cmd.token) {
+        // Given token matched known token names
+        Some(cid) => cid.to_string(),
+
+        // Given token is not known, indicating it's either already a canister id
+        // or is simply a name of a token we do not know of
+        None => cmd.token,
+    };
+
+    // Parse the canister id
+    let cid = Principal::from_text(cid).map_err(|err| CommandError::GetPrincipal {
+        err: err.to_string(),
+    })?;
 
     // Perform the required ledger calls
     let (balance, decimals, symbol) = tokio::join!(

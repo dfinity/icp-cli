@@ -37,6 +37,7 @@ indicatif.workspace = true
 itertools.workspace = true
 k256.workspace = true
 pem.workspace = true
+phf = { workspace = true }
 pkcs8.workspace = true
 reqwest = { workspace = true }
 sec1.workspace = true

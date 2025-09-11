@@ -2,6 +2,7 @@ packages:
   - app
   - libs/bindgen
   - libs/bindgen-plugin
+  - libs/canister-env
 
 onlyBuiltDependencies:
   - esbuild

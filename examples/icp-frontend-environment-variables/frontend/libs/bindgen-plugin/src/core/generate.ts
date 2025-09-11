@@ -3,8 +3,9 @@ import type { Options } from "..";
 import { emptyDir, ensureDir } from "./fs";
 import { resolve, basename } from "node:path";
 import { writeFile } from "node:fs/promises";
-import { prepareBinding } from "./bindings";
+import { envBinding, indexBinding, prepareBinding } from "./bindings";
 import { logger } from "./logger";
+import { getEnvVarNames } from "./env";
 
 const DID_FILE_EXTENSION = ".did";
 
@@ -17,13 +18,17 @@ export async function generate(options: Options) {
   await ensureDir(bindingsOutDir);
   await ensureDir(resolve(bindingsOutDir, "declarations"));
 
-  const result = bindgen.generate(didFilePath);
+  const result = bindgen.generate(didFilePath, outputFileName);
 
   await writeBindings({
     bindings: result,
     bindingsOutDir,
     outputFileName,
   });
+
+  await writeIndex(bindingsOutDir, outputFileName);
+
+  await writeEnv(bindingsOutDir, options.additionalEnvVarNames);
 
   logger.info("ICP Bindings generated successfully at", bindingsOutDir);
 }
@@ -61,4 +66,25 @@ export async function writeBindings({
   await writeFile(declarationsJsFile, declarationsJs);
   await writeFile(interfaceTsFile, interfaceTs);
   await writeFile(serviceTsFile, serviceTs);
+}
+
+export async function writeIndex(
+  bindingsOutDir: string,
+  outputFileName: string
+) {
+  const indexFile = resolve(bindingsOutDir, "index.ts");
+
+  const index = indexBinding(outputFileName);
+  await writeFile(indexFile, index);
+}
+
+export async function writeEnv(
+  bindingsOutDir: string,
+  additionalEnvVarNames: string[] = []
+) {
+  const envFile = resolve(bindingsOutDir, "canister-env.d.ts");
+  const envVarNames = getEnvVarNames();
+
+  const env = envBinding([...envVarNames, ...additionalEnvVarNames]);
+  await writeFile(envFile, env);
 }

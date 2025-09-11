@@ -10,6 +10,9 @@ importers:
 
   app:
     dependencies:
+      '@icp-sdk/canister-env':
+        specifier: workspace:*
+        version: link:../libs/canister-env
       '@icp-sdk/core':
         specifier: ^4.0.2
         version: 4.0.2(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.2.4)
@@ -77,6 +80,18 @@ importers:
       '@icp-sdk/bindgen':
         specifier: workspace:*
         version: link:../bindgen
+    devDependencies:
+      '@tanstack/config':
+        specifier: ^0.20.1
+        version: 0.20.1(@types/node@24.3.1)(@typescript-eslint/utils@8.43.0(eslint@9.35.0)(typescript@5.8.3))(eslint@9.35.0)(rollup@4.50.1)(typescript@5.8.3)(vite@7.1.5(@types/node@24.3.1)(yaml@2.8.1))
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
+      vite:
+        specifier: ^7.1.5
+        version: 7.1.5(@types/node@24.3.1)(yaml@2.8.1)
+
+  libs/canister-env:
     devDependencies:
       '@tanstack/config':
         specifier: ^0.20.1

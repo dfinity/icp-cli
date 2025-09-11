@@ -218,7 +218,7 @@ dependencies = [
 [[package]]
 name = "candid"
 version = "0.10.16"
-source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#c863400535c212ba33fd4eb4f94326c02a5eeceb"
+source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#83a870b02cf2d1994e9cf67ea1757867769e7c3a"
 dependencies = [
  "anyhow",
  "binread",
@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "candid_derive"
 version = "0.10.16"
-source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#c863400535c212ba33fd4eb4f94326c02a5eeceb"
+source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#83a870b02cf2d1994e9cf67ea1757867769e7c3a"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -253,7 +253,7 @@ dependencies = [
 [[package]]
 name = "candid_parser"
 version = "0.2.1"
-source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#c863400535c212ba33fd4eb4f94326c02a5eeceb"
+source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#83a870b02cf2d1994e9cf67ea1757867769e7c3a"
 dependencies = [
  "anyhow",
  "candid",
@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "ic_principal"
 version = "0.1.1"
-source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#c863400535c212ba33fd4eb4f94326c02a5eeceb"
+source = "git+https://github.com/dfinity/candid?branch=luca%2Fbindgen#83a870b02cf2d1994e9cf67ea1757867769e7c3a"
 dependencies = [
  "arbitrary",
  "crc32fast",

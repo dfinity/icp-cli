@@ -51,23 +51,13 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface CreateActorOptions {
-    agent?: Agent;
-    agentOptions?: HttpAgentOptions;
-    actorOptions?: ActorConfig;
-}
-export function createActor(options?: CreateActorOptions, processError?: (error: unknown) => never): hello_worldInterface {
-    const actor = _createActor(canisterId, options);
-    return new Hello_world(actor, processError);
-}
+export type ProcessErrorFn = (error: unknown) => never;
 export interface hello_worldInterface {
     greet(name: string): Promise<string>;
 }
-class Hello_world implements hello_worldInterface {
+export class Hello_world implements hello_worldInterface {
     private actor: ActorSubclass<_SERVICE>;
-    constructor(actor?: ActorSubclass<_SERVICE>, private processError?: (error: unknown) => never){
-        this.actor = actor ?? _hello_world;
-    }
+    constructor(private actor: ActorSubclass<_SERVICE>, private processError?: ProcessErrorFn){}
     async greet(arg0: string): Promise<string> {
         if (this.processError) {
             try {
@@ -83,4 +73,3 @@ class Hello_world implements hello_worldInterface {
         }
     }
 }
-export const hello_world: hello_worldInterface = new Hello_world();

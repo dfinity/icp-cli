@@ -24,22 +24,17 @@ pub struct GenerateResult {
 }
 
 #[wasm_bindgen]
-pub fn generate(declarations: String) -> Result<GenerateResult, JsError> {
+pub fn generate(declarations: String, service_name: String) -> Result<GenerateResult, JsError> {
     let input_path = PathBuf::from(declarations);
     let (env, actor, prog) = parser::check_file(input_path.as_path()).map_err(JsError::from)?;
 
     let declarations_js = candid_parser::bindings::javascript::compile(&env, &actor);
     let declarations_ts = candid_parser::bindings::typescript::compile(&env, &actor, &prog);
 
-    let service_name = input_path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or_else(|| "service"); // fallback
-
     let interface_ts = candid_parser::bindings::typescript_native::compile::compile(
         &env,
         &actor,
-        service_name,
+        &service_name,
         "interface",
         &prog,
     );
@@ -47,7 +42,7 @@ pub fn generate(declarations: String) -> Result<GenerateResult, JsError> {
     let service_ts = candid_parser::bindings::typescript_native::compile::compile(
         &env,
         &actor,
-        service_name,
+        &service_name,
         "wrapper",
         &prog,
     );

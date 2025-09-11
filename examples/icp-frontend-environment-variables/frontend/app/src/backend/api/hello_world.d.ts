@@ -17,12 +17,6 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
-export interface CreateActorOptions {
-    agent?: Agent;
-    agentOptions?: HttpAgentOptions;
-    actorOptions?: ActorConfig;
-}
-export declare const createActor: (options?: CreateActorOptions, processError?: (error: unknown) => never) => hello_worldInterface;
 export interface hello_worldInterface {
     greet(name: string): Promise<string>;
 }

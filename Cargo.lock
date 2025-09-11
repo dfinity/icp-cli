@@ -2161,9 +2161,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.39.3"
+version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
+checksum = "a2e7706e55836e8104c98149ec0796d20d5213fef972ac01b544657d410f1883"
 dependencies = [
  "candid",
  "hex",
@@ -3624,9 +3624,8 @@ checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
 name = "pocket-ic"
-version = "9.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc8ef97f44d4a20b43695690f478f6bfc4058f3ead7d51aff79be29bcfd810c5"
+version = "10.0.0"
+source = "git+https://github.com/dfinity/ic.git?branch=rc--2025-09-11_03-15#c25143850963143c9ee6bec77fe8ccf8306a4949"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -3635,7 +3634,7 @@ dependencies = [
  "hex",
  "ic-certification",
  "ic-management-canister-types 0.3.1",
- "ic-transport-types 0.39.3",
+ "ic-transport-types 0.40.1",
  "reqwest",
  "schemars",
  "serde",

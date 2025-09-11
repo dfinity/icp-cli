@@ -15,7 +15,7 @@ importers:
         version: link:../libs/canister-env
       '@icp-sdk/core':
         specifier: ^4.0.2
-        version: 4.0.2(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.2.4)
+        version: 4.0.2(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0))(@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0))(@dfinity/principal@3.2.4)
       react:
         specifier: ^19.1.1
         version: 19.1.1
@@ -92,6 +92,10 @@ importers:
         version: 7.1.5(@types/node@24.3.1)(yaml@2.8.1)
 
   libs/canister-env:
+    dependencies:
+      '@noble/hashes':
+        specifier: ^2.0.0
+        version: 2.0.0
     devDependencies:
       '@tanstack/config':
         specifier: ^0.20.1
@@ -506,6 +510,10 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@2.0.0':
+    resolution: {integrity: sha512-h8VUBlE8R42+XIDO229cgisD287im3kdY6nbNZJFjc6ZvKIXPYXe6Vc/t+kyjFdMFyt5JpapzTsEg8n63w5/lw==}
+    engines: {node: '>= 20.19.0'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2235,13 +2243,13 @@ snapshots:
       '@types/conventional-commits-parser': 5.0.1
       chalk: 5.6.2
 
-  '@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0)':
+  '@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0)':
     dependencies:
       '@dfinity/candid': 3.2.4(@dfinity/principal@3.2.4)
       '@dfinity/cbor': 0.2.2
       '@dfinity/principal': 3.2.4
       '@noble/curves': 1.9.7
-      '@noble/hashes': 1.8.0
+      '@noble/hashes': 2.0.0
 
   '@dfinity/candid@3.2.4(@dfinity/principal@3.2.4)':
     dependencies:
@@ -2249,25 +2257,25 @@ snapshots:
 
   '@dfinity/cbor@0.2.2': {}
 
-  '@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)':
+  '@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0)':
     dependencies:
-      '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0)
+      '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0)
       '@dfinity/candid': 3.2.4(@dfinity/principal@3.2.4)
       '@noble/curves': 1.9.7
-      '@noble/hashes': 1.8.0
+      '@noble/hashes': 2.0.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
       asn1js: 3.0.6
     transitivePeerDependencies:
       - '@dfinity/principal'
 
-  '@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)':
+  '@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0)':
     dependencies:
-      '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0)
+      '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0)
       '@dfinity/candid': 3.2.4(@dfinity/principal@3.2.4)
       '@dfinity/principal': 3.2.4
       '@noble/curves': 1.9.7
-      '@noble/hashes': 1.8.0
+      '@noble/hashes': 2.0.0
 
   '@dfinity/principal@3.2.4':
     dependencies:
@@ -2428,12 +2436,12 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@icp-sdk/core@4.0.2(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.2.4)':
+  '@icp-sdk/core@4.0.2(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0))(@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0))(@dfinity/principal@3.2.4)':
     dependencies:
-      '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0)
+      '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0)
       '@dfinity/candid': 3.2.4(@dfinity/principal@3.2.4)
-      '@dfinity/identity': 3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@1.8.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
+      '@dfinity/identity': 3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0)
+      '@dfinity/identity-secp256k1': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0)
       '@dfinity/principal': 3.2.4
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -2510,6 +2518,8 @@ snapshots:
       '@noble/hashes': 1.8.0
 
   '@noble/hashes@1.8.0': {}
+
+  '@noble/hashes@2.0.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

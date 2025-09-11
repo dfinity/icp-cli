@@ -1,7 +1,11 @@
+import { hexToBytes } from "@noble/hashes/utils";
+
 const IC_ENV_COOKIE_NAME = "ic_env";
 
-const ENV_VAR_SEPARATOR = ",";
+const ENV_VAR_SEPARATOR = "&";
 const ENV_VAR_ASSIGNMENT_SYMBOL = "=";
+
+const IC_ROOT_KEY_VALUE_NAME = "ic_root_key";
 
 type GetCanisterEnvOptions = {
   cookieName?: string;
@@ -14,7 +18,7 @@ export function getCanisterEnv(
 
   const encodedEnvVars = getEncodedEnvVarsFromCookie(cookieName);
   if (!encodedEnvVars) {
-    return {};
+    throw new Error("No environment variables found in cookie");
   }
 
   const decodedEnvVars = decodeURIComponent(encodedEnvVars);
@@ -32,11 +36,18 @@ function getEncodedEnvVarsFromCookie(cookieName: string): string | undefined {
 }
 
 function getEnvVars(decoded: string): CanisterEnv {
-  const entries = decoded.split(ENV_VAR_SEPARATOR).map((value) => {
+  const entries = decoded.split(ENV_VAR_SEPARATOR).map((v) => {
     // we only want to split at the first occurrence of the assignment symbol
-    const symbolIndex = value.indexOf(ENV_VAR_ASSIGNMENT_SYMBOL);
+    const symbolIndex = v.indexOf(ENV_VAR_ASSIGNMENT_SYMBOL);
 
-    return [value.slice(0, symbolIndex), value.substring(symbolIndex + 1)];
+    const key = v.slice(0, symbolIndex);
+    const value = v.substring(symbolIndex + 1);
+
+    if (key === IC_ROOT_KEY_VALUE_NAME) {
+      return [key, hexToBytes(value)];
+    }
+
+    return [key, value];
   });
 
   return Object.fromEntries(entries);

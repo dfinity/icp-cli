@@ -1,0 +1,167 @@
+name: checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  OS_VERSION: ubuntu-latest  # Change the image here
+
+jobs:
+
+  compile:
+    name: compile:required
+    runs-on: ${{ env.OS_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: build
+        run: cargo build
+        env:
+          RUST_BACKTRACE: 1
+
+  lint:
+    name: lint:required
+    needs: compile  # Run after compilation to use the cache
+    runs-on: ${{ env.OS_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Lint
+        run: cargo clippy --verbose --tests --benches -- -D warnings -D clippy::all
+        env:
+          RUST_BACKTRACE: 1
+
+
+  format:
+    name: fmt:required
+    needs: compile
+    runs-on: ${{ env.OS_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain from rust-toolchain.toml
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+
+  #
+  # Runs a series of checks to make sure that all the docs
+  # that need to be generated have been genrated an are up
+  # to date.
+  #
+  # For now we generate:
+  # - the cli reference
+  # - the json schema for icp.yaml
+  #
+
+  cli-ref:
+    name: cli-ref:required
+    needs: compile
+    runs-on: ${{ env.OS_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Rust toolchain
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: generate docs
+        run: ./scripts/generate-cli-docs.sh
+
+      - name: Check for uncommitted changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "❌ The cli-reference documentation is not up to date"
+            echo ""
+            echo " Run ./scripts/generate-cli-docs.sh to update them"
+            echo ""
+            git status --porcelain
+            exit 1
+          else
+            echo "✅ Git state is clean."
+          fi
+
+  icp-yaml-schema:
+    name: icp-yaml-schema:required
+    needs: compile
+    runs-on: ${{ env.OS_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Rust toolchain
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: generate icp.yaml schema
+        run: ./scripts/generate-config-schema.sh
+
+      - name: Check for uncommitted changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "❌ The icp.yaml schema is not up to date"
+            echo ""
+            echo " Run ./scripts/generate-config-schema.sh to update them"
+            echo ""
+            git status --porcelain
+            exit 1
+          else
+            echo "✅ Git state is clean."
+          fi

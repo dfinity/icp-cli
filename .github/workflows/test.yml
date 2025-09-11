@@ -30,13 +30,12 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Make the os matrix match .github/scripts/test-matrix.py so that
+        # we optimize caching
+        os: [ubuntu-22.04, macos-15]
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Show Rust toolchain version
-        run: rustup show
 
       - uses: actions/cache@v4
         with:
@@ -46,14 +45,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run unit tests
         run: cargo test --workspace --lib --bins
 
   test:
     name: ${{ matrix.test }} on ${{ matrix.os }}
-    needs: discover
+    # Wait until unit tests have run so we can reuse the cache
+    needs: [discover, unit-tests]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -62,9 +62,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show Rust toolchain version
-        run: rustup show
-
       - uses: actions/cache@v4
         with:
           path: |
@@ -73,7 +70,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install dfx
         uses: dfinity/setup-dfx@main

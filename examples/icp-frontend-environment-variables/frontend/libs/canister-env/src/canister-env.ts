@@ -6,6 +6,7 @@ const ENV_VAR_SEPARATOR = "&";
 const ENV_VAR_ASSIGNMENT_SYMBOL = "=";
 
 const IC_ROOT_KEY_VALUE_NAME = "ic_root_key";
+const IC_ROOT_KEY_ENV_NAME = "IC_ROOT_KEY"; // same as in ./env.d.ts
 
 type GetCanisterEnvOptions = {
   cookieName?: string;
@@ -44,7 +45,7 @@ function getEnvVars(decoded: string): CanisterEnv {
     const value = v.substring(symbolIndex + 1);
 
     if (key === IC_ROOT_KEY_VALUE_NAME) {
-      return [key, hexToBytes(value)];
+      return [IC_ROOT_KEY_ENV_NAME, hexToBytes(value)];
     }
 
     return [key, value];

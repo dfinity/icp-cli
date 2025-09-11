@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_agent::export::Principal;
+use ic_agent::{AgentError, export::Principal};
 use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
@@ -202,6 +202,9 @@ pub enum CommandError {
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
+
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
 
     #[snafu(transparent)]
     Build { source: build::CommandError },

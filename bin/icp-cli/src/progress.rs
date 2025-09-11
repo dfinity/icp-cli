@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, time::Duration};
+use std::{collections::VecDeque, fmt, time::Duration};
 
 use futures::Future;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -60,26 +60,41 @@ impl RollingLines {
         self.buf.push_back(line);
     }
 
-    /// Get an iterator over the current contents (in order).
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.buf.iter().map(|s| s.as_str())
+}
+
+impl fmt::Display for RollingLines {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f, "{}",
+            self.buf
+                .iter()
+                .filter(|s| !s.is_empty())
+                .map(|s| format!("> {}", s))
+                .join("\n")
+        )
     }
 }
 
 /// Shared progress bar utilities for build and sync commands
 pub struct ProgressManager {
     pub multi_progress: MultiProgress,
+    is_debug: bool,
 }
 
 impl ProgressManager {
     pub fn new() -> Self {
         Self {
             multi_progress: MultiProgress::new(),
+            is_debug: false,
         }
     }
 
     /// Create a new progress bar with standard configuration
     pub fn create_progress_bar(&self, canister_name: &str) -> ProgressBar {
+        if self.is_debug {
+            // We don't show the progress bars in debug mode
+            return ProgressBar::hidden();
+        }
         let pb = self
             .multi_progress
             .add(ProgressBar::new_spinner().with_style(make_style(
@@ -188,13 +203,7 @@ impl ScriptProgressHandler {
                 // Update output buffer
                 lines.push(line);
 
-                // Update progress-bar with rolling terminal output
-                let msg = lines
-                    .iter()
-                    .filter(|s| !s.is_empty())
-                    .map(|s| format!("> {}", s))
-                    .join("\n");
-                set_message(msg);
+                set_message(lines.to_string());
             }
         });
 

@@ -1,9 +1,10 @@
 import * as bindgen from "@icp-sdk/bindgen";
-import type { Options } from "./types";
+import type { Options } from "..";
 import { emptyDir, ensureDir } from "./fs";
 import { resolve, basename } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { prepareBinding } from "./bindings";
+import { logger } from "./logger";
 
 const DID_FILE_EXTENSION = ".did";
 
@@ -24,7 +25,7 @@ export async function generate(options: Options) {
     outputFileName,
   });
 
-  console.log("ICP Bindings generated successfully at", bindingsOutDir);
+  logger.info("ICP Bindings generated successfully at", bindingsOutDir);
 }
 
 type WriteBindingsOptions = {

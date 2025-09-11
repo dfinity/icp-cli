@@ -6,14 +6,11 @@ on:
       - main
   pull_request:
 
-env:
-  OS_VERSION: ubuntu-latest  # Change the image here
-
 jobs:
 
   compile:
     name: compile:required
-    runs-on: ${{ env.OS_VERSION }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +23,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: build
         run: cargo build
@@ -36,7 +33,7 @@ jobs:
   lint:
     name: lint:required
     needs: compile  # Run after compilation to use the cache
-    runs-on: ${{ env.OS_VERSION }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +46,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run Lint
         run: cargo clippy --verbose --tests --benches -- -D warnings -D clippy::all
@@ -60,7 +57,7 @@ jobs:
   format:
     name: fmt:required
     needs: compile
-    runs-on: ${{ env.OS_VERSION }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +73,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -87,15 +84,14 @@ jobs:
   # that need to be generated have been genrated an are up
   # to date.
   #
-  # For now we generate:
-  # - the cli reference
-  # - the json schema for icp.yaml
-  #
 
   cli-ref:
+    #
+    # generate the CLI reference file and check if it is up to date
+    #
     name: cli-ref:required
     needs: compile
-    runs-on: ${{ env.OS_VERSION }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +107,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: generate docs
         run: ./scripts/generate-cli-docs.sh
@@ -130,9 +126,12 @@ jobs:
           fi
 
   icp-yaml-schema:
+    #
+    # generate the icp yaml schema file and check if it is up to date
+    #
     name: icp-yaml-schema:required
     needs: compile
-    runs-on: ${{ env.OS_VERSION }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -148,7 +147,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.OS_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: generate icp.yaml schema
         run: ./scripts/generate-config-schema.sh

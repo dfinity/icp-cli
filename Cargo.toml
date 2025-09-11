@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "bin/icp-cli",
+    "bin/schema-gen",
     "lib/icp-adapter",
     "lib/icp-canister",
     "lib/icp-dirs",
@@ -10,6 +11,7 @@ members = [
     "lib/icp-project",
 ]
 
+default-members = ["bin/icp-cli"]
 exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
 resolver = "3"
 
@@ -21,6 +23,8 @@ camino-tempfile = "1"
 candid = "0.10.14"
 candid_parser = "0.1"
 clap = { version = "4.5.3", features = ["derive", "env"] }
+clap-markdown = "0.1.5"
+console = "0.16.0"
 dialoguer = "0.11.0"
 directories = "6.0.0"
 dunce = "1.0.5"
@@ -42,6 +46,7 @@ icp-fs = { path = "lib/icp-fs" }
 icp-identity = { path = "lib/icp-identity", features = ["clap"] }
 icp-network = { path = "lib/icp-network" }
 icp-project = { path = "lib/icp-project" }
+indicatif = "0.18.0"
 itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 mockall = "0.13.1"
@@ -65,7 +70,7 @@ time = "0.3.9"
 tiny-bip39 = "2.0.0"
 tokio = { version = "1.45.0", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = "0.3.20"
 url = "2.5.4"
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 zeroize = "1.8.1"
@@ -74,6 +79,10 @@ zeroize = "1.8.1"
 version = "0.12.15"
 default-features = false
 features = ["rustls-tls"]
+
+[workspace.dependencies.schemars]
+version = "0.8.19"
+features = ["derive"]
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"

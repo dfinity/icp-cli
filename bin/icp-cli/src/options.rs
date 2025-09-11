@@ -27,7 +27,7 @@ pub struct EnvironmentOpt {
     environment: Option<String>,
 
     /// Shorthand for --environment=ic.
-    #[clap(long, global(true), group = "environment-select")]
+    #[arg(long, global(true), group = "environment-select")]
     ic: bool,
 }
 

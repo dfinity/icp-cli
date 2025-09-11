@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 }
 
@@ -41,7 +41,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .collect::<Vec<_>>();
 
     for (_, c) in cs {
-        eprintln!("{c:?}");
+        let _ = ctx.term.write_line(&format!("{c:?}"));
     }
 
     Ok(())

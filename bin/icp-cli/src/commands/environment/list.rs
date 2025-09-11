@@ -12,7 +12,7 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 
     // List environments
     for e in &pm.environments {
-        eprintln!("{e:?}");
+        let _ = ctx.term.write_line(&format!("{e:?}"));
     }
 
     Ok(())

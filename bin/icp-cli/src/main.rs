@@ -2,8 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 use camino::Utf8PathBuf;
-use clap::Parser;
-use commands::{Cmd, DispatchError};
+use clap::{CommandFactory, Parser};
+use commands::{DispatchError, Subcmd};
+use console::Term;
 use context::Context;
 use icp_canister::{handlebars::Handlebars, recipe};
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
@@ -12,13 +13,13 @@ use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
-    fmt,
     layer::SubscriberExt,
 };
 
 mod commands;
 mod context;
 mod options;
+mod progress;
 mod store_artifact;
 mod store_id;
 mod telemetry;
@@ -31,11 +32,16 @@ struct Cli {
     #[arg(long, default_value = ".icp/artifacts")]
     artifact_store: Utf8PathBuf,
 
-    #[clap(long)]
+    /// Enable debug logging
+    #[arg(long, default_value = "false", global = true)]
     debug: bool,
 
-    #[command(flatten)]
-    command: Cmd,
+    /// Generate markdown documentation for all commands and exit
+    #[arg(long, hide = true)]
+    markdown_help: bool,
+
+    #[command(subcommand)]
+    command: Option<Subcmd>,
 }
 
 #[tokio::main]
@@ -43,10 +49,32 @@ struct Cli {
 async fn main() -> Result<(), ProgramError> {
     let cli = Cli::parse();
 
+    // Generate markdown documentation if requested
+    if cli.markdown_help {
+        clap_markdown::print_help_markdown::<Cli>();
+        return Ok(());
+    }
+
+    // If no command was provided, print help and exit
+    let command = match cli.command {
+        Some(cmd) => cmd,
+        None => {
+            Cli::command()
+                .print_help()
+                .map_err(|err| ProgramError::Unexpected {
+                    err: format!("Failed to print help: {}", err),
+                })?;
+            return Ok(());
+        }
+    };
+
+    // Printing for user-facing messages
+    let term = Term::stdout();
+
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
-        fmt::layer(), // debug
-        EventLayer,   // event
+        tracing_subscriber::fmt::layer(), // debug
+        EventLayer,                       // event
     );
 
     let reg = Registry::default()
@@ -104,13 +132,14 @@ async fn main() -> Result<(), ProgramError> {
 
     // Setup environment
     let ctx = Context::new(
+        term,      // term
         dirs,      // dirs
         ids,       // id_store
         artifacts, // artifact_store
         recipe_resolver,
     );
 
-    commands::dispatch(&ctx, cli.command).await?;
+    commands::dispatch(&ctx, command).await?;
 
     Ok(())
 }

@@ -1,27 +1,29 @@
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use crate::build::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
 use camino::{Utf8Path, Utf8PathBuf};
 use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
 use reqwest::{Client, Method, Request, StatusCode, Url};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use snafu::Snafu;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct LocalSource {
     /// Local path on-disk to read a WASM file from
+    #[schemars(with = "String")]
     pub path: Utf8PathBuf,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct RemoteSource {
     /// Url to fetch the remote WASM file from
     pub url: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(untagged, rename_all = "lowercase")]
 pub enum SourceField {
     /// Local path on-disk to read a WASM file from
@@ -32,7 +34,7 @@ pub enum SourceField {
 }
 
 /// Configuration for a Pre-built canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct PrebuiltAdapter {
     #[serde(flatten)]
     pub source: SourceField,
@@ -41,16 +43,32 @@ pub struct PrebuiltAdapter {
     pub sha256: Option<String>,
 }
 
+impl fmt::Display for PrebuiltAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let src = match &self.source {
+            SourceField::Local(v) => format!("path: {}", v.path),
+            SourceField::Remote(v) => format!("url: {}", v.url),
+        };
+
+        let sha = match &self.sha256 {
+            Some(v) => v,
+            None => "n/a",
+        };
+
+        write!(f, "({src}, sha: {sha})")
+    }
+}
+
 #[async_trait]
 impl Adapter for PrebuiltAdapter {
     async fn compile(
         &self,
-        _: &Utf8Path,
+        canister_path: &Utf8Path,
         wasm_output_path: &Utf8Path,
     ) -> Result<(), AdapterCompileError> {
         let wasm = match &self.source {
             // Local path
-            SourceField::Local(s) => read(&s.path)
+            SourceField::Local(s) => read(canister_path.join(&s.path))
                 .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?,
 
             // Remote url

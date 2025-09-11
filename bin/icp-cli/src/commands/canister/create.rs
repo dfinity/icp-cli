@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use clap::Parser;
+use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
 use snafu::Snafu;
@@ -6,74 +9,75 @@ use snafu::Snafu;
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
+    progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
 };
 
 pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
 
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct CanisterIDs {
     /// The effective canister ID to use when calling the management canister.
-    #[clap(long, default_value = DEFAULT_EFFECTIVE_ID)]
+    #[arg(long, default_value = DEFAULT_EFFECTIVE_ID)]
     pub effective_id: Principal,
 
     /// The specific canister ID to assign if creating with a fixed principal.
-    #[clap(long)]
+    #[arg(long)]
     pub specific_id: Option<Principal>,
 }
 
-#[derive(Debug, Default, Parser)]
+#[derive(Clone, Debug, Default, Parser)]
 pub struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
-    #[clap(long)]
+    #[arg(long)]
     pub compute_allocation: Option<u64>,
 
     /// Optional memory allocation in bytes. If unset, memory is allocated dynamically.
-    #[clap(long)]
+    #[arg(long)]
     pub memory_allocation: Option<u64>,
 
     /// Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
-    #[clap(long)]
+    #[arg(long)]
     pub freezing_threshold: Option<u64>,
 
     /// Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles.
-    #[clap(long)]
+    #[arg(long)]
     pub reserved_cycles_limit: Option<u64>,
 
     /// Optional Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    #[clap(long)]
+    #[arg(long)]
     pub wasm_memory_limit: Option<u64>,
 
     /// Optional Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    #[clap(long)]
+    #[arg(long)]
     pub wasm_memory_threshold: Option<u64>,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct Cmd {
-    /// The name of the canister within the current project
-    pub name: Option<String>,
+    /// The names of the canister within the current project
+    pub names: Vec<String>,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 
     // Canister ID configuration, including the effective and optionally specific ID.
-    #[clap(flatten)]
+    #[command(flatten)]
     pub ids: CanisterIDs,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
-    #[clap(long)]
+    #[arg(long)]
     pub controller: Vec<Principal>,
 
     // Resource-related settings and thresholds for the new canister.
-    #[clap(flatten)]
+    #[command(flatten)]
     pub settings: CanisterSettings,
 
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
-    #[clap(long, short = 'q')]
+    #[arg(long, short = 'q')]
     pub quiet: bool,
 }
 
@@ -94,18 +98,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cs = pm
         .canisters
         .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
+        .filter(|(_, c)| match &cmd.names.is_empty() {
+            // If no names specified, create all canisters
+            true => true,
+
+            // If names specified, only create matching canisters
+            false => cmd.names.contains(&c.name),
         })
         .collect::<Vec<_>>();
 
-    // Check if selected canister exists
-    if let Some(name) = &cmd.name {
-        if cs.is_empty() {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+    // Check if selected canisters exists
+    if !cmd.names.is_empty() {
+        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
+
+        for name in &cmd.names {
+            if !names.contains(name) {
+                return Err(CommandError::CanisterNotFound {
+                    name: name.to_owned(),
+                });
+            }
         }
     }
 
@@ -124,12 +135,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .collect::<Vec<_>>();
 
     // Ensure canister is included in the environment
-    if let Some(name) = &cmd.name {
-        if !ecs.contains(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
+    if !cmd.names.is_empty() {
+        for name in &cmd.names {
+            if !ecs.contains(name) {
+                return Err(CommandError::EnvironmentCanister {
+                    environment: env.name.to_owned(),
+                    canister: name.to_owned(),
+                });
+            }
         }
     }
 
@@ -139,34 +152,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .network
         .as_ref()
         .expect("no network specified in environment");
-
-    // Skip created canisters
-    let cs = cs
-        .into_iter()
-        .filter(|&(_, c)| {
-            let cid = ctx.id_store.lookup(&Key {
-                network: network.to_owned(),
-                environment: env.name.to_owned(),
-                canister: c.name.to_owned(),
-            });
-
-            match cid {
-                // Exists (skip)
-                Ok(_) => false,
-
-                // Doesn't exist (include)
-                Err(LookupError::IdNotFound { .. }) => true,
-
-                // Lookup failed
-                Err(err) => panic!("{err}"),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    // Verify at least one canister is available to create
-    if cs.is_empty() {
-        return Err(CommandError::NoCanisters);
-    }
 
     // Load identity
     ctx.require_identity(cmd.identity.name());
@@ -185,111 +170,175 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
+    // Prepare a futures set for concurrent operations
+    let mut futs = FuturesOrdered::new();
+
+    let progress_manager = ProgressManager::new();
+
     for (_, c) in cs {
-        // Create canister
-        let mut builder = mgmt.create_canister();
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
 
-        // Cycles amount
-        builder = builder.as_provisional_create_with_amount(None);
+        // Create an async closure that handles the operation for this specific canister
+        let create_fn = {
+            let cmd = cmd.clone();
+            let mgmt = mgmt.clone();
+            let pb = pb.clone();
 
-        // Canister ID (effective)
-        builder = builder.with_effective_canister_id(cmd.ids.effective_id);
+            async move {
+                // Indicate to user that the canister is created
+                pb.set_message("Creating...");
 
-        // Canister ID (specific)
-        if let Some(id) = cmd.ids.specific_id {
-            builder = builder.as_provisional_create_with_specified_id(id);
-        }
+                // Create canister-network association-key
+                let k = Key {
+                    network: network.to_owned(),
+                    environment: env.name.to_owned(),
+                    canister: c.name.to_owned(),
+                };
 
-        // Controllers
-        for c in &cmd.controller {
-            builder = builder.with_controller(c.to_owned());
-        }
+                match ctx.id_store.lookup(&k) {
+                    // Exists (skip)
+                    Ok(principal) => {
+                        return Err(CommandError::CanisterExists { principal });
+                    }
 
-        // Compute
-        builder = builder.with_optional_compute_allocation(
-            cmd.settings
-                .compute_allocation
-                .or(c.settings.compute_allocation),
-        );
+                    // Doesn't exist (include)
+                    Err(LookupError::IdNotFound { .. }) => {}
 
-        // Memory
-        builder = builder.with_optional_memory_allocation(
-            cmd.settings
-                .memory_allocation
-                .or(c.settings.memory_allocation),
-        );
+                    // Lookup failed
+                    Err(err) => panic!("{err}"),
+                };
 
-        // Freezing Threshold
-        builder = builder.with_optional_freezing_threshold(
-            cmd.settings
-                .freezing_threshold
-                .or(c.settings.freezing_threshold),
-        );
+                // Create canister
+                let mut builder = mgmt.create_canister();
 
-        // Reserved Cycles (limit)
-        builder = builder.with_optional_reserved_cycles_limit(
-            cmd.settings
-                .reserved_cycles_limit
-                .or(c.settings.reserved_cycles_limit),
-        );
+                // Cycles amount
+                builder = builder.as_provisional_create_with_amount(None);
 
-        // Wasm (memory limit)
-        builder = builder.with_optional_wasm_memory_limit(
-            cmd.settings
-                .wasm_memory_limit
-                .or(c.settings.wasm_memory_limit),
-        );
+                // Canister ID (effective)
+                builder = builder.with_effective_canister_id(cmd.ids.effective_id);
 
-        // Wasm (memory threshold)
-        builder = builder.with_optional_wasm_memory_threshold(
-            cmd.settings
-                .wasm_memory_threshold
-                .or(c.settings.wasm_memory_threshold),
-        );
+                // Configure canister environment variables
+                // Environment variables are key-value pairs that are accessible within the canister
+                // and can be used to configure behavior without hardcoding values in the WASM
+                builder = {
+                    let environment_variables = c
+                        .settings
+                        .environment_variables
+                        .to_owned()
+                        .unwrap_or_default();
 
-        // Configure canister environment variables
-        // Environment variables are key-value pairs that are accessible within the canister
-        // and can be used to configure behavior without hardcoding values in the WASM
-        builder = {
-            let environment_variables = c
-                .settings
-                .environment_variables
-                .to_owned()
-                .unwrap_or_default();
+                    // Convert from HashMap<String, String> to Vec<EnvironmentVariable>
+                    // as required by the IC management canister interface
+                    let environment_variables = environment_variables
+                        .into_iter()
+                        .map(|(name, value)| EnvironmentVariable { name, value })
+                        .collect::<Vec<_>>();
 
-            // Convert from HashMap<String, String> to Vec<EnvironmentVariable>
-            // as required by the IC management canister interface
-            let environment_variables = environment_variables
-                .into_iter()
-                .map(|(name, value)| EnvironmentVariable { name, value })
-                .collect::<Vec<_>>();
+                    builder.with_environment_variables(environment_variables)
+                };
 
-            builder.with_environment_variables(environment_variables)
+                // Logs
+                builder = builder.with_optional_log_visibility(
+                    Some(LogVisibility::Public), //
+                );
+
+                // Canister ID (specific)
+                if let Some(id) = cmd.ids.specific_id {
+                    builder = builder.as_provisional_create_with_specified_id(id);
+                }
+
+                // Controllers
+                for c in &cmd.controller {
+                    builder = builder.with_controller(c.to_owned());
+                }
+
+                // Compute
+                builder = builder.with_optional_compute_allocation(
+                    cmd.settings
+                        .compute_allocation
+                        .or(c.settings.compute_allocation),
+                );
+
+                // Memory
+                builder = builder.with_optional_memory_allocation(
+                    cmd.settings
+                        .memory_allocation
+                        .or(c.settings.memory_allocation),
+                );
+
+                // Freezing Threshold
+                builder = builder.with_optional_freezing_threshold(
+                    cmd.settings
+                        .freezing_threshold
+                        .or(c.settings.freezing_threshold),
+                );
+
+                // Reserved Cycles (limit)
+                builder = builder.with_optional_reserved_cycles_limit(
+                    cmd.settings
+                        .reserved_cycles_limit
+                        .or(c.settings.reserved_cycles_limit),
+                );
+
+                // Wasm (memory limit)
+                builder = builder.with_optional_wasm_memory_limit(
+                    cmd.settings
+                        .wasm_memory_limit
+                        .or(c.settings.wasm_memory_limit),
+                );
+
+                // Wasm (memory threshold)
+                builder = builder.with_optional_wasm_memory_threshold(
+                    cmd.settings
+                        .wasm_memory_threshold
+                        .or(c.settings.wasm_memory_threshold),
+                );
+
+                // Logs
+                builder = builder.with_optional_log_visibility(
+                    Some(LogVisibility::Public), //
+                );
+
+                // Create the canister
+                let (cid,) = builder.await?;
+
+                // Register the canister ID
+                ctx.id_store.register(&k, &cid)?;
+
+                Ok::<_, CommandError>(())
+            }
         };
 
-        // Logs
-        builder = builder.with_optional_log_visibility(
-            Some(LogVisibility::Public), //
-        );
+        futs.push_back(async move {
+            // Execute the create function with custom progress tracking
+            let mut result = ProgressManager::execute_with_custom_progress(
+                pb,
+                create_fn,
+                || "Created successfully".to_string(),
+                |err| match err {
+                    CommandError::CanisterExists { principal } => {
+                        format!("Canister already created: {principal}")
+                    }
+                    _ => format!("Failed to create canister: {err}"),
+                },
+                |err| matches!(err, CommandError::CanisterExists { .. }),
+            )
+            .await;
 
-        // Create the canister
-        let (cid,) = builder.await?;
+            // If canister already exists, it is not considered an error
+            if let Err(CommandError::CanisterExists { .. }) = result {
+                result = Ok(());
+            }
 
-        // Create canister-network association-key
-        let k = Key {
-            network: network.to_owned(),
-            environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
-        };
+            result
+        });
+    }
 
-        // Register the canister ID
-        ctx.id_store.register(&k, &cid)?;
-
-        if cmd.quiet {
-            println!("{}", cid);
-        } else {
-            eprintln!("Created canister '{}' with ID: '{}'", c.name, cid);
-        }
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister creation failures
+        res?;
     }
 
     Ok(())
@@ -317,6 +366,9 @@ pub enum CommandError {
 
     #[snafu(display("no canisters available to create"))]
     NoCanisters,
+
+    #[snafu(display("canister exists already: {principal}"))]
+    CanisterExists { principal: Principal },
 
     #[snafu(transparent)]
     CreateCanister { source: AgentError },

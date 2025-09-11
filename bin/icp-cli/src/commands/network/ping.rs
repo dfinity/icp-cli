@@ -9,15 +9,15 @@ use std::time::Duration;
 /// Try to connect to a network, and print out its status.
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    #[clap(flatten)]
+    #[command(flatten)]
     network: EnvironmentOpt,
 
     /// The compute network to connect to. By default, ping the local network.
-    #[clap(group = "network-select", value_name = "NETWORK")]
+    #[arg(group = "network-select", value_name = "NETWORK")]
     positional_network_name: Option<String>,
 
     /// Repeatedly ping until the replica is healthy or 1 minute has passed.
-    #[clap(long)]
+    #[arg(long)]
     wait_healthy: bool,
 }
 

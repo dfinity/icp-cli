@@ -1,13 +1,16 @@
+use std::fmt;
+
 use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use ic_agent::{Agent, export::Principal};
 use ic_asset::error::SyncError;
 use ic_utils::{Canister, canister::CanisterBuilderError};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::Snafu;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum DirField {
     /// Directory used to synchronize an assets canister
@@ -27,18 +30,29 @@ impl DirField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct AssetsAdapter {
     /// Directory used to synchronize an assets canister
     #[serde(flatten)]
     pub dir: DirField,
 }
 
+impl fmt::Display for AssetsAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dir = match &self.dir {
+            DirField::Dir(d) => format!("directory: {d}"),
+            DirField::Dirs(ds) => format!("{} directories", ds.len()),
+        };
+
+        write!(f, "({dir})")
+    }
+}
+
 #[async_trait]
 impl sync::Adapter for AssetsAdapter {
     async fn sync(
         &self,
-        _: &Utf8Path,
+        canister_path: &Utf8Path,
         canister_id: &Principal,
         agent: &Agent,
     ) -> Result<(), AdapterSyncError> {
@@ -48,6 +62,9 @@ impl sync::Adapter for AssetsAdapter {
         #[allow(clippy::disallowed_types)]
         let dirs = dirs
             .iter()
+            // Paths are specified relative to the canister path
+            .map(|p| canister_path.join(p))
+            // Convert to PathBuf
             .map(std::path::PathBuf::from)
             .collect::<Vec<std::path::PathBuf>>();
 

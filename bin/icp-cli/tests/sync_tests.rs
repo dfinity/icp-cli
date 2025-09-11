@@ -1,7 +1,7 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{
-    ord::eq,
+    prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
 };
 use serial_test::serial;
@@ -50,7 +50,12 @@ fn sync_adapter_script_single() {
     // Deploy project (it should sync as well)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "--debug",
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+        ])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -58,10 +63,10 @@ fn sync_adapter_script_single() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync"])
+        .args(["--debug", "sync"])
         .assert()
         .success()
-        .stdout(eq("syncing").trim());
+        .stdout(contains("syncing").trim());
 }
 
 #[test]
@@ -108,18 +113,23 @@ fn sync_adapter_script_multiple() {
     // Deploy project (it should sync as well)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "--debug",
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+        ])
         .assert()
         .success()
-        .stdout(contains("first\nsecond").trim());
+        .stdout(contains("first").and(contains("second")));
 
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync"])
+        .args(["--debug", "sync"])
         .assert()
         .success()
-        .stdout(eq("first\nsecond").trim());
+        .stdout(contains("first").and(contains("second")));
 }
 
 #[tokio::test]

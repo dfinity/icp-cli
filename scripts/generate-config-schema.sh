@@ -9,10 +9,10 @@
 set -e
 
 echo "🔨 Building schema generator..."
-cargo build --bin schema-gen --quiet
+cargo build -p schema-gen --quiet
 
 echo "📋 Generating JSON Schema..."
-cargo run --bin schema-gen > $(git rev-parse --show-toplevel)/docs/icp-yaml-schema.json
+cargo run -p schema-gen > $(git rev-parse --show-toplevel)/docs/icp-yaml-schema.json
 echo "✅ Schema generation complete!"
 echo "📄 Generated file: docs/icp-yaml-schema.json"
 

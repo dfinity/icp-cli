@@ -11,6 +11,7 @@ members = [
     "lib/icp-project",
 ]
 
+default-members = ["bin/icp-cli"]
 exclude = [
     "examples/icp-rust",
     "examples/icp-rust-recipe",

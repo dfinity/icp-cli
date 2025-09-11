@@ -18,7 +18,6 @@ export function getCanisterEnv(
   }
 
   const decodedEnvVars = decodeURIComponent(encodedEnvVars);
-
   const envVars = getEnvVars(decodedEnvVars);
 
   return envVars;

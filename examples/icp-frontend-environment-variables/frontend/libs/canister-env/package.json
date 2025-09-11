@@ -6,8 +6,7 @@
   "exports": {
     ".": {
       "types": "./dist/esm/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.cjs"
+      "import": "./dist/esm/index.js"
     },
     "./env": {
       "types": "./src/env.d.ts"

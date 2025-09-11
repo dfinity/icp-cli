@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     icpBindgen({
+      canisterEnvVariableNames: ["ICP_CANISTER_ID:backend"],
       didFile: "../../backend/dist/hello_world.did",
       bindingsOutDir: "./src/backend/api",
     }),

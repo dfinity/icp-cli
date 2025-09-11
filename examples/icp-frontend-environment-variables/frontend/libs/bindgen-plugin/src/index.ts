@@ -14,9 +14,9 @@ export interface Options {
    */
   disableWatch?: boolean;
   /**
-   * The additional environment variable names to include in the `env.d.ts` file.
+   * The canister environment variable names to include in the `canister-env.d.ts` file.
    */
-  additionalEnvVarNames?: string[];
+  canisterEnvVariableNames?: string[];
 }
 
 export const PLUGIN_NAME = "vite-plugin-icp-bindgen";

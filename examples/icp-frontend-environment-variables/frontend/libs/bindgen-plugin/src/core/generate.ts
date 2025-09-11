@@ -5,12 +5,11 @@ import { resolve, basename } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { envBinding, indexBinding, prepareBinding } from "./bindings";
 import { logger } from "./logger";
-import { getEnvVarNames } from "./env";
 
 const DID_FILE_EXTENSION = ".did";
 
 export async function generate(options: Options) {
-  const { didFile, bindingsOutDir } = options;
+  const { didFile, bindingsOutDir, canisterEnvVariableNames = [] } = options;
   const didFilePath = resolve(didFile);
   const outputFileName = basename(didFile, DID_FILE_EXTENSION);
 
@@ -28,7 +27,9 @@ export async function generate(options: Options) {
 
   await writeIndex(bindingsOutDir, outputFileName);
 
-  await writeEnv(bindingsOutDir, options.additionalEnvVarNames);
+  if (canisterEnvVariableNames.length > 0) {
+    await writeEnv(bindingsOutDir, canisterEnvVariableNames);
+  }
 
   logger.info("ICP Bindings generated successfully at", bindingsOutDir);
 }
@@ -80,11 +81,10 @@ export async function writeIndex(
 
 export async function writeEnv(
   bindingsOutDir: string,
-  additionalEnvVarNames: string[] = []
+  canisterEnvVariableNames: string[]
 ) {
   const envFile = resolve(bindingsOutDir, "canister-env.d.ts");
-  const envVarNames = getEnvVarNames();
 
-  const env = envBinding([...envVarNames, ...additionalEnvVarNames]);
+  const env = envBinding(canisterEnvVariableNames);
   await writeFile(envFile, env);
 }

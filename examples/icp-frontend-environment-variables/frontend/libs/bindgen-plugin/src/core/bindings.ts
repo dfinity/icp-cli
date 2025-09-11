@@ -19,7 +19,12 @@ ${binding}`;
 export function indexBinding(serviceFileName: string): string {
   const serviceName = capitalizeFirstLetter(serviceFileName);
 
-  return `import {
+  // we don't want to disable typescript checks for this file
+  return `${ESLINT_DISABLE_COMMENT}
+
+${DISCLAIMER_COMMENT}
+
+import {
   Actor,
   HttpAgent,
   type Agent,
@@ -75,7 +80,8 @@ export function envBinding(varNames: string[]): string {
     return "";
   }
 
-  let env = "interface CanisterEnv {\n";
+  // we don't want to disable typescript checks for this file
+  let env = `${ESLINT_DISABLE_COMMENT}\n\n${DISCLAIMER_COMMENT}\n\ninterface CanisterEnv {\n`;
   for (const varName of varNames) {
     env += `  readonly ["${varName}"]: string;\n`;
   }

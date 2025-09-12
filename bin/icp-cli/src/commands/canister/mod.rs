@@ -9,6 +9,7 @@ pub mod delete;
 pub mod info;
 pub mod install;
 pub mod list;
+pub mod settings;
 pub mod show;
 pub mod start;
 pub mod status;
@@ -29,6 +30,7 @@ pub enum CanisterSubcmd {
     Install(install::Cmd),
     Show(show::Cmd),
     List(list::Cmd),
+    Settings(settings::Cmd),
     Start(start::Cmd),
     Status(status::Cmd),
     Stop(stop::Cmd),
@@ -42,6 +44,7 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandErro
         CanisterSubcmd::Info(subcmd) => info::exec(ctx, subcmd).await?,
         CanisterSubcmd::Install(subcmd) => install::exec(ctx, subcmd).await?,
         CanisterSubcmd::List(subcmd) => list::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Settings(subcmd) => settings::dispatch(ctx, subcmd).await?,
         CanisterSubcmd::Start(subcmd) => start::exec(ctx, subcmd).await?,
         CanisterSubcmd::Show(subcmd) => show::exec(ctx, subcmd).await?,
         CanisterSubcmd::Status(subcmd) => status::exec(ctx, subcmd).await?,
@@ -81,4 +84,7 @@ pub enum CanisterCommandError {
 
     #[snafu(transparent)]
     Stop { source: stop::CommandError },
+
+    #[snafu(transparent)]
+    Settings { source: settings::CommandError },
 }

@@ -11,9 +11,7 @@ use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
-    Layer, Registry,
-    filter::{self, FilterExt},
-    layer::SubscriberExt,
+    filter::{self, FilterExt}, fmt::format::FmtSpan, layer::SubscriberExt, Layer, Registry
 };
 
 mod commands;
@@ -72,22 +70,15 @@ async fn main() -> Result<(), ProgramError> {
     let term = Term::stdout();
 
     // Logging and Telemetry
-    let (debug_layer, event_layer) = (
-        tracing_subscriber::fmt::layer(), // debug
-        EventLayer,                       // event
-    );
+    let event_layer = EventLayer;
+    let tracing_layer = tracing_subscriber::fmt::layer().json()
+        .with_level(false)  // Don't show the log level
+        .with_span_list(true) // So we know which span we're in
+        .compact();
 
     let reg = Registry::default()
         .with(
-            debug_layer.with_filter(
-                filter::filter_fn(|_| true)
-                    //
-                    // Only log if `debug` is set
-                    .and(filter::filter_fn(move |_| cli.debug))
-                    //
-                    // Only log if event level is debug
-                    .and(filter::filter_fn(|md| md.level() == &Level::DEBUG)),
-            ),
+            tracing_layer
         )
         .with(
             event_layer.with_filter(

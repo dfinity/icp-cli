@@ -199,7 +199,7 @@ impl ScriptProgressHandler {
             let mut lines = RollingLines::new(4);
 
             while let Some(line) = rx.recv().await {
-                debug!(canister, line);
+                debug!(line);
 
                 // Update output buffer
                 lines.push(line);

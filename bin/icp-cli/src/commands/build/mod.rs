@@ -8,6 +8,7 @@ use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
+use tracing::{debug, debug_span, Instrument};
 
 use crate::context::GetProjectError;
 use crate::{
@@ -64,6 +65,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
+        let span = debug_span!("Building", "{}", &c.name);
+        let _enter = span.enter();
+        debug!("This is a log statement!");
         // Create progress bar with standard configuration
         let pb = progress_manager.create_progress_bar(&c.name);
 
@@ -73,6 +77,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             let pb = pb.clone();
 
             async move {
+                debug!("Starting the build");
                 // Create a temporary directory for build artifacts
                 let build_dir = tempdir().context(BuildDirSnafu)?;
 
@@ -124,16 +129,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             }
         };
 
+        let task_span = span.clone();
         futs.push_back(async move {
             // Execute the build function with progress tracking
             ProgressManager::execute_with_progress(
                 pb,
-                build_fn,
+                build_fn.instrument(task_span),
                 || "Built successfully".to_string(),
                 |err| format!("Failed to build canister: {err}"),
             )
             .await
         });
+
     }
 
     // Consume the set of futures and abort if an error occurs

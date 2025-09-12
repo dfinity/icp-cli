@@ -52,6 +52,9 @@ pub enum LookupError {
         key.canister, key.environment, key.network
     ))]
     IdNotFound { key: Key },
+
+    #[snafu(display("could not find canisters in environment '{}'", name))]
+    EnvironmentNotFound { name: String },
 }
 
 pub struct IdStore(Utf8PathBuf);
@@ -105,5 +108,28 @@ impl IdStore {
         Err(LookupError::IdNotFound {
             key: key.to_owned(),
         })
+    }
+
+    pub fn lookup_by_environment(
+        &self,
+        environment: &str,
+    ) -> Result<Vec<(String, Principal)>, LookupError> {
+        let cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
+            .context(LookupLoadStoreSnafu)?
+            .unwrap_or_default();
+
+        let filtered_associations: Vec<(String, Principal)> = cs
+            .into_iter()
+            .filter(|Association(k, _)| k.environment == *environment)
+            .map(|Association(k, cid)| (k.canister, cid))
+            .collect();
+
+        if filtered_associations.is_empty() {
+            return Err(LookupError::EnvironmentNotFound {
+                name: environment.to_owned(),
+            });
+        }
+
+        Ok(filtered_associations)
     }
 }

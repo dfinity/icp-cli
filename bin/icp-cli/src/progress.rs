@@ -59,13 +59,13 @@ impl RollingLines {
 
         self.buf.push_back(line);
     }
-
 }
 
 impl fmt::Display for RollingLines {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
-            f, "{}",
+            f,
+            "{}",
             self.buf
                 .iter()
                 .filter(|s| !s.is_empty())

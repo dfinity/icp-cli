@@ -132,11 +132,12 @@ async fn main() -> Result<(), ProgramError> {
 
     // Setup environment
     let ctx = Context::new(
-        term,      // term
-        dirs,      // dirs
-        ids,       // id_store
-        artifacts, // artifact_store
+        term,            // term
+        dirs,            // dirs
+        ids,             // id_store
+        artifacts,       // artifact_store
         recipe_resolver,
+        cli.debug,       // save if we are going log
     );
 
     commands::dispatch(&ctx, command).await?;

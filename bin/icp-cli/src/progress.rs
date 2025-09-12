@@ -82,10 +82,10 @@ pub struct ProgressManager {
 }
 
 impl ProgressManager {
-    pub fn new() -> Self {
+    pub fn new(debug_logging: bool) -> Self {
         Self {
             multi_progress: MultiProgress::new(),
-            is_debug: false,
+            is_debug: debug_logging,
         }
     }
 
@@ -93,8 +93,9 @@ impl ProgressManager {
     pub fn create_progress_bar(&self, canister_name: &str) -> ProgressBar {
         if self.is_debug {
             // We don't show the progress bars in debug mode
-            return ProgressBar::hidden();
+            return ProgressBar::hidden().with_prefix(canister_name.to_string());
         }
+
         let pb = self
             .multi_progress
             .add(ProgressBar::new_spinner().with_style(make_style(
@@ -191,14 +192,14 @@ impl ScriptProgressHandler {
                 pb.set_message(format!("{pb_hdr}\n{msg}\n"));
             }
         };
-
+        let canister = self.progress_bar.prefix();
         // Handle logging from script commands
         tokio::spawn(async move {
             // Create a rolling buffer to contain last N lines of terminal output
             let mut lines = RollingLines::new(4);
 
             while let Some(line) = rx.recv().await {
-                debug!(line);
+                debug!(canister, line);
 
                 // Update output buffer
                 lines.push(line);

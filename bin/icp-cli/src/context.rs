@@ -53,6 +53,9 @@ pub struct Context {
 
     /// A recipe resolver for resolving canister recipes into build/sync steps
     pub recipe_resolver: Arc<dyn recipe::Resolve>,
+
+    /// Indicates if debug logging is turned on
+    pub debug_logging: bool,
 }
 
 impl Context {
@@ -62,6 +65,7 @@ impl Context {
         id_store: IdStore,
         artifact_store: ArtifactStore,
         recipe_resolver: Arc<dyn recipe::Resolve>,
+        debug_logging: bool,
     ) -> Self {
         Self {
             term,
@@ -75,6 +79,7 @@ impl Context {
             id_store,
             artifact_store,
             recipe_resolver,
+            debug_logging,
         }
     }
 

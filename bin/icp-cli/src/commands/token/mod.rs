@@ -1,10 +1,23 @@
 use clap::{Parser, Subcommand};
+use phf::phf_map;
 use snafu::Snafu;
 
 use crate::context::Context;
 
 mod balance;
 mod transfer;
+
+/// A compile-time map of token names to their corresponding ledger canister IDs.
+///
+/// This map provides a quick lookup for well-known tokens on the Internet Computer:
+/// - "icp": The Internet Computer Protocol token ledger canister
+/// - "cycles": The cycles ledger canister for managing computation cycles
+///
+/// The canister IDs are stored as string literals in textual format.
+static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
+    "icp" => "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    "cycles" => "um5iw-rqaaa-aaaaq-qaaba-cai",
+};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {

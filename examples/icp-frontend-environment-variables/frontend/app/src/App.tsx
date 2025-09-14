@@ -3,8 +3,9 @@ import { createActor } from "./backend/api";
 import { getCanisterEnv } from "@icp-sdk/canister-env";
 
 const canisterEnv = getCanisterEnv();
+const canisterId = canisterEnv["ICP_CANISTER_ID:backend"];
 
-const helloWorldActor = createActor(canisterEnv["ICP_CANISTER_ID:backend"], {
+const helloWorldActor = createActor(canisterId, {
   agentOptions: { rootKey: canisterEnv.IC_ROOT_KEY },
 });
 

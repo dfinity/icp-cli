@@ -26,9 +26,9 @@ importers:
       '@eslint/js':
         specifier: ^9.33.0
         version: 9.35.0
-      '@icp-sdk/bindgen-plugin':
-        specifier: workspace:*
-        version: link:../libs/bindgen-plugin
+      '@icp-sdk/bindgen':
+        specifier: 0.0.1-alpha.3
+        version: 0.0.1-alpha.3
       '@types/react':
         specifier: ^19.1.10
         version: 19.1.12
@@ -455,6 +455,10 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@icp-sdk/bindgen@0.0.1-alpha.3':
+    resolution: {integrity: sha512-xgJYoP8zp2WGPiLt41PCb52hMD7dj/srdvSndTzKWSKRECSdn2A7iy1mOdzQm6ebUG00H4tIQoc6oXW8CS/ahA==}
+    hasBin: true
 
   '@icp-sdk/core@4.0.2':
     resolution: {integrity: sha512-tiNXiLbzc4+CJV2R/sk8Iw9WREZ32SmwPPvt5qYUaQDs6A8iftr03alCkVa+Frx4CKqbeVrJehsp07Ms7ZaHWA==}
@@ -1101,6 +1105,10 @@ packages:
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
+
+  commander@14.0.1:
+    resolution: {integrity: sha512-2JkV3gUZUVrbNA+1sjBOYLsMZ5cEEl8GTFP2a4AVz5hvasAMCQ1D2l2le/cX+pV4N6ZU17zjUahLpIXRrnWL8A==}
+    engines: {node: '>=20'}
 
   comment-parser@1.4.1:
     resolution: {integrity: sha512-buhp5kePrmda3vhc5B9t7pUQXAb2Tnd0qgpkIhPhkHXxJpiPJ11H0ZEU0oBpJ2QztSbzG/ZxMj/CHsYJqRHmyg==}
@@ -2436,6 +2444,10 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
+  '@icp-sdk/bindgen@0.0.1-alpha.3':
+    dependencies:
+      commander: 14.0.1
+
   '@icp-sdk/core@4.0.2(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/identity-secp256k1@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0))(@dfinity/identity@3.2.4(@dfinity/agent@3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0))(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/curves@1.9.7)(@noble/hashes@2.0.0))(@dfinity/principal@3.2.4)':
     dependencies:
       '@dfinity/agent': 3.2.4(@dfinity/candid@3.2.4(@dfinity/principal@3.2.4))(@dfinity/principal@3.2.4)(@noble/hashes@2.0.0)
@@ -3174,6 +3186,8 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
+
+  commander@14.0.1: {}
 
   comment-parser@1.4.1: {}
 

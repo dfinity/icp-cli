@@ -6,11 +6,11 @@ build:
       path: canister/assetstorage.wasm.gz
       sha256: 2c9cfd9c111393ce3ff335307cda6fe38c6a474c926750d235e2a5ad96942795
 
-sync:
-  steps:
     - type: script
       command: pnpm build
 
+sync:
+  steps:
     - type: assets
       dirs:
         - app/dist

@@ -13,7 +13,7 @@ use tokio::{
     sync::mpsc::Sender,
     try_join,
 };
-
+use tracing::instrument;
 use crate::build::{self, AdapterCompileError};
 use crate::sync::{self, AdapterSyncError};
 
@@ -74,6 +74,8 @@ impl fmt::Display for ScriptAdapter {
 
 #[async_trait]
 impl build::Adapter for ScriptAdapter {
+
+    #[instrument] 
     async fn compile(
         &self,
         canister_path: &Utf8Path,

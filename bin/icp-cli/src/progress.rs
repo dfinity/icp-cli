@@ -4,7 +4,7 @@ use futures::Future;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{debug, instrument, Instrument};
 
 // Animation frames for the spinner - creates a rotating star effect
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
@@ -113,6 +113,7 @@ impl ProgressManager {
     }
 
     /// Execute a task with progress tracking and automatic style updates
+    #[instrument(skip(progress_bar, task, success_message, error_message))]
     pub async fn execute_with_progress<F, R, E>(
         progress_bar: ProgressBar,
         task: F,
@@ -134,6 +135,7 @@ impl ProgressManager {
     }
 
     /// Execute a task with custom progress handling for errors that should display as success
+    #[instrument(skip(progress_bar, task, success_message, error_message, is_success_error))]
     pub async fn execute_with_custom_progress<F, R, E>(
         progress_bar: ProgressBar,
         task: F,
@@ -180,6 +182,7 @@ impl ScriptProgressHandler {
     }
 
     /// Create a channel and start handling script output for progress updates
+    #[instrument(skip(self))]
     pub fn setup_output_handler(&self) -> mpsc::Sender<String> {
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
@@ -192,21 +195,21 @@ impl ScriptProgressHandler {
                 pb.set_message(format!("{pb_hdr}\n{msg}\n"));
             }
         };
-        let canister = self.progress_bar.prefix();
+
         // Handle logging from script commands
-        tokio::spawn(async move {
+        tokio::spawn( async move {
             // Create a rolling buffer to contain last N lines of terminal output
             let mut lines = RollingLines::new(4);
 
             while let Some(line) = rx.recv().await {
-                debug!(line);
+                debug!("{}", line);
 
                 // Update output buffer
                 lines.push(line);
 
                 set_message(lines.to_string());
             }
-        });
+        }.in_current_span());
 
         tx
     }

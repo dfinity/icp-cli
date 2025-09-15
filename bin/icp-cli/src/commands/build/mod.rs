@@ -65,9 +65,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
-        let span = debug_span!("Building", "{}", &c.name);
+        let span = debug_span!("canister", name = %c.name);
         let _enter = span.enter();
-        debug!("This is a log statement!");
         // Create progress bar with standard configuration
         let pb = progress_manager.create_progress_bar(&c.name);
 
@@ -88,6 +87,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 for (i, step) in c.build.steps.iter().enumerate() {
                     // Indicate to user the current step being executed
                     let current_step = i + 1;
+
+                    let span = debug_span!("step", number = current_step);
+                    let _enter = span.enter();
+
                     let pb_hdr = format!("Building: {step} {current_step} of {step_count}");
 
                     let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
@@ -101,6 +104,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             adapter
                                 .with_stdio_sender(tx)
                                 .compile(&canister_path, &wasm_output_path)
+                                .instrument(span.clone())
                                 .await?
                         }
 
@@ -139,7 +143,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 |err| format!("Failed to build canister: {err}"),
             )
             .await
-        });
+        }.instrument(span.clone()));
 
     }
 

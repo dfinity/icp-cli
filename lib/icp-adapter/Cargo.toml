@@ -21,6 +21,7 @@ slog = { workspace = true }
 snafu = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

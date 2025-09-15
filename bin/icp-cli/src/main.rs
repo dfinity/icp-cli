@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
+use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use commands::{DispatchError, Subcmd};
@@ -9,10 +9,7 @@ use context::Context;
 use icp_canister::{handlebars::Handlebars, recipe};
 use icp_dirs::{DiscoverDirsError, IcpCliDirs};
 use snafu::{Snafu, report};
-use tracing::{Level, subscriber::set_global_default};
-use tracing_subscriber::{
-    filter::{self, FilterExt}, fmt::format::FmtSpan, layer::SubscriberExt, Layer, Registry
-};
+use tracing::Level;
 
 mod commands;
 mod context;
@@ -69,34 +66,44 @@ async fn main() -> Result<(), ProgramError> {
     // Printing for user-facing messages
     let term = Term::stdout();
 
-    // Logging and Telemetry
-    let event_layer = EventLayer;
-    let tracing_layer = tracing_subscriber::fmt::layer().json()
-        .with_level(false)  // Don't show the log level
-        .with_span_list(true) // So we know which span we're in
-        .compact();
 
-    let reg = Registry::default()
-        .with(
-            tracing_layer
-        )
-        .with(
-            event_layer.with_filter(
-                filter::filter_fn(|_| true)
-                    //
-                    // Only log to telemetry layer if target is `events`
-                    .and(filter::filter_fn(move |md| md.target() == "events"))
-                    //
-                    // Only log to telemetry layer if level if `trace`
-                    .and(filter::filter_fn(|md| md.level() == &Level::TRACE)),
-            ),
-        );
+    let ts = tracing_subscriber::FmtSubscriber::builder().with_max_level(
+        match cli.debug {
+            false => Level::INFO,
+            true => Level::DEBUG,
+        }
+    ).finish();
 
-    // Set the configured subscriber registry as the global default for tracing
-    // This enables the logging and telemetry layers we configured above
-    set_global_default(reg).map_err(|err| ProgramError::Unexpected {
-        err: err.to_string(),
-    })?;
+    let _ = tracing::subscriber::set_global_default(ts);
+
+    // // Logging and Telemetry
+    // let event_layer = EventLayer;
+    // let tracing_layer = tracing_subscriber::fmt::layer().json()
+    //     .with_level(false)  // Don't show the log level
+    //     .with_span_list(true) // So we know which span we're in
+    //     .compact();
+
+    // let reg = Registry::default()
+    //     .with(
+    //         tracing_layer
+    //     )
+    //     .with(
+    //         event_layer.with_filter(
+    //             filter::filter_fn(|_| true)
+    //                 //
+    //                 // Only log to telemetry layer if target is `events`
+    //                 .and(filter::filter_fn(move |md| md.target() == "events"))
+    //                 //
+    //                 // Only log to telemetry layer if level if `trace`
+    //                 .and(filter::filter_fn(|md| md.level() == &Level::TRACE)),
+    //         ),
+    //     );
+
+    // // Set the configured subscriber registry as the global default for tracing
+    // // This enables the logging and telemetry layers we configured above
+    // set_global_default(reg).map_err(|err| ProgramError::Unexpected {
+    //     err: err.to_string(),
+    // })?;
 
     // Setup project directory structure
     let dirs = IcpCliDirs::new()?;

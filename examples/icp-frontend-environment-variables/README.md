@@ -17,6 +17,8 @@ The plugin supports hot module replacement, so you can run the frontend in devel
 
 The plugin also supports additional features, such as the ability to generate a TypeScript declaration file for the environment variables that are available to the frontend. The [`canister-env.d.ts`](./frontend/app/src/backend/api/canister-env.d.ts) file is generated automatically by the plugin and is used to type the environment variables in the frontend code. See the [Environment Variables](#environment-variables) section for more details.
 
+See the [`vite.config.ts`](./frontend/app/vite.config.ts) file for how the plugin is used.
+
 ### Environment Variables
 
 The project is configured to pass the backend's canister ID to the frontend using a [cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies). The environment variables are made available to the frontend JS code that runs in the browser by following this flow:

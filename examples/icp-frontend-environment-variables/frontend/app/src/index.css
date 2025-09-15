@@ -4,6 +4,16 @@
   font-weight: 400;
 
   color-scheme: light dark;
+  /* Theme variables (light by default) */
+  --bg: #ffffff;
+  --fg: #0f172a;
+  --muted: #475569;
+  --panel: #f8fafc;
+  --border: #e2e8f0;
+  --input: #ffffff;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --shadow: 0 1px 2px rgba(2, 6, 23, 0.08), 0 2px 6px rgba(2, 6, 23, 0.06);
   color: rgba(255, 255, 255, 0.87);
   background-color: #242424;
 
@@ -11,6 +21,11 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
 }
 
 a {
@@ -28,6 +43,12 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans,
+    Helvetica Neue, Arial, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1 {
@@ -52,6 +73,20 @@ button:hover {
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --fg: #e5e7eb;
+    --muted: #94a3b8;
+    --panel: #0f172a;
+    --border: #1f2937;
+    --input: #0b1220;
+    --accent: #6366f1;
+    --accent-fg: #ffffff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
 }
 
 @media (prefers-color-scheme: light) {

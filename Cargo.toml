@@ -36,9 +36,9 @@ glob = "0.3.2"
 handlebars = "6.3.2"
 hex = "0.4.3"
 httptest = "0.16.3"
-ic-agent = { version = "0.44.0" }
+ic-agent = { version = "0.44.1" }
 ic-asset = { version = "0.25.0" }
-ic-utils = { version = "0.44.0" }
+ic-utils = { version = "0.44.1" }
 icp-adapter = { path = "lib/icp-adapter" }
 icp-canister = { path = "lib/icp-canister" }
 icp-dirs = { path = "lib/icp-dirs" }
@@ -92,6 +92,3 @@ enum_variant_names = "allow"
 
 [profile.dev.package.scrypt]
 opt-level = 3
-
-[patch.crates-io]
-ic-agent = { version = "0.44.0", git = "https://github.com/dfinity/agent-rs", rev = "0884eac1930aeb47893928081ce000df4b53d3e0" }

@@ -3,7 +3,7 @@ use candid::Principal;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, IcpFeatures, IcpFeaturesConfig, InstanceConfig, InstanceId,
-    RawTime, SubnetConfigSet, SubnetSpec, Topology,
+    RawTime, SubnetConfigSet, Topology,
 };
 use reqwest::Url;
 use snafu::prelude::*;

@@ -30,6 +30,8 @@ In the [`App.tsx`](./frontend/app/src/App.tsx) file, you can see how the fronten
 
 The [Bindings Generation](#bindings-generation) process is also configured to generate a TypeScript declaration file for the environment variables served by the asset canister, in order to make the frontend code more type-safe.
 
+> Note: the `@icp-sdk/canister-env` library is only available in this repository. It will soon be extracted into a separate repo and NPM package.
+
 ## Prerequisites
 
 Before you begin, ensure that you have the following installed:

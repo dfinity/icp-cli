@@ -3,7 +3,7 @@ use candid::Principal;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, IcpFeatures, IcpFeaturesConfig, InstanceConfig, InstanceId,
-    RawTime, Topology,
+    RawTime, SubnetConfigSet, SubnetSpec, Topology,
 };
 use reqwest::Url;
 use snafu::prelude::*;
@@ -77,6 +77,15 @@ impl PocketIcAdminInterface {
                 // The rest of the features are disabled by default
                 ..Default::default()
             }),
+
+            subnet_config_set: (SubnetConfigSet {
+                // Configure a single application subnet
+                application: 1,
+
+                // The rest of the subnets are disabled by default
+                ..Default::default()
+            })
+            .into(),
 
             ..Default::default()
         };

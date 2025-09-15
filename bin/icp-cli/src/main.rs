@@ -66,13 +66,12 @@ async fn main() -> Result<(), ProgramError> {
     // Printing for user-facing messages
     let term = Term::stdout();
 
-
-    let ts = tracing_subscriber::FmtSubscriber::builder().with_max_level(
-        match cli.debug {
+    let ts = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(match cli.debug {
             false => Level::INFO,
             true => Level::DEBUG,
-        }
-    ).finish();
+        })
+        .finish();
 
     let _ = tracing::subscriber::set_global_default(ts);
 

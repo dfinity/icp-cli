@@ -4,7 +4,7 @@ use futures::Future;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tokio::sync::mpsc;
-use tracing::{debug, instrument, Instrument};
+use tracing::{Instrument, debug, instrument};
 
 // Animation frames for the spinner - creates a rotating star effect
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
@@ -197,19 +197,22 @@ impl ScriptProgressHandler {
         };
 
         // Handle logging from script commands
-        tokio::spawn( async move {
-            // Create a rolling buffer to contain last N lines of terminal output
-            let mut lines = RollingLines::new(4);
+        tokio::spawn(
+            async move {
+                // Create a rolling buffer to contain last N lines of terminal output
+                let mut lines = RollingLines::new(4);
 
-            while let Some(line) = rx.recv().await {
-                debug!("{}", line);
+                while let Some(line) = rx.recv().await {
+                    debug!("{}", line);
 
-                // Update output buffer
-                lines.push(line);
+                    // Update output buffer
+                    lines.push(line);
 
-                set_message(lines.to_string());
+                    set_message(lines.to_string());
+                }
             }
-        }.in_current_span());
+            .in_current_span(),
+        );
 
         tx
     }

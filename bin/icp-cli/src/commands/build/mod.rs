@@ -8,7 +8,7 @@ use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
-use tracing::{debug, debug_span, Instrument};
+use tracing::{Instrument, debug, debug_span};
 
 use crate::context::GetProjectError;
 use crate::{
@@ -134,17 +134,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         };
 
         let task_span = span.clone();
-        futs.push_back(async move {
-            // Execute the build function with progress tracking
-            ProgressManager::execute_with_progress(
-                pb,
-                build_fn.instrument(task_span),
-                || "Built successfully".to_string(),
-                |err| format!("Failed to build canister: {err}"),
-            )
-            .await
-        }.instrument(span.clone()));
-
+        futs.push_back(
+            async move {
+                // Execute the build function with progress tracking
+                ProgressManager::execute_with_progress(
+                    pb,
+                    build_fn.instrument(task_span),
+                    || "Built successfully".to_string(),
+                    |err| format!("Failed to build canister: {err}"),
+                )
+                .await
+            }
+            .instrument(span.clone()),
+        );
     }
 
     // Consume the set of futures and abort if an error occurs

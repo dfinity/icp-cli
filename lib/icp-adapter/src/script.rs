@@ -1,6 +1,8 @@
 use std::fmt;
 use std::process::Stdio;
 
+use crate::build::{self, AdapterCompileError};
+use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use ic_agent::{Agent, export::Principal};
@@ -14,8 +16,6 @@ use tokio::{
     try_join,
 };
 use tracing::instrument;
-use crate::build::{self, AdapterCompileError};
-use crate::sync::{self, AdapterSyncError};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -74,8 +74,7 @@ impl fmt::Display for ScriptAdapter {
 
 #[async_trait]
 impl build::Adapter for ScriptAdapter {
-
-    #[instrument] 
+    #[instrument]
     async fn compile(
         &self,
         canister_path: &Utf8Path,

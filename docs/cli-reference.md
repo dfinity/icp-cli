@@ -130,7 +130,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--ic` — Shorthand for --environment=ic
 * `--effective-id <EFFECTIVE_ID>` — The effective canister ID to use when calling the management canister
 
-  Default value: `uqqxf-5h777-77774-qaaaa-cai`
+  Default value: `tqzl2-p7777-77776-aaaaa-cai`
 * `--specific-id <SPECIFIC_ID>` — The specific canister ID to assign if creating with a fixed principal
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
@@ -479,24 +479,24 @@ Run a given network
 
 ## `icp-cli token`
 
-**Usage:** `icp-cli token <COMMAND>`
+**Usage:** `icp-cli token [TOKEN] <COMMAND>`
 
 ###### **Subcommands:**
 
 * `balance` — 
 * `transfer` — 
 
-
-
-## `icp-cli token balance`
-
-**Usage:** `icp-cli token balance [OPTIONS] [TOKEN]`
-
 ###### **Arguments:**
 
 * `<TOKEN>`
 
   Default value: `icp`
+
+
+
+## `icp-cli token balance`
+
+**Usage:** `icp-cli token balance [OPTIONS]`
 
 ###### **Options:**
 
@@ -508,7 +508,18 @@ Run a given network
 
 ## `icp-cli token transfer`
 
-**Usage:** `icp-cli token transfer`
+**Usage:** `icp-cli token transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — Token amount to transfer
+* `<RECEIVER>` — The receiver of the token transfer
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 
 
 

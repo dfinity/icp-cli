@@ -17,9 +17,6 @@ use crate::{
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
-    #[arg(default_value = "icp")]
-    pub token: String,
-
     /// Token amount to transfer
     pub amount: BigDecimal,
 
@@ -33,7 +30,7 @@ pub struct Cmd {
     pub environment: EnvironmentOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest
     let pm = ctx.project()?;
 
@@ -63,13 +60,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let agent = ctx.agent()?;
 
     // Obtain ledger address
-    let cid = match TOKEN_LEDGER_CIDS.get(&cmd.token) {
+    let cid = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
         Some(cid) => cid.to_string(),
 
         // Given token is not known, indicating it's either already a canister id
         // or is simply a name of a token we do not know of
-        None => cmd.token,
+        None => token.to_string(),
     };
 
     // Parse the canister id

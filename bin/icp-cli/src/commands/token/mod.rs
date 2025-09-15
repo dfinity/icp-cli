@@ -21,6 +21,9 @@ static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
+    #[arg(default_value = "icp")]
+    pub token: String,
+
     #[command(subcommand)]
     subcmd: Subcmd,
 }
@@ -32,9 +35,11 @@ pub enum Subcmd {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    let token = cmd.token;
+
     match cmd.subcmd {
-        Subcmd::Balance(cmd) => balance::exec(ctx, cmd).await?,
-        Subcmd::Transfer(cmd) => transfer::exec(ctx, cmd).await?,
+        Subcmd::Balance(cmd) => balance::exec(ctx, &token, cmd).await?,
+        Subcmd::Transfer(cmd) => transfer::exec(ctx, &token, cmd).await?,
     }
 
     Ok(())

@@ -10,7 +10,7 @@ mod common;
 
 #[test]
 #[serial]
-fn canister_update_settings() {
+fn canister_update_settings_controllers() {
     let ctx = TestContext::new().with_dfx();
 
     // Get principals.
@@ -254,4 +254,147 @@ fn get_principal(ctx: &TestContext, identity: &str) -> String {
         .expect("stdout was not valid UTF-8")
         .trim()
         .to_string()
+}
+
+#[test]
+#[serial]
+fn canister_update_settings_environment_variables() {
+    let ctx = TestContext::new().with_dfx();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+        "#,
+        wasm,
+    );
+
+    write(
+        project_dir.join("icp.yaml"), // path
+        pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir);
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir);
+
+    // Deploy project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Controllers: 2vxsx-fae"))
+                .and(contains("Environment Variables: N/A")),
+        );
+
+    // Add multiple environment variables
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--add-environment-variable",
+            "var1=value1",
+            "--add-environment-variable",
+            "var2=value2",
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Environment Variables:"))
+                .and(contains("Name: var1, Value: value1"))
+                .and(contains("Name: var2, Value: value2")),
+        );
+
+    // Add and remove environment variables
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--add-environment-variable",
+            "var3=value3",
+            "--remove-environment-variable",
+            "var1",
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Environment Variables:"))
+                .and(contains("Name: var1, Value: value1").not())
+                .and(contains("Name: var2, Value: value2"))
+                .and(contains("Name: var3, Value: value3")),
+        );
+
+    // Remove multiple environment variables
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--remove-environment-variable",
+            "var2",
+            "--remove-environment-variable",
+            "var3",
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Environment Variables: N/A")),
+        );
 }

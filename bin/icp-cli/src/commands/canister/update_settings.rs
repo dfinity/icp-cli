@@ -1,8 +1,8 @@
 use clap::{ArgAction, Parser};
 use ic_agent::{AgentError, export::Principal};
-use ic_utils::interfaces::management_canister::CanisterStatusResult;
+use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable};
 use snafu::Snafu;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::context::{Context, ContextGetAgentError, GetProjectError};
 use crate::options::{EnvironmentOpt, IdentityOpt};
@@ -27,6 +27,12 @@ pub struct Cmd {
 
     #[arg(long, action = ArgAction::Append)]
     set_controller: Option<Vec<Principal>>,
+
+    #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
+    add_environment_variable: Option<Vec<EnvironmentVariable>>,
+
+    #[arg(long, action = ArgAction::Append)]
+    remove_environment_variable: Option<Vec<String>>,
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -141,12 +147,67 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // Handle environment variables.
+    let mut environment_variables: Option<HashMap<String, String>> = None;
+    if let Some(to_be_added) = cmd.add_environment_variable {
+        if current_status.is_none() {
+            current_status = Some(mgmt.canister_status(&cid).await?.0);
+        }
+        let current_environment_variables: Vec<EnvironmentVariable> = current_status
+            .as_ref()
+            .unwrap()
+            .settings
+            .environment_variables
+            .clone();
+
+        // Convert current env vars to a map for easy merging
+        let mut env_map: HashMap<String, String> = current_environment_variables
+            .into_iter()
+            .map(|v| (v.name, v.value))
+            .collect();
+
+        for var in to_be_added {
+            env_map.insert(var.name, var.value);
+        }
+
+        environment_variables = Some(env_map);
+    }
+    if let Some(to_be_removed) = cmd.remove_environment_variable {
+        if environment_variables.is_none() {
+            if current_status.is_none() {
+                current_status = Some(mgmt.canister_status(&cid).await?.0);
+            }
+            let current_environment_variables: Vec<EnvironmentVariable> = current_status
+                .as_ref()
+                .unwrap()
+                .settings
+                .environment_variables
+                .clone();
+            environment_variables = Some(
+                current_environment_variables
+                    .into_iter()
+                    .map(|v| (v.name, v.value))
+                    .collect(),
+            );
+        }
+        for var in to_be_removed {
+            environment_variables.as_mut().unwrap().remove(&var);
+        }
+    }
+
     // Update settings.
     let mut update = mgmt.update_settings(&cid);
     if let Some(controllers) = controllers {
         for controller in controllers {
             update = update.with_controller(controller);
         }
+    }
+    if let Some(environment_variables) = environment_variables {
+        let environment_variables = environment_variables
+            .into_iter()
+            .map(|(name, value)| EnvironmentVariable { name, value })
+            .collect::<Vec<_>>();
+        update = update.with_environment_variables(environment_variables);
     }
     update.await?;
 
@@ -170,6 +231,9 @@ pub enum CommandError {
         canister: String,
     },
 
+    #[snafu(display("invalid environment variable '{variable}'"))]
+    InvalidEnvironmentVariable { variable: String },
+
     #[snafu(transparent)]
     LookupCanisterId { source: LookupIdError },
 
@@ -178,4 +242,17 @@ pub enum CommandError {
 
     #[snafu(transparent)]
     Agent { source: AgentError },
+}
+
+fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, CommandError> {
+    let (name, value) =
+        env_var
+            .split_once('=')
+            .ok_or(CommandError::InvalidEnvironmentVariable {
+                variable: env_var.to_owned(),
+            })?;
+    Ok(EnvironmentVariable {
+        name: name.to_owned(),
+        value: value.to_owned(),
+    })
 }

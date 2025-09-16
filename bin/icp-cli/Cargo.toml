@@ -24,6 +24,7 @@ hex.workspace = true
 httptest.workspace = true
 ic-agent.workspace = true
 ic-utils.workspace = true
+ic-management-canister-types.workspace = true
 icp-adapter.workspace = true
 icp-canister.workspace = true
 icp-dirs.workspace = true

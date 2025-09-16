@@ -282,9 +282,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
-* `--effective-id <EFFECTIVE_ID>` — The effective canister ID to use when calling the management canister
-
-  Default value: `uqqxf-5h777-77774-qaaaa-cai`
+* `--subnet-id <SUBNET_ID>` — The subnet id to use for the canisters being deployed
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 
 

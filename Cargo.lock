@@ -2088,9 +2088,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.44.0"
+version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39d930ac981dd27535b09fb36832c52554ec5acc382ed61bfb5ce91967624259"
+checksum = "8faeb37240aa11d18f7fa3f42b26f64269212fed781bd10c5d280f5edec9529f"
 dependencies = [
  "arc-swap",
  "async-channel",
@@ -2112,7 +2112,7 @@ dependencies = [
  "http-body-util",
  "ic-certification",
  "ic-ed25519",
- "ic-transport-types 0.44.0",
+ "ic-transport-types 0.44.1",
  "ic-verify-bls-signature",
  "k256 0.13.4",
  "leb128",
@@ -2251,9 +2251,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.44.0"
+version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "763b894ca67d2cf606e7ed30d21a851709d53da3488dc7e2f53fd76290e3c859"
+checksum = "f926c30911129ad3891f48827a6301d1b9d44bd47b362ff0cac6919e2fc4a623"
 dependencies = [
  "candid",
  "hex",
@@ -2269,9 +2269,9 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.44.0"
+version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a819863dfcf0ec1bc3ecb11e5a82ad86a4064a7eb9502c4d1a6859e48e2de4e0"
+checksum = "573dbc33c27dcb31d7c84fc342977d4a268fcbdcf3ce1202c1ad6b8c4e5c27b1"
 dependencies = [
  "async-trait",
  "candid",

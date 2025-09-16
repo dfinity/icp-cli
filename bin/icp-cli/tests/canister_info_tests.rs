@@ -44,7 +44,7 @@ fn canister_status() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 

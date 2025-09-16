@@ -86,5 +86,7 @@ pub enum CanisterCommandError {
     Stop { source: stop::CommandError },
 
     #[snafu(transparent)]
-    UpdateSettings { source: update_settings::CommandError },
+    UpdateSettings {
+        source: update_settings::CommandError,
+    },
 }

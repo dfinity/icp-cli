@@ -1,9 +1,9 @@
 use camino::Utf8Path;
 use candid::Principal;
 use pocket_ic::common::rest::{
-    AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet,
-    HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig, InstanceId, RawTime,
-    SubnetSpec, Topology,
+    AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
+    HttpGatewayConfig, HttpGatewayInfo, IcpFeatures, IcpFeaturesConfig, InstanceConfig, InstanceId,
+    RawTime, SubnetConfigSet, Topology,
 };
 use reqwest::Url;
 use snafu::prelude::*;
@@ -55,38 +55,60 @@ impl PocketIcAdminInterface {
         &self,
         state_dir: &Utf8Path,
     ) -> Result<(InstanceId, Topology), CreateInstanceError> {
-        let subnet_config_set = ExtendedSubnetConfigSet {
-            nns: Some(SubnetSpec::default()),
-            sns: Some(SubnetSpec::default()),
-            ii: Some(SubnetSpec::default()),
-            fiduciary: Some(SubnetSpec::default()),
-            bitcoin: Some(SubnetSpec::default()),
-            system: vec![],
-            verified_application: vec![],
-            application: vec![<_>::default()],
-        };
-        let resp = self
-            .post("/instances")
-            .json(&InstanceConfig {
-                subnet_config_set,
-                state_dir: Some(state_dir.to_path_buf().into()),
-                nonmainnet_features: true,
-                log_level: Some("ERROR".to_string()),
-                bitcoind_addr: None, // bitcoind_addr.clone(),
+        // Specify configuration for network
+        let inst_cfg = InstanceConfig {
+            // State directory
+            state_dir: Some(state_dir.to_path_buf().into()),
+
+            // Replica logging level
+            log_level: Some("ERROR".to_string()),
+
+            // Special features
+            icp_features: Some(IcpFeatures {
+                // Enable with default feature configuration
+                icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+
+                // Same as above
+                cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+
+                // Same as above
+                cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+
+                // The rest of the features are disabled by default
+                ..Default::default()
+            }),
+
+            subnet_config_set: (SubnetConfigSet {
+                // Configure a single application subnet
+                application: 1,
+
+                // The rest of the subnets are disabled by default
+                ..Default::default()
             })
-            .send()
-            .await?
+            .into(),
+
+            ..Default::default()
+        };
+
+        // Perform request
+        let resp = self.post("/instances").json(&inst_cfg).send().await?;
+
+        // Check for replica errors
+        let resp = resp
             .error_for_status()?
             .json::<CreateInstanceResponse>()
             .await?;
+
         match resp {
-            CreateInstanceResponse::Error { message } => {
-                Err(CreateInstanceError::Create { message })
-            }
             CreateInstanceResponse::Created {
                 instance_id,
                 topology,
+                ..
             } => Ok((instance_id, topology)),
+
+            CreateInstanceResponse::Error { message } => {
+                Err(CreateInstanceError::Create { message })
+            }
         }
     }
 

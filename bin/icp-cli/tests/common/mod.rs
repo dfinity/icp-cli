@@ -14,7 +14,12 @@ pub const PATH_SEPARATOR: &str = ":";
 #[cfg(windows)]
 pub const PATH_SEPARATOR: &str = ";";
 
-pub const SUBNET_ID: &str = "gnkm6-o3f2j-s4j4o-tn4cp-ebkfd-46tuv-xaitz-fv54k-u7b2d-ejijp-vqe";
+/// This ID is dependent on the toplogy being served by pocket-ic
+/// NOTE: If the topology is changed (another subnet is added, etc) the ID may change.
+/// References:
+/// - http://localhost:8000/_/topology
+/// - http://localhost:8000/_/dashboard
+pub const SUBNET_ID: &str = "cok7q-nnbiu-4xwf6-7gpqg-kwzft-mqypn-uepxh-mx2hy-q4wuy-5s5my-eae";
 
 // Spawns a test server that expects a single request and responds with a 200 status code and the given body
 pub fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httptest::Server {

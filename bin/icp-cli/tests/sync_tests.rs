@@ -169,7 +169,7 @@ async fn sync_adapter_static_assets() {
     ctx.ping_until_healthy(&project_dir);
 
     // Canister ID
-    let cid = "uqqxf-5h777-77774-qaaaa-cai";
+    let cid = "tqzl2-p7777-77776-aaaaa-cai";
 
     // Deploy project
     ctx.icp()

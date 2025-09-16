@@ -203,7 +203,7 @@ fn deploy_to_other_projects_network() {
     // Deploy project (first time)
     ctx.icp()
         .current_dir(&projb)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .args(["--environment", "environment-1"])
         .assert()
         .success();
@@ -211,7 +211,7 @@ fn deploy_to_other_projects_network() {
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&projb)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .args(["--environment", "environment-1"])
         .assert()
         .success();

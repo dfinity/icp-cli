@@ -51,7 +51,7 @@ fn canister_update_settings_controllers() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 
@@ -295,7 +295,7 @@ fn canister_update_settings_environment_variables() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 
@@ -438,7 +438,7 @@ fn canister_update_settings_miscellaneous() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 

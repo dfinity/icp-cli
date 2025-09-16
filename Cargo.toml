@@ -21,7 +21,7 @@ bigdecimal = "0.4.8"
 bip32 = "0.5.0"
 camino = { version = "1.1.9", features = ["serde1"] }
 camino-tempfile = "1"
-candid = "0.10.14"
+candid = "0.10.19"
 candid_parser = "0.1"
 clap = { version = "4.5.3", features = ["derive", "env"] }
 clap-markdown = "0.1.5"

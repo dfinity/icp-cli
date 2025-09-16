@@ -1,10 +1,11 @@
-use std::{collections::VecDeque, time::Duration};
+use std::{collections::VecDeque, sync::RwLock, time::Duration};
 
 use futures::Future;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tokio::sync::mpsc;
 use tracing::debug;
+use icp_adapter::script::{ScriptAdapterProgressHandler, ScriptAdapterProgress};
 
 // Animation frames for the spinner - creates a rotating star effect
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
@@ -149,9 +150,30 @@ impl ProgressManager {
 }
 
 /// Utility for handling script adapter progress with rolling terminal output
+#[derive(Debug)]
 pub struct ScriptProgressHandler {
     progress_bar: ProgressBar,
     header: String,
+    eheader: RwLock<String>,
+}
+
+impl ScriptAdapterProgressHandler for ScriptProgressHandler {
+    fn progress_update(&self, event: ScriptAdapterProgress) {
+        match event {
+            ScriptAdapterProgress::ScriptStarted { title } => {
+                *self.eheader.write().unwrap() = title.clone();
+                self.progress_bar.set_message(title);
+            },
+            ScriptAdapterProgress::Progress { line } => {
+                let header = self.eheader.read().unwrap();
+                self.progress_bar.set_message(format!("{}\n{line}\n", *header));
+            },
+            ScriptAdapterProgress::ScriptFinished { status, title } => {
+                *self.eheader.write().unwrap() = title.clone();
+                self.progress_bar.set_message(format!("{status} - {title}"));
+            },
+        }
+    }
 }
 
 impl ScriptProgressHandler {
@@ -160,6 +182,16 @@ impl ScriptProgressHandler {
         Self {
             progress_bar,
             header,
+            eheader: RwLock::new("".to_string()),
+        }
+    }
+
+    //Temporary to keep backwards compatibility
+    pub fn create() -> Self {
+        Self {
+            progress_bar: ProgressBar::new_spinner(),
+            header: "".to_string(),
+            eheader: RwLock::new("".to_string()),
         }
     }
 

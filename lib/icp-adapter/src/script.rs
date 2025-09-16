@@ -1,5 +1,6 @@
-use std::fmt;
+use std::fmt::Debug;
 use std::process::Stdio;
+use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
 use camino::Utf8Path;
@@ -45,12 +46,31 @@ pub struct ScriptAdapter {
 
     #[serde(skip)]
     pub stdio_sender: Option<Sender<String>>,
+
+    #[serde(skip)]
+    pub progress_handler: Vec<Arc<dyn ScriptAdapterProgressHandler>>,
+}
+
+impl Default for ScriptAdapter {
+    fn default() -> Self {
+        Self {
+            command: CommandField::Command("exit 1".to_string()),
+            stdio_sender: None,
+            progress_handler: vec![],
+        }
+    }
 }
 
 impl ScriptAdapter {
     pub fn with_stdio_sender(&self, sender: Sender<String>) -> Self {
         let mut v = self.clone();
         v.stdio_sender = Some(sender);
+        v
+    }
+
+    pub fn with_progress_handler(&self, handler: Arc<dyn ScriptAdapterProgressHandler>) -> Self {
+        let mut v = self.clone();
+        v.progress_handler.push(handler);
         v
     }
 }
@@ -138,18 +158,18 @@ impl build::Adapter for ScriptAdapter {
                 BufReader::new(stderr).lines(), //
             );
 
+
             // Spawn command and handle stdio
             let (_, _, status) = try_join!(
-                //
+
                 // Stdout
                 tokio::spawn({
-                    // Clone the stdio sender for use in the stdout handling task
-                    let stdio_sender = self.stdio_sender.clone();
+                    let progress_handlers = self.progress_handler.clone();
 
                     async move {
                         while let Ok(Some(line)) = stdout.next_line().await {
-                            if let Some(sender) = &stdio_sender {
-                                let _ = sender.send(line).await;
+                            for handler in &progress_handlers {
+                                handler.progress_update(ScriptAdapterProgress::Progress { line: line.clone() });
                             }
                         }
                     }
@@ -157,13 +177,12 @@ impl build::Adapter for ScriptAdapter {
                 //
                 // Stderr
                 tokio::spawn({
-                    // Clone the stdio sender for use in the stderr handling task
-                    let stdio_sender = self.stdio_sender.clone();
+                    let progress_handlers = self.progress_handler.clone();
 
                     async move {
                         while let Ok(Some(line)) = stderr.next_line().await {
-                            if let Some(sender) = &stdio_sender {
-                                let _ = sender.send(line).await;
+                            for handler in &progress_handlers {
+                                handler.progress_update(ScriptAdapterProgress::Progress { line: line.clone() });
                             }
                         }
                     }
@@ -366,6 +385,17 @@ pub enum ScriptAdapterSyncError {
     CommandStatus { command: String, code: String },
 }
 
+pub trait ScriptAdapterProgressHandler: Debug + Sync + Send {
+    fn progress_update(&self, event: ScriptAdapterProgress);
+}
+
+#[derive(Debug)]
+pub enum ScriptAdapterProgress {
+    ScriptStarted { title: String }, // Emitted when a task is started
+    Progress { line: String },     // Task emitted a new log line
+    ScriptFinished { status: bool, title: String }, // indicates success or failure
+}
+
 #[cfg(test)]
 mod tests {
     use crate::build::Adapter as _;
@@ -386,7 +416,7 @@ mod tests {
                 f.path(),
                 f.path()
             )),
-            stdio_sender: None,
+            ..Default::default()
         };
 
         // Invoke adapter
@@ -416,7 +446,7 @@ mod tests {
                 format!("sh -c 'echo cmd-3 >> {}'", f.path()),
                 format!("echo {}", f.path()),
             ]),
-            stdio_sender: None,
+            ..Default::default()
         };
 
         // Invoke adapter
@@ -438,7 +468,7 @@ mod tests {
         // Define adapter
         let v = ScriptAdapter {
             command: CommandField::Command("".into()),
-            stdio_sender: None,
+            ..Default::default()
         };
 
         // Invoke adapter
@@ -458,7 +488,7 @@ mod tests {
         // Define adapter
         let v = ScriptAdapter {
             command: CommandField::Command("invalid-command".into()),
-            stdio_sender: None,
+            ..Default::default()
         };
 
         // Invoke adapter
@@ -480,7 +510,7 @@ mod tests {
         // Define adapter
         let v = ScriptAdapter {
             command: CommandField::Command("sh -c 'exit 1'".into()),
-            stdio_sender: None,
+            ..Default::default()
         };
 
         // Invoke adapter

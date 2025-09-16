@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::io;
+use std::sync::Arc;
 
 use camino_tempfile::tempdir;
 use clap::Parser;
@@ -8,13 +9,11 @@ use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
+use tracing::debug;
 
 use crate::context::GetProjectError;
-use crate::{
-    context::Context,
-    progress::{ProgressManager, ScriptProgressHandler},
-    store_artifact::SaveError,
-};
+use crate::progress::ScriptProgressHandler;
+use crate::{context::Context, store_artifact::SaveError};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -60,17 +59,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new();
-
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
-        // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
-
         // Create an async closure that handles the build process for this specific canister
+        debug!("Building {}", c.name);
         let build_fn = {
             let c = c.clone();
-            let pb = pb.clone();
+            let sph = Arc::new(ScriptProgressHandler::create());
 
             async move {
                 // Create a temporary directory for build artifacts
@@ -79,29 +74,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Prepare a path for our output wasm
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
-                let step_count = c.build.steps.len();
+                let _step_count = c.build.steps.len();
                 for (i, step) in c.build.steps.iter().enumerate() {
                     // Indicate to user the current step being executed
-                    let current_step = i + 1;
-                    let pb_hdr = format!("Building: {step} {current_step} of {step_count}");
+                    let _current_step = i + 1;
 
-                    let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
+                    let sph = sph.clone();
 
                     match step {
                         // Compile using the custom script adapter.
                         BuildStep::Script(adapter) => {
                             // Setup script progress handling
-                            let tx = script_handler.setup_output_handler();
 
                             adapter
-                                .with_stdio_sender(tx)
-                                .compile(&canister_path, &wasm_output_path)
-                                .await?
+                                .with_progress_handler(sph)
+                                .compile(&canister_path, &wasm_output_path).await?
                         }
 
                         // Compile using the Pre-built adapter.
                         BuildStep::Prebuilt(adapter) => {
-                            pb.set_message(pb_hdr);
                             adapter.compile(&canister_path, &wasm_output_path).await?
                         }
                     };
@@ -124,16 +115,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             }
         };
 
-        futs.push_back(async move {
-            // Execute the build function with progress tracking
-            ProgressManager::execute_with_progress(
-                pb,
-                build_fn,
-                || "Built successfully".to_string(),
-                |err| format!("Failed to build canister: {err}"),
-            )
-            .await
-        });
+        futs.push_back(build_fn);
     }
 
     // Consume the set of futures and abort if an error occurs

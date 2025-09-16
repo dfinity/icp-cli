@@ -1,6 +1,8 @@
+use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Parser};
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable};
+use ic_utils::interfaces::management_canister::attributes::ComputeAllocation;
 use snafu::Snafu;
 use std::collections::{HashMap, HashSet};
 
@@ -27,6 +29,12 @@ pub struct Cmd {
 
     #[arg(long, action = ArgAction::Append)]
     set_controller: Option<Vec<Principal>>,
+
+    #[arg(long, value_parser = compute_allocation_parser)]
+    compute_allocation: Option<u8>,
+
+    #[arg(long, value_parser = memory_allocation_parser)]
+    memory_allocation: Option<Byte>,
 
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
@@ -147,6 +155,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // Handle compute allocation.
+    let compute_allocation = cmd
+        .compute_allocation
+        .map(|c| {
+            ComputeAllocation::try_from(c).map_err(|_| CommandError::InvalidComputeAllocation {
+                compute_allocation: c,
+            })
+        })
+        .transpose()?;
+
+    // Handle memory allocation.
+    let memory_allocation = cmd.memory_allocation.map(|m| m.as_u64());
+
     // Handle environment variables.
     let mut environment_variables: Option<HashMap<String, String>> = None;
     if let Some(to_be_added) = cmd.add_environment_variable {
@@ -202,12 +223,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             update = update.with_controller(controller);
         }
     }
+    if let Some(compute_allocation) = compute_allocation {
+        update = update.with_compute_allocation(compute_allocation);
+    }
     if let Some(environment_variables) = environment_variables {
         let environment_variables = environment_variables
             .into_iter()
             .map(|(name, value)| EnvironmentVariable { name, value })
             .collect::<Vec<_>>();
         update = update.with_environment_variables(environment_variables);
+    }
+    if let Some(memory_allocation) = memory_allocation {
+        update = update.with_memory_allocation(memory_allocation);
     }
     update.await?;
 
@@ -230,6 +257,12 @@ pub enum CommandError {
         environment: String,
         canister: String,
     },
+
+    #[snafu(display("compute allocation must be a percent between 0 and 100"))]
+    InvalidComputeAllocation { compute_allocation: u8 },
+
+    #[snafu(display("memory allocation must be a value between 0..256 TiB inclusive"))]
+    InvalidMemoryAllocation { memory_allocation: Byte },
 
     #[snafu(display("invalid environment variable '{variable}'"))]
     InvalidEnvironmentVariable { variable: String },
@@ -255,4 +288,24 @@ fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, Com
         name: name.to_owned(),
         value: value.to_owned(),
     })
+}
+
+fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
+    if let Ok(num) = compute_allocation.parse::<u8>() {
+        if num <= 100 {
+            return Ok(num);
+        }
+    }
+    Err("Must be a percent between 0 and 100".to_string())
+}
+
+fn memory_allocation_parser(memory_allocation: &str) -> Result<Byte, String> {
+    let limit = Byte::from_u64_with_unit(256, Unit::TiB).expect("256 TiB is a valid byte unit");
+    if let Ok(byte) = memory_allocation.parse::<Byte>() {
+        if byte > limit {
+            return Err("Memory allocation must be less than 256 TiB".to_string());
+        }
+        return Ok(byte);
+    }
+    Err("Must be a value between 0..256 TiB inclusive".to_string())
 }

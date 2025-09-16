@@ -398,3 +398,87 @@ fn canister_update_settings_environment_variables() {
                 .and(contains("Environment Variables: N/A")),
         );
 }
+
+#[test]
+#[serial]
+fn canister_update_settings_miscellaneous() {
+    let ctx = TestContext::new().with_dfx();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+        "#,
+        wasm,
+    );
+
+    write(
+        project_dir.join("icp.yaml"), // path
+        pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir);
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir);
+
+    // Deploy project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Compute allocation: 0")),
+        );
+
+    // Update compute allocation
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--compute-allocation",
+            "1",
+            "--memory-allocation",
+            "6GiB",
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Compute allocation: 1"))
+                .and(contains("Memory allocation: 6_442_450_944")),
+        );
+}

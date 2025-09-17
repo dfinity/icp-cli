@@ -39,6 +39,7 @@ hex = "0.4.3"
 httptest = "0.16.3"
 ic-agent = { version = "0.44.1" }
 ic-asset = { version = "0.25.0" }
+ic-ledger-types = "0.15.0"
 ic-utils = { version = "0.44.1" }
 icp-adapter = { path = "lib/icp-adapter" }
 icp-canister = { path = "lib/icp-canister" }

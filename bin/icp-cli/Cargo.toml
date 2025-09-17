@@ -24,6 +24,7 @@ futures.workspace = true
 hex.workspace = true
 httptest.workspace = true
 ic-agent.workspace = true
+ic-ledger-types.workspace = true
 ic-utils.workspace = true
 icp-adapter.workspace = true
 icp-canister.workspace = true

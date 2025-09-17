@@ -202,8 +202,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     "Update environment variables with new canister bindings: {:?}",
                     environment_variables
                 );
-                mgmt
-                    .update_settings(&cid)
+                mgmt.update_settings(&cid)
                     .with_environment_variables(environment_variables)
                     .await?;
 

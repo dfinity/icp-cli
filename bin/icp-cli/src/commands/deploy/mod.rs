@@ -8,7 +8,7 @@ use crate::{
         build,
         canister::{
             create::{self, CanisterIDs, CanisterSettings, DEFAULT_EFFECTIVE_ID},
-            install, settings,
+            install, binding_env_vars,
         },
         sync,
     },
@@ -154,9 +154,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     let _ = ctx.term.write_line("\n\nSetting environment variables:");
-    let out = settings::exec(
+    let out = binding_env_vars::exec(
         ctx,
-        settings::Cmd {
+        binding_env_vars::Cmd {
             names: cnames.to_owned(),
             identity: cmd.identity.clone(),
             environment: cmd.environment.clone(),
@@ -165,7 +165,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     .await;
 
     if let Err(err) = out {
-        if !matches!(err, settings::CommandError::NoCanisters) {
+        if !matches!(err, binding_env_vars::CommandError::NoCanisters) {
             return Err(CommandError::SetEnvironmentVariables { source: err });
         }
     }
@@ -234,7 +234,7 @@ pub enum CommandError {
     Install { source: install::CommandError },
 
     #[snafu(transparent)]
-    SetEnvironmentVariables { source: settings::CommandError },
+    SetEnvironmentVariables { source: binding_env_vars::CommandError },
 
     #[snafu(transparent)]
     Sync { source: sync::CommandError },

@@ -9,7 +9,7 @@ pub mod delete;
 pub mod info;
 pub mod install;
 pub mod list;
-pub mod settings;
+pub mod binding_env_vars;
 pub mod show;
 pub mod start;
 pub mod status;

@@ -451,7 +451,11 @@ fn canister_update_settings_miscellaneous() {
         .stderr(
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
-                .and(contains("Compute allocation: 0")),
+                .and(contains("Compute allocation: 0"))
+                .and(contains("Freezing threshold: 2_592_000"))
+                .and(contains("Reserved cycles limit: 5_000_000_000_000"))
+                .and(contains("Wasm memory limit: 3_221_225_472"))
+                .and(contains("Wasm memory threshold: 0")),
         );
 
     // Update compute allocation
@@ -465,6 +469,14 @@ fn canister_update_settings_miscellaneous() {
             "1",
             "--memory-allocation",
             "6GiB",
+            "--freezing-threshold",
+            "8640000",
+            "--reserved-cycles-limit",
+            "6000000000000",
+            "--wasm-memory-limit",
+            "4GiB",
+            "--wasm-memory-threshold",
+            "4GiB",
         ])
         .assert()
         .success();
@@ -479,6 +491,10 @@ fn canister_update_settings_miscellaneous() {
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
                 .and(contains("Compute allocation: 1"))
-                .and(contains("Memory allocation: 6_442_450_944")),
+                .and(contains("Memory allocation: 6_442_450_944"))
+                .and(contains("Freezing threshold: 8_640_000"))
+                .and(contains("Reserved cycles limit: 6_000_000_000_000"))
+                .and(contains("Wasm memory limit: 4_294_967_296"))
+                .and(contains("Wasm memory threshold: 4_294_967_296")),
         );
 }

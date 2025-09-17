@@ -2,7 +2,6 @@ use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Parser};
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable};
-use ic_utils::interfaces::management_canister::attributes::ComputeAllocation;
 use snafu::Snafu;
 use std::collections::{HashMap, HashSet};
 
@@ -33,8 +32,20 @@ pub struct Cmd {
     #[arg(long, value_parser = compute_allocation_parser)]
     compute_allocation: Option<u8>,
 
-    #[arg(long, value_parser = memory_allocation_parser)]
+    #[arg(long, value_parser = memory_parser)]
     memory_allocation: Option<Byte>,
+
+    #[arg(long, value_parser = freezing_threshold_parser)]
+    freezing_threshold: Option<u64>,
+
+    #[arg(long, value_parser = reserved_cycles_limit_parser)]
+    reserved_cycles_limit: Option<u128>,
+
+    #[arg(long, value_parser = memory_parser)]
+    wasm_memory_limit: Option<Byte>,
+
+    #[arg(long, value_parser = memory_parser)]
+    wasm_memory_threshold: Option<Byte>,
 
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
@@ -107,7 +118,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let mut current_status: Option<CanisterStatusResult> = None;
 
-    // Handle controllers.
+    // TODO(VZ): Ask for consent
+    // - if the freezing threshold is too long or too short.
+    // - if trying to remove the caller itself from the controllers.
+
     let mut controllers: Option<Vec<Principal>> = None;
     if let Some(to_be_set) = cmd.set_controller {
         controllers = Some(to_be_set);
@@ -155,20 +169,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
-    // Handle compute allocation.
-    let compute_allocation = cmd
-        .compute_allocation
-        .map(|c| {
-            ComputeAllocation::try_from(c).map_err(|_| CommandError::InvalidComputeAllocation {
-                compute_allocation: c,
-            })
-        })
-        .transpose()?;
-
-    // Handle memory allocation.
-    let memory_allocation = cmd.memory_allocation.map(|m| m.as_u64());
-
-    // Handle environment variables.
     let mut environment_variables: Option<HashMap<String, String>> = None;
     if let Some(to_be_added) = cmd.add_environment_variable {
         if current_status.is_none() {
@@ -223,8 +223,23 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             update = update.with_controller(controller);
         }
     }
-    if let Some(compute_allocation) = compute_allocation {
+    if let Some(compute_allocation) = cmd.compute_allocation {
         update = update.with_compute_allocation(compute_allocation);
+    }
+    if let Some(memory_allocation) = cmd.memory_allocation {
+        update = update.with_memory_allocation(memory_allocation.as_u64());
+    }
+    if let Some(freezing_threshold) = cmd.freezing_threshold {
+        update = update.with_freezing_threshold(freezing_threshold);
+    }
+    if let Some(reserved_cycles_limit) = cmd.reserved_cycles_limit {
+        update = update.with_reserved_cycles_limit(reserved_cycles_limit);
+    }
+    if let Some(wasm_memory_limit) = cmd.wasm_memory_limit {
+        update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
+    }
+    if let Some(wasm_memory_threshold) = cmd.wasm_memory_threshold {
+        update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
     }
     if let Some(environment_variables) = environment_variables {
         let environment_variables = environment_variables
@@ -232,9 +247,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             .map(|(name, value)| EnvironmentVariable { name, value })
             .collect::<Vec<_>>();
         update = update.with_environment_variables(environment_variables);
-    }
-    if let Some(memory_allocation) = memory_allocation {
-        update = update.with_memory_allocation(memory_allocation);
     }
     update.await?;
 
@@ -257,12 +269,6 @@ pub enum CommandError {
         environment: String,
         canister: String,
     },
-
-    #[snafu(display("compute allocation must be a percent between 0 and 100"))]
-    InvalidComputeAllocation { compute_allocation: u8 },
-
-    #[snafu(display("memory allocation must be a value between 0..256 TiB inclusive"))]
-    InvalidMemoryAllocation { memory_allocation: Byte },
 
     #[snafu(display("invalid environment variable '{variable}'"))]
     InvalidEnvironmentVariable { variable: String },
@@ -299,13 +305,26 @@ fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
     Err("Must be a percent between 0 and 100".to_string())
 }
 
-fn memory_allocation_parser(memory_allocation: &str) -> Result<Byte, String> {
+fn memory_parser(memory_allocation: &str) -> Result<Byte, String> {
     let limit = Byte::from_u64_with_unit(256, Unit::TiB).expect("256 TiB is a valid byte unit");
     if let Ok(byte) = memory_allocation.parse::<Byte>() {
-        if byte > limit {
-            return Err("Memory allocation must be less than 256 TiB".to_string());
+        if byte <= limit {
+            return Ok(byte);
         }
-        return Ok(byte);
     }
-    Err("Must be a value between 0..256 TiB inclusive".to_string())
+    Err("Must be a value between 0..256 TiB inclusive, (e.g. '2GiB')".to_string())
+}
+
+fn freezing_threshold_parser(freezing_threshold: &str) -> Result<u64, String> {
+    if let Ok(num) = freezing_threshold.parse::<u64>() {
+        return Ok(num);
+    }
+    Err("Must be a value between 0..2^64-1 inclusive".to_string())
+}
+
+fn reserved_cycles_limit_parser(reserved_cycles_limit: &str) -> Result<u128, String> {
+    if let Ok(num) = reserved_cycles_limit.parse::<u128>() {
+        return Ok(num);
+    }
+    Err("Must be a value between 0..2^128-1 inclusive".to_string())
 }

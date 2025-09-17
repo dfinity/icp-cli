@@ -54,54 +54,54 @@ pub struct Cmd {
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-struct CmcResponse {
-    data: CmcData,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-struct CmcData {
+struct RateData {
     xdr_permyriad_per_icp: u64,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesArgs {
+struct RateResponse {
+    data: RateData,
+}
+
+#[derive(Debug, Deserialize, CandidType)]
+pub struct NotifyArgs {
     pub block_index: u64,
     pub deposit_memo: Option<Vec<u8>>,
     pub to_subaccount: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesOk {
+pub struct NotifyErrorRefunded {
+    pub block_index: Option<u64>,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize, CandidType)]
+pub struct NotifyErrorOther {
+    pub error_message: String,
+    pub error_code: u64,
+}
+
+#[derive(Debug, Deserialize, CandidType)]
+pub enum NotifyError {
+    InvalidTransaction(String),
+    Other(NotifyErrorOther),
+    Processing,
+    Refunded(NotifyErrorRefunded),
+    TransactionTooOld(u64),
+}
+
+#[derive(Debug, Deserialize, CandidType)]
+pub struct NotifyOk {
     pub balance: Nat,
     pub block_index: Nat,
     pub minted: Nat,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesRefunded {
-    pub block_index: Option<u64>,
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesOther {
-    pub error_message: String,
-    pub error_code: u64,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintCyclesErr {
-    Refunded(NotifyMintCyclesRefunded),
-    InvalidTransaction(String),
-    Other(NotifyMintCyclesOther),
-    Processing,
-    TransactionTooOld(u64),
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintCyclesResponse {
-    Ok(NotifyMintCyclesOk),
-    Err(NotifyMintCyclesErr),
+pub enum NotifyResponse {
+    Ok(NotifyOk),
+    Err(NotifyError),
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -155,7 +155,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 .await?;
 
             // Decode response
-            let resp = Decode!(&resp, CmcResponse)?;
+            let resp = Decode!(&resp, RateResponse)?;
 
             // Current cycles price in icp
             let cost = resp.data.xdr_permyriad_per_icp as u128;
@@ -251,7 +251,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             err: err.to_string(),
         })?;
 
-    let arg = NotifyMintCyclesArgs {
+    let arg = NotifyArgs {
         block_index: idx,
         deposit_memo: None,
         to_subaccount: None,
@@ -264,20 +264,20 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .await?;
 
     // Parse response
-    let resp = Decode!(&resp, NotifyMintCyclesResponse)?;
+    let resp = Decode!(&resp, NotifyResponse)?;
 
     // Convert response
     let resp = match resp {
         // Success
-        NotifyMintCyclesResponse::Ok(v) => Ok(v),
+        NotifyResponse::Ok(v) => Ok(v),
 
         // Failure
-        NotifyMintCyclesResponse::Err(err) => Err(CommandError::Transfer {
+        NotifyResponse::Err(err) => Err(CommandError::Transfer {
             err: format!("{err:?}"),
         }),
     }?;
 
-    let NotifyMintCyclesOk {
+    let NotifyOk {
         balance, minted, ..
     } = resp;
 

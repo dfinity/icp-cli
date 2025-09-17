@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
+use icp_adapter::script::{ScriptAdapterProgress, ScriptAdapterProgressHandler};
 use snafu::Snafu;
 
 use crate::{
@@ -125,18 +126,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let progress_manager = ProgressManager::new();
 
     for (_, c) in cs {
-        // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+
+        let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
         // Create an async closure that handles the operation for this specific canister
         let install_fn = {
             let cmd = cmd.clone();
             let mgmt = mgmt.clone();
-            let pb = pb.clone();
+            let sph = sph.clone();
 
             async move {
                 // Indicate to user that the canister is being installed
-                pb.set_message("Installing...");
+                sph.progress_update(ScriptAdapterProgress::ScriptStarted { title: "Installing...".to_string() });
 
                 // Lookup the canister id
                 let cid = ctx.id_store.lookup(&Key {
@@ -185,13 +186,16 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         futs.push_back(async move {
             // Execute the install function with progress tracking
-            ProgressManager::execute_with_progress(
-                pb,
-                install_fn,
-                || "Installed successfully".to_string(),
-                |err| format!("Failed to install canister: {err}"),
-            )
-            .await
+            let result = install_fn.await;
+            match result {
+                Ok(_) => 
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Created".to_string() }),
+                Err(e) => {
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: format!("Installation failed: {}", e) });
+                    return Err(e);
+                }
+            }
+            result
         });
     }
 

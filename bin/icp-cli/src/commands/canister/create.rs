@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
+use icp_adapter::script::{ScriptAdapterProgressHandler, ScriptAdapterProgress};
 use snafu::Snafu;
 
 use crate::{
@@ -176,18 +177,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let progress_manager = ProgressManager::new();
 
     for (_, c) in cs {
-        // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+
+        let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
             let cmd = cmd.clone();
             let mgmt = mgmt.clone();
-            let pb = pb.clone();
+            let sph = sph.clone();
 
             async move {
                 // Indicate to user that the canister is created
-                pb.set_message("Creating...");
+                sph.progress_update(ScriptAdapterProgress::ScriptStarted { title: "Creating...".to_string() });
 
                 // Create canister-network association-key
                 let k = Key {
@@ -312,24 +313,22 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         futs.push_back(async move {
             // Execute the create function with custom progress tracking
-            let mut result = ProgressManager::execute_with_custom_progress(
-                pb,
-                create_fn,
-                || "Created successfully".to_string(),
-                |err| match err {
-                    CommandError::CanisterExists { principal } => {
-                        format!("Canister already created: {principal}")
-                    }
-                    _ => format!("Failed to create canister: {err}"),
+            let result = create_fn.await;
+            match result {
+                Ok(_) => {
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Created".to_string() });
                 },
-                |err| matches!(err, CommandError::CanisterExists { .. }),
-            )
-            .await;
-
-            // If canister already exists, it is not considered an error
-            if let Err(CommandError::CanisterExists { .. }) = result {
-                result = Ok(());
-            }
+                Err(e) => {
+                    match e {
+                        CommandError::CanisterExists { principal: _ } => return Ok(()), // We're
+                        // good
+                        _ => {
+                            sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: format!("Creating failed: {}", e) });
+                            return Err(e);
+                        }
+                    }
+                }
+            };
 
             result
         });

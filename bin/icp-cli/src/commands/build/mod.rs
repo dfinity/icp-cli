@@ -8,12 +8,11 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
-use indicatif::MultiProgress;
 use snafu::{ResultExt, Snafu};
 use tracing::debug;
 
 use crate::context::GetProjectError;
-use crate::progress::ScriptProgressHandler;
+use crate::progress::ProgressManager;
 use crate::{context::Context, store_artifact::SaveError};
 
 #[derive(Parser, Debug)]
@@ -62,7 +61,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     //Create the mulitprogressbar
     //We might choose to disable it depending on the state
-    let multiprogress = MultiProgress::new();
+    let progress_manager = ProgressManager::new();
 
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
@@ -70,10 +69,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         debug!("Building {}", c.name);
         let build_fn = {
             let c = c.clone();
-            let sph = Arc::new(
-                ScriptProgressHandler::create(&multiprogress,
-                    c.name.clone())
-            );
+            let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
             async move {
                 // Create a temporary directory for build artifacts
@@ -95,7 +91,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             // Setup script progress handling
 
                             adapter
-                                .with_progress_handler(sph)
+                                .with_progress_handler(sph) 
                                 .compile(&canister_path, &wasm_output_path).await?
                         }
 

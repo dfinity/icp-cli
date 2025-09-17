@@ -1,14 +1,14 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
-    progress::{ProgressManager, ScriptProgressHandler},
+    progress::ProgressManager,
     store_id::{Key, LookupError},
 };
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp_adapter::sync::{Adapter, AdapterSyncError};
+use icp_adapter::{script::{ScriptAdapterProgress, ScriptAdapterProgressHandler}, sync::{Adapter, AdapterSyncError}};
 use icp_canister::SyncStep;
 use snafu::Snafu;
 
@@ -118,8 +118,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in cs {
-        // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+
+        let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
         // Get canister principal ID
         let cid = ctx.id_store.lookup(&Key {
@@ -129,31 +129,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         })?;
 
         // Create an async closure that handles the sync process for this specific canister
-        let sync_fn = {
-            let pb = pb.clone();
 
+        let sync_fn = {
+            let sph = sph.clone();
             async move {
                 for step in &c.sync.steps {
                     // Indicate to user the current step being executed
-                    let pb_hdr = format!("Syncing: {step}");
-
-                    let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
-
+                    let sph = sph.clone();
                     match step {
                         // Synchronize the canister using the custom script adapter.
                         SyncStep::Script(adapter) => {
                             // Setup script progress handling
-                            let tx = script_handler.setup_output_handler();
-
                             adapter
-                                .with_stdio_sender(tx)
+                                .with_progress_handler(sph)
                                 .sync(canister_path, &cid, agent)
                                 .await?
                         }
 
                         // Synchronize the canister using the assets adapter.
                         SyncStep::Assets(adapter) => {
-                            pb.set_message(pb_hdr);
                             adapter.sync(canister_path, &cid, agent).await?
                         }
                     };
@@ -165,13 +159,16 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         futs.push_back(async move {
             // Execute the sync function with progress tracking
-            ProgressManager::execute_with_progress(
-                pb,
-                sync_fn,
-                || format!("Synced successfully: {cid}"),
-                |err| format!("Failed to sync canister: {err}"),
-            )
-            .await
+            let result = sync_fn.await;
+            match result {
+                Ok(_) => 
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Synced".to_string() }),
+                Err(e) => {
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: format!("Sync failed: {}", e) });
+                    return Err(e);
+                }
+            }
+            result
         });
     }
 

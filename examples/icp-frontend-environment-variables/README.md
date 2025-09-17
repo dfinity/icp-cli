@@ -13,7 +13,7 @@ This project consists of two canisters:
 
 The [`@icp-sdk/bindgen`](https://npmjs.com/package/@icp-sdk/bindgen) library offers a plugin for Vite that generates the TypeScript Candid bindings from the [`backend.did`](./backend/dist/hello_world.did) file. The bindings are generated at build time by Vite and are saved in the [`frontend/app/src/backend/api/`](./frontend/app/src/backend/api/) folder.
 
-The plugin supports hot module replacement, so you can run the frontend in development mode (by running `pnpm dev` in the [`frontend/app/`](./frontend/app/) folder) and make changes to the Candid declaration file to see the bindings being updated in real time.
+The plugin supports hot module replacement, so you can run the frontend in development mode (by running `npm run dev` in the [`frontend/app/`](./frontend/app/) folder) and make changes to the Candid declaration file to see the bindings being updated in real time.
 
 The plugin also supports additional features, such as the ability to generate a TypeScript declaration file for the environment variables that are available to the frontend. The [`canister-env.d.ts`](./frontend/app/src/backend/api/canister-env.d.ts) file is generated automatically by the plugin and is used to type the environment variables in the frontend code. See the [Environment Variables](#environment-variables) section for more details.
 
@@ -39,18 +39,11 @@ The [Bindings Generation](#bindings-generation) process is also configured to ge
 Before you begin, ensure that you have the following installed:
 
 - [Node.js](https://nodejs.org/)
-- [pnpm](https://pnpm.io/)
+- [npm](https://docs.npmjs.com/)
 
 ## Instructions
 
-First, install the frontend dependencies:
-
-```bash
-cd frontend
-pnpm install
-```
-
-Then, start a local network in a separate terminal window:
+First, start a local network in a separate terminal window:
 
 ```bash
 icp network run

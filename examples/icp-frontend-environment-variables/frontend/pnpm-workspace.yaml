@@ -1,8 +1,0 @@
-packages:
-  - app
-  - libs/canister-env
-
-onlyBuiltDependencies:
-  - esbuild
-  - unrs-resolver
-  - wasm-pack

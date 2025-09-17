@@ -9,6 +9,7 @@ name = "icp"
 path = "src/main.rs"
 
 [dependencies]
+bigdecimal.workspace = true
 bip32.workspace = true
 camino-tempfile.workspace = true
 camino.workspace = true
@@ -31,10 +32,12 @@ icp-fs.workspace = true
 icp-identity.workspace = true
 icp-network.workspace = true
 icp-project.workspace = true
+icrc-ledger-types.workspace = true
 indicatif.workspace = true
 itertools.workspace = true
 k256.workspace = true
 pem.workspace = true
+phf = { workspace = true }
 pkcs8.workspace = true
 reqwest = { workspace = true }
 sec1.workspace = true

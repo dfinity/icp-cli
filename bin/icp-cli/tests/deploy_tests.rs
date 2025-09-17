@@ -1,7 +1,6 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
-use serial_test::serial;
 
 mod common;
 
@@ -61,7 +60,6 @@ fn deploy_canister_not_found() {
 }
 
 #[test]
-#[serial]
 fn deploy() {
     let ctx = TestContext::new().with_dfx();
 
@@ -91,6 +89,7 @@ fn deploy() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -113,7 +112,6 @@ fn deploy() {
 }
 
 #[test]
-#[serial]
 fn deploy_twice_should_succeed() {
     let ctx = TestContext::new().with_dfx();
 
@@ -143,6 +141,7 @@ fn deploy_twice_should_succeed() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network

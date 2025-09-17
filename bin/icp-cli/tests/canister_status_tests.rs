@@ -4,12 +4,10 @@ use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
-use serial_test::serial;
 
 mod common;
 
 #[test]
-#[serial]
 fn canister_status() {
     let ctx = TestContext::new().with_dfx();
 
@@ -39,6 +37,7 @@ fn canister_status() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network

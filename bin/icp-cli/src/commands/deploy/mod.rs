@@ -7,8 +7,9 @@ use crate::{
     commands::{
         build,
         canister::{
+            binding_env_vars,
             create::{self, CanisterIDs, CanisterSettings, DEFAULT_EFFECTIVE_ID},
-            install, binding_env_vars,
+            install,
         },
         sync,
     },
@@ -234,7 +235,9 @@ pub enum CommandError {
     Install { source: install::CommandError },
 
     #[snafu(transparent)]
-    SetEnvironmentVariables { source: binding_env_vars::CommandError },
+    SetEnvironmentVariables {
+        source: binding_env_vars::CommandError,
+    },
 
     #[snafu(transparent)]
     Sync { source: sync::CommandError },

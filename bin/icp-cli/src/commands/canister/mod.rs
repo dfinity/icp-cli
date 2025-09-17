@@ -3,13 +3,13 @@ use snafu::Snafu;
 
 use crate::context::Context;
 
+pub mod binding_env_vars;
 pub mod call;
 pub mod create;
 pub mod delete;
 pub mod info;
 pub mod install;
 pub mod list;
-pub mod binding_env_vars;
 pub mod show;
 pub mod start;
 pub mod status;

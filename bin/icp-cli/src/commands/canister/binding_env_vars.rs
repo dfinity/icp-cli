@@ -134,21 +134,23 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Check that all the canisters in this environment have an id
     // We need to have all the ids to generate environment variables
     // for the bindings
-    let canisters_with_ids : HashSet<&String> = canister_list.iter().map(|(n, _p)| n).collect();
+    let canisters_with_ids: HashSet<&String> = canister_list.iter().map(|(n, _p)| n).collect();
     debug!("Canisters with ids: {:?}", canisters_with_ids);
 
-    let missing_canisters : Vec<String> = ecs.iter()
+    let missing_canisters: Vec<String> = ecs
+        .iter()
         .filter(|c| !canisters_with_ids.contains(c))
         .map(|c| c.to_string())
         .collect();
 
     debug!("missing canisters: {:?}", missing_canisters);
 
-    if ! missing_canisters.is_empty() {
-        return Err(CommandError::CanisterNotCreated { environment: env.name.to_owned(), canister_names: missing_canisters });
+    if !missing_canisters.is_empty() {
+        return Err(CommandError::CanisterNotCreated {
+            environment: env.name.to_owned(),
+            canister_names: missing_canisters,
+        });
     }
-
-    
 
     debug!("Found canisters: {:?}", canister_list);
     let binding_vars = canister_list
@@ -196,8 +198,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     .map(|(name, value)| EnvironmentVariable { name, value })
                     .collect::<Vec<_>>();
 
-                debug!("Update environment variables with new canister bindings: {:?}", environment_variables);
-                let res = mgmt.update_settings(&cid)
+                debug!(
+                    "Update environment variables with new canister bindings: {:?}",
+                    environment_variables
+                );
+                let res = mgmt
+                    .update_settings(&cid)
                     .with_environment_variables(environment_variables)
                     .await?;
 

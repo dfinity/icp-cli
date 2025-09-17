@@ -1,7 +1,9 @@
 use camino::Utf8Path;
 use candid::Principal;
 use pocket_ic::common::rest::{
-    AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig, InstanceConfig, InstanceId, RawTime, SubnetConfigSet, Topology
+    AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
+    HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
+    InstanceConfig, InstanceId, RawTime, SubnetConfigSet, Topology,
 };
 use reqwest::Url;
 use snafu::prelude::*;

@@ -8,7 +8,10 @@ use crate::{
 };
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp_adapter::{script::{ScriptAdapterProgress, ScriptAdapterProgressHandler}, sync::{Adapter, AdapterSyncError}};
+use icp_adapter::{
+    script::{ScriptAdapterProgress, ScriptAdapterProgressHandler},
+    sync::{Adapter, AdapterSyncError},
+};
 use icp_canister::SyncStep;
 use snafu::Snafu;
 
@@ -118,7 +121,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Iterate through each resolved canister and trigger its sync process.
     for (canister_path, c) in cs {
-
         let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
         // Get canister principal ID
@@ -161,10 +163,15 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             // Execute the sync function with progress tracking
             let result = sync_fn.await;
             match result {
-                Ok(_) => 
-                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Synced".to_string() }),
+                Ok(_) => sph.progress_update(ScriptAdapterProgress::ScriptFinished {
+                    status: true,
+                    title: "Synced".to_string(),
+                }),
                 Err(e) => {
-                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: format!("Sync failed: {}", e) });
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished {
+                        status: false,
+                        title: format!("Sync failed: {}", e),
+                    });
                     return Err(e);
                 }
             }

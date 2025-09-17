@@ -4,7 +4,7 @@ use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
-use icp_adapter::script::{ScriptAdapterProgressHandler, ScriptAdapterProgress};
+use icp_adapter::script::{ScriptAdapterProgress, ScriptAdapterProgressHandler};
 use snafu::Snafu;
 
 use crate::{
@@ -177,7 +177,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let progress_manager = ProgressManager::new();
 
     for (_, c) in cs {
-
         let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
         // Create an async closure that handles the operation for this specific canister
@@ -188,7 +187,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
             async move {
                 // Indicate to user that the canister is created
-                sph.progress_update(ScriptAdapterProgress::ScriptStarted { title: "Creating...".to_string() });
+                sph.progress_update(ScriptAdapterProgress::ScriptStarted {
+                    title: "Creating...".to_string(),
+                });
 
                 // Create canister-network association-key
                 let k = Key {
@@ -316,14 +317,20 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             let result = create_fn.await;
             match result {
                 Ok(_) => {
-                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Created".to_string() });
-                },
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished {
+                        status: true,
+                        title: "Created".to_string(),
+                    });
+                }
                 Err(e) => {
                     match e {
                         CommandError::CanisterExists { principal: _ } => return Ok(()), // We're
                         // good
                         _ => {
-                            sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: format!("Creating failed: {}", e) });
+                            sph.progress_update(ScriptAdapterProgress::ScriptFinished {
+                                status: false,
+                                title: format!("Creating failed: {}", e),
+                            });
                             return Err(e);
                         }
                     }

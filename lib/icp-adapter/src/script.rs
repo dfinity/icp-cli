@@ -99,9 +99,10 @@ impl build::Adapter for ScriptAdapter {
         canister_path: &Utf8Path,
         wasm_output_path: &Utf8Path,
     ) -> Result<(), AdapterCompileError> {
-
         self.progress_handler.iter().for_each(|h| {
-            h.progress_update(ScriptAdapterProgress::ScriptStarted { title: "Started!!".to_string() });
+            h.progress_update(ScriptAdapterProgress::ScriptStarted {
+                title: "Started!!".to_string(),
+            });
         });
 
         // Normalize `command` field based on whether it's a single command or multiple.
@@ -163,10 +164,8 @@ impl build::Adapter for ScriptAdapter {
                 BufReader::new(stderr).lines(), //
             );
 
-
             // Spawn command and handle stdio
             let (_, _, status) = try_join!(
-
                 // Stdout
                 tokio::spawn({
                     let progress_handlers = self.progress_handler.clone();
@@ -174,12 +173,13 @@ impl build::Adapter for ScriptAdapter {
                     async move {
                         while let Ok(Some(line)) = stdout.next_line().await {
                             for handler in &progress_handlers {
-                                handler.progress_update(ScriptAdapterProgress::Progress { line: line.clone() });
+                                handler.progress_update(ScriptAdapterProgress::Progress {
+                                    line: line.clone(),
+                                });
                             }
                         }
                     }
                 }),
-
                 // Stderr
                 tokio::spawn({
                     let progress_handlers = self.progress_handler.clone();
@@ -187,7 +187,9 @@ impl build::Adapter for ScriptAdapter {
                     async move {
                         while let Ok(Some(line)) = stderr.next_line().await {
                             for handler in &progress_handlers {
-                                handler.progress_update(ScriptAdapterProgress::Progress { line: line.clone() });
+                                handler.progress_update(ScriptAdapterProgress::Progress {
+                                    line: line.clone(),
+                                });
                             }
                         }
                     }
@@ -208,11 +210,17 @@ impl build::Adapter for ScriptAdapter {
 
             if status.success() {
                 self.progress_handler.iter().for_each(|h| {
-                    h.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Success".to_string() });
+                    h.progress_update(ScriptAdapterProgress::ScriptFinished {
+                        status: true,
+                        title: "Success".to_string(),
+                    });
                 });
             } else {
                 self.progress_handler.iter().for_each(|h| {
-                    h.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: "Failed...".to_string() });
+                    h.progress_update(ScriptAdapterProgress::ScriptFinished {
+                        status: false,
+                        title: "Failed...".to_string(),
+                    });
                 });
                 return Err(ScriptAdapterCompileError::CommandStatus {
                     command: input_cmd,
@@ -404,7 +412,7 @@ pub trait ScriptAdapterProgressHandler: Debug + Sync + Send {
 #[derive(Debug)]
 pub enum ScriptAdapterProgress {
     ScriptStarted { title: String }, // Emitted when a task is started
-    Progress { line: String },     // Task emitted a new log line
+    Progress { line: String },       // Task emitted a new log line
     ScriptFinished { status: bool, title: String }, // indicates success or failure
 }
 

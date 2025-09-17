@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, sync::RwLock, time::Duration};
 
+use icp_adapter::script::{ScriptAdapterProgress, ScriptAdapterProgressHandler};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use icp_adapter::script::{ScriptAdapterProgressHandler, ScriptAdapterProgress};
 
 // Animation frames for the spinner - creates a rotating star effect
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
@@ -69,7 +69,6 @@ pub struct ProgressManager {
 }
 
 impl ProgressManager {
-
     pub fn new() -> Self {
         Self {
             multi_progress: MultiProgress::new(),
@@ -77,13 +76,9 @@ impl ProgressManager {
     }
 
     pub fn new_progress_handler(&self, name: String) -> ScriptProgressHandler {
-
-        let pb = self.multi_progress.add(
-            ProgressBar::new_spinner()
-                .with_style(
-                    make_style(TICK_EMPTY, COLOR_REGULAR)
-                )
-        );
+        let pb = self
+            .multi_progress
+            .add(ProgressBar::new_spinner().with_style(make_style(TICK_EMPTY, COLOR_REGULAR)));
         // Auto-tick spinner
         pb.enable_steady_tick(Duration::from_millis(120));
 
@@ -95,7 +90,6 @@ impl ProgressManager {
             header: RwLock::new("".to_string()),
         }
     }
-
 }
 
 /// Utility for handling script adapter progress with rolling terminal output
@@ -111,18 +105,19 @@ impl ScriptAdapterProgressHandler for ScriptProgressHandler {
             ScriptAdapterProgress::ScriptStarted { title } => {
                 *self.header.write().unwrap() = title.clone();
                 self.progress_bar.set_message(title);
-            },
+            }
             ScriptAdapterProgress::Progress { line } => {
                 let header = self.header.read().unwrap();
-                self.progress_bar.set_message(format!("{}\n{line}\n", *header));
-            },
+                self.progress_bar
+                    .set_message(format!("{}\n{line}\n", *header));
+            }
             ScriptAdapterProgress::ScriptFinished { status, title } => {
                 *self.header.write().unwrap() = title.clone();
                 let header = self.header.read().unwrap();
-                self.progress_bar.set_message(format!("{status} - {}", *header));
+                self.progress_bar
+                    .set_message(format!("{status} - {}", *header));
                 self.progress_bar.finish();
-            },
+            }
         }
     }
 }
-

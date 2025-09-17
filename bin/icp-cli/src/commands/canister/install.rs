@@ -126,7 +126,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let progress_manager = ProgressManager::new();
 
     for (_, c) in cs {
-
         let sph = Arc::new(progress_manager.new_progress_handler(c.name.clone()));
 
         // Create an async closure that handles the operation for this specific canister
@@ -137,7 +136,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
             async move {
                 // Indicate to user that the canister is being installed
-                sph.progress_update(ScriptAdapterProgress::ScriptStarted { title: "Installing...".to_string() });
+                sph.progress_update(ScriptAdapterProgress::ScriptStarted {
+                    title: "Installing...".to_string(),
+                });
 
                 // Lookup the canister id
                 let cid = ctx.id_store.lookup(&Key {
@@ -188,10 +189,15 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             // Execute the install function with progress tracking
             let result = install_fn.await;
             match result {
-                Ok(_) => 
-                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Created".to_string() }),
+                Ok(_) => sph.progress_update(ScriptAdapterProgress::ScriptFinished {
+                    status: true,
+                    title: "Created".to_string(),
+                }),
                 Err(e) => {
-                    sph.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: format!("Installation failed: {}", e) });
+                    sph.progress_update(ScriptAdapterProgress::ScriptFinished {
+                        status: false,
+                        title: format!("Installation failed: {}", e),
+                    });
                     return Err(e);
                 }
             }

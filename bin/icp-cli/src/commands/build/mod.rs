@@ -91,8 +91,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             // Setup script progress handling
 
                             adapter
-                                .with_progress_handler(sph) 
-                                .compile(&canister_path, &wasm_output_path).await?
+                                .with_progress_handler(sph)
+                                .compile(&canister_path, &wasm_output_path)
+                                .await?
                         }
 
                         // Compile using the Pre-built adapter.

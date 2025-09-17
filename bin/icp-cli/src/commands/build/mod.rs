@@ -8,6 +8,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
+use indicatif::MultiProgress;
 use snafu::{ResultExt, Snafu};
 use tracing::debug;
 
@@ -59,13 +60,20 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
 
+    //Create the mulitprogressbar
+    //We might choose to disable it depending on the state
+    let multiprogress = MultiProgress::new();
+
     // Iterate through each resolved canister and trigger its build process.
     for (canister_path, c) in canisters {
         // Create an async closure that handles the build process for this specific canister
         debug!("Building {}", c.name);
         let build_fn = {
             let c = c.clone();
-            let sph = Arc::new(ScriptProgressHandler::create());
+            let sph = Arc::new(
+                ScriptProgressHandler::create(&multiprogress,
+                    c.name.clone())
+            );
 
             async move {
                 // Create a temporary directory for build artifacts

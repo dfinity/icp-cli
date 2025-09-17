@@ -152,7 +152,7 @@ impl ProgressManager {
 /// Utility for handling script adapter progress with rolling terminal output
 #[derive(Debug)]
 pub struct ScriptProgressHandler {
-    progress_bar: ProgressBar,
+    pub progress_bar: ProgressBar,
     header: String,
     eheader: RwLock<String>,
 }
@@ -170,7 +170,9 @@ impl ScriptAdapterProgressHandler for ScriptProgressHandler {
             },
             ScriptAdapterProgress::ScriptFinished { status, title } => {
                 *self.eheader.write().unwrap() = title.clone();
-                self.progress_bar.set_message(format!("{status} - {title}"));
+                let header = self.eheader.read().unwrap();
+                self.progress_bar.set_message(format!("{status} - {}", *header));
+                self.progress_bar.finish();
             },
         }
     }
@@ -187,9 +189,21 @@ impl ScriptProgressHandler {
     }
 
     //Temporary to keep backwards compatibility
-    pub fn create() -> Self {
+    pub fn create(multi : &MultiProgress, canister_name: String) -> Self {
+        let pb = multi.add(
+            ProgressBar::new_spinner()
+                .with_style(
+                    make_style(TICK_EMPTY, COLOR_REGULAR)
+                )
+        );
+        // Auto-tick spinner
+        pb.enable_steady_tick(Duration::from_millis(120));
+
+        // Set the progress bar prefix to display the canister name in brackets
+        pb.set_prefix(format!("[{}]", canister_name));
+
         Self {
-            progress_bar: ProgressBar::new_spinner(),
+            progress_bar: pb,
             header: "".to_string(),
             eheader: RwLock::new("".to_string()),
         }

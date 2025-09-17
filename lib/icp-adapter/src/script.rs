@@ -99,6 +99,11 @@ impl build::Adapter for ScriptAdapter {
         canister_path: &Utf8Path,
         wasm_output_path: &Utf8Path,
     ) -> Result<(), AdapterCompileError> {
+
+        self.progress_handler.iter().for_each(|h| {
+            h.progress_update(ScriptAdapterProgress::ScriptStarted { title: "Started!!".to_string() });
+        });
+
         // Normalize `command` field based on whether it's a single command or multiple.
         let cmds = self.command.as_vec();
 
@@ -174,7 +179,7 @@ impl build::Adapter for ScriptAdapter {
                         }
                     }
                 }),
-                //
+
                 // Stderr
                 tokio::spawn({
                     let progress_handlers = self.progress_handler.clone();
@@ -201,7 +206,14 @@ impl build::Adapter for ScriptAdapter {
                 command: &input_cmd,
             })?;
 
-            if !status.success() {
+            if status.success() {
+                self.progress_handler.iter().for_each(|h| {
+                    h.progress_update(ScriptAdapterProgress::ScriptFinished { status: true, title: "Success".to_string() });
+                });
+            } else {
+                self.progress_handler.iter().for_each(|h| {
+                    h.progress_update(ScriptAdapterProgress::ScriptFinished { status: false, title: "Failed...".to_string() });
+                });
                 return Err(ScriptAdapterCompileError::CommandStatus {
                     command: input_cmd,
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),

@@ -4,7 +4,7 @@ use snafu::Snafu;
 
 use crate::{CYCLES_LEDGER_CID, ICP_LEDGER_CID, context::Context};
 
-mod balance;
+pub mod balance;
 mod transfer;
 
 /// A compile-time map of token names to their corresponding ledger canister IDs.

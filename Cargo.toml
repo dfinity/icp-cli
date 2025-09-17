@@ -12,11 +12,7 @@ members = [
 ]
 
 default-members = ["bin/icp-cli"]
-exclude = [
-    "examples/icp-rust",
-    "examples/icp-rust-recipe",
-    "examples/icp-frontend-environment-variables/frontend/libs/bindgen",
-]
+exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
 resolver = "3"
 
 [workspace.dependencies]

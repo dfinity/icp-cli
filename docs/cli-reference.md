@@ -18,6 +18,9 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
 * [`icp-cli canister update-settings`↴](#icp-cli-canister-update-settings)
+* [`icp-cli cycles`↴](#icp-cli-cycles)
+* [`icp-cli cycles balance`↴](#icp-cli-cycles-balance)
+* [`icp-cli cycles mint`↴](#icp-cli-cycles-mint)
 * [`icp-cli deploy`↴](#icp-cli-deploy)
 * [`icp-cli environment`↴](#icp-cli-environment)
 * [`icp-cli environment list`↴](#icp-cli-environment-list)
@@ -32,6 +35,9 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli network ping`↴](#icp-cli-network-ping)
 * [`icp-cli network run`↴](#icp-cli-network-run)
 * [`icp-cli sync`↴](#icp-cli-sync)
+* [`icp-cli token`↴](#icp-cli-token)
+* [`icp-cli token balance`↴](#icp-cli-token-balance)
+* [`icp-cli token transfer`↴](#icp-cli-token-transfer)
 
 ## `icp-cli`
 
@@ -41,11 +47,13 @@ This document contains the help content for the `icp-cli` command-line program.
 
 * `build` — 
 * `canister` — 
+* `cycles` — 
 * `deploy` — 
 * `environment` — 
 * `identity` — 
 * `network` — 
 * `sync` — 
+* `token` — 
 
 ###### **Options:**
 
@@ -124,7 +132,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--ic` — Shorthand for --environment=ic
 * `--effective-id <EFFECTIVE_ID>` — The effective canister ID to use when calling the management canister
 
-  Default value: `uqqxf-5h777-77774-qaaaa-cai`
+  Default value: `tqzl2-p7777-77776-aaaaa-cai`
 * `--specific-id <SPECIFIC_ID>` — The specific canister ID to assign if creating with a fixed principal
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
@@ -293,6 +301,29 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+
+
+
+## `icp-cli cycles`
+
+**Usage:** `icp-cli cycles <COMMAND>`
+
+###### **Subcommands:**
+
+* `balance` — 
+* `mint` — 
+
+
+
+## `icp-cli cycles balance`
+
+**Usage:** `icp-cli cycles balance`
+
+
+
+## `icp-cli cycles mint`
+
+**Usage:** `icp-cli cycles mint`
 
 
 
@@ -470,6 +501,52 @@ Run a given network
 ###### **Arguments:**
 
 * `<NAMES>` — The names of the canisters within the current project
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli token`
+
+**Usage:** `icp-cli token [TOKEN] <COMMAND>`
+
+###### **Subcommands:**
+
+* `balance` — 
+* `transfer` — 
+
+###### **Arguments:**
+
+* `<TOKEN>`
+
+  Default value: `icp`
+
+
+
+## `icp-cli token balance`
+
+**Usage:** `icp-cli token balance [OPTIONS]`
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli token transfer`
+
+**Usage:** `icp-cli token transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — Token amount to transfer
+* `<RECEIVER>` — The receiver of the token transfer
 
 ###### **Options:**
 

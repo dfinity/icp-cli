@@ -1,15 +1,14 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
+use icp_network::NETWORK_LOCAL;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
 };
-use serial_test::serial;
 
 mod common;
 
 #[test]
-#[serial]
 fn sync_adapter_script_single() {
     let ctx = TestContext::new().with_dfx();
 
@@ -42,6 +41,7 @@ fn sync_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -65,7 +65,6 @@ fn sync_adapter_script_single() {
 }
 
 #[test]
-#[serial]
 fn sync_adapter_script_multiple() {
     let ctx = TestContext::new().with_dfx();
 
@@ -100,6 +99,7 @@ fn sync_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -123,7 +123,6 @@ fn sync_adapter_script_multiple() {
 }
 
 #[tokio::test]
-#[serial]
 async fn sync_adapter_static_assets() {
     let ctx = TestContext::new().with_dfx();
 
@@ -163,13 +162,17 @@ async fn sync_adapter_static_assets() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir);
+    let network_port = ctx
+        .wait_for_network_descriptor(&project_dir, NETWORK_LOCAL)
+        .gateway_port;
 
     // Canister ID
-    let cid = "uqqxf-5h777-77774-qaaaa-cai";
+    let cid = "tqzl2-p7777-77776-aaaaa-cai";
 
     // Deploy project
     ctx.icp()
@@ -186,7 +189,7 @@ async fn sync_adapter_static_assets() {
         .success();
 
     // Verify that assets canister was synced
-    let resp = reqwest::get(format!("http://localhost:8000/?canisterId={cid}"))
+    let resp = reqwest::get(format!("http://localhost:{network_port}/?canisterId={cid}"))
         .await
         .expect("request failed");
 

@@ -2093,6 +2093,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.18.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4efb278f5d3ef033b3eed7f01f1096eaf67701896aa5ef69f5eddf5a84833dc0"
+dependencies = [
+ "candid",
+ "ic-cdk-executor",
+ "ic-cdk-macros",
+ "ic-error-types",
+ "ic-management-canister-types 0.3.3",
+ "ic0",
+ "serde",
+ "serde_bytes",
+ "slotmap",
+ "thiserror 2.0.16",
+]
+
+[[package]]
+name = "ic-cdk-executor"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99f4ee8930fd2e491177e2eb7fff53ee1c407c13b9582bdc7d6920cf83109a2d"
+dependencies = [
+ "ic0",
+ "slotmap",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.18.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7eb14c5d691cc9d72bb95459b4761e3a4b3444b85a63d17555d5ddd782969a1e"
+dependencies = [
+ "candid",
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "ic-certification"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2120,6 +2161,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-error-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbeeb3d91aa179d6496d7293becdacedfc413c825cac79fd54ea1906f003ee55"
+dependencies = [
+ "serde",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
 name = "ic-identity-hsm"
 version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2131,6 +2183,21 @@ dependencies = [
  "sha2 0.10.9",
  "simple_asn1",
  "thiserror 2.0.16",
+]
+
+[[package]]
+name = "ic-ledger-types"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "feb52826a353b583012628af6da762b52672350686c3275234febfadeca965ea"
+dependencies = [
+ "candid",
+ "crc32fast",
+ "hex",
+ "ic-cdk",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -2238,6 +2305,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic0"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1499d08fd5be8f790d477e1865d63bab6a8d748300e141270c4296e6d5fdd6bc"
+
+[[package]]
 name = "ic_bls12_381"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2328,6 +2401,7 @@ dependencies = [
  "hex",
  "httptest",
  "ic-agent",
+ "ic-ledger-types",
  "ic-utils",
  "icp-adapter",
  "icp-canister",
@@ -4590,6 +4664,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8347046d4ebd943127157b94d63abb990fcf729dc4e9978927fdf4ac3c998d06"
 dependencies = [
  "erased-serde",
+]
+
+[[package]]
+name = "slotmap"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]

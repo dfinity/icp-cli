@@ -7,6 +7,7 @@ use crate::{
     commands::{
         build,
         canister::{
+            binding_env_vars,
             create::{self, CanisterIDs, CanisterSettings, DEFAULT_EFFECTIVE_ID},
             install,
         },
@@ -14,6 +15,7 @@ use crate::{
     },
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
+    store_id::LookupError,
 };
 
 #[derive(Parser, Debug)]
@@ -152,6 +154,23 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    let _ = ctx.term.write_line("\n\nSetting environment variables:");
+    let out = binding_env_vars::exec(
+        ctx,
+        binding_env_vars::Cmd {
+            names: cnames.to_owned(),
+            identity: cmd.identity.clone(),
+            environment: cmd.environment.clone(),
+        },
+    )
+    .await;
+
+    if let Err(err) = out {
+        if !matches!(err, binding_env_vars::CommandError::NoCanisters) {
+            return Err(CommandError::SetEnvironmentVariables { source: err });
+        }
+    }
+
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
     let out = install::exec(
@@ -216,6 +235,11 @@ pub enum CommandError {
     Install { source: install::CommandError },
 
     #[snafu(transparent)]
+    SetEnvironmentVariables {
+        source: binding_env_vars::CommandError,
+    },
+
+    #[snafu(transparent)]
     Sync { source: sync::CommandError },
 
     #[snafu(transparent)]
@@ -223,4 +247,7 @@ pub enum CommandError {
 
     #[snafu(transparent)]
     Agent { source: AgentError },
+
+    #[snafu(transparent)]
+    LookupCanisterId { source: LookupError },
 }

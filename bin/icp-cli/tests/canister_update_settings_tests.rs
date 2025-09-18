@@ -258,6 +258,356 @@ fn get_principal(ctx: &TestContext, identity: &str) -> String {
 
 #[test]
 #[serial]
+fn canister_update_settings_log_visibility() {
+    let ctx = TestContext::new().with_dfx();
+
+    // Get principals.
+    let principal_alice = get_principal(&ctx, "alice");
+    let principal_bob = get_principal(&ctx, "bob");
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+        "#,
+        wasm,
+    );
+
+    write(
+        project_dir.join("icp.yaml"), // path
+        pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir);
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir);
+
+    // Deploy project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Public")),
+        );
+
+    // Set log visibility to controllers
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--log-visibility",
+            "controllers",
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Controllers")),
+        );
+
+    // Add log viewer.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--add-log-viewer",
+            principal_alice.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Allowed viewers:"))
+                .and(contains(principal_alice.as_str())),
+        );
+
+    // Add and remove log viewer.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--add-log-viewer",
+            principal_bob.as_str(),
+            "--remove-log-viewer",
+            principal_alice.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Allowed viewers:"))
+                .and(contains(principal_alice.as_str()).not())
+                .and(contains(principal_bob.as_str())),
+        );
+
+    // Remove log viewer.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--remove-log-viewer",
+            principal_bob.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Allowed viewers list is empty")),
+        );
+
+    // Add multiple log viewers.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--add-log-viewer",
+            principal_alice.as_str(),
+            "--add-log-viewer",
+            principal_bob.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Allowed viewers:"))
+                .and(contains(principal_alice.as_str()))
+                .and(contains(principal_bob.as_str())),
+        );
+
+    // Remove multiple log viewers.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--remove-log-viewer",
+            principal_alice.as_str(),
+            "--remove-log-viewer",
+            principal_bob.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Allowed viewers list is empty")),
+        );
+
+    // Set multiple log viewers.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--set-log-viewer",
+            principal_alice.as_str(),
+            "--set-log-viewer",
+            principal_bob.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Query status with identity alice.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Allowed viewers:"))
+                .and(contains(principal_alice.as_str()))
+                .and(contains(principal_bob.as_str())),
+        );
+}
+
+#[test]
+#[serial]
+fn canister_update_settings_miscellaneous() {
+    let ctx = TestContext::new().with_dfx();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+        "#,
+        wasm,
+    );
+
+    write(
+        project_dir.join("icp.yaml"), // path
+        pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir);
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir);
+
+    // Deploy project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Compute allocation: 0"))
+                .and(contains("Freezing threshold: 2_592_000"))
+                .and(contains("Reserved cycles limit: 5_000_000_000_000"))
+                .and(contains("Wasm memory limit: 3_221_225_472"))
+                .and(contains("Wasm memory threshold: 0")),
+        );
+
+    // Update compute allocation
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "update-settings",
+            "my-canister",
+            "--compute-allocation",
+            "1",
+            "--memory-allocation",
+            "6GiB",
+            "--freezing-threshold",
+            "8640000",
+            "--reserved-cycles-limit",
+            "6000000000000",
+            "--wasm-memory-limit",
+            "4GiB",
+            "--wasm-memory-threshold",
+            "4GiB",
+        ])
+        .assert()
+        .success();
+
+    // Query status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "status", "my-canister"])
+        .assert()
+        .success()
+        .stderr(
+            starts_with("Canister Status Report:")
+                .and(contains("Status: Running"))
+                .and(contains("Compute allocation: 1"))
+                .and(contains("Memory allocation: 6_442_450_944"))
+                .and(contains("Freezing threshold: 8_640_000"))
+                .and(contains("Reserved cycles limit: 6_000_000_000_000"))
+                .and(contains("Wasm memory limit: 4_294_967_296"))
+                .and(contains("Wasm memory threshold: 4_294_967_296")),
+        );
+}
+
+#[test]
+#[serial]
 fn canister_update_settings_environment_variables() {
     let ctx = TestContext::new().with_dfx();
 
@@ -396,105 +746,5 @@ fn canister_update_settings_environment_variables() {
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
                 .and(contains("Environment Variables: N/A")),
-        );
-}
-
-#[test]
-#[serial]
-fn canister_update_settings_miscellaneous() {
-    let ctx = TestContext::new().with_dfx();
-
-    // Setup project
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Use vendored WASM
-    let wasm = ctx.make_asset("example_icp_mo.wasm");
-
-    // Project manifest
-    let pm = format!(
-        r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-        "#,
-        wasm,
-    );
-
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Start network
-    let _g = ctx.start_network_in(&project_dir);
-
-    // Wait for network
-    ctx.ping_until_healthy(&project_dir);
-
-    // Deploy project
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
-        .assert()
-        .success();
-
-    // Query status
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
-        .assert()
-        .success()
-        .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
-                .and(contains("Compute allocation: 0"))
-                .and(contains("Freezing threshold: 2_592_000"))
-                .and(contains("Reserved cycles limit: 5_000_000_000_000"))
-                .and(contains("Wasm memory limit: 3_221_225_472"))
-                .and(contains("Wasm memory threshold: 0")),
-        );
-
-    // Update compute allocation
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "update-settings",
-            "my-canister",
-            "--compute-allocation",
-            "1",
-            "--memory-allocation",
-            "6GiB",
-            "--freezing-threshold",
-            "8640000",
-            "--reserved-cycles-limit",
-            "6000000000000",
-            "--wasm-memory-limit",
-            "4GiB",
-            "--wasm-memory-threshold",
-            "4GiB",
-        ])
-        .assert()
-        .success();
-
-    // Query status
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
-        .assert()
-        .success()
-        .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
-                .and(contains("Compute allocation: 1"))
-                .and(contains("Memory allocation: 6_442_450_944"))
-                .and(contains("Freezing threshold: 8_640_000"))
-                .and(contains("Reserved cycles limit: 6_000_000_000_000"))
-                .and(contains("Wasm memory limit: 4_294_967_296"))
-                .and(contains("Wasm memory threshold: 4_294_967_296")),
         );
 }

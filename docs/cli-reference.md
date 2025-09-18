@@ -17,6 +17,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
+* [`icp-cli canister update-settings`↴](#icp-cli-canister-update-settings)
 * [`icp-cli deploy`↴](#icp-cli-deploy)
 * [`icp-cli environment`↴](#icp-cli-environment)
 * [`icp-cli environment list`↴](#icp-cli-environment-list)
@@ -86,6 +87,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `start` — 
 * `status` — 
 * `stop` — 
+* `update-settings` — 
 
 
 
@@ -260,6 +262,37 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli canister update-settings`
+
+**Usage:** `icp-cli canister update-settings [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The name of the canister within the current project
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--add-controller <ADD_CONTROLLER>`
+* `--remove-controller <REMOVE_CONTROLLER>`
+* `--set-controller <SET_CONTROLLER>`
+* `--compute-allocation <COMPUTE_ALLOCATION>`
+* `--memory-allocation <MEMORY_ALLOCATION>`
+* `--freezing-threshold <FREEZING_THRESHOLD>`
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>`
+* `--wasm-memory-limit <WASM_MEMORY_LIMIT>`
+* `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>`
+* `--log-visibility <LOG_VISIBILITY>`
+* `--add-log-viewer <ADD_LOG_VIEWER>`
+* `--remove-log-viewer <REMOVE_LOG_VIEWER>`
+* `--set-log-viewer <SET_LOG_VIEWER>`
+* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
+* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
 
 
 

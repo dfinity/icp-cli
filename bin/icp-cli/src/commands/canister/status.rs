@@ -1,6 +1,6 @@
 use clap::Parser;
-use ic_agent::AgentError;
-use ic_utils::interfaces::management_canister::CanisterStatusResult;
+use ic_agent::{AgentError, export::Principal};
+use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use snafu::Snafu;
 
 use crate::{
@@ -139,7 +139,21 @@ pub fn print_status(result: &CanisterStatusResult) {
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
     );
-    eprintln!("  Log visibility: {:?}", settings.log_visibility);
+
+    let log_visibility = match &settings.log_visibility {
+        LogVisibility::Controllers => "Controllers".to_string(),
+        LogVisibility::Public => "Public".to_string(),
+        LogVisibility::AllowedViewers(viewers) => {
+            if viewers.is_empty() {
+                "Allowed viewers list is empty".to_string()
+            } else {
+                let mut viewers: Vec<_> = viewers.iter().map(Principal::to_text).collect();
+                viewers.sort();
+                format!("Allowed viewers: {}", viewers.join(", "))
+            }
+        }
+    };
+    eprintln!("  Log visibility: {}", log_visibility);
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister

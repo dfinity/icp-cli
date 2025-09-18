@@ -1,13 +1,40 @@
 use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Parser};
 use ic_agent::{AgentError, export::Principal};
-use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable};
+use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use snafu::Snafu;
 use std::collections::{HashMap, HashSet};
 
 use crate::context::{Context, ContextGetAgentError, GetProjectError};
 use crate::options::{EnvironmentOpt, IdentityOpt};
 use crate::store_id::{Key, LookupError as LookupIdError};
+
+#[derive(Clone, Debug, Default, Parser)]
+pub struct LogVisibilityOpt {
+    #[arg(
+        long,
+        value_parser = log_visibility_parser,
+        conflicts_with("add_log_viewer"),
+        conflicts_with("remove_log_viewer"),
+        conflicts_with("set_log_viewer"),
+    )]
+    log_visibility: Option<LogVisibility>,
+
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
+    add_log_viewer: Option<Vec<Principal>>,
+
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
+    remove_log_viewer: Option<Vec<Principal>>,
+
+    #[arg(long, action = ArgAction::Append)]
+    set_log_viewer: Option<Vec<Principal>>,
+}
+
+impl LogVisibilityOpt {
+    pub fn require_current_settings(&self) -> bool {
+        self.add_log_viewer.is_some() || self.remove_log_viewer.is_some()
+    }
+}
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -46,6 +73,9 @@ pub struct Cmd {
 
     #[arg(long, value_parser = memory_parser)]
     wasm_memory_threshold: Option<Byte>,
+
+    #[command(flatten)]
+    log_visibility: Option<LogVisibilityOpt>,
 
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
@@ -122,6 +152,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // - if the freezing threshold is too long or too short.
     // - if trying to remove the caller itself from the controllers.
 
+    // Handle controllers.
     let mut controllers: Option<Vec<Principal>> = None;
     if let Some(to_be_set) = cmd.set_controller {
         controllers = Some(to_be_set);
@@ -169,6 +200,16 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         }
     }
 
+    // Handle log visibility.
+    let mut log_visibility: Option<LogVisibility> = None;
+    if let Some(log_visibility_opt) = cmd.log_visibility {
+        if current_status.is_none() & log_visibility_opt.require_current_settings() {
+            current_status = Some(mgmt.canister_status(&cid).await?.0);
+        }
+        log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
+    }
+
+    // Handle environment variables.
     let mut environment_variables: Option<HashMap<String, String>> = None;
     if let Some(to_be_added) = cmd.add_environment_variable {
         if current_status.is_none() {
@@ -240,6 +281,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
     if let Some(wasm_memory_threshold) = cmd.wasm_memory_threshold {
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
+    }
+    if let Some(log_visibility) = log_visibility {
+        update = update.with_log_visibility(log_visibility);
     }
     if let Some(environment_variables) = environment_variables {
         let environment_variables = environment_variables
@@ -327,4 +371,54 @@ fn reserved_cycles_limit_parser(reserved_cycles_limit: &str) -> Result<u128, Str
         return Ok(num);
     }
     Err("Must be a value between 0..2^128-1 inclusive".to_string())
+}
+
+fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> {
+    match log_visibility {
+        "public" => Ok(LogVisibility::Public),
+        "controllers" => Ok(LogVisibility::Controllers),
+        _ => Err("Must be `controllers` or `public`.".to_string()),
+    }
+}
+
+fn get_log_visibility(
+    log_visibility: &LogVisibilityOpt,
+    current_status: Option<&CanisterStatusResult>,
+) -> Option<LogVisibility> {
+    if let Some(log_visibility) = log_visibility.log_visibility.as_ref() {
+        return Some(log_visibility.clone());
+    }
+
+    if let Some(viewer) = log_visibility.set_log_viewer.as_ref() {
+        // TODO(VZ): Warn for switching from public to viewers.
+        return Some(LogVisibility::AllowedViewers(viewer.clone()));
+    }
+
+    let mut log_viewers: Vec<Principal> = match current_status {
+        Some(status) => match &status.settings.log_visibility {
+            LogVisibility::AllowedViewers(viewers) => viewers.clone(),
+            _ => vec![],
+        },
+        None => vec![],
+    };
+
+    if let Some(to_be_added) = log_visibility.add_log_viewer.as_ref() {
+        // TODO(VZ): Warn for switching from public to viewers.
+        for principal in to_be_added {
+            if !log_viewers.iter().any(|x| x == principal) {
+                log_viewers.push(*principal);
+            }
+        }
+    }
+
+    if let Some(removed) = log_visibility.remove_log_viewer.as_ref() {
+        // TODO(VZ): Warn for removing from if log visibility is public and controllers.
+        for principal in removed {
+            if let Some(idx) = log_viewers.iter().position(|x| x == principal) {
+                log_viewers.swap_remove(idx);
+            }
+        }
+    }
+
+    Some(LogVisibility::AllowedViewers(log_viewers))
 }

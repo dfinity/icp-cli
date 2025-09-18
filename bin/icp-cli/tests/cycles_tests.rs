@@ -11,25 +11,10 @@ async fn cycles_balance() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    // Use vendored WASM
-    let wasm = ctx.make_asset("example_icp_mo.wasm");
-
     // Project manifest
-    let pm = format!(
-        r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-        "#,
-        wasm,
-    );
-
     write(
         project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+        "",                           // contents
     )
     .expect("failed to write project manifest");
 

@@ -39,7 +39,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load identity
     ctx.require_identity(cmd.identity.name());
 
-    // Load the project manifest, which defines the canisters to be built.
+    // Load the project manifest
     let pm = ctx.project()?;
 
     // Load target environment

@@ -9,7 +9,7 @@ use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{Utf8TempDir, tempdir};
 use icp_network::NETWORK_LOCAL;
-use pocket_ic::PocketIc;
+use pocket_ic::nonblocking::PocketIc;
 use serde_json::{Value, json};
 use url::Url;
 

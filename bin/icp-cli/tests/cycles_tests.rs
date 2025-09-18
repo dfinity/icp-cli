@@ -1,13 +1,11 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::str::contains;
-use serial_test::serial;
 
 mod common;
 
-#[test]
-#[serial]
-fn cycles_balance() {
+#[tokio::test]
+async fn cycles_balance() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -53,7 +51,9 @@ fn cycles_balance() {
 
     // Mint ICP to cycles, specify ICP amount
     let identity = ctx.icp_().active_principal();
-    ctx.icp_ledger().mint_icp(identity, None, 123456789_u64);
+    ctx.icp_ledger()
+        .mint_icp(identity, None, 123456789_u64)
+        .await;
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "mint", "--icp-amount", "1"])
@@ -66,7 +66,9 @@ fn cycles_balance() {
     // Mint ICP to cycles, specify cycles amount
     ctx.icp_().use_new_random_identity();
     let identity = ctx.icp_().active_principal();
-    ctx.icp_ledger().mint_icp(identity, None, 123456789_u64);
+    ctx.icp_ledger()
+        .mint_icp(identity, None, 123456789_u64)
+        .await;
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "mint", "--cycles-amount", "1000000000"])

@@ -1,13 +1,11 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::str::contains;
-use serial_test::serial;
 
 mod common;
 
-#[test]
-#[serial]
-fn token_balance() {
+#[tokio::test]
+async fn token_balance() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -59,7 +57,9 @@ fn token_balance() {
         .success();
 
     // mint icp to identity
-    ctx.icp_ledger().mint_icp(identity, None, 123456780_u128);
+    ctx.icp_ledger()
+        .mint_icp(identity, None, 123456780_u128)
+        .await;
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -69,8 +69,8 @@ fn token_balance() {
         .success();
 }
 
-#[test]
-fn token_transfer() {
+#[tokio::test]
+async fn token_transfer() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm = ctx.make_asset("example_icp_mo.wasm");
@@ -104,12 +104,16 @@ fn token_transfer() {
 
     // Initial balance
     ctx.icp_ledger()
-        .mint_icp(alice_principal, None, 1_000_000_000_u128); // 10 ICP
+        .mint_icp(alice_principal, None, 1_000_000_000_u128)
+        .await; // 10 ICP
     assert_eq!(
-        ctx.icp_ledger().balance_of(alice_principal, None),
+        ctx.icp_ledger().balance_of(alice_principal, None).await,
         1_000_000_000_u128
     );
-    assert_eq!(ctx.icp_ledger().balance_of(bob_principal, None), 0_u128);
+    assert_eq!(
+        ctx.icp_ledger().balance_of(bob_principal, None).await,
+        0_u128
+    );
 
     // Simple ICP transfer
     ctx.icp_().use_identity("alice");
@@ -123,11 +127,11 @@ fn token_transfer() {
         )))
         .success();
     assert_eq!(
-        ctx.icp_ledger().balance_of(alice_principal, None),
+        ctx.icp_ledger().balance_of(alice_principal, None).await,
         889_990_000_u128
     );
     assert_eq!(
-        ctx.icp_ledger().balance_of(bob_principal, None),
+        ctx.icp_ledger().balance_of(bob_principal, None).await,
         110_000_000_u128
     );
 

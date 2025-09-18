@@ -1,6 +1,6 @@
 use candid::{Decode, Encode, Nat, Principal};
 use icrc_ledger_types::icrc1::account::Subaccount;
-use pocket_ic::PocketIc;
+use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
 const GOVERNANCE_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 0, 0, 0, 1, 1, 1]); // rrkah-fqaaa-aaaaa-aaaaq-cai
@@ -11,7 +11,7 @@ pub struct IcpLedgerPocketIcClient<'a> {
 }
 
 impl IcpLedgerPocketIcClient<'_> {
-    pub fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
+    pub async fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
         Decode!(
             &self
                 .pic
@@ -22,13 +22,14 @@ impl IcpLedgerPocketIcClient<'_> {
                     Encode!(&icrc_ledger_types::icrc1::account::Account { owner, subaccount })
                         .unwrap(),
                 )
+                .await
                 .unwrap(),
             Nat
         )
         .unwrap()
     }
 
-    pub fn mint_icp(
+    pub async fn mint_icp(
         &self,
         owner: Principal,
         subaccount: Option<Subaccount>,
@@ -49,6 +50,7 @@ impl IcpLedgerPocketIcClient<'_> {
                 })
                 .unwrap(),
             )
+            .await
             .unwrap();
     }
 }

@@ -4,12 +4,10 @@ use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
-use serial_test::serial;
 
 mod common;
 
 #[test]
-#[serial]
 fn canister_update_settings_controllers() {
     let ctx = TestContext::new().with_dfx();
 
@@ -43,6 +41,7 @@ fn canister_update_settings_controllers() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -257,7 +256,6 @@ fn get_principal(ctx: &TestContext, identity: &str) -> String {
 }
 
 #[test]
-#[serial]
 fn canister_update_settings_log_visibility() {
     let ctx = TestContext::new().with_dfx();
 
@@ -291,6 +289,7 @@ fn canister_update_settings_log_visibility() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -507,7 +506,6 @@ fn canister_update_settings_log_visibility() {
 }
 
 #[test]
-#[serial]
 fn canister_update_settings_miscellaneous() {
     let ctx = TestContext::new().with_dfx();
 
@@ -537,6 +535,7 @@ fn canister_update_settings_miscellaneous() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -607,7 +606,6 @@ fn canister_update_settings_miscellaneous() {
 }
 
 #[test]
-#[serial]
 fn canister_update_settings_environment_variables() {
     let ctx = TestContext::new().with_dfx();
 
@@ -637,6 +635,7 @@ fn canister_update_settings_environment_variables() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network

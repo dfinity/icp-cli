@@ -1,9 +1,13 @@
+// This is a temporary placeholder command
+// For now it's only used to set environment variables
+// Eventually we will add support for canister settings operation
+
 use std::collections::HashSet;
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
-use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
+use ic_utils::interfaces::management_canister::builders::EnvironmentVariable;
 use snafu::Snafu;
 use tracing::debug;
 
@@ -19,10 +23,6 @@ use crate::{
 pub struct Cmd {
     /// The names of the canisters within the current project
     pub names: Vec<String>,
-
-    /// Specifies the mode of canister installation.
-    #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
-    pub mode: String,
 
     #[command(flatten)]
     pub identity: IdentityOpt,
@@ -125,19 +125,52 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let progress_manager = ProgressManager::new();
 
+    // Get the list of name to canister id for this environment
+    // We need this to inject the `ICP_CANISTER_ID:` environment variables
+    // as we're installing the canisters
+    let canister_list = ctx.id_store.lookup_by_environment(&env.name)?;
+    debug!("Canister list: {:?}", canister_list);
+
+    // Check that all the canisters in this environment have an id
+    // We need to have all the ids to generate environment variables
+    // for the bindings
+    let canisters_with_ids: HashSet<&String> = canister_list.iter().map(|(n, _p)| n).collect();
+    debug!("Canisters with ids: {:?}", canisters_with_ids);
+
+    let missing_canisters: Vec<String> = ecs
+        .iter()
+        .filter(|c| !canisters_with_ids.contains(c))
+        .map(|c| c.to_string())
+        .collect();
+
+    debug!("missing canisters: {:?}", missing_canisters);
+
+    if !missing_canisters.is_empty() {
+        return Err(CommandError::CanisterNotCreated {
+            environment: env.name.to_owned(),
+            canister_names: missing_canisters,
+        });
+    }
+
+    debug!("Found canisters: {:?}", canister_list);
+    let binding_vars = canister_list
+        .iter()
+        .map(|(n, p)| (format!("ICP_CANISTER_ID:{}", n), p.to_text()))
+        .collect::<Vec<(_, _)>>();
+
     for (_, c) in cs {
         // Create progress bar with standard configuration
         let pb = progress_manager.create_progress_bar(&c.name);
 
         // Create an async closure that handles the operation for this specific canister
-        let install_fn = {
-            let cmd = cmd.clone();
+        let settings_fn = {
             let mgmt = mgmt.clone();
             let pb = pb.clone();
+            let binding_vars = binding_vars.clone();
 
             async move {
-                // Indicate to user that the canister is being installed
-                pb.set_message("Installing...");
+                // Indicate to user that the canister's environment variables are being set
+                pb.set_message("Updating environment variables...");
 
                 // Lookup the canister id
                 let cid = ctx.id_store.lookup(&Key {
@@ -146,39 +179,31 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     canister: c.name.to_owned(),
                 })?;
 
-                // Lookup the canister build artifact
-                let wasm = ctx.artifact_store.lookup(&c.name)?;
+                // Load the variables from the config files
+                let mut environment_variables = c
+                    .settings
+                    .environment_variables
+                    .to_owned()
+                    .unwrap_or_default();
 
-                // Retrieve canister status
-                let (status,) = mgmt.canister_status(&cid).await?;
+                // inject the ids of the other canisters
+                for (k, v) in binding_vars.iter() {
+                    environment_variables.insert(k.to_string(), v.to_string());
+                }
 
-                let install_mode = match cmd.mode.as_ref() {
-                    // Auto
-                    "auto" => match status.module_hash {
-                        // Canister has had code installed to it.
-                        Some(_) => CanisterInstallMode::Upgrade(None),
+                // Convert from HashMap<String, String> to Vec<EnvironmentVariable>
+                // as required by the IC management canister interface
+                let environment_variables = environment_variables
+                    .into_iter()
+                    .map(|(name, value)| EnvironmentVariable { name, value })
+                    .collect::<Vec<_>>();
 
-                        // Canister has not had code installed to it.
-                        None => CanisterInstallMode::Install,
-                    },
-
-                    // Install
-                    "install" => CanisterInstallMode::Install,
-
-                    // Reinstall
-                    "reinstall" => CanisterInstallMode::Reinstall,
-
-                    // Upgrade
-                    "upgrade" => CanisterInstallMode::Upgrade(None),
-
-                    // invalid
-                    _ => panic!("invalid install mode"),
-                };
-
-                // Install code to canister
-                debug!("Install new canister code");
-                mgmt.install_code(&cid, &wasm)
-                    .with_mode(install_mode)
+                debug!(
+                    "Update environment variables with new canister bindings: {:?}",
+                    environment_variables
+                );
+                mgmt.update_settings(&cid)
+                    .with_environment_variables(environment_variables)
                     .await?;
 
                 Ok::<_, CommandError>(())
@@ -189,9 +214,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             // Execute the install function with progress tracking
             ProgressManager::execute_with_progress(
                 pb,
-                install_fn,
-                || "Installed successfully".to_string(),
-                |err| format!("Failed to install canister: {err}"),
+                settings_fn,
+                || "Environment variables updated successfully".to_string(),
+                |err| format!("Failed to update environment variables: {err}"),
             )
             .await
         });
@@ -227,6 +252,12 @@ pub enum CommandError {
     EnvironmentCanister {
         environment: String,
         canister: String,
+    },
+
+    #[snafu(display("Could not find canister id(s) for '{}' in environment '{environment}' make sure they are created first", canister_names.join(", ")))]
+    CanisterNotCreated {
+        environment: String,
+        canister_names: Vec<String>,
     },
 
     #[snafu(transparent)]

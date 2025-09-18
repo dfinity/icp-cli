@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::process::{Child, Command};
+use url::Url;
 
 use httptest::{Expectation, Server, matchers::*, responders::*};
 
@@ -40,6 +41,8 @@ pub fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httptest::Ser
 // A network run by icp-cli for a test. These fields are read from the network descriptor
 // after starting the network.
 pub struct TestNetwork {
+    pub pocketic_url: Url,
+    pub pocketic_instance_id: usize,
     pub gateway_port: u16,
     pub root_key: String,
 }

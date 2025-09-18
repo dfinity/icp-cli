@@ -1,17 +1,23 @@
-use clap::Parser;
 use snafu::Snafu;
 
-use crate::context::{Context, GetProjectError};
+use crate::{
+    commands::token,
+    context::{Context, GetProjectError},
+};
 
-#[derive(Debug, Parser)]
-pub struct Cmd;
-
-pub async fn exec(_ctx: &Context, _: Cmd) -> Result<(), CommandError> {
-    unimplemented!()
+pub async fn exec(_ctx: &Context, cmd: token::balance::Cmd) -> Result<(), CommandError> {
+    token::balance::exec(_ctx, "cycles", cmd)
+        .await
+        .map_err(Into::into)
 }
 
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
+
+    #[snafu(transparent)]
+    Balance {
+        source: token::balance::CommandError,
+    },
 }

@@ -38,7 +38,7 @@ pub fn spawn_pocketic(pocketic_path: &Utf8Path, port_file: &Utf8Path) -> tokio::
 
 pub struct PocketIcAdminInterface {
     client: reqwest::Client,
-    base_url: Url,
+    pub base_url: Url,
 }
 
 impl PocketIcAdminInterface {

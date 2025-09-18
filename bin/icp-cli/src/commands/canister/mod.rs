@@ -3,6 +3,7 @@ use snafu::Snafu;
 
 use crate::context::Context;
 
+pub mod binding_env_vars;
 pub mod call;
 pub mod create;
 pub mod delete;

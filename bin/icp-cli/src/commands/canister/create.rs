@@ -244,9 +244,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 // Logs
-                builder = builder.with_optional_log_visibility(
-                    Some(LogVisibility::Public), //
-                );
+                builder = builder.with_optional_log_visibility(Some(LogVisibility::Public));
 
                 // Canister ID (specific)
                 if let Some(id) = cmd.ids.specific_id {

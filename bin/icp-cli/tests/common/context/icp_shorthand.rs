@@ -22,7 +22,7 @@ impl<'a> IcpShorthand<'a> {
                 .clone(),
         )
         .unwrap();
-        Principal::from_text(&stdout.trim()).unwrap()
+        Principal::from_text(stdout.trim()).unwrap()
     }
 
     pub fn use_new_random_identity(&self) {

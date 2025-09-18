@@ -337,7 +337,7 @@ impl TestContext {
     }
 
     pub fn icp_(&self) -> IcpShorthand<'_> {
-        IcpShorthand::new(&self)
+        IcpShorthand::new(self)
     }
 
     pub fn icp_ledger(&self) -> IcpLedgerPocketIcClient<'_> {

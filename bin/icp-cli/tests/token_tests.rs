@@ -119,7 +119,7 @@ fn token_transfer() {
         .assert()
         .stdout(contains(format!(
             "Transferred 1.10000000 ICP to {}",
-            bob_principal.to_string()
+            bob_principal
         )))
         .success();
     assert_eq!(
@@ -149,7 +149,7 @@ fn token_transfer() {
         .assert()
         .stdout(contains(format!(
             "Transferred 2.000000000000 TCYCLES to {}",
-            bob_principal.to_string()
+            bob_principal
         )))
         .success();
     ctx.icp_().use_identity("bob");

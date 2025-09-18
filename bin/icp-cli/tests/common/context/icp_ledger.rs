@@ -10,7 +10,7 @@ pub struct IcpLedgerPocketIcClient<'a> {
     pub pic: Ref<'a, PocketIc>,
 }
 
-impl<'a> IcpLedgerPocketIcClient<'a> {
+impl IcpLedgerPocketIcClient<'_> {
     pub fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
         Decode!(
             &self

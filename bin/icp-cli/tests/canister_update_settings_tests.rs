@@ -606,6 +606,7 @@ fn canister_update_settings_miscellaneous() {
 }
 
 #[test]
+#[ignore = "Environment variables are not enabled yet"]
 fn canister_update_settings_environment_variables() {
     let ctx = TestContext::new().with_dfx();
 

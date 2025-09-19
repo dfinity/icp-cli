@@ -1,9 +1,9 @@
 use candid::{Decode, Encode, Nat, Principal};
-use icrc_ledger_types::icrc1::account::Subaccount;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
-const CYCLES_LEDGER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 16, 0, 2, 1, 1]); // um5iw-rqaaa-aaaaq-qaaba-cai
+use crate::common::CYCLES_LEDGER_CID;
 
 pub struct CyclesLedgerPocketIcClient<'a> {
     pub pic: Ref<'a, PocketIc>,
@@ -11,20 +11,18 @@ pub struct CyclesLedgerPocketIcClient<'a> {
 
 impl CyclesLedgerPocketIcClient<'_> {
     pub async fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
-        Decode!(
-            &self
-                .pic
-                .query_call(
-                    CYCLES_LEDGER_ID,
-                    Principal::anonymous(),
-                    "icrc1_balance_of",
-                    Encode!(&icrc_ledger_types::icrc1::account::Account { owner, subaccount })
-                        .unwrap(),
-                )
-                .await
-                .unwrap(),
-            Nat
-        )
-        .unwrap()
+        let args = Account { owner, subaccount };
+        let bytes = Encode!(&args).unwrap();
+        let result = &self
+            .pic
+            .query_call(
+                Principal::from_text(CYCLES_LEDGER_CID).unwrap(),
+                Principal::anonymous(),
+                "icrc1_balance_of",
+                bytes,
+            )
+            .await
+            .unwrap();
+        Decode!(result, Nat).unwrap()
     }
 }

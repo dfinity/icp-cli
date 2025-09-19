@@ -1,38 +1,38 @@
-use bigdecimal::BigDecimal;
-use bigdecimal::ToPrimitive;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use clap::Parser;
 use ic_agent::AgentError;
-use ic_ledger_types::AccountIdentifier;
-use ic_ledger_types::Memo;
-use ic_ledger_types::Subaccount;
-use ic_ledger_types::Tokens;
-use ic_ledger_types::TransferArgs;
-use ic_ledger_types::TransferResult;
+use ic_ledger_types::{
+    AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
+};
 use icp_identity::key::LoadIdentityInContextError;
 use serde::Deserialize;
 use snafu::Snafu;
 
 use crate::{
+    CYCLES_MINTING_CANISTER_CID, ICP_LEDGER_CID,
     context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
 pub const MEMO_MINT_CYCLES: u64 = 0x544e494d; // == 'MINT'
+const ICP_TRANSFER_FEE: u64 = 10_000;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
-    #[clap(flatten)]
+    /// Amount of ICP to mint to cycles.
+    #[arg(long, conflicts_with = "cycles")]
+    pub icp: Option<BigDecimal>,
+
+    /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
+    #[arg(long, conflicts_with = "icp")]
+    pub cycles: Option<u128>,
+
+    #[command(flatten)]
     pub environment: EnvironmentOpt,
 
-    #[clap(flatten)]
+    #[command(flatten)]
     pub identity: IdentityOpt,
-
-    #[clap(long = "icp-amount", conflicts_with = "cycles_amount")]
-    pub icp_amount: Option<BigDecimal>,
-
-    #[clap(long = "cycles-amount", conflicts_with = "icp_amount")]
-    pub cycles_amount: Option<u128>,
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -68,14 +68,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .sender()
         .map_err(|e| CommandError::GetPrincipalError { message: e })?;
 
-    let icp_e8s_to_deposit = if let Some(icp_amount) = cmd.icp_amount {
+    let icp_e8s_to_deposit = if let Some(icp_amount) = cmd.icp {
         (icp_amount * 100_000_000_u64)
             .to_u64()
             .ok_or(CommandError::IcpAmountOverflow)?
-    } else if let Some(cycles_amount) = cmd.cycles_amount {
+    } else if let Some(cycles_amount) = cmd.cycles {
         let cmc_response = agent
             .query(
-                &Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap(),
+                &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
                 "get_icp_xdr_conversion_rate",
             )
             .with_arg(Encode!(&()).unwrap())
@@ -86,7 +86,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 source: e,
             })?;
 
-        let cmc_response = Decode!(&cmc_response, CmcResponse).unwrap();
+        let cmc_response = Decode!(&cmc_response, ConversionRateResponse).unwrap();
         let cycles_per_e8s = cmc_response.data.xdr_permyriad_per_icp as u128;
         let cycles_plus_fees = cycles_amount + 100_000_000_u128; // Cycles ledger charges 100M for deposits
         let e8s_to_deposit = cycles_plus_fees.div_ceil(cycles_per_e8s);
@@ -99,24 +99,21 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     };
 
     let account_id = AccountIdentifier::new(
-        &Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap(),
+        &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
         &Subaccount::from(user_principal),
     );
     let memo = Memo(MEMO_MINT_CYCLES);
     let transfer_args = TransferArgs {
         memo,
         amount: Tokens::from_e8s(icp_e8s_to_deposit),
-        fee: Tokens::from_e8s(10_000),
+        fee: Tokens::from_e8s(ICP_TRANSFER_FEE),
         from_subaccount: None,
         to: account_id,
         created_at_time: None,
     };
 
     let transfer_result = agent
-        .update(
-            &Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(),
-            "transfer",
-        )
+        .update(&Principal::from_text(ICP_LEDGER_CID).unwrap(), "transfer")
         .with_arg(Encode!(&transfer_args).unwrap())
         .call_and_wait()
         .await
@@ -129,9 +126,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         Ok(block_index) => block_index,
         Err(err) => {
             match err {
-                ic_ledger_types::TransferError::TxDuplicate { duplicate_of } => duplicate_of,
-                ic_ledger_types::TransferError::InsufficientFunds { balance } => {
-                    let required = BigDecimal::new((icp_e8s_to_deposit + 10_000).into(), 8); // transfer fee
+                TransferError::TxDuplicate { duplicate_of } => duplicate_of,
+                TransferError::InsufficientFunds { balance } => {
+                    let required =
+                        BigDecimal::new((icp_e8s_to_deposit + ICP_TRANSFER_FEE).into(), 8); // transfer fee
                     let available = BigDecimal::new(balance.e8s().into(), 8);
                     return Err(CommandError::InsufficientFunds {
                         required,
@@ -147,11 +145,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let notify_response = agent
         .update(
-            &Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai").unwrap(),
+            &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
             "notify_mint_cycles",
         )
         .with_arg(
-            Encode!(&NotifyMintCyclesArgs {
+            Encode!(&NotifyMintArgs {
                 block_index,
                 deposit_memo: None,
                 to_subaccount: None,
@@ -164,71 +162,74 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             canister: "cmc".to_string(),
             source: e,
         })?;
-    let notify_response = Decode!(&notify_response, NotifyMintCyclesResponse).unwrap();
+    let notify_response = Decode!(&notify_response, NotifyMintResponse).unwrap();
     let minted = match notify_response {
-        NotifyMintCyclesResponse::Ok(ok) => ok,
-        NotifyMintCyclesResponse::Err(err) => {
-            return Err(CommandError::NotifyMintCyclesError { src: err });
+        NotifyMintResponse::Ok(ok) => ok,
+        NotifyMintResponse::Err(err) => {
+            return Err(CommandError::NotifyMintError { src: err });
         }
     };
 
     // display
     let deposited = BigDecimal::new((minted.minted - 100_000_000_u128).into(), 12); // deposit charges 100M fee
     let new_balance = BigDecimal::new(minted.balance.into(), 12);
-    println!("Minted {deposited} TCYCLES to your account, new balance: {new_balance} TCYCLES.");
+    let _ = ctx.term.write_line(&format!(
+        "Minted {deposited} TCYCLES to your account, new balance: {new_balance} TCYCLES."
+    ));
 
     Ok(())
 }
 
+/// Response from get_icp_xdr_conversion_rate on the cycles minting canister
 #[derive(Debug, Deserialize, CandidType)]
-struct CmcResponse {
-    data: CmcData,
+struct ConversionRateResponse {
+    data: ConversionRateData,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-struct CmcData {
+struct ConversionRateData {
     xdr_permyriad_per_icp: u64,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesArgs {
+pub struct NotifyMintArgs {
     pub block_index: u64,
     pub deposit_memo: Option<Vec<u8>>,
     pub to_subaccount: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesOk {
+pub struct NotifyMintOk {
     pub balance: Nat,
     pub block_index: Nat,
     pub minted: Nat,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesRefunded {
+pub struct NotifyMintRefunded {
     pub block_index: Option<u64>,
     pub reason: String,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintCyclesOther {
+pub struct NotifyMintOther {
     pub error_message: String,
     pub error_code: u64,
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintCyclesErr {
-    Refunded(NotifyMintCyclesRefunded),
+pub enum NotifyMintErr {
+    Refunded(NotifyMintRefunded),
     InvalidTransaction(String),
-    Other(NotifyMintCyclesOther),
+    Other(NotifyMintOther),
     Processing,
     TransactionTooOld(u64),
 }
 
 #[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintCyclesResponse {
-    Ok(NotifyMintCyclesOk),
-    Err(NotifyMintCyclesErr),
+pub enum NotifyMintResponse {
+    Ok(NotifyMintOk),
+    Err(NotifyMintErr),
 }
 
 #[derive(Debug, Snafu)]
@@ -255,7 +256,7 @@ pub enum CommandError {
     IcpAmountOverflow,
 
     #[snafu(display("Failed ICP ledger transfer: {src:?}"))]
-    TransferError { src: ic_ledger_types::TransferError },
+    TransferError { src: TransferError },
 
     #[snafu(display("Insufficient funds: {required} ICP required, {available} ICP available."))]
     InsufficientFunds {
@@ -270,5 +271,5 @@ pub enum CommandError {
     NoAmountSpecified,
 
     #[snafu(display("Failed to notify mint cycles: {src:?}"))]
-    NotifyMintCyclesError { src: NotifyMintCyclesErr },
+    NotifyMintError { src: NotifyMintErr },
 }

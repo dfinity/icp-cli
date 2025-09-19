@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use phf::phf_map;
 use snafu::Snafu;
 
-use crate::context::Context;
+use crate::{CYCLES_LEDGER_CID, ICP_LEDGER_CID, context::Context};
 
 pub mod balance;
 mod transfer;
@@ -15,8 +15,8 @@ mod transfer;
 ///
 /// The canister IDs are stored as string literals in textual format.
 static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
-    "icp" => "ryjl3-tyaaa-aaaaa-aaaba-cai",
-    "cycles" => "um5iw-rqaaa-aaaaq-qaaba-cai",
+    "icp" => ICP_LEDGER_CID,
+    "cycles" => CYCLES_LEDGER_CID,
 };
 
 #[derive(Parser, Debug)]

@@ -122,17 +122,18 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     );
 
     // Calculate units of token to transfer
-    let units_amount = cmd.amount.clone() * 10u128.pow(decimals);
+    // Ledgers do not work in decimals and instead use the smallest non-divisible unit of the token
+    let ledger_amount = cmd.amount.clone() * 10u128.pow(decimals);
 
     // Convert amount to big decimal
-    let units_amount = units_amount
+    let ledger_amount = ledger_amount
         .to_bigint()
         .ok_or(CommandError::Amount)?
         .to_biguint()
         .ok_or(CommandError::Amount)?;
 
-    let units_amount = Nat::from(units_amount);
-    let display_amount = BigDecimal::from_biguint(units_amount.0.clone(), decimals as i64);
+    let ledger_amount = Nat::from(ledger_amount);
+    let display_amount = BigDecimal::from_biguint(ledger_amount.0.clone(), decimals as i64);
 
     // Prepare transfer
     let receiver = Account {
@@ -142,7 +143,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
 
     let arg = TransferArg {
         // Transfer amount
-        amount: units_amount.clone(),
+        amount: ledger_amount.clone(),
 
         // Transfer destination
         to: receiver,

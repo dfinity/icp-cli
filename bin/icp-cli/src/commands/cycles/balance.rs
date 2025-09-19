@@ -5,8 +5,8 @@ use crate::{
     context::{Context, GetProjectError},
 };
 
-pub async fn exec(_ctx: &Context, cmd: token::balance::Cmd) -> Result<(), CommandError> {
-    token::balance::exec(_ctx, "cycles", cmd)
+pub async fn exec(ctx: &Context, cmd: token::balance::Cmd) -> Result<(), CommandError> {
+    token::balance::exec(ctx, "cycles", cmd)
         .await
         .map_err(Into::into)
 }

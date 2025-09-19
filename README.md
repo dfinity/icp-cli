@@ -13,7 +13,8 @@ For now, you have to build icp-cli locally in order to use it.
 ### Prerequisites
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
-- **dfx**: Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install) for IC development.
+- **pocket-ic**: Download [pocket-ic](https://github.com/dfinity/pocketic/releases/tag/10.0.0) in order to run a local network.
+- **dfx**: Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install) for the motoko tools.
 
 ### Building
 
@@ -30,17 +31,27 @@ icp help
 
 ### Add pocket-ic and motoko tools to the path
 
-To launch a local network you will also need to have pocket-ic on the path. You might
-also need the Motoko compiler if you plan on building canisters with Motoko. For now,
+To launch a local network you will also need to set the `ICP_POCKET_IC_PATH` environment variable.
+You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases/tag/10.0.0).
+At least version 10.0.0 of pocket-ic is required.
+
+```bash
+# for eg for a mac with apple sillicon:
+wget https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-arm64-darwin.gz
+gunzip pocket-ic-arm64-darwin.gz
+chmod +x pocket-ic-arm64-darwin
+export ICP_POCKET_IC_PATH="$(pwd)/pocket-ic-arm64-darwin"
+```
+
+### [Optional] Add motoko tools to the path
+
+You might also need the Motoko compiler if you plan on building canisters with Motoko. For now,
 a good way to do this is to use the tools that ship with `dfx`. One way to configure them
 is to run the following in your terminal:
 
 ```bash
 # Ensure dfx is installed and the cache is populated
 dfx cache install
-
-# Export the path to the pocket-ic binary
-export ICP_POCKET_IC_PATH="$(dfx cache show)/pocket-ic"
 
 # Add moc to the path
 export PATH=$(dfx cache show):$PATH
@@ -61,7 +72,6 @@ The `examples/` directory contains various project templates and configurations 
 ### Prerequisites
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
-- **dfx**: Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install) for IC development.
 
 ### Building
 
@@ -93,19 +103,22 @@ To ensure test isolation, they run in a temporary HOME directory and
 The `ICP_POCKET_IC_PATH` environment variable should point to
 the path of the `pocket-ic` binary.
 
+You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases/tag/10.0.0).
+At least version 10.0.0 of pocket-ic is required.
+
 To run the tests, it's necessary to set the `ICPTEST_DFX_PATH` environment variable
 to a valid dfx path, as well as the `ICP_POCKET_IC_PATH` environment variable.
 Here is one way to do that:
 
 ```
+# Export the path to the pocket-ic binary
+export ICP_POCKET_IC_PATH="<yourpath>/pocket-ic"
+
 # Ensure dfx is installed and the cache is populated
 dfx cache install
 
 # Export the path to the actual dfx binary (not the shim)
 export ICPTEST_DFX_PATH="$(dfx cache show)/dfx"
-
-# Export the path to the pocket-ic binary
-export ICP_POCKET_IC_PATH="$(dfx cache show)/pocket-ic"
 
 # Run tests
 cargo test

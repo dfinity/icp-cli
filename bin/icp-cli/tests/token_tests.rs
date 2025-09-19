@@ -112,7 +112,7 @@ async fn token_transfer() {
     // Simple cycles transfer
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp-amount", "5"])
+        .args(["cycles", "mint", "--icp", "5"])
         .assert()
         .success();
     ctx.icp()

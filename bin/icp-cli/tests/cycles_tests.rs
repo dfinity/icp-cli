@@ -41,7 +41,7 @@ async fn cycles_balance() {
         .await;
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp-amount", "1"])
+        .args(["cycles", "mint", "--icp", "1"])
         .assert()
         .stdout(contains(
             "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",
@@ -56,7 +56,7 @@ async fn cycles_balance() {
         .await;
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--cycles-amount", "1000000000"])
+        .args(["cycles", "mint", "--cycles", "1000000000"])
         .assert()
         .stdout(contains(
             "Minted 0.001000000000 TCYCLES to your account, new balance: 0.001000000000 TCYCLES.",
@@ -64,7 +64,7 @@ async fn cycles_balance() {
         .success();
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--cycles-amount", "1500000000"])
+        .args(["cycles", "mint", "--cycles", "1500000000"])
         .assert()
         .stdout(contains(
             "Minted 0.001500016000 TCYCLES to your account, new balance: 0.002500016000 TCYCLES.",

@@ -25,7 +25,7 @@ pub struct Cmd {
 #[derive(Subcommand, Debug)]
 pub enum Subcmd {
     Build(build::Cmd),
-    Canister(Box<canister::Cmd>),
+    Canister(canister::Cmd),
     Cycles(cycles::Cmd),
     Deploy(deploy::Cmd),
     Environment(environment::Cmd),
@@ -38,7 +38,7 @@ pub enum Subcmd {
 pub async fn dispatch(ctx: &Context, subcmd: Subcmd) -> Result<(), DispatchError> {
     match subcmd {
         Subcmd::Build(opts) => build::exec(ctx, opts).await?,
-        Subcmd::Canister(opts) => canister::dispatch(ctx, *opts).await?,
+        Subcmd::Canister(opts) => canister::dispatch(ctx, opts).await?,
         Subcmd::Cycles(opts) => cycles::exec(ctx, opts).await?,
         Subcmd::Deploy(opts) => deploy::exec(ctx, opts).await?,
         Subcmd::Environment(opts) => environment::exec(ctx, opts).await?,

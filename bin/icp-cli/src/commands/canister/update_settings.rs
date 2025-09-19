@@ -10,6 +10,24 @@ use crate::options::{EnvironmentOpt, IdentityOpt};
 use crate::store_id::{Key, LookupError as LookupIdError};
 
 #[derive(Clone, Debug, Default, Parser)]
+pub struct ControllerOpt {
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
+    add_controller: Option<Vec<Principal>>,
+
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
+    remove_controller: Option<Vec<Principal>>,
+
+    #[arg(long, action = ArgAction::Append)]
+    set_controller: Option<Vec<Principal>>,
+}
+
+impl ControllerOpt {
+    pub fn require_current_settings(&self) -> bool {
+        self.add_controller.is_some() || self.remove_controller.is_some()
+    }
+}
+
+#[derive(Clone, Debug, Default, Parser)]
 pub struct LogVisibilityOpt {
     #[arg(
         long,
@@ -47,14 +65,8 @@ pub struct Cmd {
     #[command(flatten)]
     environment: EnvironmentOpt,
 
-    #[arg(long, action = ArgAction::Append, conflicts_with = "set_controller")]
-    add_controller: Option<Vec<Principal>>,
-
-    #[arg(long, action = ArgAction::Append, conflicts_with = "set_controller")]
-    remove_controller: Option<Vec<Principal>>,
-
-    #[arg(long, action = ArgAction::Append)]
-    set_controller: Option<Vec<Principal>>,
+    #[command(flatten)]
+    controllers: Option<ControllerOpt>,
 
     #[arg(long, value_parser = compute_allocation_parser)]
     compute_allocation: Option<u8>,
@@ -110,7 +122,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .canisters
         .iter()
         .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CommandError::CanisterNotFound { name: cmd.name })?;
+        .ok_or_else(|| CommandError::CanisterNotFound {
+            name: cmd.name.clone(),
+        })?;
 
     // Ensure canister is included in the environment
     if !ecs.contains(&c.name) {
@@ -147,6 +161,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
     let mut current_status: Option<CanisterStatusResult> = None;
+    if require_current_settings(&cmd) {
+        current_status = Some(mgmt.canister_status(&cid).await?.0);
+    }
 
     // TODO(VZ): Ask for consent
     // - if the freezing threshold is too long or too short.
@@ -154,70 +171,22 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Handle controllers.
     let mut controllers: Option<Vec<Principal>> = None;
-    if let Some(to_be_set) = cmd.set_controller {
-        controllers = Some(to_be_set);
-    }
-    if let Some(to_be_added) = cmd.add_controller {
-        current_status = Some(mgmt.canister_status(&cid).await?.0);
-        let current_controllers: Vec<Principal> = current_status
-            .as_ref()
-            .unwrap()
-            .settings
-            .controllers
-            .clone();
-
-        let new_controllers: Vec<Principal> = {
-            let mut set: HashSet<Principal> = current_controllers.into_iter().collect();
-            set.extend(to_be_added.into_iter());
-            set.into_iter().collect()
-        };
-
-        // Only update controllers if there're new controllers to be added.
-        if new_controllers.len() > current_status.as_ref().unwrap().settings.controllers.len() {
-            controllers = Some(new_controllers);
-        }
-    }
-    if let Some(to_be_removed) = cmd.remove_controller {
-        if controllers.is_none() {
-            if current_status.is_none() {
-                current_status = Some(mgmt.canister_status(&cid).await?.0);
-            }
-            controllers = Some(
-                current_status
-                    .as_ref()
-                    .unwrap()
-                    .settings
-                    .controllers
-                    .clone(),
-            );
-        }
-
-        let controllers = controllers.as_mut().unwrap();
-        for removed in to_be_removed {
-            if let Some(idx) = controllers.iter().position(|x| *x == removed) {
-                controllers.swap_remove(idx);
-            }
-        }
+    if let Some(controllers_opt) = &cmd.controllers {
+        controllers = get_controllers(&controllers_opt, current_status.as_ref());
     }
 
     // Handle log visibility.
     let mut log_visibility: Option<LogVisibility> = None;
     if let Some(log_visibility_opt) = cmd.log_visibility {
-        if current_status.is_none() & log_visibility_opt.require_current_settings() {
-            current_status = Some(mgmt.canister_status(&cid).await?.0);
-        }
         log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
     }
 
     // Handle environment variables.
     let mut environment_variables: Option<HashMap<String, String>> = None;
     if let Some(to_be_added) = cmd.add_environment_variable {
-        if current_status.is_none() {
-            current_status = Some(mgmt.canister_status(&cid).await?.0);
-        }
         let current_environment_variables: Vec<EnvironmentVariable> = current_status
             .as_ref()
-            .unwrap()
+            .expect("current status should be ready")
             .settings
             .environment_variables
             .clone();
@@ -236,12 +205,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
     if let Some(to_be_removed) = cmd.remove_environment_variable {
         if environment_variables.is_none() {
-            if current_status.is_none() {
-                current_status = Some(mgmt.canister_status(&cid).await?.0);
-            }
             let current_environment_variables: Vec<EnvironmentVariable> = current_status
                 .as_ref()
-                .unwrap()
+                .expect("current status should be ready")
                 .settings
                 .environment_variables
                 .clone();
@@ -327,19 +293,6 @@ pub enum CommandError {
     Agent { source: AgentError },
 }
 
-fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, CommandError> {
-    let (name, value) =
-        env_var
-            .split_once('=')
-            .ok_or(CommandError::InvalidEnvironmentVariable {
-                variable: env_var.to_owned(),
-            })?;
-    Ok(EnvironmentVariable {
-        name: name.to_owned(),
-        value: value.to_owned(),
-    })
-}
-
 fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
     if let Ok(num) = compute_allocation.parse::<u8>() {
         if num <= 100 {
@@ -379,6 +332,70 @@ fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> 
         "controllers" => Ok(LogVisibility::Controllers),
         _ => Err("Must be `controllers` or `public`.".to_string()),
     }
+}
+
+fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, CommandError> {
+    let (name, value) =
+        env_var
+            .split_once('=')
+            .ok_or(CommandError::InvalidEnvironmentVariable {
+                variable: env_var.to_owned(),
+            })?;
+    Ok(EnvironmentVariable {
+        name: name.to_owned(),
+        value: value.to_owned(),
+    })
+}
+
+fn require_current_settings(cmd: &Cmd) -> bool {
+    if let Some(controllers) = &cmd.controllers {
+        if controllers.require_current_settings() {
+            return true;
+        }
+    }
+
+    if let Some(log_visibility) = &cmd.log_visibility {
+        if log_visibility.require_current_settings() {
+            return true;
+        }
+    }
+
+    if cmd.add_environment_variable.is_some() || cmd.remove_environment_variable.is_some() {
+        return true;
+    }
+
+    false
+}
+
+fn get_controllers(
+    controllers: &ControllerOpt,
+    current_status: Option<&CanisterStatusResult>,
+) -> Option<Vec<Principal>> {
+    if let Some(controllers) = controllers.set_controller.as_ref() {
+        return Some(controllers.clone());
+    } else if controllers.require_current_settings() {
+        let mut current_controllers: HashSet<Principal> = current_status
+            .as_ref()
+            .expect("current status should be ready")
+            .settings
+            .controllers
+            .clone()
+            .into_iter()
+            .collect();
+
+        if let Some(to_be_added) = controllers.add_controller.as_ref() {
+            current_controllers.extend(to_be_added.into_iter());
+        }
+        if let Some(to_be_removed) = controllers.remove_controller.as_ref() {
+            for controller in to_be_removed {
+                current_controllers.remove(controller);
+            }
+        }
+
+        return Some(current_controllers.into_iter().collect::<Vec<Principal>>());
+    }
+
+    None
 }
 
 fn get_log_visibility(

@@ -17,7 +17,7 @@ for test in test_names():
     # Ubuntu: run everything
     include.append({
         "test": test,
-        "os": "ubuntu-24.04"
+        "os": "ubuntu-22.04"
     })
 
     # macOS: only run selected tests

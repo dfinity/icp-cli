@@ -54,6 +54,21 @@ impl LogVisibilityOpt {
     }
 }
 
+#[derive(Clone, Debug, Default, Parser)]
+pub struct EnvironmentVariableOpt {
+    #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
+    add_environment_variable: Option<Vec<EnvironmentVariable>>,
+
+    #[arg(long, action = ArgAction::Append)]
+    remove_environment_variable: Option<Vec<String>>,
+}
+
+impl EnvironmentVariableOpt {
+    pub fn require_current_settings(&self) -> bool {
+        self.add_environment_variable.is_some() || self.remove_environment_variable.is_some()
+    }
+}
+
 #[derive(Debug, Parser)]
 pub struct Cmd {
     /// The name of the canister within the current project
@@ -89,11 +104,8 @@ pub struct Cmd {
     #[command(flatten)]
     log_visibility: Option<LogVisibilityOpt>,
 
-    #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
-    add_environment_variable: Option<Vec<EnvironmentVariable>>,
-
-    #[arg(long, action = ArgAction::Append)]
-    remove_environment_variable: Option<Vec<String>>,
+    #[command(flatten)]
+    environment_variables: Option<EnvironmentVariableOpt>,
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -182,45 +194,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Handle environment variables.
-    let mut environment_variables: Option<HashMap<String, String>> = None;
-    if let Some(to_be_added) = cmd.add_environment_variable {
-        let current_environment_variables: Vec<EnvironmentVariable> = current_status
-            .as_ref()
-            .expect("current status should be ready")
-            .settings
-            .environment_variables
-            .clone();
-
-        // Convert current env vars to a map for easy merging
-        let mut env_map: HashMap<String, String> = current_environment_variables
-            .into_iter()
-            .map(|v| (v.name, v.value))
-            .collect();
-
-        for var in to_be_added {
-            env_map.insert(var.name, var.value);
-        }
-
-        environment_variables = Some(env_map);
-    }
-    if let Some(to_be_removed) = cmd.remove_environment_variable {
-        if environment_variables.is_none() {
-            let current_environment_variables: Vec<EnvironmentVariable> = current_status
-                .as_ref()
-                .expect("current status should be ready")
-                .settings
-                .environment_variables
-                .clone();
-            environment_variables = Some(
-                current_environment_variables
-                    .into_iter()
-                    .map(|v| (v.name, v.value))
-                    .collect(),
-            );
-        }
-        for var in to_be_removed {
-            environment_variables.as_mut().unwrap().remove(&var);
-        }
+    let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
+    if let Some(environment_variables_opt) = &cmd.environment_variables {
+        environment_variables =
+            get_environment_variables(environment_variables_opt, current_status.as_ref());
     }
 
     // Update settings.
@@ -252,10 +229,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         update = update.with_log_visibility(log_visibility);
     }
     if let Some(environment_variables) = environment_variables {
-        let environment_variables = environment_variables
-            .into_iter()
-            .map(|(name, value)| EnvironmentVariable { name, value })
-            .collect::<Vec<_>>();
         update = update.with_environment_variables(environment_variables);
     }
     update.await?;
@@ -360,8 +333,10 @@ fn require_current_settings(cmd: &Cmd) -> bool {
         }
     }
 
-    if cmd.add_environment_variable.is_some() || cmd.remove_environment_variable.is_some() {
-        return true;
+    if let Some(environment_variables) = &cmd.environment_variables {
+        if environment_variables.require_current_settings() {
+            return true;
+        }
     }
 
     false
@@ -438,4 +413,41 @@ fn get_log_visibility(
     }
 
     Some(LogVisibility::AllowedViewers(log_viewers))
+}
+
+fn get_environment_variables(
+    environment_variables: &EnvironmentVariableOpt,
+    current_status: Option<&CanisterStatusResult>,
+) -> Option<Vec<EnvironmentVariable>> {
+    if environment_variables.require_current_settings() {
+        let mut current_environment_variables: HashMap<String, String> = current_status
+            .as_ref()
+            .expect("current status should be ready")
+            .settings
+            .environment_variables
+            .clone()
+            .into_iter()
+            .map(|v| (v.name, v.value))
+            .collect();
+
+        if let Some(to_be_added) = environment_variables.add_environment_variable.clone() {
+            for var in to_be_added {
+                current_environment_variables.insert(var.name, var.value);
+            }
+        }
+        if let Some(to_be_removed) = environment_variables.remove_environment_variable.as_ref() {
+            for var in to_be_removed {
+                current_environment_variables.remove(var);
+            }
+        }
+
+        return Some(
+            current_environment_variables
+                .into_iter()
+                .map(|(name, value)| EnvironmentVariable { name, value })
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    None
 }

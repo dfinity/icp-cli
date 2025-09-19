@@ -606,7 +606,6 @@ fn canister_update_settings_miscellaneous() {
 }
 
 #[test]
-#[ignore = "Environment variables are not enabled yet"]
 fn canister_update_settings_environment_variables() {
     let ctx = TestContext::new().with_dfx();
 
@@ -659,7 +658,8 @@ fn canister_update_settings_environment_variables() {
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
                 .and(contains("Controllers: 2vxsx-fae"))
-                .and(contains("Environment Variables: N/A")),
+                .and(contains("Environment Variables:"))
+                .and(contains("Name: ICP_CANISTER_ID:my-canister")),
         );
 
     // Add multiple environment variables
@@ -745,6 +745,8 @@ fn canister_update_settings_environment_variables() {
         .stderr(
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
-                .and(contains("Environment Variables: N/A")),
+                .and(contains("Environment Variables:"))
+                .and(contains("Name: var2, Value: value2").not())
+                .and(contains("Name: var3, Value: value3").not()),
         );
 }

@@ -1,7 +1,6 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{ord::eq, str::PredicateStrExt};
-use serial_test::serial;
 
 mod common;
 
@@ -27,7 +26,7 @@ fn deploy_empty() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 }
@@ -54,19 +53,13 @@ fn deploy_canister_not_found() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "my-canister",
-            "--effective-id",
-            "ghsi2-tqaaa-aaaan-aaaca-cai",
-        ])
+        .args(["deploy", "my-canister", "--subnet-id", common::SUBNET_ID])
         .assert()
         .failure()
         .stderr(eq("Error: project does not contain a canister named 'my-canister'").trim());
 }
 
 #[test]
-#[serial]
 fn deploy() {
     let ctx = TestContext::new().with_dfx();
 
@@ -96,6 +89,7 @@ fn deploy() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -104,7 +98,7 @@ fn deploy() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 
@@ -118,7 +112,6 @@ fn deploy() {
 }
 
 #[test]
-#[serial]
 fn deploy_twice_should_succeed() {
     let ctx = TestContext::new().with_dfx();
 
@@ -148,6 +141,7 @@ fn deploy_twice_should_succeed() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -156,14 +150,14 @@ fn deploy_twice_should_succeed() {
     // Deploy project (first time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 

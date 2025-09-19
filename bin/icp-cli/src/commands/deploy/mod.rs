@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_agent::export::Principal;
+use ic_agent::{AgentError, export::Principal};
 use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
@@ -7,13 +7,15 @@ use crate::{
     commands::{
         build,
         canister::{
+            binding_env_vars,
             create::{self, CanisterIDs, CanisterSettings, DEFAULT_EFFECTIVE_ID},
             install,
         },
         sync,
     },
-    context::{Context, GetProjectError},
+    context::{Context, ContextGetAgentError, GetProjectError},
     options::{EnvironmentOpt, IdentityOpt},
+    store_id::LookupError,
 };
 
 #[derive(Parser, Debug)]
@@ -31,9 +33,9 @@ pub struct Cmd {
     #[command(flatten)]
     pub environment: EnvironmentOpt,
 
-    /// The effective canister ID to use when calling the management canister.
-    #[arg(long, default_value = DEFAULT_EFFECTIVE_ID)]
-    pub effective_id: Principal,
+    /// The subnet id to use for the canisters being deployed.
+    #[clap(long)]
+    pub subnet_id: Option<Principal>,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -74,6 +76,40 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         return Ok(());
     }
 
+    // Infer the effective canister id from the subnet id if provided.
+    let mut effective_id = Principal::from_text(DEFAULT_EFFECTIVE_ID).unwrap();
+    if let Some(subnet_id) = cmd.subnet_id {
+        // Load environment
+        let env = pm
+            .environments
+            .iter()
+            .find(|&v| v.name == cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
+
+        // Get network
+        let network = env
+            .network
+            .as_ref()
+            .expect("no network specified in environment");
+
+        // Load identity
+        ctx.require_identity(cmd.identity.name());
+
+        // Setup network
+        ctx.require_network(network);
+
+        // Prepare agent
+        let agent = ctx.agent()?;
+
+        // Get subnet canister ranges
+        let ranges = agent.read_state_subnet_canister_ranges(subnet_id).await?;
+        if !ranges.is_empty() {
+            effective_id = ranges[0].0 // Use the first start canister id as the effective id.
+        }
+    }
+
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
     build::exec(
@@ -95,7 +131,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
             // Ids
             ids: CanisterIDs {
-                effective_id: cmd.effective_id.to_owned(),
+                effective_id: effective_id.to_owned(),
                 specific_id: None,
             },
 
@@ -115,6 +151,23 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     if let Err(err) = out {
         if !matches!(err, create::CommandError::NoCanisters) {
             return Err(CommandError::Create { source: err });
+        }
+    }
+
+    let _ = ctx.term.write_line("\n\nSetting environment variables:");
+    let out = binding_env_vars::exec(
+        ctx,
+        binding_env_vars::Cmd {
+            names: cnames.to_owned(),
+            identity: cmd.identity.clone(),
+            environment: cmd.environment.clone(),
+        },
+    )
+    .await;
+
+    if let Err(err) = out {
+        if !matches!(err, binding_env_vars::CommandError::NoCanisters) {
+            return Err(CommandError::SetEnvironmentVariables { source: err });
         }
     }
 
@@ -169,6 +222,9 @@ pub enum CommandError {
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
 
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
     #[snafu(transparent)]
     Build { source: build::CommandError },
 
@@ -179,5 +235,19 @@ pub enum CommandError {
     Install { source: install::CommandError },
 
     #[snafu(transparent)]
+    SetEnvironmentVariables {
+        source: binding_env_vars::CommandError,
+    },
+
+    #[snafu(transparent)]
     Sync { source: sync::CommandError },
+
+    #[snafu(transparent)]
+    GetAgent { source: ContextGetAgentError },
+
+    #[snafu(transparent)]
+    Agent { source: AgentError },
+
+    #[snafu(transparent)]
+    LookupCanisterId { source: LookupError },
 }

@@ -1,0 +1,10 @@
+{
+  "name": "icp-frontend-environment-variables",
+  "scripts": {
+    "build": "npm run build -w=libs/canister-env -w=app"
+  },
+  "workspaces": [
+    "app",
+    "libs/canister-env"
+  ]
+}

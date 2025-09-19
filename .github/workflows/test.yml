@@ -74,11 +74,49 @@ jobs:
 
       - name: Install dfx
         uses: dfinity/setup-dfx@main
-      - name: Set up path to dfx for tests and to pocketic for icp
+
+      - name: Set up path to dfx for tests
         run: |
           dfx cache install
           echo "ICPTEST_DFX_PATH=$(dfx cache show)/dfx" >> "$GITHUB_ENV"
-          echo "ICP_POCKET_IC_PATH=$(dfx cache show)/pocket-ic" >> "$GITHUB_ENV"
+
+      - name: install pocket-ic
+        run: |
+          VERSION=10.0.0
+          OS=""
+          ARCH=""
+
+          # Map runner.os → release suffix
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            OS="linux"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            OS="darwin"
+          else
+            echo "Unsupported OS: ${{ runner.os }}"
+            exit 1
+          fi
+
+          # Detect architecture
+          case "$(uname -m)" in
+            x86_64) ARCH="x86_64" ;;
+            arm64|aarch64) ARCH="arm64" ;;
+            *)
+              echo "Unsupported architecture: $(uname -m)"
+              exit 1
+              ;;
+          esac
+
+          URL="https://github.com/dfinity/pocketic/releases/download/$VERSION/pocket-ic-${ARCH}-${OS}.gz"
+          DEST="/usr/local/bin/pocket-ic"
+
+          echo "Downloading $URL"
+          curl -L "$URL" -o pocket-ic.gz
+          gunzip -f pocket-ic.gz
+          chmod +x pocket-ic
+          sudo mv pocket-ic "$DEST"
+
+          echo "Installed pocket-ic to $DEST"
+          echo "ICP_POCKET_IC_PATH=$DEST" >> "$GITHUB_ENV"
 
       - name: Run ${{ matrix.test }}
         run: cargo test --test ${{ matrix.test }}

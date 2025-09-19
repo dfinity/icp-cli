@@ -5,6 +5,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use snafu::Snafu;
+use tracing::debug;
 
 use crate::{
     context::{Context, ContextGetAgentError, GetProjectError},
@@ -175,6 +176,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 // Install code to canister
+                debug!("Install new canister code");
                 mgmt.install_code(&cid, &wasm)
                     .with_mode(install_mode)
                     .await?;

@@ -1,0 +1,19 @@
+name: frontend
+
+build:
+  steps:
+    - type: pre-built
+      path: canister/assetstorage.wasm.gz
+      sha256: 2c9cfd9c111393ce3ff335307cda6fe38c6a474c926750d235e2a5ad96942795
+
+    - type: script
+      command: npm install
+
+    - type: script
+      command: npm run build
+
+sync:
+  steps:
+    - type: assets
+      dirs:
+        - app/dist

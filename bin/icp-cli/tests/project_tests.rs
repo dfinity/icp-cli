@@ -196,7 +196,7 @@ fn redefine_ic_network_disallowed() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .failure()
         .stderr(eq("Error: cannot redefine the 'ic' network; the network path 'networks/ic' is invalid").trim());
@@ -229,7 +229,7 @@ fn missing_specific_network() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .failure()
         .stderr(eq(expected_error).trim());

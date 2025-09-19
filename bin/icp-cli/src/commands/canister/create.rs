@@ -13,7 +13,12 @@ use crate::{
     store_id::{Key, LookupError, RegisterError},
 };
 
-pub const DEFAULT_EFFECTIVE_ID: &str = "uqqxf-5h777-77774-qaaaa-cai";
+/// This CID is dependent on the toplogy being served by pocket-ic
+/// NOTE: If the topology is changed (another subnet is added, etc) the CID may change.
+/// References:
+/// - http://localhost:8000/_/topology
+/// - http://localhost:8000/_/dashboard
+pub const DEFAULT_EFFECTIVE_ID: &str = "tqzl2-p7777-77776-aaaaa-cai";
 
 #[derive(Clone, Debug, Parser)]
 pub struct CanisterIDs {
@@ -239,9 +244,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 // Logs
-                builder = builder.with_optional_log_visibility(
-                    Some(LogVisibility::Public), //
-                );
+                builder = builder.with_optional_log_visibility(Some(LogVisibility::Public));
 
                 // Canister ID (specific)
                 if let Some(id) = cmd.ids.specific_id {

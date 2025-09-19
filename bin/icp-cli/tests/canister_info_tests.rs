@@ -1,12 +1,10 @@
 use crate::common::TestContext;
 use icp_fs::fs::write;
 use predicates::{prelude::PredicateBooleanExt, str::contains};
-use serial_test::serial;
 
 mod common;
 
 #[test]
-#[serial]
 fn canister_status() {
     let ctx = TestContext::new().with_dfx();
 
@@ -36,6 +34,7 @@ fn canister_status() {
     .expect("failed to write project manifest");
 
     // Start network
+    ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
 
     // Wait for network
@@ -44,7 +43,7 @@ fn canister_status() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--effective-id", "ghsi2-tqaaa-aaaan-aaaca-cai"])
+        .args(["deploy", "--subnet-id", common::SUBNET_ID])
         .assert()
         .success();
 

@@ -10,11 +10,11 @@ pub mod delete;
 pub mod info;
 pub mod install;
 pub mod list;
+pub mod settings;
 pub mod show;
 pub mod start;
 pub mod status;
 pub mod stop;
-pub mod update_settings;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -30,11 +30,11 @@ pub enum CanisterSubcmd {
     Info(info::Cmd),
     Install(install::Cmd),
     Show(show::Cmd),
+    Settings(settings::Cmd),
     List(list::Cmd),
     Start(start::Cmd),
     Status(status::Cmd),
     Stop(stop::Cmd),
-    UpdateSettings(update_settings::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandError> {
@@ -45,11 +45,11 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandErro
         CanisterSubcmd::Info(subcmd) => info::exec(ctx, subcmd).await?,
         CanisterSubcmd::Install(subcmd) => install::exec(ctx, subcmd).await?,
         CanisterSubcmd::List(subcmd) => list::exec(ctx, subcmd).await?,
+        CanisterSubcmd::Settings(subcmd) => settings::dispatch(ctx, subcmd).await?,
         CanisterSubcmd::Start(subcmd) => start::exec(ctx, subcmd).await?,
         CanisterSubcmd::Show(subcmd) => show::exec(ctx, subcmd).await?,
         CanisterSubcmd::Status(subcmd) => status::exec(ctx, subcmd).await?,
         CanisterSubcmd::Stop(subcmd) => stop::exec(ctx, subcmd).await?,
-        CanisterSubcmd::UpdateSettings(subcmd) => update_settings::exec(ctx, subcmd).await?,
     }
     Ok(())
 }
@@ -75,6 +75,9 @@ pub enum CanisterCommandError {
     Install { source: install::CommandError },
 
     #[snafu(transparent)]
+    Settings { source: settings::CommandError },
+
+    #[snafu(transparent)]
     Show { source: show::CommandError },
 
     #[snafu(transparent)]
@@ -85,9 +88,4 @@ pub enum CanisterCommandError {
 
     #[snafu(transparent)]
     Stop { source: stop::CommandError },
-
-    #[snafu(transparent)]
-    UpdateSettings {
-        source: update_settings::CommandError,
-    },
 }

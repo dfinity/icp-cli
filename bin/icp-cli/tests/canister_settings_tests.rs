@@ -8,7 +8,7 @@ use predicates::{
 mod common;
 
 #[test]
-fn canister_update_settings_controllers() {
+fn canister_settings_update_controllers() {
     let ctx = TestContext::new().with_dfx();
 
     // Get principals.
@@ -72,7 +72,8 @@ fn canister_update_settings_controllers() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-controller",
             principal_alice.as_str(),
@@ -98,7 +99,8 @@ fn canister_update_settings_controllers() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-controller",
             principal_bob.as_str(),
@@ -127,7 +129,8 @@ fn canister_update_settings_controllers() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--remove-controller",
             principal_bob.as_str(),
@@ -153,7 +156,8 @@ fn canister_update_settings_controllers() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-controller",
             principal_alice.as_str(),
@@ -182,7 +186,8 @@ fn canister_update_settings_controllers() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--remove-controller",
             principal_alice.as_str(),
@@ -211,7 +216,8 @@ fn canister_update_settings_controllers() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--set-controller",
             principal_alice.as_str(),
@@ -256,7 +262,7 @@ fn get_principal(ctx: &TestContext, identity: &str) -> String {
 }
 
 #[test]
-fn canister_update_settings_log_visibility() {
+fn canister_settings_update_log_visibility() {
     let ctx = TestContext::new().with_dfx();
 
     // Get principals.
@@ -319,7 +325,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--log-visibility",
             "controllers",
@@ -344,7 +351,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-log-viewer",
             principal_alice.as_str(),
@@ -370,7 +378,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-log-viewer",
             principal_bob.as_str(),
@@ -399,7 +408,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--remove-log-viewer",
             principal_bob.as_str(),
@@ -424,7 +434,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-log-viewer",
             principal_alice.as_str(),
@@ -453,7 +464,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--remove-log-viewer",
             principal_alice.as_str(),
@@ -480,7 +492,8 @@ fn canister_update_settings_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--set-log-viewer",
             principal_alice.as_str(),
@@ -506,7 +519,7 @@ fn canister_update_settings_log_visibility() {
 }
 
 #[test]
-fn canister_update_settings_miscellaneous() {
+fn canister_settings_update_miscellaneous() {
     let ctx = TestContext::new().with_dfx();
 
     // Setup project
@@ -569,7 +582,8 @@ fn canister_update_settings_miscellaneous() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--compute-allocation",
             "1",
@@ -606,7 +620,7 @@ fn canister_update_settings_miscellaneous() {
 }
 
 #[test]
-fn canister_update_settings_environment_variables() {
+fn canister_settings_update_environment_variables() {
     let ctx = TestContext::new().with_dfx();
 
     // Setup project
@@ -667,7 +681,8 @@ fn canister_update_settings_environment_variables() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-environment-variable",
             "var1=value1",
@@ -696,7 +711,8 @@ fn canister_update_settings_environment_variables() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--add-environment-variable",
             "var3=value3",
@@ -726,7 +742,8 @@ fn canister_update_settings_environment_variables() {
         .current_dir(&project_dir)
         .args([
             "canister",
-            "update-settings",
+            "settings",
+            "update",
             "my-canister",
             "--remove-environment-variable",
             "var2",

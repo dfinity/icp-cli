@@ -54,15 +54,14 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()).not()),
         );
@@ -81,15 +80,14 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str())),
         );
@@ -110,15 +108,14 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
@@ -138,15 +135,14 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_bob.as_str()).not()),
         );
@@ -167,15 +163,14 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
@@ -197,15 +192,14 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str()).not()),
@@ -227,15 +221,21 @@ fn canister_settings_update_controllers() {
         .assert()
         .success();
 
-    // Query status with identity alice.
+    // Query settings with identity alice.
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister", "--identity", "alice"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--identity",
+            "alice",
+        ])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("2vxsx-fae").not())
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
@@ -308,17 +308,13 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
-        .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
-                .and(contains("Log visibility: Public")),
-        );
+        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Public")));
 
     // Set log visibility to controllers
     ctx.icp()
@@ -334,17 +330,13 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
-        .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
-                .and(contains("Log visibility: Controllers")),
-        );
+        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Controllers")));
 
     // Add log viewer.
     ctx.icp()
@@ -360,15 +352,14 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str())),
         );
@@ -389,15 +380,14 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
@@ -417,15 +407,14 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers list is empty")),
         );
 
@@ -445,15 +434,14 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
@@ -475,15 +463,14 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers list is empty")),
         );
 
@@ -503,15 +490,14 @@ fn canister_settings_update_log_visibility() {
         .assert()
         .success();
 
-    // Query status with identity alice.
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
@@ -561,15 +547,14 @@ fn canister_settings_update_miscellaneous() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Compute allocation: 0"))
                 .and(contains("Freezing threshold: 2_592_000"))
                 .and(contains("Reserved cycles limit: 5_000_000_000_000"))
@@ -601,15 +586,14 @@ fn canister_settings_update_miscellaneous() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Compute allocation: 1"))
                 .and(contains("Memory allocation: 6_442_450_944"))
                 .and(contains("Freezing threshold: 8_640_000"))
@@ -662,15 +646,14 @@ fn canister_settings_update_environment_variables() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: ICP_CANISTER_ID:my-canister")),
@@ -692,15 +675,14 @@ fn canister_settings_update_environment_variables() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: var1, Value: value1"))
                 .and(contains("Name: var2, Value: value2")),
@@ -722,15 +704,14 @@ fn canister_settings_update_environment_variables() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: var1, Value: value1").not())
                 .and(contains("Name: var2, Value: value2"))
@@ -753,15 +734,14 @@ fn canister_settings_update_environment_variables() {
         .assert()
         .success();
 
-    // Query status
+    // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
         .stderr(
-            starts_with("Canister Status Report:")
-                .and(contains("Status: Running"))
+            starts_with("Canister Settings:")
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: var2, Value: value2").not())
                 .and(contains("Name: var3, Value: value3").not()),

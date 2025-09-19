@@ -172,7 +172,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Handle controllers.
     let mut controllers: Option<Vec<Principal>> = None;
     if let Some(controllers_opt) = &cmd.controllers {
-        controllers = get_controllers(&controllers_opt, current_status.as_ref());
+        controllers = get_controllers(controllers_opt, current_status.as_ref());
     }
 
     // Handle log visibility.
@@ -384,7 +384,7 @@ fn get_controllers(
             .collect();
 
         if let Some(to_be_added) = controllers.add_controller.as_ref() {
-            current_controllers.extend(to_be_added.into_iter());
+            current_controllers.extend(to_be_added);
         }
         if let Some(to_be_removed) = controllers.remove_controller.as_ref() {
             for controller in to_be_removed {

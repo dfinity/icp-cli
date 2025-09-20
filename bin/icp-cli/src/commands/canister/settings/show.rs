@@ -3,11 +3,9 @@ use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use snafu::Snafu;
 
-use crate::{
-    context::{Context, ContextGetAgentError, GetProjectError},
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
-};
+use crate::context::{Context, ContextGetAgentError, GetProjectError};
+use crate::options::{EnvironmentOpt, IdentityOpt};
+use crate::store_id::{Key, LookupError as LookupIdError};
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -22,15 +20,8 @@ pub struct Cmd {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest
+    // Load the project manifest.
     let pm = ctx.project()?;
-
-    // Select canister to query
-    let (_, c) = pm
-        .canisters
-        .iter()
-        .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CommandError::CanisterNotFound { name: cmd.name })?;
 
     // Load target environment
     let env = pm
@@ -48,6 +39,15 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             .map(|(_, c)| c.name.to_owned())
             .collect(),
     );
+
+    // Select canister to query
+    let (_, c) = pm
+        .canisters
+        .iter()
+        .find(|(_, c)| cmd.name == c.name)
+        .ok_or_else(|| CommandError::CanisterNotFound {
+            name: cmd.name.clone(),
+        })?;
 
     // Ensure canister is included in the environment
     if !ecs.contains(&c.name) {
@@ -83,11 +83,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
 
-    // Retrieve canister status from management canister
+    // Get canister settings
     let (result,) = mgmt.canister_status(&cid).await?;
-
-    // Status printout
-    print_status(&result);
+    print_settings(&result);
 
     Ok(())
 }
@@ -97,11 +95,11 @@ pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: GetProjectError },
 
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
     #[snafu(display("project does not contain an environment named '{name}'"))]
     EnvironmentNotFound { name: String },
+
+    #[snafu(display("project does not contain a canister named '{name}'"))]
+    CanisterNotFound { name: String },
 
     #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
     EnvironmentCanister {
@@ -119,9 +117,8 @@ pub enum CommandError {
     Agent { source: AgentError },
 }
 
-pub fn print_status(result: &CanisterStatusResult) {
-    eprintln!("Canister Status Report:");
-    eprintln!("  Status: {:?}", result.status);
+pub fn print_settings(result: &CanisterStatusResult) {
+    eprintln!("Canister Settings:");
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
@@ -165,33 +162,4 @@ pub fn print_status(result: &CanisterStatusResult) {
             eprintln!("    Name: {}, Value: {}", v.name, v.value);
         }
     }
-
-    match &result.module_hash {
-        Some(hash) => {
-            let hex_string: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
-            eprintln!("  Module hash: 0x{}", hex_string);
-        }
-        None => eprintln!("  Module hash: <none>"),
-    }
-
-    eprintln!("  Memory size: {}", result.memory_size);
-    eprintln!("  Cycles: {}", result.cycles);
-    eprintln!("  Reserved cycles: {}", result.reserved_cycles);
-    eprintln!(
-        "  Idle cycles burned per day: {}",
-        result.idle_cycles_burned_per_day
-    );
-
-    let stats = &result.query_stats;
-    eprintln!("  Query stats:");
-    eprintln!("    Calls: {}", stats.num_calls_total);
-    eprintln!("    Instructions: {}", stats.num_instructions_total);
-    eprintln!(
-        "    Req payload bytes: {}",
-        stats.request_payload_bytes_total
-    );
-    eprintln!(
-        "    Res payload bytes: {}",
-        stats.response_payload_bytes_total
-    );
 }

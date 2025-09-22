@@ -13,7 +13,7 @@ For now, you have to build icp-cli locally in order to use it.
 ### Prerequisites
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
-- **pocket-ic**: Download [pocket-ic](https://github.com/dfinity/pocketic/releases/tag/10.0.0) in order to run a local network.
+- **pocket-ic**: Download [pocket-ic](https://github.com/dfinity/pocketic/releases) in order to run a local network. pocket-ic v10 or above is required.
 - **dfx**: Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install) for the motoko tools.
 
 ### Building

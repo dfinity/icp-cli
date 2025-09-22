@@ -86,9 +86,9 @@ fn sync_adapter_script_multiple() {
           sync:
             steps:
               - type: script
-                command: echo "first"
-              - type: script
                 command: echo "second"
+              - type: script
+                command: echo "first"
         "#,
     );
 

@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 bigdecimal.workspace = true
 bip32.workspace = true
+byte-unit.workspace = true
 camino-tempfile.workspace = true
 camino.workspace = true
 candid_parser.workspace = true
@@ -25,6 +26,7 @@ hex.workspace = true
 httptest.workspace = true
 ic-agent.workspace = true
 ic-ledger-types.workspace = true
+ic-management-canister-types.workspace = true
 ic-utils.workspace = true
 icp-adapter.workspace = true
 icp-canister.workspace = true

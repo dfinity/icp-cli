@@ -25,18 +25,11 @@ impl<'a> IcpShorthand<'a> {
         Principal::from_text(stdout.trim()).unwrap()
     }
 
-    pub fn use_new_random_identity(&self) {
+    pub fn use_new_random_identity(&self) -> Principal {
         let random_name = format!("alice-{}", rand::random::<u64>());
-        self.ctx
-            .icp()
-            .args(["identity", "new", &random_name])
-            .assert()
-            .success();
-        self.ctx
-            .icp()
-            .args(["identity", "default", &random_name])
-            .assert()
-            .success();
+        self.create_identity(&random_name);
+        self.use_identity(&random_name);
+        self.active_principal()
     }
 
     pub fn create_identity(&self, name: &str) {

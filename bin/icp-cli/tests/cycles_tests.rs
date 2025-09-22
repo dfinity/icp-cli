@@ -26,7 +26,7 @@ async fn cycles_balance() {
     ctx.ping_until_healthy(&project_dir);
 
     // Empty account has empty balance
-    ctx.icp_().use_new_random_identity();
+    let identity = ctx.icp_().use_new_random_identity();
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "balance"])
@@ -35,7 +35,6 @@ async fn cycles_balance() {
         .success();
 
     // Mint ICP to cycles, specify ICP amount
-    let identity = ctx.icp_().active_principal();
     ctx.icp_ledger()
         .mint_icp(identity, None, 123456789_u64)
         .await;
@@ -49,8 +48,7 @@ async fn cycles_balance() {
         .success();
 
     // Mint ICP to cycles, specify cycles amount
-    ctx.icp_().use_new_random_identity();
-    let identity = ctx.icp_().active_principal();
+    let identity = ctx.icp_().use_new_random_identity();
     ctx.icp_ledger()
         .mint_icp(identity, None, 123456789_u64)
         .await;

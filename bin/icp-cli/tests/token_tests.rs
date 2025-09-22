@@ -25,8 +25,7 @@ async fn token_balance() {
     // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
-    ctx.icp_().use_new_random_identity();
-    let identity = ctx.icp_().active_principal();
+    let identity = ctx.icp_().use_new_random_identity();
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])

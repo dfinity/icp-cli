@@ -6,13 +6,19 @@ use icrc_ledger_types::icrc1::{
 use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
-use crate::common::{GOVERNANCE_ID, ICP_LEDGER_CID};
+use crate::common::{GOVERNANCE_ID, ICP_LEDGER_CID, TestContext};
 
 pub struct IcpLedgerPocketIcClient<'a> {
-    pub pic: Ref<'a, PocketIc>,
+    pic: Ref<'a, PocketIc>,
 }
 
-impl IcpLedgerPocketIcClient<'_> {
+impl<'a> IcpLedgerPocketIcClient<'a> {
+    pub fn new(ctx: &'a TestContext) -> Self {
+        Self {
+            pic: ctx.pocketic(),
+        }
+    }
+
     pub async fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
         let arg = Account { owner, subaccount };
         let bytes = Encode!(&arg).unwrap();

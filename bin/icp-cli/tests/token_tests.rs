@@ -1,4 +1,4 @@
-use crate::common::TestContext;
+use crate::common::{TestContext, clients};
 use icp_fs::fs::write;
 use predicates::str::contains;
 
@@ -25,7 +25,7 @@ async fn token_balance() {
     // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
-    let identity = ctx.icp_().use_new_random_identity();
+    let identity = clients::icp_client(&ctx).use_new_random_identity();
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])
@@ -41,7 +41,7 @@ async fn token_balance() {
         .success();
 
     // mint icp to identity
-    ctx.icp_ledger()
+    clients::icp_ledger(&ctx)
         .mint_icp(identity, None, 123456780_u128)
         .await;
 
@@ -68,28 +68,27 @@ async fn token_transfer() {
     let _g = ctx.start_network_in(&project_dir);
     ctx.ping_until_healthy(&project_dir);
 
-    ctx.icp_().create_identity("alice");
-    ctx.icp_().use_identity("alice");
-    let alice_principal = ctx.icp_().active_principal();
-    ctx.icp_().create_identity("bob");
-    ctx.icp_().use_identity("bob");
-    let bob_principal = ctx.icp_().active_principal();
+    let icp_client = clients::icp_client(&ctx);
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
 
     // Initial balance
-    ctx.icp_ledger()
+    let icp_ledger = clients::icp_ledger(&ctx);
+    icp_ledger
         .mint_icp(alice_principal, None, 1_000_000_000_u128)
         .await; // 10 ICP
     assert_eq!(
-        ctx.icp_ledger().balance_of(alice_principal, None).await,
+        icp_ledger.balance_of(alice_principal, None).await,
         1_000_000_000_u128
     );
-    assert_eq!(
-        ctx.icp_ledger().balance_of(bob_principal, None).await,
-        0_u128
-    );
+    assert_eq!(icp_ledger.balance_of(bob_principal, None).await, 0_u128);
 
     // Simple ICP transfer
-    ctx.icp_().use_identity("alice");
+    icp_client.use_identity("alice");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "transfer", "1.1", &bob_principal.to_string()])
@@ -100,11 +99,11 @@ async fn token_transfer() {
         )))
         .success();
     assert_eq!(
-        ctx.icp_ledger().balance_of(alice_principal, None).await,
+        icp_ledger.balance_of(alice_principal, None).await,
         889_990_000_u128
     );
     assert_eq!(
-        ctx.icp_ledger().balance_of(bob_principal, None).await,
+        icp_ledger.balance_of(bob_principal, None).await,
         110_000_000_u128
     );
 
@@ -129,7 +128,7 @@ async fn token_transfer() {
             bob_principal
         )))
         .success();
-    ctx.icp_().use_identity("bob");
+    icp_client.use_identity("bob");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "balance"])

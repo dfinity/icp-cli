@@ -13,17 +13,7 @@ use pocket_ic::nonblocking::PocketIc;
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::common::{
-    ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx,
-    context::{
-        cycles_ledger::CyclesLedgerPocketIcClient, icp_ledger::IcpLedgerPocketIcClient,
-        icp_shorthand::IcpShorthand,
-    },
-};
-
-mod cycles_ledger;
-mod icp_ledger;
-mod icp_shorthand;
+use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx};
 pub struct TestContext {
     home_dir: Utf8TempDir,
     bin_dir: Utf8PathBuf,
@@ -336,21 +326,9 @@ impl TestContext {
             .expect("Failed to write network descriptor file");
     }
 
-    pub fn icp_(&self) -> IcpShorthand<'_> {
-        IcpShorthand::new(self)
-    }
-
-    pub fn icp_ledger(&self) -> IcpLedgerPocketIcClient<'_> {
-        let pic_ref: Ref<'_, PocketIc> = Ref::map(self.pocketic.borrow(), |opt| {
-            opt.as_ref().expect("pocketic not started")
-        });
-        IcpLedgerPocketIcClient { pic: pic_ref }
-    }
-
-    pub fn cycles_ledger(&self) -> CyclesLedgerPocketIcClient<'_> {
-        let pic_ref: Ref<'_, PocketIc> = Ref::map(self.pocketic.borrow(), |opt| {
-            opt.as_ref().expect("pocketic not started")
-        });
-        CyclesLedgerPocketIcClient { pic: pic_ref }
+    pub fn pocketic(&self) -> Ref<'_, PocketIc> {
+        Ref::map(self.pocketic.borrow(), |opt| {
+            opt.as_ref().expect("PocketIc instance not initialized")
+        })
     }
 }

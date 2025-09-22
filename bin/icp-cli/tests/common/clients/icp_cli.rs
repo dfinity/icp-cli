@@ -2,11 +2,11 @@ use candid::Principal;
 
 use crate::common::TestContext;
 
-pub struct IcpShorthand<'a> {
+pub struct IcpCliClient<'a> {
     ctx: &'a TestContext,
 }
 
-impl<'a> IcpShorthand<'a> {
+impl<'a> IcpCliClient<'a> {
     pub fn new(ctx: &'a TestContext) -> Self {
         Self { ctx }
     }
@@ -25,13 +25,6 @@ impl<'a> IcpShorthand<'a> {
         Principal::from_text(stdout.trim()).unwrap()
     }
 
-    pub fn use_new_random_identity(&self) -> Principal {
-        let random_name = format!("alice-{}", rand::random::<u64>());
-        self.create_identity(&random_name);
-        self.use_identity(&random_name);
-        self.active_principal()
-    }
-
     pub fn create_identity(&self, name: &str) {
         self.ctx
             .icp()
@@ -46,5 +39,12 @@ impl<'a> IcpShorthand<'a> {
             .args(["identity", "default", name])
             .assert()
             .success();
+    }
+
+    pub fn use_new_random_identity(&self) -> Principal {
+        let random_name = format!("alice-{}", rand::random::<u64>());
+        self.create_identity(&random_name);
+        self.use_identity(&random_name);
+        self.active_principal()
     }
 }

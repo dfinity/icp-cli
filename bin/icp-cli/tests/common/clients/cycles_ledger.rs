@@ -3,13 +3,19 @@ use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
-use crate::common::CYCLES_LEDGER_CID;
+use crate::common::{CYCLES_LEDGER_CID, TestContext};
 
 pub struct CyclesLedgerPocketIcClient<'a> {
-    pub pic: Ref<'a, PocketIc>,
+    pic: Ref<'a, PocketIc>,
 }
 
-impl CyclesLedgerPocketIcClient<'_> {
+impl<'a> CyclesLedgerPocketIcClient<'a> {
+    pub fn new(ctx: &'a TestContext) -> Self {
+        Self {
+            pic: ctx.pocketic(),
+        }
+    }
+
     pub async fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
         let args = Account { owner, subaccount };
         let bytes = Encode!(&args).unwrap();

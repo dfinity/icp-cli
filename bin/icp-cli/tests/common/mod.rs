@@ -5,6 +5,7 @@ use url::Url;
 
 use httptest::{Expectation, Server, matchers::*, responders::*};
 
+pub mod clients;
 mod context;
 
 pub use context::TestContext;

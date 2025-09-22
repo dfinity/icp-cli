@@ -78,7 +78,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
                 "get_icp_xdr_conversion_rate",
             )
-            .with_arg(Encode!(&()).unwrap())
+            .with_arg(Encode!(&()).expect("Failed to encode get ICP XDR conversion rate args"))
             .call()
             .await
             .map_err(|e| CommandError::CanisterError {
@@ -86,7 +86,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 source: e,
             })?;
 
-        let cmc_response = Decode!(&cmc_response, ConversionRateResponse).unwrap();
+        let cmc_response =
+            Decode!(&cmc_response, ConversionRateResponse).expect("CMC response type changed");
         let cycles_per_e8s = cmc_response.data.xdr_permyriad_per_icp as u128;
         let cycles_plus_fees = cycles_amount + 100_000_000_u128; // Cycles ledger charges 100M for deposits
         let e8s_to_deposit = cycles_plus_fees.div_ceil(cycles_per_e8s);
@@ -114,14 +115,15 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let transfer_result = agent
         .update(&Principal::from_text(ICP_LEDGER_CID).unwrap(), "transfer")
-        .with_arg(Encode!(&transfer_args).unwrap())
+        .with_arg(Encode!(&transfer_args).expect("Failed to encode transfer args"))
         .call_and_wait()
         .await
         .map_err(|e| CommandError::CanisterError {
             canister: "ICP ledger".to_string(),
             source: e,
         })?;
-    let transfer_response = Decode!(&transfer_result, TransferResult).unwrap();
+    let transfer_response =
+        Decode!(&transfer_result, TransferResult).expect("ICP ledger transfer result type changed");
     let block_index = match transfer_response {
         Ok(block_index) => block_index,
         Err(err) => {
@@ -154,7 +156,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 deposit_memo: None,
                 to_subaccount: None,
             })
-            .unwrap(),
+            .expect("Failed to encode notify mint cycles args"),
         )
         .call_and_wait()
         .await
@@ -162,7 +164,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             canister: "cmc".to_string(),
             source: e,
         })?;
-    let notify_response = Decode!(&notify_response, NotifyMintResponse).unwrap();
+    let notify_response = Decode!(&notify_response, NotifyMintResponse)
+        .expect("Notify mint cycles response type changed");
     let minted = match notify_response {
         NotifyMintResponse::Ok(ok) => ok,
         NotifyMintResponse::Err(err) => {

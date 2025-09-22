@@ -32,7 +32,7 @@ icp help
 ### Add pocket-ic and motoko tools to the path
 
 To launch a local network you will also need to set the `ICP_POCKET_IC_PATH` environment variable.
-You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases/tag/10.0.0).
+You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases).
 At least version 10.0.0 of pocket-ic is required.
 
 ```bash

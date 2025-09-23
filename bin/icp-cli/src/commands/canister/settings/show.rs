@@ -3,7 +3,7 @@ use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use snafu::Snafu;
 
-use crate::context::{Context, ContextGetAgentError, GetProjectError};
+use crate::context::{Context, ContextAgentError, ContextProjectError};
 use crate::options::{EnvironmentOpt, IdentityOpt};
 use crate::store_id::{Key, LookupError as LookupIdError};
 
@@ -93,7 +93,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain an environment named '{name}'"))]
     EnvironmentNotFound { name: String },
@@ -111,7 +111,7 @@ pub enum CommandError {
     LookupCanisterId { source: LookupIdError },
 
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(transparent)]
     Agent { source: AgentError },

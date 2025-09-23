@@ -2,7 +2,7 @@ use clap::Parser;
 use snafu::Snafu;
 
 use crate::{
-    context::{Context, GetProjectError},
+    context::{Context, ContextProjectError},
     options::EnvironmentOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -79,7 +79,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },

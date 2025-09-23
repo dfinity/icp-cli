@@ -11,7 +11,7 @@ use snafu::Snafu;
 
 use crate::{
     CYCLES_MINTING_CANISTER_CID, ICP_LEDGER_CID,
-    context::{Context, ContextGetAgentError, GetProjectError},
+    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -247,13 +247,13 @@ pub enum CommandError {
     EnvironmentNotFound { name: String },
 
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(display("Failed to get identity principal: {message}"))]
     GetPrincipalError { message: String },
 
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("ICP amount overflow. Specify less tokens."))]
     IcpAmountOverflow,

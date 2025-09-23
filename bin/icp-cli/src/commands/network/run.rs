@@ -3,7 +3,7 @@ use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
 use icp_project::NoSuchNetworkError;
 use snafu::Snafu;
 
-use crate::context::{Context, GetProjectError};
+use crate::context::{Context, ContextProjectError};
 
 /// Run a given network
 #[derive(Parser, Debug)]
@@ -55,7 +55,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(transparent)]
     NoSuchNetwork { source: NoSuchNetworkError },

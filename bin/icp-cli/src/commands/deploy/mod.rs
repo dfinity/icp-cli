@@ -13,7 +13,7 @@ use crate::{
         },
         sync,
     },
-    context::{Context, ContextGetAgentError, GetProjectError},
+    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::LookupError,
 };
@@ -214,7 +214,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityInContextError },
@@ -243,7 +243,7 @@ pub enum CommandError {
     Sync { source: sync::CommandError },
 
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(transparent)]
     Agent { source: AgentError },

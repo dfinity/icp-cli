@@ -2,7 +2,7 @@ use snafu::Snafu;
 
 use crate::{
     commands::token,
-    context::{Context, GetProjectError},
+    context::{Context, ContextProjectError},
 };
 
 pub async fn exec(ctx: &Context, cmd: token::balance::Cmd) -> Result<(), CommandError> {
@@ -14,7 +14,7 @@ pub async fn exec(ctx: &Context, cmd: token::balance::Cmd) -> Result<(), Command
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(transparent)]
     Balance {

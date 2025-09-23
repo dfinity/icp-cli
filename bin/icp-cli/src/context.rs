@@ -5,7 +5,10 @@ use console::Term;
 use ic_agent::{Agent, Identity};
 use icp_canister::recipe;
 use icp_dirs::IcpCliDirs;
-use icp_identity::key::LoadIdentityInContextError;
+use icp_identity::{
+    key::{LoadIdentityInContextError, load_identity, load_identity_in_context},
+    manifest::load_identity_list,
+};
 use icp_network::{
     NETWORK_IC,
     access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
@@ -17,33 +20,12 @@ use icp_project::{
 use snafu::Snafu;
 use tokio::task::JoinError;
 
-use crate::context::GetProjectError::ProjectNotFound;
+use crate::context::ContextProjectError::ProjectNotFound;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub struct Context {
     /// Terminal for printing messages for the user to see
     pub term: Term,
-
-    dirs: IcpCliDirs,
-
-    /// The name of the identity to use, set from the command line.
-    identity_name: OnceLock<Option<String>>,
-
-    /// The identity to use for the agent, instantiated on-demand.
-    identity: TryOnceLock<Arc<dyn Identity>>,
-
-    /// The current project, instantiated on-demand.
-    project: TryOnceLock<Project>,
-
-    /// The network name, set from the command line for those commands that access a network.
-    network_name: OnceLock<String>,
-
-    /// The default effective canister ID for the network, available for managed networks
-    /// after creating the agent.
-    default_effective_canister_id: OnceLock<Principal>,
-
-    /// The agent used to access the network, instantiated on-demand.
-    agent: TryOnceLock<Agent>,
 
     /// Canisters ID Store for lookup and storage
     pub id_store: IdStore,
@@ -53,6 +35,27 @@ pub struct Context {
 
     /// A recipe resolver for resolving canister recipes into build/sync steps
     pub recipe_resolver: Arc<dyn recipe::Resolve>,
+
+    dirs: IcpCliDirs,
+
+    /// The name of the identity to use, set from the command line.
+    identity_name: OnceLock<Option<String>>,
+
+    /// The network name, set from the command line for those commands that access a network.
+    network_name: OnceLock<String>,
+
+    /// The default effective canister ID for the network, available for managed networks
+    /// after creating the agent.
+    default_effective_canister_id: OnceLock<Principal>,
+
+    /// The current project, instantiated on-demand.
+    project: TryOnceLock<Project>,
+
+    /// The identity to use for the agent, instantiated on-demand.
+    identity: TryOnceLock<Arc<dyn Identity>>,
+
+    /// The agent used to access the network, instantiated on-demand.
+    agent: TryOnceLock<Agent>,
 }
 
 impl Context {
@@ -65,137 +68,149 @@ impl Context {
     ) -> Self {
         Self {
             term,
-            dirs,
-            identity_name: OnceLock::new(),
-            identity: TryOnceLock::new(),
-            project: TryOnceLock::new(),
-            network_name: OnceLock::new(),
-            default_effective_canister_id: OnceLock::new(),
-            agent: TryOnceLock::new(),
             id_store,
             artifact_store,
             recipe_resolver,
+            dirs,
+            identity_name: OnceLock::new(),
+            network_name: OnceLock::new(),
+            default_effective_canister_id: OnceLock::new(),
+            identity: TryOnceLock::new(),
+            project: TryOnceLock::new(),
+            agent: TryOnceLock::new(),
         }
     }
 
     pub fn dirs(&self) -> &IcpCliDirs {
         &self.dirs
     }
-
-    // Accessors using TryOnceLock only cache success.
-    // Errors are re-evaluated on each access attempt.
-
-    pub fn identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
-        self.identity
-            .get_or_try_init(|| self.load_identity())
-            .cloned()
-    }
-
-    pub fn project(&self) -> Result<&Project, GetProjectError> {
-        self.project
-            .get_or_try_init(|| self.find_and_load_project())
-    }
-
-    pub fn require_identity(&self, identity_name: Option<&str>) {
-        match self.identity_name.get() {
-            Some(existing) if existing.as_deref() == identity_name => {
-                // Already set to the same value — fine, do nothing
-            }
-            Some(existing) => {
-                // Already set to a different value — not allowed
-                panic!(
-                    "IdentityOpt was already set to a different value: {existing:?} vs {identity_name:?}"
-                );
-            }
-            None => {
-                // Not yet set — store it
-                self.identity_name
-                    .set(identity_name.map(|s| s.to_string()))
-                    .expect("Should only fail if already set");
-            }
-        }
-    }
-
-    pub fn require_network(&self, network_name: &str) {
-        match self.network_name.get() {
-            Some(existing) if *existing == network_name => {
-                // Already set to the same value — fine, do nothing
-            }
-            Some(existing) => {
-                // Already set to a different value — not allowed
-                panic!(
-                    "NetworkOpt was already set to a different value: {existing} vs {network_name}"
-                );
-            }
-            None => {
-                // Not yet set — store it
-                self.network_name
-                    .set(network_name.to_string())
-                    .expect("Should only fail if already set");
-            }
-        }
-    }
-
-    // The default effective canister ID is available for local networks
-    // after constructing the agent.
-    #[allow(dead_code)]
-    pub fn default_effective_canister_id(
-        &self,
-    ) -> Result<Principal, NoDefaultEffectiveCanisterIdError> {
-        self.default_effective_canister_id
-            .get()
-            .ok_or(NoDefaultEffectiveCanisterIdError)
-            .cloned()
-    }
-
-    pub fn agent(&self) -> Result<&Agent, ContextGetAgentError> {
-        self.agent.get_or_try_init(|| self.create_agent())
-    }
 }
 
 impl Context {
-    fn load_identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
-        let identity_name = self
-            .identity_name
-            .get()
-            .cloned()
-            .expect("identity has not been set");
+    pub fn require_identity(&self, identity_name: Option<&str>) {
+        match self.identity_name.get() {
+            // Already set to the same value — fine, do nothing
+            Some(existing) if existing.as_deref() == identity_name => {}
 
-        if let Some(identity) = identity_name {
-            return Ok(icp_identity::key::load_identity(
-                &self.dirs,
-                &icp_identity::manifest::load_identity_list(&self.dirs)?,
-                &identity,
-                || todo!(),
-            )?);
+            // Already set to a different value — not allowed
+            Some(existing) => panic!(
+                "IdentityOpt was already set to a different value: {existing:?} vs {identity_name:?}"
+            ),
+
+            // Not yet set — store it
+            None => self
+                .identity_name
+                .set(identity_name.map(|s| s.to_string()))
+                .expect("Should only fail if already set"),
         }
-
-        icp_identity::key::load_identity_in_context(&self.dirs, || todo!())
     }
 
-    fn find_and_load_project(&self) -> Result<Project, GetProjectError> {
-        let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
-        let recipe_resolver = self.recipe_resolver.to_owned();
+    pub fn identity(&self) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
+        self.identity
+            .get_or_try_init(|| {
+                let identity_name = self
+                    .identity_name
+                    .get()
+                    .cloned()
+                    .expect("identity has not been set");
 
-        // Bridge between sync and async worlds: Project::load is async because
-        // recipe resolution may require HTTP requests for remote templates.
-        // We spawn a blocking task with its own runtime to handle this.
-        let handle = tokio::task::spawn_blocking(move || {
-            tokio::runtime::Runtime::new()
-                .expect("failed to create runtime")
-                .block_on(async move {
-                    let p = Project::load(pd, Some(recipe_resolver))
-                        .await
-                        .map_err(|err| GetProjectError::LoadProjectManifest { source: err })?;
+                let id = match identity_name {
+                    Some(name) => {
+                        load_identity(
+                            &self.dirs,                       // dirs
+                            &load_identity_list(&self.dirs)?, // list
+                            &name,                            // name
+                            || todo!(),                       // password_func
+                        )?
+                    }
 
-                    Ok(p)
-                })
-        });
+                    None => load_identity_in_context(
+                        &self.dirs, // dirs
+                        || todo!(), // password_func
+                    )?,
+                };
 
-        futures::executor::block_on(handle)?
+                Ok(id)
+            })
+            .cloned()
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ContextProjectError {
+    #[snafu(transparent)]
+    FindProjectDirectory { source: FindProjectError },
+
+    #[snafu(transparent)]
+    LoadProjectManifest { source: LoadProjectManifestError },
+
+    #[snafu(transparent)]
+    Join { source: JoinError },
+
+    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
+    ProjectNotFound,
+}
+
+impl Context {
+    pub fn project(&self) -> Result<&Project, ContextProjectError> {
+        self.project.get_or_try_init(|| {
+            let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
+            let recipe_resolver = self.recipe_resolver.to_owned();
+
+            // Bridge between sync and async worlds: Project::load is async because
+            // recipe resolution may require HTTP requests for remote templates.
+            // We spawn a blocking task with its own runtime to handle this.
+            let handle = tokio::task::spawn_blocking(move || {
+                tokio::runtime::Runtime::new()
+                    .expect("failed to create runtime")
+                    .block_on(async move {
+                        let p = Project::load(pd, Some(recipe_resolver))
+                            .await
+                            .map_err(|err| ContextProjectError::LoadProjectManifest {
+                                source: err,
+                            })?;
+
+                        Ok(p)
+                    })
+            });
+
+            futures::executor::block_on(handle)?
+        })
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum CreateNetworkError {
+    #[snafu(transparent)]
+    GetProject { source: ContextProjectError },
+
+    #[snafu(transparent)]
+    GetNetworkAccess { source: GetNetworkAccessError },
+
+    #[snafu(transparent)]
+    NoSuchNetwork { source: NoSuchNetworkError },
+}
+
+impl Context {
+    pub fn require_network(&self, network_name: &str) {
+        match self.network_name.get() {
+            // Already set to the same value — fine, do nothing
+            Some(existing) if *existing == network_name => {}
+
+            // Already set to a different value — not allowed
+            Some(existing) => panic!(
+                "NetworkOpt was already set to a different value: {existing} vs {network_name}"
+            ),
+
+            // Not yet set — store it
+            None => self
+                .network_name
+                .set(network_name.to_string())
+                .expect("Should only fail if already set"),
+        }
     }
 
-    fn create_network_access(&self) -> Result<NetworkAccess, EnvGetNetworkAccessError> {
+    fn create_network_access(&self) -> Result<NetworkAccess, CreateNetworkError> {
         let network_name = self
             .network_name
             .get()
@@ -209,50 +224,28 @@ impl Context {
         // For other networks, we need to load the project
         // in order to read the network configuration.
         let project = self.project()?;
+
         let nd = project
             .directory
             .network(&network_name, self.dirs.port_descriptor_dir());
-        let network_config = project.get_network_config(&network_name)?;
 
+        let network_config = project.get_network_config(&network_name)?;
         let ac = icp_network::access::get_network_access(nd, network_config)?;
 
-        if let Some(default_effective_canister_id) = ac.default_effective_canister_id {
+        if let Some(id) = ac.default_effective_canister_id {
             self.default_effective_canister_id
-                .set(default_effective_canister_id)
+                .set(id)
                 .expect("default effective canister id should only be set once");
         }
 
         Ok(ac)
     }
-
-    fn create_agent(&self) -> Result<Agent, ContextGetAgentError> {
-        let network_access = self.create_network_access()?;
-        let identity = self.identity()?;
-        let agent = network_access.create_agent(identity)?;
-        Ok(agent)
-    }
 }
 
 #[derive(Debug, Snafu)]
-#[snafu(display("no default effective canister id set"))]
-pub struct NoDefaultEffectiveCanisterIdError;
-
-#[derive(Debug, Snafu)]
-pub enum EnvGetNetworkAccessError {
+pub enum ContextAgentError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
-
-    #[snafu(transparent)]
-    GetNetworkAccess { source: GetNetworkAccessError },
-
-    #[snafu(transparent)]
-    NoSuchNetwork { source: NoSuchNetworkError },
-}
-
-#[derive(Debug, Snafu)]
-pub enum ContextGetAgentError {
-    #[snafu(transparent)]
-    EnvGetNetworkAccess { source: EnvGetNetworkAccessError },
+    EnvGetNetworkAccess { source: CreateNetworkError },
 
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityInContextError },
@@ -261,19 +254,21 @@ pub enum ContextGetAgentError {
     CreateAgent { source: CreateAgentError },
 }
 
-#[derive(Debug, Snafu)]
-pub enum GetProjectError {
-    #[snafu(transparent)]
-    FindProjectDirectory { source: FindProjectError },
+impl Context {
+    pub fn agent(&self) -> Result<&Agent, ContextAgentError> {
+        self.agent.get_or_try_init(|| {
+            // Setup network
+            let network_access = self.create_network_access()?;
 
-    #[snafu(transparent)]
-    LoadProjectManifest { source: LoadProjectManifestError },
+            // Setup identity
+            let identity = self.identity()?;
 
-    #[snafu(transparent)]
-    Join { source: JoinError },
+            // Setup agent
+            let agent = network_access.create_agent(identity)?;
 
-    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
-    ProjectNotFound,
+            Ok(agent)
+        })
+    }
 }
 
 #[derive(Debug)]

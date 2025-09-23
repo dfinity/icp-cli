@@ -7,7 +7,7 @@ use icp_identity::key::LoadIdentityInContextError;
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    context::{Context, ContextGetAgentError, GetProjectError},
+    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::Key,
 };
@@ -107,7 +107,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
@@ -127,7 +127,7 @@ pub enum CommandError {
     },
 
     #[snafu(transparent)]
-    CreateAgent { source: ContextGetAgentError },
+    CreateAgent { source: ContextAgentError },
 
     #[snafu(display("failed to parse candid arguments"))]
     DecodeArgsError { source: candid_parser::Error },

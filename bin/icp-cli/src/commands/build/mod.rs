@@ -9,7 +9,7 @@ use icp_canister::BuildStep;
 use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
 
-use crate::context::GetProjectError;
+use crate::context::ContextProjectError;
 use crate::{
     context::Context,
     progress::{ProgressManager, ScriptProgressHandler},
@@ -148,7 +148,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },

@@ -162,6 +162,7 @@ fn deploy_to_other_projects_network() {
     let TestNetwork {
         gateway_port,
         root_key,
+        ..
     } = ctx.wait_for_local_network_descriptor(&proja);
 
     // Use vendored WASM

@@ -1,6 +1,5 @@
 use std::sync::{Arc, OnceLock};
 
-use candid::Principal;
 use console::Term;
 use ic_agent::{Agent, Identity};
 use icp_canister::recipe;
@@ -44,10 +43,6 @@ pub struct Context {
     /// The network name, set from the command line for those commands that access a network.
     network_name: OnceLock<String>,
 
-    /// The default effective canister ID for the network, available for managed networks
-    /// after creating the agent.
-    default_effective_canister_id: OnceLock<Principal>,
-
     /// The current project, instantiated on-demand.
     project: TryOnceLock<Project>,
 
@@ -74,7 +69,6 @@ impl Context {
             dirs,
             identity_name: OnceLock::new(),
             network_name: OnceLock::new(),
-            default_effective_canister_id: OnceLock::new(),
             identity: TryOnceLock::new(),
             project: TryOnceLock::new(),
             agent: TryOnceLock::new(),
@@ -225,18 +219,16 @@ impl Context {
         // in order to read the network configuration.
         let project = self.project()?;
 
-        let nd = project
-            .directory
-            .network(&network_name, self.dirs.port_descriptor_dir());
-
-        let network_config = project.get_network_config(&network_name)?;
-        let ac = icp_network::access::get_network_access(nd, network_config)?;
-
-        if let Some(id) = ac.default_effective_canister_id {
-            self.default_effective_canister_id
-                .set(id)
-                .expect("default effective canister id should only be set once");
-        }
+        let ac = icp_network::access::get_network_access(
+            //
+            // nd
+            project
+                .directory
+                .network(&network_name, self.dirs.port_descriptor_dir()),
+            //
+            // config
+            project.get_network_config(&network_name)?,
+        )?;
 
         Ok(ac)
     }

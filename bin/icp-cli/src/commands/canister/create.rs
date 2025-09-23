@@ -7,7 +7,7 @@ use ic_utils::interfaces::management_canister::{LogVisibility, builders::Environ
 use snafu::Snafu;
 
 use crate::{
-    context::{Context, ContextGetAgentError, GetProjectError},
+    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
@@ -350,13 +350,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain an environment named '{name}'"))]
     EnvironmentNotFound { name: String },
 
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },

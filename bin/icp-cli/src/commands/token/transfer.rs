@@ -11,7 +11,7 @@ use snafu::Snafu;
 
 use crate::{
     commands::token::TOKEN_LEDGER_CIDS,
-    context::{Context, ContextGetAgentError, GetProjectError},
+    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -200,13 +200,13 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain an environment named '{name}'"))]
     EnvironmentNotFound { name: String },
 
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(transparent)]
     LoadIdentity { source: LoadIdentityInContextError },

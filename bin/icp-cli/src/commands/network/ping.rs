@@ -1,4 +1,4 @@
-use crate::context::{Context, ContextGetAgentError};
+use crate::context::{Context, ContextAgentError};
 use crate::options::EnvironmentOpt;
 use clap::Parser;
 use ic_agent::agent::status::Status;
@@ -72,7 +72,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, TimeoutWaitingForHe
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(display("failed to ping the network"))]
     Status { source: AgentError },

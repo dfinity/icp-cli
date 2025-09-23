@@ -3,7 +3,7 @@ use ic_agent::AgentError;
 use snafu::Snafu;
 
 use crate::{
-    context::{Context, ContextGetAgentError, GetProjectError},
+    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -91,7 +91,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain a canister named '{name}'"))]
     CanisterNotFound { name: String },
@@ -109,7 +109,7 @@ pub enum CommandError {
     LookupCanisterId { source: LookupIdError },
 
     #[snafu(transparent)]
-    GetAgent { source: ContextGetAgentError },
+    GetAgent { source: ContextAgentError },
 
     #[snafu(transparent)]
     Agent { source: AgentError },

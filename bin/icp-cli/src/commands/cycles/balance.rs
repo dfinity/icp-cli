@@ -1,7 +1,7 @@
 use clap::Parser;
 use snafu::Snafu;
 
-use crate::context::{Context, GetProjectError};
+use crate::context::{Context, ContextProjectError};
 
 #[derive(Debug, Parser)]
 pub struct Cmd;
@@ -13,5 +13,5 @@ pub async fn exec(_ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 }

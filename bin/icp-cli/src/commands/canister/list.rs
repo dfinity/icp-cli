@@ -2,7 +2,7 @@ use clap::Parser;
 use snafu::Snafu;
 
 use crate::{
-    context::{Context, GetProjectError},
+    context::{Context, ContextProjectError},
     options::EnvironmentOpt,
 };
 
@@ -50,7 +50,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 
     #[snafu(display("project does not contain an environment named '{name}'"))]
     EnvironmentNotFound { name: String },

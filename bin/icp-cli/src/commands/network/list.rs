@@ -1,7 +1,7 @@
 use clap::Parser;
 use snafu::Snafu;
 
-use crate::context::{Context, GetProjectError};
+use crate::context::{Context, ContextProjectError};
 
 /// List networks in the project
 #[derive(Parser, Debug)]
@@ -22,5 +22,5 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
-    GetProject { source: GetProjectError },
+    GetProject { source: ContextProjectError },
 }

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
-use crate::context::Context;
+use crate::{commands::token, context::Context};
 
 mod balance;
 mod mint;
@@ -14,7 +14,7 @@ pub struct Cmd {
 
 #[derive(Subcommand, Debug)]
 pub enum Subcmd {
-    Balance(balance::Cmd),
+    Balance(token::balance::Cmd),
     Mint(mint::Cmd),
 }
 

@@ -118,6 +118,8 @@ async fn run_pocketic(
             network_dir: nd.structure().network_root.to_path_buf(),
             gateway,
             default_effective_canister_id,
+            pocketic_url: instance.admin.base_url.to_string(),
+            pocketic_instance_id: instance.instance_id,
             pid: Some(child.id().unwrap()),
             root_key: instance.root_key,
         };

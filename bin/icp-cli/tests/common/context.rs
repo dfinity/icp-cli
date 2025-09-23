@@ -1,4 +1,5 @@
 use std::{
+    cell::{Ref, RefCell},
     env,
     ffi::OsString,
     fs::{self, create_dir_all},
@@ -8,16 +9,18 @@ use assert_cmd::Command;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{Utf8TempDir, tempdir};
 use icp_network::NETWORK_LOCAL;
+use pocket_ic::nonblocking::PocketIc;
 use serde_json::{Value, json};
+use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx};
-
 pub struct TestContext {
     home_dir: Utf8TempDir,
     bin_dir: Utf8PathBuf,
     asset_dir: Utf8PathBuf,
     dfx_path: Option<Utf8PathBuf>,
     os_path: OsString,
+    pocketic: RefCell<Option<PocketIc>>,
 }
 
 impl TestContext {
@@ -44,6 +47,7 @@ impl TestContext {
             asset_dir,
             dfx_path: None,
             os_path,
+            pocketic: RefCell::new(None),
         }
     }
 
@@ -188,7 +192,13 @@ impl TestContext {
 
         // "icp network start" will wait for the local network to be healthy,
         // but for now we need to wait for the descriptor to be created.
-        self.wait_for_local_network_descriptor(project_dir);
+        let network_descriptor = self.wait_for_local_network_descriptor(project_dir);
+        let pocketic = PocketIc::new_from_existing_instance(
+            network_descriptor.pocketic_url,
+            network_descriptor.pocketic_instance_id,
+            None,
+        );
+        self.pocketic.replace(Some(pocketic));
 
         child_guard
     }
@@ -256,9 +266,24 @@ impl TestContext {
             .expect("network descriptor does not contain root key")
             .to_string();
 
+        let pocketic_url = network_descriptor
+            .get("pocketic-url")
+            .and_then(|pu| pu.as_str())
+            .expect("network descriptor does not contain pocketic url")
+            .to_string();
+        let pocketic_url = Url::parse(&pocketic_url).expect("invalid pocketic url");
+
+        let pocketic_instance_id = network_descriptor
+            .get("pocketic-instance-id")
+            .and_then(|pii| pii.as_u64())
+            .expect("network descriptor does not contain pocketic instance id")
+            as usize;
+
         TestNetwork {
             gateway_port,
             root_key,
+            pocketic_url,
+            pocketic_instance_id,
         }
     }
 
@@ -299,5 +324,11 @@ impl TestContext {
         let descriptor_path = self.network_descriptor_path(project_dir, network);
         std::fs::write(&descriptor_path, contents)
             .expect("Failed to write network descriptor file");
+    }
+
+    pub fn pocketic(&self) -> Ref<'_, PocketIc> {
+        Ref::map(self.pocketic.borrow(), |opt| {
+            opt.as_ref().expect("PocketIc instance not initialized")
+        })
     }
 }

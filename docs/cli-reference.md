@@ -346,13 +346,27 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli cycles balance`
 
-**Usage:** `icp-cli cycles balance`
+**Usage:** `icp-cli cycles balance [OPTIONS]`
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 
 
 
 ## `icp-cli cycles mint`
 
-**Usage:** `icp-cli cycles mint`
+**Usage:** `icp-cli cycles mint [OPTIONS]`
+
+###### **Options:**
+
+* `--icp <ICP>` — Amount of ICP to mint to cycles
+* `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 

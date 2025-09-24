@@ -1,5 +1,5 @@
 use cycles_ledger::CyclesLedgerPocketIcClient;
-use icp_cli::IcpCliClient;
+pub use icp_cli::IcpCliClient;
 use icp_ledger::IcpLedgerPocketIcClient;
 
 use crate::common::TestContext;

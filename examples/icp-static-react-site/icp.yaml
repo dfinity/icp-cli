@@ -6,7 +6,7 @@ canister:
       - type: script
         commands:
           - sh -c 'command -v npm >/dev/null 2>&1 || { echo >&2 "npm not found. To install npm, see https://docs.npmjs.com/downloading-and-installing-node-js-and-npm \n"; exit 1; }'
-          - npm install
+          - npm ci
           - npm run build
 
       - type: pre-built

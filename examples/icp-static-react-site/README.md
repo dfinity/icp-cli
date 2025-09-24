@@ -15,7 +15,7 @@ Before you begin, ensure that you have Node.js and npm installed.
 First, install the project dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 Next, start a local network in a separate terminal window:

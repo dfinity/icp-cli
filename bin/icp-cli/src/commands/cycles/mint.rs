@@ -18,7 +18,7 @@ use crate::{
 pub const MEMO_MINT_CYCLES: u64 = 0x544e494d; // == 'MINT'
 /// 0.0001 ICP, a.k.a. 10k e8s
 const ICP_TRANSFER_FEE_E8S: u64 = 10_000;
-/// 100b cycles
+/// 100m cycles
 const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
 
 #[derive(Debug, Parser)]

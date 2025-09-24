@@ -16,7 +16,10 @@ use crate::{
 };
 
 pub const MEMO_MINT_CYCLES: u64 = 0x544e494d; // == 'MINT'
-const ICP_TRANSFER_FEE: u64 = 10_000;
+/// 0.0001 ICP, a.k.a. 10k e8s
+const ICP_TRANSFER_FEE_E8S: u64 = 10_000;
+/// 100b cycles
+const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -89,7 +92,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         let cmc_response =
             Decode!(&cmc_response, ConversionRateResponse).expect("CMC response type changed");
         let cycles_per_e8s = cmc_response.data.xdr_permyriad_per_icp as u128;
-        let cycles_plus_fees = cycles_amount + 100_000_000_u128; // Cycles ledger charges 100M for deposits
+        let cycles_plus_fees = cycles_amount + CYCLES_LEDGER_BLOCK_FEE;
         let e8s_to_deposit = cycles_plus_fees.div_ceil(cycles_per_e8s);
 
         e8s_to_deposit
@@ -107,7 +110,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let transfer_args = TransferArgs {
         memo,
         amount: Tokens::from_e8s(icp_e8s_to_deposit),
-        fee: Tokens::from_e8s(ICP_TRANSFER_FEE),
+        fee: Tokens::from_e8s(ICP_TRANSFER_FEE_E8S),
         from_subaccount: None,
         to: account_id,
         created_at_time: None,
@@ -126,23 +129,21 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         Decode!(&transfer_result, TransferResult).expect("ICP ledger transfer result type changed");
     let block_index = match transfer_response {
         Ok(block_index) => block_index,
-        Err(err) => {
-            match err {
-                TransferError::TxDuplicate { duplicate_of } => duplicate_of,
-                TransferError::InsufficientFunds { balance } => {
-                    let required =
-                        BigDecimal::new((icp_e8s_to_deposit + ICP_TRANSFER_FEE).into(), 8); // transfer fee
-                    let available = BigDecimal::new(balance.e8s().into(), 8);
-                    return Err(CommandError::InsufficientFunds {
-                        required,
-                        available,
-                    });
-                }
-                err => {
-                    return Err(CommandError::TransferError { src: err });
-                }
+        Err(err) => match err {
+            TransferError::TxDuplicate { duplicate_of } => duplicate_of,
+            TransferError::InsufficientFunds { balance } => {
+                let required =
+                    BigDecimal::new((icp_e8s_to_deposit + ICP_TRANSFER_FEE_E8S).into(), 8);
+                let available = BigDecimal::new(balance.e8s().into(), 8);
+                return Err(CommandError::InsufficientFunds {
+                    required,
+                    available,
+                });
             }
-        }
+            err => {
+                return Err(CommandError::TransferError { src: err });
+            }
+        },
     };
 
     let notify_response = agent
@@ -174,7 +175,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     };
 
     // display
-    let deposited = BigDecimal::new((minted.minted - 100_000_000_u128).into(), 12); // deposit charges 100M fee
+    let deposited = BigDecimal::new((minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(), 12);
     let new_balance = BigDecimal::new(minted.balance.into(), 12);
     let _ = ctx.term.write_line(&format!(
         "Minted {deposited} TCYCLES to your account, new balance: {new_balance} TCYCLES."

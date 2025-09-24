@@ -33,6 +33,20 @@ impl<'a> IcpCliClient<'a> {
             .success();
     }
 
+    pub fn get_principal(&self, name: &str) -> Principal {
+        let stdout = String::from_utf8(
+            self.ctx
+                .icp()
+                .args(["identity", "principal", "--identity", name])
+                .assert()
+                .get_output()
+                .stdout
+                .clone(),
+        )
+        .unwrap();
+        Principal::from_text(stdout.trim()).unwrap()
+    }
+
     pub fn use_identity(&self, name: &str) {
         self.ctx
             .icp()

@@ -1,4 +1,4 @@
-use crate::common::TestContext;
+use crate::common::{TestContext, clients, clients::IcpCliClient};
 use icp_fs::fs::write;
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -11,9 +11,10 @@ mod common;
 fn canister_settings_update_controllers() {
     let ctx = TestContext::new().with_dfx();
 
-    // Get principals.
-    let principal_alice = get_principal(&ctx, "alice");
-    let principal_bob = get_principal(&ctx, "bob");
+    // Prepare principals.
+    let client = clients::icp_client(&ctx);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -242,32 +243,19 @@ fn canister_settings_update_controllers() {
         );
 }
 
-fn get_principal(ctx: &TestContext, identity: &str) -> String {
-    ctx.icp()
-        .args(["identity", "import", identity, "--from-pem"])
-        .arg(ctx.make_asset(format!("{identity}.pem").as_str()))
-        .assert()
-        .success();
-
-    let status = ctx
-        .icp()
-        .args(["identity", "principal", "--identity", identity])
-        .assert()
-        .success();
-
-    String::from_utf8(status.get_output().stdout.clone())
-        .expect("stdout was not valid UTF-8")
-        .trim()
-        .to_string()
+fn get_principal(client: &IcpCliClient, identity: &str) -> String {
+    client.create_identity(identity);
+    client.get_principal(identity).to_string()
 }
 
 #[test]
 fn canister_settings_update_log_visibility() {
     let ctx = TestContext::new().with_dfx();
 
-    // Get principals.
-    let principal_alice = get_principal(&ctx, "alice");
-    let principal_bob = get_principal(&ctx, "bob");
+    // Prepare principals.
+    let client = clients::icp_client(&ctx);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");

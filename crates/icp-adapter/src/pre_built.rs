@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use crate::build::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use icp::prelude::*;
 use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
 use reqwest::{Client, Method, Request, StatusCode, Url};
 use schemars::JsonSchema;

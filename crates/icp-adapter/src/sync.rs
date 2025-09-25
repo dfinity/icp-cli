@@ -1,7 +1,7 @@
 use crate::{assets::AssetsAdapterSyncError, script::ScriptAdapterSyncError};
 use async_trait::async_trait;
-use camino::Utf8Path as Path;
 use ic_agent::{Agent, export::Principal};
+use icp::prelude::*;
 use snafu::Snafu;
 
 #[async_trait]

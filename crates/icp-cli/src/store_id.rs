@@ -1,5 +1,5 @@
-use camino::Utf8PathBuf as PathBuf;
 use ic_agent::export::Principal;
+use icp::prelude::*;
 use icp_fs::lockedjson;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};

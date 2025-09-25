@@ -2,8 +2,8 @@ use crate::paths::{
     ensure_identity_defaults_path, ensure_identity_list_path, identity_defaults_path,
     identity_list_path,
 };
-use camino::Utf8PathBuf;
 use ic_agent::export::Principal;
+use icp::prelude::*;
 use icp_dirs::IcpCliDirs;
 use icp_fs::{
     fs,
@@ -69,7 +69,7 @@ pub enum LoadIdentityManifestError {
     LoadJsonError { source: json::LoadJsonFileError },
 
     #[snafu(display("file `{path}` was modified by an incompatible new version of icp-cli"))]
-    BadVersion { path: Utf8PathBuf },
+    BadVersion { path: PathBuf },
 }
 
 pub fn load_identity_defaults(

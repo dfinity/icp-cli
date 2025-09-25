@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use camino::Utf8Path as Path;
+use icp::prelude::*;
 use snafu::Snafu;
 
 use crate::{pre_built::PrebuiltAdapterCompileError, script::ScriptAdapterCompileError};

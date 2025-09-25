@@ -1,6 +1,6 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use icp::prelude::*;
 use icp_fs::{
     fs::{
         CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,

@@ -1,4 +1,4 @@
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use icp::prelude::*;
 
 pub struct ProjectDirectoryStructure {
     root: PathBuf,

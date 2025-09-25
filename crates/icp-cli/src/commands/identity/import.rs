@@ -1,8 +1,8 @@
 use crate::context::Context;
 use bip39::{Language, Mnemonic};
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use clap::{ArgGroup, Parser};
 use dialoguer::Password;
+use icp::prelude::*;
 use icp_fs::fs;
 use icp_identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},

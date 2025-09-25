@@ -1,7 +1,7 @@
 use crate::lock::{
     AcquireWriteLockError, OpenFileForWriteLockError, ReadWithLockError, RwFileLock,
 };
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use icp::prelude::*;
 use serde::ser::Serialize;
 use snafu::{ResultExt, Snafu};
 use std::io::Write;

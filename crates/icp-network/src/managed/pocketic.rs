@@ -1,5 +1,5 @@
-use camino::Utf8Path as Path;
 use candid::Principal;
+use icp::prelude::*;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,

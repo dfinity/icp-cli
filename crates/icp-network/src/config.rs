@@ -1,5 +1,5 @@
-use camino::Utf8PathBuf;
 use candid::Principal;
+use icp::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -14,9 +14,9 @@ pub struct NetworkDescriptorGatewayPort {
 #[serde(rename_all = "kebab-case")]
 pub struct NetworkDescriptorModel {
     pub id: Uuid,
-    pub project_dir: Utf8PathBuf,
+    pub project_dir: PathBuf,
     pub network: String,
-    pub network_dir: Utf8PathBuf,
+    pub network_dir: PathBuf,
     pub gateway: NetworkDescriptorGatewayPort,
     pub default_effective_canister_id: Principal,
     pub pocketic_url: String,

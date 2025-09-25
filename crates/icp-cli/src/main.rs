@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Error;
-use camino::Utf8PathBuf as PathBuf;
 use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
+use icp::prelude::*;
 use icp_canister::{handlebars::Handlebars, recipe};
 use icp_dirs::IcpCliDirs;
 use tracing::{Level, subscriber::set_global_default};

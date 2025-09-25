@@ -2,10 +2,10 @@ use std::fmt;
 
 use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
-use camino::Utf8Path as Path;
 use ic_agent::{Agent, export::Principal};
 use ic_asset::error::SyncError;
 use ic_utils::{Canister, canister::CanisterBuilderError};
+use icp::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::Snafu;

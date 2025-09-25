@@ -6,8 +6,8 @@ use std::{
 };
 
 use assert_cmd::Command;
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
+use icp::prelude::*;
 use icp_network::NETWORK_LOCAL;
 use pocket_ic::nonblocking::PocketIc;
 use serde_json::{Value, json};

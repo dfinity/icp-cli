@@ -1,7 +1,7 @@
 use crate::context::Context;
 use bip39::{Language, Mnemonic, MnemonicType};
-use camino::Utf8PathBuf as PathBuf;
 use clap::Parser;
+use icp::prelude::*;
 use icp_fs::fs;
 use icp_identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},

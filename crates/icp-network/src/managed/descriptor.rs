@@ -3,8 +3,8 @@ use std::{
     io::{Seek, Write},
 };
 
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use fd_lock::RwLockWriteGuard;
+use icp::prelude::*;
 use icp_fs::{
     fs::remove_file,
     lock::{AcquireWriteLockError, RwFileLock},

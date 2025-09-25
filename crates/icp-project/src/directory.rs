@@ -1,6 +1,6 @@
 use std::io;
 
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use icp::prelude::*;
 use icp_canister::manifest::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use icp_network::{NetworkConfig, NetworkDirectory};
@@ -74,7 +74,8 @@ impl ProjectDirectory {
 #[derive(Debug, Snafu)]
 pub enum FindProjectError {
     #[snafu(display("project path is non-UTF-8"))]
-    NonUtf8 { source: camino::FromPathBufError },
+    NonUtf8 { source: FromPathBufError },
+
     #[snafu(display("failed to access current directory"))]
     AccessError { source: io::Error },
 }

@@ -6,11 +6,11 @@ use crate::{
     },
     paths::{ensure_key_pem_path, key_pem_path},
 };
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
+use icp::prelude::*;
 use icp_dirs::IcpCliDirs;
 use icp_fs::fs;
 use pem::Pem;

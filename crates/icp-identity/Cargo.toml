@@ -5,12 +5,12 @@ edition = "2024"
 
 [dependencies]
 bip32.workspace = true
-camino.workspace = true
 clap = { workspace = true, optional = true }
 directories.workspace = true
 ed25519-consensus.workspace = true
 elliptic-curve.workspace = true
 ic-agent.workspace = true
+icp.workspace = true
 icp-dirs.workspace = true
 icp-fs.workspace = true
 itertools.workspace = true

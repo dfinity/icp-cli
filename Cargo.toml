@@ -34,6 +34,7 @@ ic-asset = { version = "0.25.0" }
 ic-ledger-types = "0.15.0"
 ic-management-canister-types = { version = "0.4.1" }
 ic-utils = { version = "0.44.1" }
+icp = { path = "crates/icp" }
 icp-adapter = { path = "crates/icp-adapter" }
 icp-canister = { path = "crates/icp-canister" }
 icp-dirs = { path = "crates/icp-dirs" }

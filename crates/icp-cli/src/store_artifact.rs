@@ -1,4 +1,4 @@
-use camino::Utf8PathBuf as PathBuf;
+use icp::prelude::*;
 use icp_fs::fs::{CreateDirAllError, ReadFileError, WriteFileError, create_dir_all, read, write};
 use snafu::{ResultExt, Snafu};
 

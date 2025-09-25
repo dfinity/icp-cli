@@ -1,5 +1,5 @@
-use camino::Utf8PathBuf as PathBuf;
 use directories::ProjectDirs;
+use icp::prelude::*;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ impl IcpCliDirs {
 #[derive(Debug, Snafu)]
 pub enum DiscoverDirsError {
     #[snafu(display("user directories are non-UTF-8"))]
-    NonUtf8 { source: camino::FromPathBufError },
+    NonUtf8 { source: FromPathBufError },
 
     #[snafu(display("home directory could not be located"))]
     CannotFindHome,
@@ -62,7 +62,7 @@ pub struct Utf8ProjectDirs {
 }
 
 impl Utf8ProjectDirs {
-    pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, camino::FromPathBufError> {
+    pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, FromPathBufError> {
         Ok(Self {
             data_dir: dirs.data_dir().to_owned().try_into()?,
             config_dir: dirs.config_dir().to_owned().try_into()?,

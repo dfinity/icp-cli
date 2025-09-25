@@ -2,8 +2,8 @@ use std::fmt;
 use std::process::Stdio;
 
 use async_trait::async_trait;
-use camino::Utf8Path as Path;
 use ic_agent::{Agent, export::Principal};
+use icp::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};

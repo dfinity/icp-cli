@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use icp::prelude::*;
 // Async stream processing utilities for concurrent recipe resolution
 use futures::{StreamExt, TryStreamExt, stream};
 use glob::GlobError;
@@ -600,7 +600,7 @@ pub enum LoadProjectManifestError {
     Parse { source: LoadYamlFileError },
 
     #[snafu(transparent)]
-    InvalidPathUtf8 { source: camino::FromPathBufError },
+    InvalidPathUtf8 { source: FromPathBufError },
 
     #[snafu(display("canister path must exist and be a directory '{path}'"))]
     CanisterPath { path: PathBuf },
@@ -693,7 +693,7 @@ pub enum LoadNetworkConfigurationsError {
 #[derive(Debug, Snafu)]
 pub enum NormalizeGlobNetworksError {
     #[snafu(transparent)]
-    InvalidPathUtf8 { source: camino::FromPathBufError },
+    InvalidPathUtf8 { source: FromPathBufError },
 
     #[snafu(display("failed to glob pattern '{pattern}'"))]
     NetworkGlobPattern {
@@ -711,7 +711,7 @@ pub enum NormalizeGlobNetworksError {
 #[derive(Debug, Snafu)]
 pub enum CheckSpecificNetworkError {
     #[snafu(transparent)]
-    InvalidPathUtf8 { source: camino::FromPathBufError },
+    InvalidPathUtf8 { source: FromPathBufError },
 
     #[snafu(display(
         "configuration file for network '{network_path}' not found at '{config_path}'"

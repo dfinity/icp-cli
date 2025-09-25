@@ -1,11 +1,11 @@
-use camino::Utf8PathBuf;
+use camino::Utf8PathBuf as PathBuf;
 use directories::ProjectDirs;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 #[derive(Debug, Clone)]
 pub enum IcpCliDirs {
     Standard(Utf8ProjectDirs),
-    Overridden(Utf8PathBuf),
+    Overridden(PathBuf),
 }
 
 impl IcpCliDirs {
@@ -22,22 +22,22 @@ impl IcpCliDirs {
         }
     }
 
-    pub fn identity_dir(&self) -> Utf8PathBuf {
+    pub fn identity_dir(&self) -> PathBuf {
         self.data_dir().join("identity")
     }
 
-    pub fn port_descriptor_dir(&self) -> Utf8PathBuf {
+    pub fn port_descriptor_dir(&self) -> PathBuf {
         self.cache_dir().join("port-descriptors")
     }
 
-    fn data_dir(&self) -> Utf8PathBuf {
+    fn data_dir(&self) -> PathBuf {
         match self {
             Self::Standard(dirs) => dirs.data_dir.clone(),
             Self::Overridden(path) => path.clone(),
         }
     }
 
-    fn cache_dir(&self) -> Utf8PathBuf {
+    fn cache_dir(&self) -> PathBuf {
         match self {
             Self::Standard(dirs) => dirs.cache_dir.clone(),
             Self::Overridden(path) => path.clone(),
@@ -56,9 +56,9 @@ pub enum DiscoverDirsError {
 
 #[derive(Debug, Clone)]
 pub struct Utf8ProjectDirs {
-    pub data_dir: Utf8PathBuf,
-    pub config_dir: Utf8PathBuf,
-    pub cache_dir: Utf8PathBuf,
+    pub data_dir: PathBuf,
+    pub config_dir: PathBuf,
+    pub cache_dir: PathBuf,
 }
 
 impl Utf8ProjectDirs {

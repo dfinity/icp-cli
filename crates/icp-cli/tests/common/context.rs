@@ -6,8 +6,8 @@ use std::{
 };
 
 use assert_cmd::Command;
-use camino::{Utf8Path, Utf8PathBuf};
-use camino_tempfile::{Utf8TempDir, tempdir};
+use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
+use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use icp_network::NETWORK_LOCAL;
 use pocket_ic::nonblocking::PocketIc;
 use serde_json::{Value, json};
@@ -15,10 +15,10 @@ use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx};
 pub struct TestContext {
-    home_dir: Utf8TempDir,
-    bin_dir: Utf8PathBuf,
-    asset_dir: Utf8PathBuf,
-    dfx_path: Option<Utf8PathBuf>,
+    home_dir: TempDir,
+    bin_dir: PathBuf,
+    asset_dir: PathBuf,
+    dfx_path: Option<PathBuf>,
     os_path: OsString,
     pocketic: RefCell<Option<PocketIc>>,
 }
@@ -56,7 +56,7 @@ impl TestContext {
         let dfx_path = std::env::var("ICPTEST_DFX_PATH")
             .expect("ICPTEST_DFX_PATH must be set to use with_dfx()");
 
-        let src = Utf8PathBuf::from(dfx_path);
+        let src = PathBuf::from(dfx_path);
         assert!(
             src.exists(),
             "ICPTEST_DFX_PATH points to non-existent file: {src}",
@@ -79,7 +79,7 @@ impl TestContext {
         self
     }
 
-    pub fn home_path(&self) -> &Utf8Path {
+    pub fn home_path(&self) -> &Path {
         self.home_dir.path()
     }
 
@@ -106,7 +106,7 @@ impl TestContext {
         cmd.env_remove("ICP_HOME");
     }
 
-    fn build_os_path(bin_dir: &Utf8Path) -> OsString {
+    fn build_os_path(bin_dir: &Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
         let mut new_path = bin_dir.as_os_str().to_owned();
         new_path.push(PATH_SEPARATOR);
@@ -126,7 +126,7 @@ impl TestContext {
 
     pub fn configure_dfx_network(
         &self,
-        icp_project_dir: &Utf8Path,
+        icp_project_dir: &Path,
         network_name: &str,
     ) -> TestNetworkForDfx {
         let test_network = self.wait_for_network_descriptor(icp_project_dir, network_name);
@@ -160,24 +160,24 @@ impl TestContext {
         }
     }
 
-    pub fn pkg_dir(&self) -> Utf8PathBuf {
+    pub fn pkg_dir(&self) -> PathBuf {
         env!("CARGO_MANIFEST_DIR").into()
     }
 
-    pub fn make_asset(&self, name: &str) -> Utf8PathBuf {
+    pub fn make_asset(&self, name: &str) -> PathBuf {
         let target = self.asset_dir.join(name);
         fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
             .expect("failed to copy asset");
         target
     }
-    pub fn create_project_dir(&self, name: &str) -> Utf8PathBuf {
+    pub fn create_project_dir(&self, name: &str) -> PathBuf {
         let project_dir = self.home_path().join(name);
         std::fs::create_dir_all(&project_dir).expect("Failed to create icp project directory");
         std::fs::write(project_dir.join("icp.yaml"), "").expect("Failed to write project file");
         project_dir
     }
 
-    pub fn start_network_in(&self, project_dir: &Utf8Path) -> ChildGuard {
+    pub fn start_network_in(&self, project_dir: &Path) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir)
@@ -203,7 +203,7 @@ impl TestContext {
         child_guard
     }
 
-    pub fn ping_until_healthy(&self, project_dir: &Utf8Path) {
+    pub fn ping_until_healthy(&self, project_dir: &Path) {
         self.wait_for_local_network_descriptor(project_dir);
         self.icp()
             .current_dir(project_dir)
@@ -213,13 +213,13 @@ impl TestContext {
     }
 
     // wait up to 30 seconds for descriptor path to contain valid json
-    pub fn wait_for_local_network_descriptor(&self, project_dir: &Utf8Path) -> TestNetwork {
+    pub fn wait_for_local_network_descriptor(&self, project_dir: &Path) -> TestNetwork {
         self.wait_for_network_descriptor(project_dir, NETWORK_LOCAL)
     }
 
     pub fn wait_for_network_descriptor(
         &self,
-        project_dir: &Utf8Path,
+        project_dir: &Path,
         network_name: &str,
     ) -> TestNetwork {
         let descriptor_path = project_dir
@@ -287,11 +287,11 @@ impl TestContext {
         }
     }
 
-    pub fn configure_icp_local_network_random_port(&self, project_dir: &Utf8Path) {
+    pub fn configure_icp_local_network_random_port(&self, project_dir: &Path) {
         self.configure_icp_local_network_port(project_dir, 0);
     }
 
-    pub fn configure_icp_local_network_port(&self, project_dir: &Utf8Path, gateway_port: u16) {
+    pub fn configure_icp_local_network_port(&self, project_dir: &Path, gateway_port: u16) {
         let networks_dir = project_dir.join("networks");
         create_dir_all(&networks_dir).expect("Failed to create networks directory");
         fs::write(
@@ -307,7 +307,7 @@ impl TestContext {
         .unwrap();
     }
 
-    fn network_descriptor_path(&self, project_dir: &Utf8Path, network: &str) -> Utf8PathBuf {
+    fn network_descriptor_path(&self, project_dir: &Path, network: &str) -> PathBuf {
         project_dir
             .join(".icp")
             .join("networks")
@@ -315,12 +315,12 @@ impl TestContext {
             .join("descriptor.json")
     }
 
-    pub fn read_network_descriptor(&self, project_dir: &Utf8Path, network: &str) -> Vec<u8> {
+    pub fn read_network_descriptor(&self, project_dir: &Path, network: &str) -> Vec<u8> {
         std::fs::read(self.network_descriptor_path(project_dir, network))
             .expect("Failed to read network descriptor file")
     }
 
-    pub fn write_network_descriptor(&self, project_dir: &Utf8Path, network: &str, contents: &[u8]) {
+    pub fn write_network_descriptor(&self, project_dir: &Path, network: &str, contents: &[u8]) {
         let descriptor_path = self.network_descriptor_path(project_dir, network);
         std::fs::write(&descriptor_path, contents)
             .expect("Failed to write network descriptor file");

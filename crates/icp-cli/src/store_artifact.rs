@@ -1,4 +1,4 @@
-use camino::Utf8PathBuf;
+use camino::Utf8PathBuf as PathBuf;
 use icp_fs::fs::{CreateDirAllError, ReadFileError, WriteFileError, create_dir_all, read, write};
 use snafu::{ResultExt, Snafu};
 
@@ -20,10 +20,10 @@ pub enum LookupError {
     LookupArtifactNotFound { name: String },
 }
 
-pub struct ArtifactStore(Utf8PathBuf);
+pub struct ArtifactStore(PathBuf);
 
 impl ArtifactStore {
-    pub fn new(path: &Utf8PathBuf) -> Self {
+    pub fn new(path: &PathBuf) -> Self {
         Self(path.clone())
     }
 }

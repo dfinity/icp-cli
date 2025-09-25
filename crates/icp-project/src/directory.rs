@@ -1,6 +1,6 @@
 use std::io;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use icp_canister::manifest::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use icp_network::{NetworkConfig, NetworkDirectory};
@@ -14,13 +14,13 @@ pub struct ProjectDirectory {
 
 impl ProjectDirectory {
     #[cfg(test)]
-    pub fn new(root: &Utf8Path) -> Self {
+    pub fn new(root: &Path) -> Self {
         let structure = ProjectDirectoryStructure::new(root);
         Self { structure }
     }
 
     pub fn find() -> Result<Option<Self>, FindProjectError> {
-        let current_dir = Utf8PathBuf::try_from(std::env::current_dir().context(AccessSnafu)?)
+        let current_dir = PathBuf::try_from(std::env::current_dir().context(AccessSnafu)?)
             .context(NonUtf8Snafu)?;
         let mut path = current_dir.clone();
         loop {
@@ -42,7 +42,7 @@ impl ProjectDirectory {
     pub fn network(
         &self,
         network_name: &str,
-        port_descriptor_dir: impl AsRef<Utf8Path>,
+        port_descriptor_dir: impl AsRef<Path>,
     ) -> NetworkDirectory {
         let network_root = self.structure.network_root(network_name);
 
@@ -56,7 +56,7 @@ impl ProjectDirectory {
 
     pub fn load_canister_manifest(
         &self,
-        canister_path: &Utf8Path,
+        canister_path: &Path,
     ) -> Result<CanisterManifest, LoadYamlFileError> {
         let path = self.structure().canister_yaml_path(canister_path);
         load_yaml_file(path)
@@ -64,7 +64,7 @@ impl ProjectDirectory {
 
     pub fn load_network_config(
         &self,
-        network_path: &Utf8Path,
+        network_path: &Path,
     ) -> Result<NetworkConfig, LoadYamlFileError> {
         let path = self.structure.network_config_path(network_path);
         load_yaml_file(path)

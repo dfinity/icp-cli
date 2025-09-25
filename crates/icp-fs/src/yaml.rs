@@ -1,4 +1,4 @@
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use snafu::prelude::*;
 
 use crate::fs::{ReadFileError, read};
@@ -7,7 +7,7 @@ use crate::fs::{ReadFileError, read};
 pub enum LoadYamlFileError {
     #[snafu(display("failed to parse {path} as yaml"))]
     Parse {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: serde_yaml::Error,
     },
 
@@ -16,7 +16,7 @@ pub enum LoadYamlFileError {
 }
 
 pub fn load_yaml_file<T: for<'a> serde::de::Deserialize<'a>>(
-    path: impl AsRef<Utf8Path>,
+    path: impl AsRef<Path>,
 ) -> Result<T, LoadYamlFileError> {
     let path = path.as_ref();
     let content = read(path)?;

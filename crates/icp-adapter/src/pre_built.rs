@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use crate::build::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
 use reqwest::{Client, Method, Request, StatusCode, Url};
 use schemars::JsonSchema;
@@ -14,7 +14,7 @@ use snafu::Snafu;
 pub struct LocalSource {
     /// Local path on-disk to read a WASM file from
     #[schemars(with = "String")]
-    pub path: Utf8PathBuf,
+    pub path: PathBuf,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
@@ -63,8 +63,8 @@ impl fmt::Display for PrebuiltAdapter {
 impl Adapter for PrebuiltAdapter {
     async fn compile(
         &self,
-        canister_path: &Utf8Path,
-        wasm_output_path: &Utf8Path,
+        canister_path: &Path,
+        wasm_output_path: &Path,
     ) -> Result<(), AdapterCompileError> {
         let wasm = match &self.source {
             // Local path

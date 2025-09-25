@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::sync::{self, AdapterSyncError};
 use async_trait::async_trait;
-use camino::Utf8Path;
+use camino::Utf8Path as Path;
 use ic_agent::{Agent, export::Principal};
 use ic_asset::error::SyncError;
 use ic_utils::{Canister, canister::CanisterBuilderError};
@@ -52,7 +52,7 @@ impl fmt::Display for AssetsAdapter {
 impl sync::Adapter for AssetsAdapter {
     async fn sync(
         &self,
-        canister_path: &Utf8Path,
+        canister_path: &Path,
         canister_id: &Principal,
         agent: &Agent,
     ) -> Result<(), AdapterSyncError> {

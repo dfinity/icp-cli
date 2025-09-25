@@ -1,5 +1,5 @@
 use crate::common::TestContext;
-use camino_tempfile::NamedUtf8TempFile;
+use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp_fs::fs::{create_dir_all, write};
 use predicates::{ord::eq, str::PredicateStrExt};
 
@@ -13,7 +13,7 @@ fn single_canister_project() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(
@@ -62,7 +62,7 @@ fn multi_canister_project() {
     .expect("failed to write project manifest");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Canister manifest
     let cm = format!(
@@ -112,7 +112,7 @@ fn glob_path() {
     .expect("failed to write project manifest");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Canister manifest
     let cm = format!(

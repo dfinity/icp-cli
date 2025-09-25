@@ -1,6 +1,6 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use icp_fs::{
     fs::{
         CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
@@ -33,9 +33,9 @@ use crate::{
 pub async fn run_network(
     config: &ManagedNetworkModel,
     nd: NetworkDirectory,
-    project_root: &Utf8Path,
+    project_root: &Path,
 ) -> Result<(), RunNetworkError> {
-    let pocketic_path = Utf8PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
+    let pocketic_path = PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
 
     nd.ensure_exists()?;
 
@@ -80,10 +80,10 @@ pub enum RunNetworkError {
 }
 
 async fn run_pocketic(
-    pocketic_path: &Utf8Path,
+    pocketic_path: &Path,
     config: &ManagedNetworkModel,
     nd: &NetworkDirectory,
-    project_root: &Utf8Path,
+    project_root: &Path,
 ) -> Result<(), RunPocketIcError> {
     let nds = nd.structure();
     eprintln!("PocketIC path: {pocketic_path}");
@@ -176,7 +176,7 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     )
 }
 
-pub async fn wait_for_port_file(path: &Utf8Path) -> Result<u16, WaitForPortTimeoutError> {
+pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
     let mut retries = 0;
     while retries < 3000 {
         if let Ok(contents) = read_to_string(path) {
@@ -215,7 +215,7 @@ pub struct ChildExitError {
 
 /// Waits for the child to populate a port number.
 /// Exits early if the child exits or the user interrupts.
-pub async fn wait_for_port(path: &Utf8Path, child: &mut Child) -> Result<u16, WaitForPortError> {
+pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
     tokio::select! {
         res = wait_for_port_file(path) => res.map_err(WaitForPortError::from),
         _ = ctrl_c() => Err(WaitForPortError::Interrupted),
@@ -236,7 +236,7 @@ pub enum WaitForPortError {
 async fn initialize_pocketic(
     pocketic_port: u16,
     gateway_bind_port: &BindPort,
-    state_dir: &Utf8Path,
+    state_dir: &Path,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
     let pic = PocketIcAdminInterface::new(
         format!("http://localhost:{pocketic_port}")

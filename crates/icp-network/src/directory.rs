@@ -1,4 +1,4 @@
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use icp_fs::{
     fs::{CreateDirAllError, create_dir_all},
     lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
@@ -21,11 +21,7 @@ pub struct NetworkDirectory {
 }
 
 impl NetworkDirectory {
-    pub fn new(
-        network_name: &str,
-        network_root: &Utf8Path,
-        port_descriptor_dir: &Utf8Path,
-    ) -> Self {
+    pub fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
         let network_name = network_name.to_string();
         let structure = NetworkDirectoryStructure::new(network_root, port_descriptor_dir);
 
@@ -155,7 +151,7 @@ pub enum SaveNetworkDescriptorError {
     WriteDescriptor { source: WriteDescriptorError },
 
     #[snafu(display("failed to obtain descriptor for project network descriptor"))]
-    ObtainProjectNetworkDescriptorLock { path: Utf8PathBuf },
+    ObtainProjectNetworkDescriptorLock { path: PathBuf },
 }
 
 #[derive(Debug, Snafu)]

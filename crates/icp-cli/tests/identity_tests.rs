@@ -1,7 +1,7 @@
 use core::str;
 use std::io::Write;
 
-use camino_tempfile::NamedUtf8TempFile;
+use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use common::TestContext;
 use ic_agent::export::Principal;
 use predicates::{
@@ -30,7 +30,7 @@ fn identity_anonymous() {
 
 #[test]
 fn identity_import_seed() {
-    let mut file = NamedUtf8TempFile::new().unwrap();
+    let mut file = NamedTempFile::new().unwrap();
     file.write_all(b"equip will roof matter pink blind book anxiety banner elbow sun young")
         .unwrap();
     let path = file.into_temp_path();
@@ -109,7 +109,7 @@ fn identity_import_pem() {
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
 
     // from encrypted pkcs8
-    let mut file = NamedUtf8TempFile::new().unwrap();
+    let mut file = NamedTempFile::new().unwrap();
     file.write_all(b"swordfish").unwrap();
     let path = file.into_temp_path();
     ctx.icp()
@@ -169,7 +169,7 @@ fn identity_create() {
         .assert()
         .success();
 
-    let mut file = NamedUtf8TempFile::new().unwrap();
+    let mut file = NamedTempFile::new().unwrap();
     file.write_all(seed.trim().as_bytes()).unwrap();
     let path = file.into_temp_path();
 

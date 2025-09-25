@@ -2,7 +2,7 @@ use std::fmt;
 use std::process::Stdio;
 
 use async_trait::async_trait;
-use camino::Utf8Path;
+use camino::Utf8Path as Path;
 use ic_agent::{Agent, export::Principal};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -76,8 +76,8 @@ impl fmt::Display for ScriptAdapter {
 impl build::Adapter for ScriptAdapter {
     async fn compile(
         &self,
-        canister_path: &Utf8Path,
-        wasm_output_path: &Utf8Path,
+        canister_path: &Path,
+        wasm_output_path: &Path,
     ) -> Result<(), AdapterCompileError> {
         // Normalize `command` field based on whether it's a single command or multiple.
         let cmds = self.command.as_vec();
@@ -226,7 +226,7 @@ pub enum ScriptAdapterCompileError {
 impl sync::Adapter for ScriptAdapter {
     async fn sync(
         &self,
-        canister_path: &Utf8Path,
+        canister_path: &Path,
         _canister_id: &Principal,
         _agent: &Agent,
     ) -> Result<(), AdapterSyncError> {

@@ -1,11 +1,10 @@
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use snafu::{ResultExt, Snafu};
-
 use icp_canister::manifest::CanisterManifest;
 use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use icp_network::{NetworkConfig, NetworkDirectory};
+use snafu::{ResultExt, Snafu};
 
 use crate::{manifest::ProjectManifest, structure::ProjectDirectoryStructure};
 

@@ -7,16 +7,16 @@ edition = "2024"
 camino = { workspace = true }
 glob = { workspace = true }
 futures = { workspace = true }
-icp-canister = { path = "../icp-canister" }
-icp-fs = { "path" = "../icp-fs" }
-icp-network = { path = "../icp-network" }
+icp-canister = { workspace = true }
+icp-fs = { workspace = true }
+icp-network = { workspace = true }
 pathdiff.workspace = true
 serde = { workspace = true }
 schemars = { workspace = true }
 snafu = { workspace = true }
 
 [dev-dependencies]
-icp-adapter = { path = "../icp-adapter" }
+icp-adapter = { workspace = true }
 camino-tempfile = { workspace = true }
 serde_yaml.workspace = true
 serde_json.workspace = true

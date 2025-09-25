@@ -1,17 +1,7 @@
 [workspace]
-members = [
-    "bin/icp-cli",
-    "bin/schema-gen",
-    "lib/icp-adapter",
-    "lib/icp-canister",
-    "lib/icp-dirs",
-    "lib/icp-fs",
-    "lib/icp-identity",
-    "lib/icp-network",
-    "lib/icp-project",
-]
+members = ["crates/*"]
 
-default-members = ["bin/icp-cli"]
+default-members = ["crates/icp-cli"]
 exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
 resolver = "3"
 
@@ -43,13 +33,13 @@ ic-asset = { version = "0.25.0" }
 ic-ledger-types = "0.15.0"
 ic-management-canister-types = { version = "0.4.1" }
 ic-utils = { version = "0.44.1" }
-icp-adapter = { path = "lib/icp-adapter" }
-icp-canister = { path = "lib/icp-canister" }
-icp-dirs = { path = "lib/icp-dirs" }
-icp-fs = { path = "lib/icp-fs" }
-icp-identity = { path = "lib/icp-identity", features = ["clap"] }
-icp-network = { path = "lib/icp-network" }
-icp-project = { path = "lib/icp-project" }
+icp-adapter = { path = "crates/icp-adapter" }
+icp-canister = { path = "crates/icp-canister" }
+icp-dirs = { path = "crates/icp-dirs" }
+icp-fs = { path = "crates/icp-fs" }
+icp-identity = { path = "crates/icp-identity", features = ["clap"] }
+icp-network = { path = "crates/icp-network" }
+icp-project = { path = "crates/icp-project" }
 icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
 itertools = "0.14.0"

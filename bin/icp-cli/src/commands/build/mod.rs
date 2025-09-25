@@ -91,7 +91,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                         // Compile using the custom script adapter.
                         BuildStep::Script(adapter) => {
                             // Setup script progress handling and receiver join handle
-                            let (tx, recv_handle) = script_handler.setup_output_handler();
+                            let (tx, rx) = script_handler.setup_output_handler();
 
                             // Run compile which will feed lines into the channel
                             adapter
@@ -100,7 +100,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                                 .await?;
 
                             // Ensure background receiver drains all messages
-                            let _ = recv_handle.await;
+                            let _ = rx.await;
 
                             Ok::<_, CommandError>(())?
                         }

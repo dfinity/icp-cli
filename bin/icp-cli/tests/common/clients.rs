@@ -8,7 +8,7 @@ mod cycles_ledger;
 mod icp_cli;
 mod icp_ledger;
 
-pub fn icp_client(ctx: &TestContext) -> IcpCliClient<'_> {
+pub fn icp(ctx: &TestContext) -> IcpCliClient<'_> {
     IcpCliClient::new(ctx)
 }
 

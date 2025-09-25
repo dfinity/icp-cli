@@ -1,20 +1,21 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
+use anyhow::Error;
 use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
-use commands::{DispatchError, Subcmd};
+use commands::Subcmd;
 use console::Term;
 use context::Context;
 use icp_canister::{handlebars::Handlebars, recipe};
-use icp_dirs::{DiscoverDirsError, IcpCliDirs};
-use snafu::{Snafu, report};
+use icp_dirs::IcpCliDirs;
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
     layer::SubscriberExt,
 };
+
+use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 
 mod commands;
 mod context;
@@ -54,8 +55,7 @@ struct Cli {
 }
 
 #[tokio::main]
-#[report]
-async fn main() -> Result<(), ProgramError> {
+async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     // Generate markdown documentation if requested
@@ -68,11 +68,7 @@ async fn main() -> Result<(), ProgramError> {
     let command = match cli.command {
         Some(cmd) => cmd,
         None => {
-            Cli::command()
-                .print_help()
-                .map_err(|err| ProgramError::Unexpected {
-                    err: format!("Failed to print help: {}", err),
-                })?;
+            Cli::command().print_help()?;
             return Ok(());
         }
     };
@@ -112,9 +108,7 @@ async fn main() -> Result<(), ProgramError> {
 
     // Set the configured subscriber registry as the global default for tracing
     // This enables the logging and telemetry layers we configured above
-    set_global_default(reg).map_err(|err| ProgramError::Unexpected {
-        err: err.to_string(),
-    })?;
+    set_global_default(reg)?;
 
     // Setup project directory structure
     let dirs = IcpCliDirs::new()?;
@@ -151,18 +145,6 @@ async fn main() -> Result<(), ProgramError> {
     commands::dispatch(&ctx, command).await?;
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum ProgramError {
-    #[snafu(transparent)]
-    Dispatch { source: DispatchError },
-
-    #[snafu(transparent)]
-    Dirs { source: DiscoverDirsError },
-
-    #[snafu(display("an unexpected error occurred: {err}"))]
-    Unexpected { err: String },
 }
 
 #[cfg(test)]

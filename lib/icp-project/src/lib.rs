@@ -18,10 +18,7 @@ use snafu::{ResultExt, Snafu};
 
 use crate::{
     directory::ProjectDirectory,
-    manifest::{
-        CanisterItem, CanistersField, EnvironmentManifest, NetworkItem, NetworkManifest,
-        default_networks,
-    },
+    manifest::{CanistersField, EnvironmentManifest, Item, NetworkManifest},
 };
 
 pub mod directory;
@@ -33,6 +30,28 @@ pub const ENVIRONMENT_IC: &str = "ic";
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
+}
+
+/// Provides the default glob pattern for locating canister manifests
+/// when no `canisters` are explicitly specified in the YAML.
+pub fn default_canisters() -> CanistersField {
+    CanistersField::Canisters(
+        ["canisters/*"]
+            .into_iter()
+            .map(String::from)
+            .map(Item::Path)
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Provides the default glob pattern for locating network definition files
+/// when the `networks` field is not explicitly specified in the YAML.
+pub fn default_networks() -> Vec<Item<NetworkManifest>> {
+    ["networks/*"]
+        .into_iter()
+        .map(String::from)
+        .map(Item::Path)
+        .collect::<Vec<_>>()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -84,9 +103,7 @@ impl Project {
 
         // Resolve the canisters field: if not explicitly defined in the YAML (i.e., None),
         // fall back to the default glob pattern for locating canister manifests.
-        let canisters_field = pm
-            .canisters
-            .unwrap_or_else(crate::manifest::default_canisters);
+        let canisters_field = pm.canisters.unwrap_or_else(default_canisters);
 
         // Process the resolved RawCanistersField into the final CanistersField.
         let canisters = match canisters_field {
@@ -104,16 +121,16 @@ impl Project {
                     // Paths
                     cs.iter()
                         .filter_map(|v| match v {
-                            CanisterItem::Path(path) => Some(path.to_owned()),
-                            CanisterItem::Definition(_) => None,
+                            Item::Path(path) => Some(path.to_owned()),
+                            Item::Manifest(_) => None,
                         })
                         .collect::<Vec<String>>(),
                     //
                     // Manifests
                     cs.iter()
                         .filter_map(|v| match v {
-                            CanisterItem::Path(_) => None,
-                            CanisterItem::Definition(c) => {
+                            Item::Path(_) => None,
+                            Item::Manifest(c) => {
                                 Some((
                                     pds.root().to_owned(), // path
                                     c.to_owned(),          // canister
@@ -238,8 +255,8 @@ impl Project {
             networks
                 .iter()
                 .filter_map(|v| match v {
-                    NetworkItem::Path(path) => Some(path.to_owned()),
-                    NetworkItem::Definition(_) => None,
+                    Item::Path(path) => Some(path.to_owned()),
+                    Item::Manifest(_) => None,
                 })
                 .collect::<Vec<String>>(),
             //
@@ -247,8 +264,8 @@ impl Project {
             networks
                 .iter()
                 .filter_map(|v| match v {
-                    NetworkItem::Path(_) => None,
-                    NetworkItem::Definition(m) => Some(m.to_owned()),
+                    Item::Path(_) => None,
+                    Item::Manifest(m) => Some(m.to_owned()),
                 })
                 .collect::<Vec<NetworkManifest>>(),
         );
@@ -533,6 +550,46 @@ impl Project {
         self.networks.get(network_name).ok_or(NoSuchNetworkError {
             network: network_name.to_string(),
         })
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Project does not contain a canister named {name}"))]
+pub struct NoCanister {
+    name: String,
+}
+
+impl Project {
+    pub fn canister(&self, name: &str) -> Result<&Canister, NoCanister> {
+        let (_, c) = self
+            .canisters
+            .iter()
+            .find(|(_, c)| name == c.name)
+            .ok_or(NoCanister {
+                name: name.to_string(),
+            })?;
+
+        Ok(c)
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Project does not contain an environment named {name}"))]
+pub struct NoEnvironment {
+    name: String,
+}
+
+impl Project {
+    pub fn environment(&self, name: &str) -> Result<&EnvironmentManifest, NoEnvironment> {
+        let env = self
+            .environments
+            .iter()
+            .find(|&v| name == v.name)
+            .ok_or(NoEnvironment {
+                name: name.to_string(),
+            })?;
+
+        Ok(env)
     }
 }
 

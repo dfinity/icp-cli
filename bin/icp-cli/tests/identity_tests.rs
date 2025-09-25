@@ -20,7 +20,7 @@ fn identity_anonymous() {
         .args(["identity", "list"])
         .assert()
         .success()
-        .stdout(eq("* anonymous").trim());
+        .stdout(eq("* anonymous 2vxsx-fae").trim());
     ctx.icp()
         .args(["identity", "principal"])
         .assert()
@@ -160,7 +160,7 @@ fn identity_create() {
         .args(["identity", "list"])
         .assert()
         .success()
-        .stdout(contains(format!("alice {alice_principal}")))
+        .stdout(contains(format!("alice     {alice_principal}")))
         .stdout(contains(format!("anonymous {anonymous_principal}")));
 
     let principal1_out = ctx

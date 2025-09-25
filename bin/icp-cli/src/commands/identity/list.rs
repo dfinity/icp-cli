@@ -11,6 +11,7 @@ pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
     let dirs = ctx.dirs();
     let list = load_identity_list(dirs)?;
     let defaults = load_identity_defaults(dirs)?;
+    // sorted alphabetically by name
     let sorted_identities = list
         .identities
         .iter()

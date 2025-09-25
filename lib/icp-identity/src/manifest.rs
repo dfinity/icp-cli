@@ -3,6 +3,7 @@ use crate::paths::{
     identity_list_path,
 };
 use camino::Utf8PathBuf;
+use ic_agent::export::Principal;
 use icp_dirs::IcpCliDirs;
 use icp_fs::{
     fs,
@@ -162,9 +163,19 @@ pub enum IdentitySpec {
     Pem {
         format: PemFormat,
         algorithm: IdentityKeyAlgorithm,
+        principal: Principal,
     },
     Anonymous,
     // Keyring,
+}
+
+impl IdentitySpec {
+    pub fn principal(&self) -> Principal {
+        match self {
+            IdentitySpec::Pem { principal, .. } => *principal,
+            IdentitySpec::Anonymous => Principal::anonymous(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

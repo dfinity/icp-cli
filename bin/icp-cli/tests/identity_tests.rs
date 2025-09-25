@@ -9,6 +9,8 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 
+use crate::common::clients;
+
 mod common;
 
 #[test]
@@ -146,6 +148,9 @@ fn identity_create() {
         .assert()
         .success();
 
+    let alice_principal = clients::icp(&ctx).get_principal("alice");
+    let anonymous_principal = clients::icp(&ctx).get_principal("anonymous");
+
     let seed = str::from_utf8(&new_out.get_output().stdout)
         .unwrap()
         .strip_prefix("Your seed phrase: ")
@@ -155,8 +160,8 @@ fn identity_create() {
         .args(["identity", "list"])
         .assert()
         .success()
-        .stdout(contains("alice"))
-        .stdout(contains("anonymous"));
+        .stdout(contains(format!("alice {alice_principal}")))
+        .stdout(contains(format!("anonymous {anonymous_principal}")));
 
     let principal1_out = ctx
         .icp()

@@ -37,9 +37,11 @@ pub fn load_identity(
         .get(name)
         .context(NoSuchIdentitySnafu { name })?;
     match identity {
-        IdentitySpec::Pem { format, algorithm } => {
-            load_pem_identity(dirs, name, format, algorithm, password_func)
-        }
+        IdentitySpec::Pem {
+            format,
+            algorithm,
+            principal: _,
+        } => load_pem_identity(dirs, name, format, algorithm, password_func),
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
 }
@@ -157,9 +159,17 @@ pub fn create_identity(
         CreateFormat::Plaintext => PemFormat::Plaintext,
         CreateFormat::Pbes2 { .. } => PemFormat::Pbes2,
     };
+    let principal = match &key {
+        IdentityKey::Secp256k1(secret_key) => {
+            Secp256k1Identity::from_private_key(secret_key.clone())
+                .sender()
+                .expect("infallible method")
+        }
+    };
     let spec = IdentitySpec::Pem {
         format: pem_format,
         algorithm,
+        principal,
     };
     let mut identity_list = load_identity_list(dirs)?;
     ensure!(

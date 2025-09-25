@@ -142,13 +142,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     match step {
                         // Synchronize the canister using the custom script adapter.
                         SyncStep::Script(adapter) => {
-                            // Setup script progress handling
-                            let tx = script_handler.setup_output_handler();
+                            // Setup script progress handling and receiver join handle
+                            let (tx, rx) = script_handler.setup_output_handler();
 
+                            // Run sync which will feed lines into the channel
                             adapter
                                 .with_stdio_sender(tx)
                                 .sync(canister_path, &cid, agent)
-                                .await?
+                                .await?;
+
+                            // Ensure background receiver drains all messages
+                            let _ = rx.await;
+
+                            Ok::<_, CommandError>(())?
                         }
 
                         // Synchronize the canister using the assets adapter.

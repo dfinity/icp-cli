@@ -90,13 +90,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     match step {
                         // Compile using the custom script adapter.
                         BuildStep::Script(adapter) => {
-                            // Setup script progress handling
-                            let tx = script_handler.setup_output_handler();
+                            // Setup script progress handling and receiver join handle
+                            let (tx, rx) = script_handler.setup_output_handler();
 
+                            // Run compile which will feed lines into the channel
                             adapter
                                 .with_stdio_sender(tx)
                                 .compile(&canister_path, &wasm_output_path)
-                                .await?
+                                .await?;
+
+                            // Ensure background receiver drains all messages
+                            let _ = rx.await;
+
+                            Ok::<_, CommandError>(())?
                         }
 
                         // Compile using the Pre-built adapter.

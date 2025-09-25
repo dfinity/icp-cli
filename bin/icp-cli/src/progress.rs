@@ -3,7 +3,7 @@ use std::{collections::VecDeque, time::Duration};
 use futures::Future;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
 
 // Animation frames for the spinner - creates a rotating star effect
@@ -164,7 +164,8 @@ impl ScriptProgressHandler {
     }
 
     /// Create a channel and start handling script output for progress updates
-    pub fn setup_output_handler(&self) -> mpsc::Sender<String> {
+    /// Returns the sender and a join handle for the background receiver task.
+    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<()>) {
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
         // Shared progress-bar messaging utility
@@ -178,7 +179,7 @@ impl ScriptProgressHandler {
         };
 
         // Handle logging from script commands
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             // Create a rolling buffer to contain last N lines of terminal output
             let mut lines = RollingLines::new(4);
 
@@ -198,6 +199,6 @@ impl ScriptProgressHandler {
             }
         });
 
-        tx
+        (tx, handle)
     }
 }

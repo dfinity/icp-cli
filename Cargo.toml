@@ -6,6 +6,7 @@ exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
 resolver = "3"
 
 [workspace.dependencies]
+anyhow = "1.0.100"
 async-trait = "0.1.88"
 bigdecimal = "0.4.8"
 bip32 = "0.5.0"
@@ -62,6 +63,7 @@ slog = "2.7.0"
 snafu = "0.8.5"
 strum = { version = "0.27", features = ["derive"] }
 tempfile = "3"
+thiserror = "2.0.16"
 time = "0.3.9"
 tiny-bip39 = "2.0.0"
 tokio = { version = "1.45.0", features = ["macros", "rt-multi-thread"] }

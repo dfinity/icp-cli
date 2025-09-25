@@ -3,8 +3,7 @@ use std::{collections::VecDeque, time::Duration};
 use futures::Future;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
 
 // Animation frames for the spinner - creates a rotating star effect

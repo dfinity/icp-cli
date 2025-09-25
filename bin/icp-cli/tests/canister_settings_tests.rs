@@ -12,7 +12,7 @@ fn canister_settings_update_controllers() {
     let ctx = TestContext::new().with_dfx();
 
     // Prepare principals.
-    let client = clients::icp_client(&ctx);
+    let client = clients::icp(&ctx);
     let principal_alice = get_principal(&client, "alice");
     let principal_bob = get_principal(&client, "bob");
 
@@ -253,7 +253,7 @@ fn canister_settings_update_log_visibility() {
     let ctx = TestContext::new().with_dfx();
 
     // Prepare principals.
-    let client = clients::icp_client(&ctx);
+    let client = clients::icp(&ctx);
     let principal_alice = get_principal(&client, "alice");
     let principal_bob = get_principal(&client, "bob");
 

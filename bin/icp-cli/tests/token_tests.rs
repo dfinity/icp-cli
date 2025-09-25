@@ -25,7 +25,7 @@ async fn token_balance() {
     // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
-    let identity = clients::icp_client(&ctx).use_new_random_identity();
+    let identity = clients::icp(&ctx).use_new_random_identity();
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])
@@ -68,7 +68,7 @@ async fn token_transfer() {
     let _g = ctx.start_network_in(&project_dir);
     ctx.ping_until_healthy(&project_dir);
 
-    let icp_client = clients::icp_client(&ctx);
+    let icp_client = clients::icp(&ctx);
     icp_client.create_identity("alice");
     icp_client.use_identity("alice");
     let alice_principal = icp_client.active_principal();

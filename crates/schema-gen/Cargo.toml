@@ -8,9 +8,9 @@ name = "schema-gen"
 path = "src/main.rs"
 
 [dependencies]
-icp-project = { path = "../../lib/icp-project" }
-icp-canister = { path = "../../lib/icp-canister" }
-icp-network = { path = "../../lib/icp-network" }
+icp-project = { workspace = true }
+icp-canister = { workspace = true }
+icp-network = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

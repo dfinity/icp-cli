@@ -132,16 +132,6 @@
       ],
       "type": "object"
     },
-    "CanisterItem": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "$ref": "#/definitions/CanisterManifest"
-        }
-      ]
-    },
     "CanisterManifest": {
       "anyOf": [
         {
@@ -317,6 +307,26 @@
       },
       "type": "object"
     },
+    "Item_for_CanisterManifest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/CanisterManifest"
+        }
+      ]
+    },
+    "Item_for_NetworkManifest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/NetworkManifest"
+        }
+      ]
+    },
     "LocalSource": {
       "properties": {
         "path": {
@@ -328,16 +338,6 @@
         "path"
       ],
       "type": "object"
-    },
-    "NetworkItem": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "$ref": "#/definitions/NetworkManifest"
-        }
-      ]
     },
     "NetworkManifest": {
       "oneOf": [
@@ -582,7 +582,7 @@
       "properties": {
         "canisters": {
           "items": {
-            "$ref": "#/definitions/CanisterItem"
+            "$ref": "#/definitions/Item_for_CanisterManifest"
           },
           "type": "array"
         }
@@ -606,7 +606,7 @@
     "networks": {
       "description": "List of network definition files relevant to the project. Supports glob patterns to reference multiple network config files.",
       "items": {
-        "$ref": "#/definitions/NetworkItem"
+        "$ref": "#/definitions/Item_for_NetworkManifest"
       },
       "type": [
         "array",

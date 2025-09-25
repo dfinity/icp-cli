@@ -1,7 +1,7 @@
 import os
 import json
 
-TEST_DIR = "bin/icp-cli/tests"
+TEST_DIR = "crates/icp-cli/tests"
 
 MACOS_TESTS = ["network_tests"]
 

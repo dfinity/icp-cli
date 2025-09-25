@@ -6,42 +6,11 @@ use serde::Deserialize;
 use icp_canister::{CanisterManifest, CanisterSettings};
 use icp_network::NetworkConfig;
 
-/// Provides the default glob pattern for locating canister manifests
-/// when no `canisters` are explicitly specified in the YAML.
-pub fn default_canisters() -> CanistersField {
-    CanistersField::Canisters(
-        ["canisters/*"]
-            .into_iter()
-            .map(String::from)
-            .map(CanisterItem::Path)
-            .collect::<Vec<_>>(),
-    )
-}
-
-/// Provides the default glob pattern for locating network definition files
-/// when the `networks` field is not explicitly specified in the YAML.
-pub fn default_networks() -> Vec<NetworkItem> {
-    ["networks/*"]
-        .into_iter()
-        .map(String::from)
-        .map(NetworkItem::Path)
-        .collect::<Vec<_>>()
-}
-
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
-#[allow(clippy::large_enum_variant)]
-pub enum CanisterItem {
+pub enum Item<T> {
     Path(String),
-    Definition(CanisterManifest),
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-#[allow(clippy::large_enum_variant)]
-pub enum CanistersField {
-    Canister(CanisterManifest),
-    Canisters(Vec<CanisterItem>),
+    Manifest(T),
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
@@ -50,13 +19,6 @@ pub struct NetworkManifest {
 
     #[serde(flatten)]
     pub config: NetworkConfig,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(untagged)]
-pub enum NetworkItem {
-    Path(String),
-    Definition(NetworkManifest),
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
@@ -74,6 +36,14 @@ pub struct EnvironmentManifest {
     pub settings: Option<HashMap<String, CanisterSettings>>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[allow(clippy::large_enum_variant)]
+pub enum CanistersField {
+    Canister(CanisterManifest),
+    Canisters(Vec<Item<CanisterManifest>>),
+}
+
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
 /// A project is a repository or directory grouping related canisters and network definitions.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -89,7 +59,7 @@ pub struct ProjectManifest {
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
-    pub networks: Option<Vec<NetworkItem>>,
+    pub networks: Option<Vec<Item<NetworkManifest>>>,
 
     // Projects define environments to which canisters can be deployed
     // An environment is always associated with a project-defined network

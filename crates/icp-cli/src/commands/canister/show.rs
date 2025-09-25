@@ -1,4 +1,5 @@
 use clap::Parser;
+use icp_project::{NoCanister, NoEnvironment};
 use snafu::Snafu;
 
 use crate::{
@@ -21,20 +22,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let pm = ctx.project()?;
 
     // Select canister to show
-    let (_, c) = pm
-        .canisters
-        .iter()
-        .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CommandError::CanisterNotFound { name: cmd.name })?;
+    let c = pm.canister(&cmd.name)?;
 
     // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
+    let env = pm.environment(cmd.environment.name())?;
 
     // Collect environment canisters
     let ecs = env.canisters.clone().unwrap_or(
@@ -81,11 +72,11 @@ pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: ContextProjectError },
 
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
+    #[snafu(transparent)]
+    CanisterNotFound { source: NoCanister },
 
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
+    #[snafu(transparent)]
+    EnvironmentNotFound { source: NoEnvironment },
 
     #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
     EnvironmentCanister {

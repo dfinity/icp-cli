@@ -9,9 +9,9 @@ use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
+    join,
     process::Command,
     sync::mpsc::Sender,
-    try_join,
 };
 
 use crate::build::{self, AdapterCompileError};
@@ -139,7 +139,9 @@ impl build::Adapter for ScriptAdapter {
             );
 
             // Spawn command and handle stdio
-            let (_, _, status) = try_join!(
+            // We need to join! as opposed to try_join! even if we only care about the result of the task
+            // because we want to make sure we finish  reading all of the output
+            let (_, _, status) = join!(
                 //
                 // Stdout
                 tokio::spawn({
@@ -174,10 +176,10 @@ impl build::Adapter for ScriptAdapter {
                     //
                     child.wait().await
                 }),
-            )
-            .context(JoinCompileSnafu)?;
+            );
 
             // Status
+            let status = status.context(JoinCompileSnafu)?;
             let status = status.context(CommandInvokeCompileSnafu {
                 command: &input_cmd,
             })?;
@@ -285,7 +287,7 @@ impl sync::Adapter for ScriptAdapter {
             );
 
             // Spawn command and handle stdio
-            let (_, _, status) = try_join!(
+            let (_, _, status) = join!(
                 //
                 // Stdout
                 tokio::spawn({
@@ -320,10 +322,12 @@ impl sync::Adapter for ScriptAdapter {
                     //
                     child.wait().await
                 }),
-            )
-            .context(JoinSyncSnafu)?;
+            );
 
             // Status
+            // We need to join! as opposed to try_join! even if we only care about
+            // the task because we want to make sure we finish reading all of the output
+            let status = status.context(JoinSyncSnafu)?;
             let status = status.context(CommandInvokeSyncSnafu {
                 command: &input_cmd,
             })?;

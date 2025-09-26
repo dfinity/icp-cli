@@ -1,4 +1,4 @@
 disallowed-types = [
-    { path = "std::path::PathBuf", replacement = "camino::Utf8PathBuf" },
-    { path = "std::path::Path", replacement = "camino::Utf8Path" },
+    { path = "std::path::PathBuf", reason = "Use `use icp::prelude::PathBuf;` or `use icp::prelude::*;` instead" },
+    { path = "std::path::Path", reason = "Use `icp::prelude::Path;` or `use icp::prelude::*;` instead" },
 ]

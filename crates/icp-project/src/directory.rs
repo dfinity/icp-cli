@@ -1,8 +1,7 @@
 use std::io;
 
-use icp::prelude::*;
+use icp::{fs::yaml, prelude::*};
 use icp_canister::manifest::CanisterManifest;
-use icp_fs::yaml::{LoadYamlFileError, load_yaml_file};
 use icp_network::{NetworkConfig, NetworkDirectory};
 use snafu::{ResultExt, Snafu};
 
@@ -49,25 +48,19 @@ impl ProjectDirectory {
         NetworkDirectory::new(network_name, &network_root, port_descriptor_dir.as_ref())
     }
 
-    pub fn load_project_manifest(&self) -> Result<ProjectManifest, LoadYamlFileError> {
-        let path = self.structure.project_yaml_path();
-        load_yaml_file(path)
+    pub fn load_project_manifest(&self) -> Result<ProjectManifest, yaml::Error> {
+        yaml::load(&self.structure.project_yaml_path())
     }
 
     pub fn load_canister_manifest(
         &self,
         canister_path: &Path,
-    ) -> Result<CanisterManifest, LoadYamlFileError> {
-        let path = self.structure().canister_yaml_path(canister_path);
-        load_yaml_file(path)
+    ) -> Result<CanisterManifest, yaml::Error> {
+        yaml::load(&self.structure().canister_yaml_path(canister_path))
     }
 
-    pub fn load_network_config(
-        &self,
-        network_path: &Path,
-    ) -> Result<NetworkConfig, LoadYamlFileError> {
-        let path = self.structure.network_config_path(network_path);
-        load_yaml_file(path)
+    pub fn load_network_config(&self, network_path: &Path) -> Result<NetworkConfig, yaml::Error> {
+        yaml::load(&self.structure.network_config_path(network_path))
     }
 }
 

@@ -6,6 +6,7 @@ use std::{
 use crate::prelude::*;
 
 pub mod json;
+pub mod yaml;
 
 #[derive(Debug, thiserror::Error)]
 pub struct Error {

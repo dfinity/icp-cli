@@ -3,12 +3,12 @@ use std::{
     io::{Seek, Write},
 };
 
+use crate::lock::{AcquireWriteLockError, RwFileLock};
 use fd_lock::RwLockWriteGuard;
 use icp::{
     fs::{json, remove_file},
     prelude::*,
 };
-use icp_fs::lock::{AcquireWriteLockError, RwFileLock};
 use snafu::prelude::*;
 
 use crate::{NetworkDirectory, config::NetworkDescriptorModel};

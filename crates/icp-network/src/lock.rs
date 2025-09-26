@@ -95,10 +95,4 @@ pub enum ReadWithLockError {
 
     #[snafu(transparent)]
     OpenFileForReadLock { source: OpenFileForReadLockError },
-
-    #[snafu(display("failed to read file at {path}"))]
-    ReadFile {
-        source: std::io::Error,
-        path: PathBuf,
-    },
 }

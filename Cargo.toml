@@ -38,7 +38,6 @@ icp = { path = "crates/icp" }
 icp-adapter = { path = "crates/icp-adapter" }
 icp-canister = { path = "crates/icp-canister" }
 icp-dirs = { path = "crates/icp-dirs" }
-icp-fs = { path = "crates/icp-fs" }
 icp-identity = { path = "crates/icp-identity", features = ["clap"] }
 icp-network = { path = "crates/icp-network" }
 icp-project = { path = "crates/icp-project" }

@@ -4,11 +4,11 @@ use icp::{
     fs::{create_dir_all, json},
     prelude::*,
 };
-use icp_fs::lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock};
 use snafu::prelude::*;
 
 use crate::{
     config::NetworkDescriptorModel,
+    lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
     managed::descriptor::{
         FixedPortLock, NetworkDescriptorCleaner, NetworkDescriptorWriter, NetworkLock,
         TruncateFileError, WriteDescriptorError,

@@ -4,7 +4,6 @@ use icp::{
     fs::{create_dir_all, remove_dir_all, remove_file},
     prelude::*,
 };
-use icp_fs::lock::OpenFileForWriteLockError;
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
@@ -16,6 +15,7 @@ use crate::{
     RunNetworkError::NoPocketIcPath,
     config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
     directory::SaveNetworkDescriptorError,
+    lock::OpenFileForWriteLockError,
     managed::{
         descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
         pocketic::{

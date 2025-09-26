@@ -3,9 +3,8 @@ use crate::paths::{
     identity_list_path,
 };
 use ic_agent::export::Principal;
-use icp::prelude::*;
+use icp::{fs::json, prelude::*};
 use icp_dirs::IcpCliDirs;
-use icp_fs::json::{self, LoadJsonFileError};
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
@@ -16,7 +15,7 @@ pub fn write_identity_defaults(
     defaults: &IdentityDefaults,
 ) -> Result<(), WriteIdentityManifestError> {
     let defaults_path = ensure_identity_defaults_path(dirs)?;
-    json::save_json_file(&defaults_path, defaults)?;
+    json::save(&defaults_path, defaults)?;
     Ok(())
 }
 
@@ -25,14 +24,14 @@ pub fn write_identity_list(
     list: &IdentityList,
 ) -> Result<(), WriteIdentityManifestError> {
     let defaults_path = ensure_identity_list_path(dirs)?;
-    json::save_json_file(&defaults_path, list)?;
+    json::save(&defaults_path, list)?;
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityManifestError {
     #[snafu(transparent)]
-    WriteJsonError { source: json::SaveJsonFileError },
+    WriteJsonError { source: json::Error },
 
     #[snafu(transparent)]
     CreateDirectoryError { source: icp::fs::Error },
@@ -40,11 +39,9 @@ pub enum WriteIdentityManifestError {
 
 pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityManifestError> {
     let id_list_file = identity_list_path(dirs);
-    let list = match json::load_json_file(&id_list_file) {
+    let list = match json::load(&id_list_file) {
         Ok(id_list) => id_list,
-        Err(LoadJsonFileError::Read { source, .. }) if source.kind() == ErrorKind::NotFound => {
-            IdentityList::default()
-        }
+        Err(json::Error::Io(err)) if err.kind() == ErrorKind::NotFound => IdentityList::default(),
         Err(e) => {
             return Err(e.into());
         }
@@ -61,7 +58,7 @@ pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentit
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityManifestError {
     #[snafu(transparent)]
-    LoadJsonError { source: json::LoadJsonFileError },
+    LoadJsonError { source: json::Error },
 
     #[snafu(display("file `{path}` was modified by an incompatible new version of icp-cli"))]
     BadVersion { path: PathBuf },
@@ -71,9 +68,9 @@ pub fn load_identity_defaults(
     dirs: &IcpCliDirs,
 ) -> Result<IdentityDefaults, LoadIdentityManifestError> {
     let id_defaults_path = identity_defaults_path(dirs);
-    let defaults = match json::load_json_file(&id_defaults_path) {
+    let defaults = match json::load(&id_defaults_path) {
         Ok(id_defaults) => id_defaults,
-        Err(LoadJsonFileError::Read { source, .. }) if source.kind() == ErrorKind::NotFound => {
+        Err(json::Error::Io(err)) if err.kind() == ErrorKind::NotFound => {
             IdentityDefaults::default()
         }
         Err(e) => return Err(e.into()),

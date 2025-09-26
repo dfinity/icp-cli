@@ -5,6 +5,8 @@ use std::{
 
 use crate::prelude::*;
 
+pub mod json;
+
 #[derive(Debug, thiserror::Error)]
 pub struct Error {
     path: PathBuf,

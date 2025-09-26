@@ -221,14 +221,11 @@ Now that you have your first canister running, explore:
 
 **Network connection fails**
 - Verify `icp network run` is running in another terminal
-- Check that `ICP_POCKET_IC_PATH` is set correctly
-
-**Permission errors**
-- Ensure you have write permissions in the project directory
-- Check that temporary directories aren't protected
+- Check that `ICP_POCKET_IC_PATH` is set correctly. It should point directly to your
+pocket-ic binary. You can download pocket-ic from [github](https://github.com/dfinity/pocketic/releases)
 
 **Canister deployment fails**
-- Verify the local network is healthy: `icp network ping --wait-healthy`
+- Verify the local network is healthy: `icp network ping`
 - Check canister build succeeded: `icp build`
 
 ### Getting Help
@@ -241,9 +238,11 @@ Now that you have your first canister running, explore:
 
 If you're familiar with dfx, here are the key differences:
 
-- **Unified configuration**: Single `icp.yaml` vs multiple config files
-- **Recipe system**: Reusable build templates and remote configurations
-- **Environment management**: Built-in support for multiple deployment targets
-- **Modern CLI**: Improved UX with better error messages and progress indicators
+- **Configuration**: Project configuration is in `icp.yaml` vs `dfx.json`.
+- **Environment**: A project is deployed to an "environment" not a network. An environment
+is a logical name that points to a network (could be mainnet or your local network).
+- **Recipe system**: Reusable build templates you can share with your team or the community.
+- **Consistent with mainnet**: Aims to make interacting with the local network the same as interacting
+with mainnet.
 
 Ready to build more complex applications? Check out our [examples](../examples/) or dive into [project configuration](project-configuration.md)!

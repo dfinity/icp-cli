@@ -2,7 +2,6 @@ use std::{collections::HashMap, str::FromStr, string::FromUtf8Error};
 
 use async_trait::async_trait;
 use handlebars::{Context, Helper, HelperDef, HelperResult, Output};
-// use handlebars::*;
 use icp::{fs::read, prelude::*};
 use reqwest::{Method, Request, Url};
 use snafu::Snafu;

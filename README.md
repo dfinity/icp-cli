@@ -94,9 +94,7 @@ The compiled binary will be available at `target/debug/icp` (or `target/release/
 
 #### Prerequisites for Testing
 
-These tests use dfx to stand up and interact with a local Internet Computer instance.
-To ensure test isolation, they run in a temporary HOME directory and 
-**cannot use the dfx shim from dfxvm**.
+The tests require pocket-ic for running the local network. See the setup instructions below.
 
 #### Setup
 
@@ -106,25 +104,16 @@ the path of the `pocket-ic` binary.
 You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases/tag/10.0.0).
 At least version 10.0.0 of pocket-ic is required.
 
-To run the tests, it's necessary to set the `ICPTEST_DFX_PATH` environment variable
-to a valid dfx path, as well as the `ICP_POCKET_IC_PATH` environment variable.
+To run the tests, it's necessary to set the `ICP_POCKET_IC_PATH` environment variable.
 Here is one way to do that:
 
 ```
 # Export the path to the pocket-ic binary
 export ICP_POCKET_IC_PATH="<yourpath>/pocket-ic"
 
-# Ensure dfx is installed and the cache is populated
-dfx cache install
-
-# Export the path to the actual dfx binary (not the shim)
-export ICPTEST_DFX_PATH="$(dfx cache show)/dfx"
-
 # Run tests
 cargo test
 ```
-
-If ICPTEST_DFX_PATH is not set, tests that depend on dfx will fail.
 
 ### Generating CLI Documentation
 

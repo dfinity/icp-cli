@@ -10,7 +10,7 @@ mod common;
 
 #[test]
 fn sync_adapter_script_single() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -66,7 +66,7 @@ fn sync_adapter_script_single() {
 
 #[test]
 fn sync_adapter_script_multiple() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -124,7 +124,7 @@ fn sync_adapter_script_multiple() {
 
 #[tokio::test]
 async fn sync_adapter_static_assets() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");

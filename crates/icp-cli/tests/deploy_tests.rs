@@ -61,7 +61,7 @@ fn deploy_canister_not_found() {
 
 #[test]
 fn deploy() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -113,7 +113,7 @@ fn deploy() {
 
 #[test]
 fn deploy_twice_should_succeed() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");

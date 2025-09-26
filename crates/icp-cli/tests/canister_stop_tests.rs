@@ -9,7 +9,7 @@ mod common;
 
 #[test]
 fn canister_stop() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");

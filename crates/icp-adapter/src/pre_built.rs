@@ -2,8 +2,10 @@ use std::{fmt, str::FromStr};
 
 use crate::build::{Adapter, AdapterCompileError};
 use async_trait::async_trait;
-use icp::prelude::*;
-use icp_fs::fs::{ReadFileError, WriteFileError, read, write};
+use icp::{
+    fs::{read, write},
+    prelude::*,
+};
 use reqwest::{Client, Method, Request, StatusCode, Url};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -68,7 +70,7 @@ impl Adapter for PrebuiltAdapter {
     ) -> Result<(), AdapterCompileError> {
         let wasm = match &self.source {
             // Local path
-            SourceField::Local(s) => read(canister_path.join(&s.path))
+            SourceField::Local(s) => read(&canister_path.join(&s.path))
                 .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?,
 
             // Remote url
@@ -133,7 +135,7 @@ impl Adapter for PrebuiltAdapter {
         // Set WASM file
         write(
             wasm_output_path, // path
-            wasm,             // contents
+            &wasm,            // contents
         )
         .map_err(|err| PrebuiltAdapterCompileError::WriteFile { source: err })?;
 
@@ -143,8 +145,8 @@ impl Adapter for PrebuiltAdapter {
 
 #[derive(Debug, Snafu)]
 pub enum PrebuiltAdapterCompileError {
-    #[snafu(transparent)]
-    ReadFile { source: ReadFileError },
+    #[snafu(display("failed to read file"))]
+    ReadFile { source: icp::fs::Error },
 
     #[snafu(transparent)]
     Url { source: url::ParseError },
@@ -164,6 +166,6 @@ pub enum PrebuiltAdapterCompileError {
     ))]
     Checksum { expected: String, actual: String },
 
-    #[snafu(transparent)]
-    WriteFile { source: WriteFileError },
+    #[snafu(display("failed to write file"))]
+    WriteFile { source: icp::fs::Error },
 }

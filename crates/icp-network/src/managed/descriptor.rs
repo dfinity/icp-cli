@@ -4,9 +4,8 @@ use std::{
 };
 
 use fd_lock::RwLockWriteGuard;
-use icp::prelude::*;
+use icp::{fs::remove_file, prelude::*};
 use icp_fs::{
-    fs::remove_file,
     lock::{AcquireWriteLockError, RwFileLock},
     lockedjson::load_json_with_lock,
 };

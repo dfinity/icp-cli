@@ -10,9 +10,8 @@ use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
-use icp::prelude::*;
+use icp::{fs, prelude::*};
 use icp_dirs::IcpCliDirs;
-use icp_fs::fs;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -49,7 +48,7 @@ pub fn load_identity(
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: fs::ReadToStringError },
+    ReadFileError { source: icp::fs::Error },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
     ParsePemError {
@@ -207,18 +206,18 @@ pub enum CreateIdentityError {
 }
 
 fn write_identity(dirs: &IcpCliDirs, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
-    let pem_path = ensure_key_pem_path(dirs, name)?;
-    fs::write(&pem_path, pem.as_bytes())?;
+    let pem_path = ensure_key_pem_path(dirs, name).context(WriteFileSnafu)?;
+    fs::write_string(&pem_path, pem).context(WriteFileSnafu)?;
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
-    #[snafu(transparent)]
-    WriteFileError { source: fs::WriteFileError },
+    #[snafu(display("failed to write file"))]
+    WriteFileError { source: icp::fs::Error },
 
-    #[snafu(transparent)]
-    CreateDirectoryError { source: fs::CreateDirAllError },
+    #[snafu(display("failed to create directory"))]
+    CreateDirectoryError { source: icp::fs::Error },
 }
 
 fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {

@@ -1,8 +1,9 @@
 use std::{collections::HashMap, str::FromStr, string::FromUtf8Error};
 
 use async_trait::async_trait;
-use handlebars::*;
-use icp_fs::fs::{ReadFileError, read};
+use handlebars::{Context, Helper, HelperDef, HelperResult, Output};
+// use handlebars::*;
+use icp::{fs::read, prelude::*};
 use reqwest::{Method, Request, Url};
 use snafu::Snafu;
 use url::ParseError;
@@ -23,7 +24,7 @@ pub struct Handlebars {
 
 pub enum TemplateSource {
     BuiltIn(String),
-    LocalPath(String),
+    LocalPath(PathBuf),
     RemoteUrl(String),
 
     /// Template originating in a remote registry, e.g `@dfinity/rust@v1.0.2`
@@ -36,7 +37,7 @@ pub enum HandlebarsError {
     Unknown { recipe: String },
 
     #[snafu(display("failed to read local recipe template file"))]
-    ReadFile { source: ReadFileError },
+    ReadFile { source: icp::fs::Error },
 
     #[snafu(display("failed to decode UTF-8 string"))]
     DecodeUtf8 { source: FromUtf8Error },
@@ -86,8 +87,9 @@ impl Resolve for Handlebars {
             if recipe_type.starts_with("file://") {
                 let path = recipe_type
                     .strip_prefix("file://")
+                    .map(Path::new)
                     .expect("prefix missing")
-                    .to_owned();
+                    .into();
 
                 return TemplateSource::LocalPath(path);
             }
@@ -160,7 +162,7 @@ impl Resolve for Handlebars {
 
             // Attempt to load template from local file-system
             TemplateSource::LocalPath(path) => {
-                let bs = read(path).map_err(|err| ResolveError::Handlebars {
+                let bs = read(&path).map_err(|err| ResolveError::Handlebars {
                     source: HandlebarsError::ReadFile { source: err },
                 })?;
 

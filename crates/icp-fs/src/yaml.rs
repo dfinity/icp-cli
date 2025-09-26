@@ -1,7 +1,7 @@
 use icp::prelude::*;
 use snafu::prelude::*;
 
-use crate::fs::{ReadFileError, read};
+use icp::fs::read;
 
 #[derive(Snafu, Debug)]
 pub enum LoadYamlFileError {
@@ -12,7 +12,7 @@ pub enum LoadYamlFileError {
     },
 
     #[snafu(transparent)]
-    Read { source: ReadFileError },
+    Read { source: icp::fs::Error },
 }
 
 pub fn load_yaml_file<T: for<'a> serde::de::Deserialize<'a>>(

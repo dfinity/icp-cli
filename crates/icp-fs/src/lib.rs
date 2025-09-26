@@ -1,4 +1,3 @@
-pub mod fs;
 pub mod json;
 pub mod lock;
 pub mod lockedjson;

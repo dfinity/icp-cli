@@ -1,6 +1,5 @@
-use icp::prelude::*;
+use icp::{fs::create_dir_all, prelude::*};
 use icp_fs::{
-    fs::{CreateDirAllError, create_dir_all},
     lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
     lockedjson::{LoadJsonWithLockError, load_json_with_lock},
 };
@@ -37,7 +36,7 @@ impl NetworkDirectory {
         &self.structure
     }
 
-    pub fn ensure_exists(&self) -> Result<(), CreateDirAllError> {
+    pub fn ensure_exists(&self) -> Result<(), icp::fs::Error> {
         create_dir_all(&self.structure.network_root)?;
         create_dir_all(&self.structure.port_descriptor_dir)
     }

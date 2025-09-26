@@ -2443,6 +2443,8 @@ name = "icp"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "serde",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -2475,8 +2477,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "handlebars 6.3.2",
+ "icp",
  "icp-adapter",
- "icp-fs",
  "mockall",
  "reqwest",
  "schemars",

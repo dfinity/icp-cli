@@ -2,7 +2,7 @@ use icp::prelude::*;
 use serde::Serialize;
 use snafu::prelude::*;
 
-use crate::fs::{ReadFileError, WriteFileError, read};
+use icp::fs::read;
 
 #[derive(Snafu, Debug)]
 pub enum LoadJsonFileError {
@@ -13,7 +13,7 @@ pub enum LoadJsonFileError {
     },
 
     #[snafu(transparent)]
-    Read { source: ReadFileError },
+    Read { source: icp::fs::Error },
 }
 
 pub fn load_json_file<T: for<'a> serde::de::Deserialize<'a>>(
@@ -34,7 +34,7 @@ pub enum SaveJsonFileError {
     },
 
     #[snafu(transparent)]
-    Write { source: WriteFileError },
+    Write { source: icp::fs::Error },
 }
 
 pub fn save_json_file<T: Serialize>(
@@ -43,6 +43,6 @@ pub fn save_json_file<T: Serialize>(
 ) -> Result<(), SaveJsonFileError> {
     let path = path.as_ref();
     let content = serde_json::to_string_pretty(&value).context(SerializeSnafu { path })?;
-    crate::fs::write(path, content)?;
+    icp::fs::write_string(path, &content)?;
     Ok(())
 }

@@ -1,13 +1,10 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
-use icp::prelude::*;
-use icp_fs::{
-    fs::{
-        CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
-        remove_file,
-    },
-    lock::OpenFileForWriteLockError,
+use icp::{
+    fs::{create_dir_all, remove_dir_all, remove_file},
+    prelude::*,
 };
+use icp_fs::lock::OpenFileForWriteLockError;
 use pocket_ic::common::rest::HttpGatewayBackend;
 use reqwest::Url;
 use snafu::prelude::*;
@@ -67,7 +64,7 @@ pub enum RunNetworkError {
     },
 
     #[snafu(transparent)]
-    CreateDirFailed { source: CreateDirAllError },
+    CreateDirFailed { source: icp::fs::Error },
 
     #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
     NoPocketIcPath,
@@ -88,16 +85,16 @@ async fn run_pocketic(
     let nds = nd.structure();
     eprintln!("PocketIC path: {pocketic_path}");
 
-    create_dir_all(nds.pocketic_dir())?;
+    create_dir_all(&nds.pocketic_dir()).context(CreateDirAllSnafu)?;
     let port_file = nds.pocketic_port_file();
     if port_file.exists() {
-        remove_file(&port_file)?;
+        remove_file(&port_file).context(RemoveDirAllSnafu)?;
     }
     eprintln!("Port file: {port_file}");
     if nds.state_dir().exists() {
-        remove_dir_all(nds.state_dir())?;
+        remove_dir_all(&nds.state_dir()).context(RemoveDirAllSnafu)?;
     }
-    create_dir_all(nds.state_dir())?;
+    create_dir_all(&nds.state_dir()).context(CreateDirAllSnafu)?;
     let mut child = spawn_pocketic(pocketic_path, &port_file);
 
     let result = async {
@@ -139,14 +136,14 @@ async fn run_pocketic(
 
 #[derive(Debug, Snafu)]
 pub enum RunPocketIcError {
-    #[snafu(transparent)]
-    CreateDirAll { source: CreateDirAllError },
+    #[snafu(display("failed to create dir"))]
+    CreateDirAll { source: icp::fs::Error },
 
-    #[snafu(transparent)]
-    RemoveDirAll { source: RemoveDirAllError },
+    #[snafu(display("failed to remove dir"))]
+    RemoveDirAll { source: icp::fs::Error },
 
-    #[snafu(transparent)]
-    RemoveFile { source: RemoveFileError },
+    #[snafu(display("failed to remove file"))]
+    RemoveFile { source: icp::fs::Error },
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },

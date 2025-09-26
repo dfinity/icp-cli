@@ -5,10 +5,7 @@ use crate::paths::{
 use ic_agent::export::Principal;
 use icp::prelude::*;
 use icp_dirs::IcpCliDirs;
-use icp_fs::{
-    fs,
-    json::{self, LoadJsonFileError},
-};
+use icp_fs::json::{self, LoadJsonFileError};
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
@@ -38,16 +35,14 @@ pub enum WriteIdentityManifestError {
     WriteJsonError { source: json::SaveJsonFileError },
 
     #[snafu(transparent)]
-    CreateDirectoryError { source: fs::CreateDirAllError },
+    CreateDirectoryError { source: icp::fs::Error },
 }
 
 pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityManifestError> {
     let id_list_file = identity_list_path(dirs);
     let list = match json::load_json_file(&id_list_file) {
         Ok(id_list) => id_list,
-        Err(LoadJsonFileError::Read { source, .. })
-            if source.source.kind() == ErrorKind::NotFound =>
-        {
+        Err(LoadJsonFileError::Read { source, .. }) if source.kind() == ErrorKind::NotFound => {
             IdentityList::default()
         }
         Err(e) => {
@@ -78,9 +73,7 @@ pub fn load_identity_defaults(
     let id_defaults_path = identity_defaults_path(dirs);
     let defaults = match json::load_json_file(&id_defaults_path) {
         Ok(id_defaults) => id_defaults,
-        Err(LoadJsonFileError::Read { source, .. })
-            if source.source.kind() == ErrorKind::NotFound =>
-        {
+        Err(LoadJsonFileError::Read { source, .. }) if source.kind() == ErrorKind::NotFound => {
             IdentityDefaults::default()
         }
         Err(e) => return Err(e.into()),

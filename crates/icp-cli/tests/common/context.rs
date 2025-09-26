@@ -10,15 +10,13 @@ use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use icp::prelude::*;
 use icp_network::NETWORK_LOCAL;
 use pocket_ic::nonblocking::PocketIc;
-use serde_json::{Value, json};
 use url::Url;
 
-use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, TestNetworkForDfx};
+use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork};
 pub struct TestContext {
     home_dir: TempDir,
     bin_dir: PathBuf,
     asset_dir: PathBuf,
-    dfx_path: Option<PathBuf>,
     os_path: OsString,
     pocketic: RefCell<Option<PocketIc>>,
 }
@@ -45,38 +43,9 @@ impl TestContext {
             home_dir,
             bin_dir,
             asset_dir,
-            dfx_path: None,
             os_path,
             pocketic: RefCell::new(None),
         }
-    }
-
-    /// Sets up `dfx` in the test environment by copying the binary from $ICPTEST_DFX_PATH
-    pub fn with_dfx(mut self) -> Self {
-        let dfx_path = std::env::var("ICPTEST_DFX_PATH")
-            .expect("ICPTEST_DFX_PATH must be set to use with_dfx()");
-
-        let src = PathBuf::from(dfx_path);
-        assert!(
-            src.exists(),
-            "ICPTEST_DFX_PATH points to non-existent file: {src}",
-        );
-
-        let dest = self.bin_dir.join("dfx");
-        fs::copy(&src, &dest).unwrap_or_else(|e| panic!("Failed to copy dfx to test bin dir: {e}"));
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dest)
-                .unwrap_or_else(|e| panic!("Failed to read metadata for {dest}: {e}"))
-                .permissions();
-            perms.set_mode(0o500);
-            fs::set_permissions(&dest, perms).unwrap();
-        }
-
-        self.dfx_path = Some(dest);
-        self
     }
 
     pub fn home_path(&self) -> &Path {
@@ -85,16 +54,6 @@ impl TestContext {
 
     pub fn icp(&self) -> Command {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
-        self.isolate(&mut cmd);
-        cmd
-    }
-
-    pub fn dfx(&self) -> Command {
-        let dfx_path = self
-            .dfx_path
-            .as_ref()
-            .expect("dfx not configured in test env — call with_dfx() first");
-        let mut cmd = Command::new(dfx_path);
         self.isolate(&mut cmd);
         cmd
     }
@@ -112,52 +71,6 @@ impl TestContext {
         new_path.push(PATH_SEPARATOR);
         new_path.push(&old_path);
         new_path
-    }
-
-    pub fn configure_dfx_local_network(&self) {
-        let dfx_config_dir = self.home_path().join(".config").join("dfx");
-        create_dir_all(&dfx_config_dir).expect("create .config directory");
-        let networks_json_path = dfx_config_dir.join("networks.json");
-
-        let bind_address = "127.0.0.1:8000";
-        let networks = format!(r#"{{"local": {{"bind": "{}"}}}}"#, bind_address);
-        fs::write(&networks_json_path, networks).unwrap();
-    }
-
-    pub fn configure_dfx_network(
-        &self,
-        icp_project_dir: &Path,
-        network_name: &str,
-    ) -> TestNetworkForDfx {
-        let test_network = self.wait_for_network_descriptor(icp_project_dir, network_name);
-
-        let dfx_network_name = format!("{}-{}", icp_project_dir.file_name().unwrap(), network_name);
-        let gateway_port = test_network.gateway_port;
-
-        let dfx_config_dir = self.home_path().join(".config").join("dfx");
-        create_dir_all(&dfx_config_dir).expect("create .config directory");
-        let networks_json_path = dfx_config_dir.join("networks.json");
-
-        // Build the bind address
-        let bind_address = format!("127.0.0.1:{gateway_port}");
-
-        // Create the inner object
-        let network_entry = json!({
-            "bind": bind_address,
-        });
-
-        // Construct the outer object dynamically
-        let mut root = serde_json::Map::new();
-        root.insert(dfx_network_name.to_string(), network_entry);
-
-        let networks = serde_json::to_string_pretty(&Value::Object(root)).unwrap();
-
-        eprintln!("Configuring dfx network: {}", networks);
-        fs::write(&networks_json_path, networks).unwrap();
-        TestNetworkForDfx {
-            dfx_network_name,
-            gateway_port,
-        }
     }
 
     pub fn pkg_dir(&self) -> PathBuf {

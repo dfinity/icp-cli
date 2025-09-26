@@ -10,7 +10,7 @@ mod common;
 
 #[test]
 fn canister_create() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -53,7 +53,7 @@ fn canister_create() {
 
 #[test]
 fn canister_create_with_settings() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -126,7 +126,7 @@ fn canister_create_with_settings() {
 
 #[test]
 fn canister_create_with_settings_cmdline_override() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");

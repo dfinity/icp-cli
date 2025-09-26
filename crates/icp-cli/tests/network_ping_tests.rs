@@ -138,7 +138,7 @@ fn attempt_ping_other_project() {
 
 #[test]
 fn ping_not_running() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     let icp_project_dir = ctx.create_project_dir("icp");
 

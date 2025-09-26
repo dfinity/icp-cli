@@ -4,11 +4,11 @@ use std::{
 };
 
 use fd_lock::RwLockWriteGuard;
-use icp::{fs::remove_file, prelude::*};
-use icp_fs::{
-    lock::{AcquireWriteLockError, RwFileLock},
-    lockedjson::load_json_with_lock,
+use icp::{
+    fs::{json, remove_file},
+    prelude::*,
 };
+use icp_fs::lock::{AcquireWriteLockError, RwFileLock};
 use snafu::prelude::*;
 
 use crate::{NetworkDirectory, config::NetworkDescriptorModel};
@@ -93,7 +93,7 @@ impl FixedPortLock {
         let lock_path = self.file_lock.path().to_path_buf();
 
         let guard = self.file_lock.rwlock_mut().try_write().map_err(|_| {
-            let network_descriptor = load_json_with_lock(&self.port_descriptor_path)
+            let network_descriptor = json::load(&self.port_descriptor_path)
                 .ok()
                 .flatten()
                 .map(Box::new);

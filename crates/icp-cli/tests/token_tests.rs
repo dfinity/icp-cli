@@ -14,7 +14,7 @@ async fn token_balance() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                           // contents
+        "",                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -60,7 +60,7 @@ async fn token_transfer() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                           // contents
+        "",                            // contents
     )
     .expect("failed to write project manifest");
 

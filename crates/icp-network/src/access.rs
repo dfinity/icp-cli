@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ic_agent::{Agent, AgentError, Identity, export::Principal};
+use icp::fs::json;
 use icp::prelude::*;
-use icp_fs::lockedjson::LoadJsonWithLockError;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::access::GetNetworkAccessError::DecodeRootKey;
@@ -137,13 +137,10 @@ pub enum GetNetworkAccessError {
     DecodeRootKey { source: hex::FromHexError },
 
     #[snafu(transparent)]
-    LoadJsonWithLock { source: LoadJsonWithLockError },
+    LoadJsonWithLock { source: json::Error },
 
     #[snafu(display("failed to load port {port} descriptor"))]
-    LoadPortDescriptor {
-        port: u16,
-        source: LoadJsonWithLockError,
-    },
+    LoadPortDescriptor { port: u16, source: json::Error },
 
     #[snafu(display("the {network} network for this project is not running"))]
     NetworkNotRunning { network: String },

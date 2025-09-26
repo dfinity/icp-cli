@@ -1,8 +1,10 @@
-use icp::{fs::create_dir_all, prelude::*};
-use icp_fs::{
-    lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
-    lockedjson::{LoadJsonWithLockError, load_json_with_lock},
+use std::io::ErrorKind;
+
+use icp::{
+    fs::{create_dir_all, json},
+    prelude::*,
 };
+use icp_fs::lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock};
 use snafu::prelude::*;
 
 use crate::{
@@ -41,17 +43,27 @@ impl NetworkDirectory {
         create_dir_all(&self.structure.port_descriptor_dir)
     }
 
-    pub fn load_network_descriptor(
-        &self,
-    ) -> Result<Option<NetworkDescriptorModel>, LoadJsonWithLockError> {
-        load_json_with_lock(self.structure.network_descriptor_path())
+    pub fn load_network_descriptor(&self) -> Result<Option<NetworkDescriptorModel>, json::Error> {
+        json::load(&self.structure.network_descriptor_path()).or_else(|err| match err {
+            // Default to empty
+            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+
+            // Other
+            _ => Err(err),
+        })
     }
 
     pub fn load_port_descriptor(
         &self,
         port: u16,
-    ) -> Result<Option<NetworkDescriptorModel>, LoadJsonWithLockError> {
-        load_json_with_lock(self.structure.port_descriptor_path(port))
+    ) -> Result<Option<NetworkDescriptorModel>, json::Error> {
+        json::load(&self.structure.port_descriptor_path(port)).or_else(|err| match err {
+            // Default to empty
+            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+
+            // Other
+            _ => Err(err),
+        })
     }
 
     pub fn open_network_lock_file(&self) -> Result<NetworkLock, OpenFileForWriteLockError> {

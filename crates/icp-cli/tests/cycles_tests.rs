@@ -14,7 +14,7 @@ async fn cycles_balance() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                           // contents
+        "",                            // contents
     )
     .expect("failed to write project manifest");
 

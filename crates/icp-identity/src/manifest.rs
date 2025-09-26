@@ -39,19 +39,22 @@ pub enum WriteIdentityManifestError {
 
 pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityManifestError> {
     let id_list_file = identity_list_path(dirs);
-    let list = match json::load(&id_list_file) {
-        Ok(id_list) => id_list,
-        Err(json::Error::Io(err)) if err.kind() == ErrorKind::NotFound => IdentityList::default(),
-        Err(e) => {
-            return Err(e.into());
-        }
-    };
+
+    let list = json::load(&id_list_file).or_else(|err| match err {
+        // Default fallback
+        json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(IdentityList::default()),
+
+        // Other
+        _ => Err(err),
+    })?;
+
     ensure!(
         list.v == 1,
         BadVersionSnafu {
             path: &id_list_file
         }
     );
+
     Ok(list)
 }
 
@@ -68,19 +71,24 @@ pub fn load_identity_defaults(
     dirs: &IcpCliDirs,
 ) -> Result<IdentityDefaults, LoadIdentityManifestError> {
     let id_defaults_path = identity_defaults_path(dirs);
-    let defaults = match json::load(&id_defaults_path) {
-        Ok(id_defaults) => id_defaults,
-        Err(json::Error::Io(err)) if err.kind() == ErrorKind::NotFound => {
-            IdentityDefaults::default()
+
+    let defaults = json::load(&id_defaults_path).or_else(|err| match err {
+        // Default fallback
+        json::Error::Io(err) if err.kind() == ErrorKind::NotFound => {
+            Ok(IdentityDefaults::default())
         }
-        Err(e) => return Err(e.into()),
-    };
+
+        // Other
+        _ => Err(err),
+    })?;
+
     ensure!(
         defaults.v == 1,
         BadVersionSnafu {
             path: &id_defaults_path
         }
     );
+
     Ok(defaults)
 }
 

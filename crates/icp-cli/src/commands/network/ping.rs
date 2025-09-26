@@ -22,11 +22,12 @@ pub struct Cmd {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    ctx.require_identity(Some("anonymous"));
     let network = cmd
         .positional_network_name
         .unwrap_or(cmd.network.name().to_string());
+
     ctx.require_network(&network);
+    ctx.require_identity(Some("anonymous"));
 
     let agent = ctx.agent()?;
 

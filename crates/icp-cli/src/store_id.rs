@@ -1,6 +1,7 @@
+use std::io::ErrorKind;
+
 use ic_agent::export::Principal;
-use icp::prelude::*;
-use icp_fs::lockedjson;
+use icp::{fs::json, prelude::*};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
@@ -24,9 +25,7 @@ struct Association(Key, Principal);
 #[derive(Debug, Snafu)]
 pub enum RegisterError {
     #[snafu(display("failed to load canister id store"))]
-    RegisterLoadStore {
-        source: lockedjson::LoadJsonWithLockError,
-    },
+    RegisterLoadStore { source: json::Error },
 
     #[snafu(display(
         "canister '{}' in environment '{}', associated with network '{}' is already registered with id '{id}'",
@@ -35,17 +34,13 @@ pub enum RegisterError {
     AlreadyRegistered { key: Key, id: Principal },
 
     #[snafu(display("failed to save canister id store"))]
-    RegisterSaveStore {
-        source: lockedjson::SaveJsonWithLockError,
-    },
+    RegisterSaveStore { source: json::Error },
 }
 
 #[derive(Debug, Snafu)]
 pub enum LookupError {
     #[snafu(display("failed to load canister id store"))]
-    LookupLoadStore {
-        source: lockedjson::LoadJsonWithLockError,
-    },
+    LookupLoadStore { source: json::Error },
 
     #[snafu(display(
         "could not find ID for canister '{}' in environment '{}', associated with network '{}'",
@@ -68,9 +63,15 @@ impl IdStore {
 impl IdStore {
     pub fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Load JSON
-        let mut cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
-            .context(RegisterLoadStoreSnafu)?
-            .unwrap_or_default();
+        let mut cs = json::load::<Vec<Association>>(&self.0)
+            .or_else(|err| match err {
+                // Default to empty
+                json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),
+
+                // Other
+                _ => Err(err),
+            })
+            .context(RegisterLoadStoreSnafu)?;
 
         // Check for existence
         for Association(k, cid) in cs.iter() {
@@ -86,16 +87,22 @@ impl IdStore {
         cs.push(Association(key.to_owned(), cid.to_owned()));
 
         // Store JSON
-        lockedjson::save_json_with_lock(&self.0, &cs).context(RegisterSaveStoreSnafu)?;
+        json::save(&self.0, &cs).context(RegisterSaveStoreSnafu)?;
 
         Ok(())
     }
 
     pub fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Load JSON
-        let cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
-            .context(LookupLoadStoreSnafu)?
-            .unwrap_or_default();
+        let cs = json::load::<Vec<Association>>(&self.0)
+            .or_else(|err| match err {
+                // Default to empty
+                json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),
+
+                // Other
+                _ => Err(err),
+            })
+            .context(LookupLoadStoreSnafu)?;
 
         // Search for association
         for Association(k, cid) in cs {
@@ -114,9 +121,16 @@ impl IdStore {
         &self,
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {
-        let cs: Vec<Association> = lockedjson::load_json_with_lock(&self.0)
-            .context(LookupLoadStoreSnafu)?
-            .unwrap_or_default();
+        // Load JSON
+        let cs = json::load::<Vec<Association>>(&self.0)
+            .or_else(|err| match err {
+                // Default to empty
+                json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),
+
+                // Other
+                _ => Err(err),
+            })
+            .context(LookupLoadStoreSnafu)?;
 
         let filtered_associations: Vec<(String, Principal)> = cs
             .into_iter()

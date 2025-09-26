@@ -1,4 +1,5 @@
 use clap::Parser;
+use icp_identity::manifest::load_identity_list;
 use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
 use icp_project::NoSuchNetworkError;
 use snafu::Snafu;
@@ -16,6 +17,8 @@ pub struct Cmd {
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
     let project = ctx.project()?;
+    let dirs = ctx.dirs();
+    let identities = load_identity_list(dirs)?;
 
     // Obtain network configuration
     let cfg = match project.get_network_config(&cmd.name)? {
@@ -39,6 +42,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         ctx.dirs().port_descriptor_dir(), // port_descriptor
     );
 
+    // Determine ICP accounts to seed
+    let seed_accounts = identities.identities.values().map(|id| id.principal());
+
     eprintln!("Project root: {}", pd.structure().root());
     eprintln!("Network root: {}", nd.structure().network_root);
 
@@ -46,6 +52,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         cfg,                   // config
         nd,                    // nd
         pd.structure().root(), // project_root
+        seed_accounts,         // seed_accounts
     )
     .await?;
 
@@ -56,6 +63,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 pub enum CommandError {
     #[snafu(transparent)]
     GetProject { source: ContextProjectError },
+
+    #[snafu(transparent)]
+    LoadIdentity {
+        source: icp_identity::manifest::LoadIdentityManifestError,
+    },
 
     #[snafu(transparent)]
     NoSuchNetwork { source: NoSuchNetworkError },

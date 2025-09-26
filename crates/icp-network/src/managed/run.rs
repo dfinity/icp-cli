@@ -1,6 +1,8 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use candid::{Encode, Nat, Principal};
+use futures::future::join_all;
 use icp_fs::{
     fs::{
         CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
@@ -8,7 +10,8 @@ use icp_fs::{
     },
     lock::OpenFileForWriteLockError,
 };
-use pocket_ic::common::rest::HttpGatewayBackend;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use pocket_ic::{common::rest::HttpGatewayBackend, nonblocking::PocketIc};
 use reqwest::Url;
 use snafu::prelude::*;
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
@@ -30,10 +33,14 @@ use crate::{
     status,
 };
 
+/// ICP ledger on mainnet
+pub const ICP_LEDGER_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+
 pub async fn run_network(
     config: &ManagedNetworkModel,
     nd: NetworkDirectory,
     project_root: &Utf8Path,
+    seed_accounts: impl Iterator<Item = Principal>,
 ) -> Result<(), RunNetworkError> {
     let pocketic_path = Utf8PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
 
@@ -50,7 +57,7 @@ pub async fn run_network(
         _port_claim = Some(port_lock.as_mut().unwrap().try_acquire()?);
     }
 
-    run_pocketic(&pocketic_path, config, &nd, project_root).await?;
+    run_pocketic(&pocketic_path, config, &nd, project_root, seed_accounts).await?;
     Ok(())
 }
 
@@ -84,6 +91,7 @@ async fn run_pocketic(
     config: &ManagedNetworkModel,
     nd: &NetworkDirectory,
     project_root: &Utf8Path,
+    seed_accounts: impl Iterator<Item = Principal>,
 ) -> Result<(), RunPocketIcError> {
     let nds = nd.structure();
     eprintln!("PocketIC path: {pocketic_path}");
@@ -103,8 +111,13 @@ async fn run_pocketic(
     let result = async {
         let pocketic_port = wait_for_port(&port_file, &mut child).await?;
         eprintln!("PocketIC started on port {pocketic_port}");
-        let instance =
-            initialize_pocketic(pocketic_port, &config.gateway.port, &nds.state_dir()).await?;
+        let instance = initialize_pocketic(
+            pocketic_port,
+            &config.gateway.port,
+            &nds.state_dir(),
+            seed_accounts,
+        )
+        .await?;
 
         let gateway = NetworkDescriptorGatewayPort {
             port: instance.gateway_port,
@@ -237,12 +250,12 @@ async fn initialize_pocketic(
     pocketic_port: u16,
     gateway_bind_port: &BindPort,
     state_dir: &Utf8Path,
+    seed_accounts: impl Iterator<Item = Principal>,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
-    let pic = PocketIcAdminInterface::new(
-        format!("http://localhost:{pocketic_port}")
-            .parse::<Url>()
-            .unwrap(),
-    );
+    let pic_url = format!("http://localhost:{pocketic_port}")
+        .parse::<Url>()
+        .unwrap();
+    let pic = PocketIcAdminInterface::new(pic_url.clone());
 
     eprintln!("Initializing PocketIC instance");
 
@@ -257,6 +270,29 @@ async fn initialize_pocketic(
     eprintln!("Set auto-progress");
     let artificial_delay = 600;
     pic.auto_progress(instance_id, artificial_delay).await?;
+
+    eprintln!("Seeding ICP account balances...");
+    let pocket_ic_client = PocketIc::new_from_existing_instance(pic_url, instance_id, None);
+    join_all(seed_accounts.map(|account| {
+        pocket_ic_client.update_call(
+            Principal::from_text(ICP_LEDGER_CID).unwrap(),
+            Principal::anonymous(),
+            "icrc1_transfer",
+            Encode!(&TransferArg {
+                to: Account {
+                    owner: account,
+                    subaccount: None,
+                },
+                from_subaccount: None,
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(100_000_000_000_000u64),
+            })
+            .expect("Failed to encode transfer arg"),
+        )
+    }))
+    .await;
 
     let gateway_port = match gateway_bind_port {
         BindPort::Fixed(port) => Some(*port),

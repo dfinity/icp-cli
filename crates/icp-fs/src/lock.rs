@@ -1,16 +1,16 @@
-use camino::{Utf8Path, Utf8PathBuf};
 use fd_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use icp::prelude::*;
 use snafu::prelude::*;
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 
 pub struct RwFileLock {
     lock: RwLock<File>,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 impl RwFileLock {
-    pub fn new(file: File, path: &Utf8Path) -> Self {
+    pub fn new(file: File, path: &Path) -> Self {
         Self {
             lock: RwLock::new(file),
             path: path.to_path_buf(),
@@ -21,11 +21,11 @@ impl RwFileLock {
         &mut self.lock
     }
 
-    pub fn path(&self) -> &Utf8Path {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn open_for_read(path: impl AsRef<Utf8Path>) -> Result<Self, OpenFileForReadLockError> {
+    pub fn open_for_read(path: impl AsRef<Path>) -> Result<Self, OpenFileForReadLockError> {
         let path = path.as_ref();
         let file = OpenOptions::new()
             .read(true)
@@ -40,7 +40,7 @@ impl RwFileLock {
         })
     }
 
-    pub fn read(path: impl AsRef<Utf8Path>) -> Result<Vec<u8>, ReadWithLockError> {
+    pub fn read(path: impl AsRef<Path>) -> Result<Vec<u8>, ReadWithLockError> {
         let path = path.as_ref();
         let mut lock = Self::open_for_read(path)?;
         let guard = lock.acquire_read_lock()?;
@@ -53,7 +53,7 @@ impl RwFileLock {
         Ok(buf)
     }
 
-    pub fn open_for_write(path: impl AsRef<Utf8Path>) -> Result<Self, OpenFileForWriteLockError> {
+    pub fn open_for_write(path: impl AsRef<Path>) -> Result<Self, OpenFileForWriteLockError> {
         let path = path.as_ref();
         let file = OpenOptions::new()
             .create(true)
@@ -78,28 +78,28 @@ impl RwFileLock {
 #[snafu(display("failed to open file for read lock at {path}"))]
 pub struct OpenFileForReadLockError {
     source: std::io::Error,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 #[derive(Debug, Snafu)]
 #[snafu(display("failed to open file for write lock at {path}"))]
 pub struct OpenFileForWriteLockError {
     source: std::io::Error,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 #[derive(Debug, Snafu)]
 #[snafu(display("failed to acquire read lock on {path}"))]
 pub struct AcquireReadLockError {
     source: std::io::Error,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 #[derive(Debug, Snafu)]
 #[snafu(display("failed to acquire write lock on {path}"))]
 pub struct AcquireWriteLockError {
     source: std::io::Error,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 #[derive(Debug, Snafu)]
@@ -113,6 +113,6 @@ pub enum ReadWithLockError {
     #[snafu(display("failed to read file at {path}"))]
     ReadFile {
         source: std::io::Error,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 }

@@ -1,5 +1,5 @@
 use crate::common::TestContext;
-use camino_tempfile::NamedUtf8TempFile;
+use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp_fs::fs::write;
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -59,7 +59,7 @@ fn canister_create_with_settings() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(
@@ -132,7 +132,7 @@ fn canister_create_with_settings_cmdline_override() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(

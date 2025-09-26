@@ -1,13 +1,14 @@
-use crate::fs::{ReadFileError, WriteFileError, read};
-use camino::{Utf8Path, Utf8PathBuf};
+use icp::prelude::*;
 use serde::Serialize;
 use snafu::prelude::*;
+
+use crate::fs::{ReadFileError, WriteFileError, read};
 
 #[derive(Snafu, Debug)]
 pub enum LoadJsonFileError {
     #[snafu(display("failed to parse {path} as json"))]
     Parse {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: serde_json::Error,
     },
 
@@ -16,7 +17,7 @@ pub enum LoadJsonFileError {
 }
 
 pub fn load_json_file<T: for<'a> serde::de::Deserialize<'a>>(
-    path: impl AsRef<Utf8Path>,
+    path: impl AsRef<Path>,
 ) -> Result<T, LoadJsonFileError> {
     let path = path.as_ref();
     let content = read(path)?;
@@ -28,7 +29,7 @@ pub fn load_json_file<T: for<'a> serde::de::Deserialize<'a>>(
 pub enum SaveJsonFileError {
     #[snafu(display("failed to serialize json for {path}"))]
     Serialize {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: serde_json::Error,
     },
 
@@ -37,7 +38,7 @@ pub enum SaveJsonFileError {
 }
 
 pub fn save_json_file<T: Serialize>(
-    path: impl AsRef<Utf8Path>,
+    path: impl AsRef<Path>,
     value: &T,
 ) -> Result<(), SaveJsonFileError> {
     let path = path.as_ref();

@@ -1,5 +1,5 @@
 use crate::common::TestContext;
-use camino_tempfile::NamedUtf8TempFile;
+use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp_fs::fs::write;
 
 mod common;
@@ -12,7 +12,7 @@ fn build_adapter_script_single() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(
@@ -49,7 +49,7 @@ fn build_adapter_script_multiple() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(

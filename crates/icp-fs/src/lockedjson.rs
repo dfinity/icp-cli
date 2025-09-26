@@ -1,13 +1,13 @@
 use crate::lock::{
     AcquireWriteLockError, OpenFileForWriteLockError, ReadWithLockError, RwFileLock,
 };
-use camino::{Utf8Path, Utf8PathBuf};
+use icp::prelude::*;
 use serde::ser::Serialize;
 use snafu::{ResultExt, Snafu};
 use std::io::Write;
 
 pub fn load_json_with_lock<T: serde::de::DeserializeOwned>(
-    path: impl AsRef<Utf8Path>,
+    path: impl AsRef<Path>,
 ) -> Result<Option<T>, LoadJsonWithLockError> {
     let path = path.as_ref();
 
@@ -33,7 +33,7 @@ pub enum LoadJsonWithLockError {
     #[snafu(display("failed to parse {path} as json"))]
     Parse {
         source: serde_json::Error,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 
     #[snafu(transparent)]
@@ -41,7 +41,7 @@ pub enum LoadJsonWithLockError {
 }
 
 pub fn save_json_with_lock<T: Serialize>(
-    path: impl AsRef<Utf8Path>,
+    path: impl AsRef<Path>,
     data: &T,
 ) -> Result<(), SaveJsonWithLockError> {
     let path = path.as_ref();
@@ -70,12 +70,12 @@ pub enum SaveJsonWithLockError {
     #[snafu(display("failed to truncate file at {path}"))]
     Truncate {
         source: std::io::Error,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 
     #[snafu(display("failed to write to file at {path}"))]
     Write {
         source: std::io::Error,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 }

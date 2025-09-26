@@ -2439,17 +2439,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp"
+version = "0.1.0"
+dependencies = [
+ "camino",
+]
+
+[[package]]
 name = "icp-adapter"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "camino",
  "camino-tempfile",
  "dunce",
  "hex",
  "ic-agent",
  "ic-asset",
  "ic-utils",
+ "icp",
  "icp-fs",
  "reqwest",
  "schemars",
@@ -2467,7 +2474,6 @@ name = "icp-canister"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "camino",
  "handlebars 6.3.2",
  "icp-adapter",
  "icp-fs",
@@ -2490,7 +2496,6 @@ dependencies = [
  "bigdecimal",
  "bip32 0.5.3",
  "byte-unit 5.1.6",
- "camino",
  "camino-tempfile",
  "candid",
  "candid_parser",
@@ -2506,6 +2511,7 @@ dependencies = [
  "ic-ledger-types",
  "ic-management-canister-types 0.4.1",
  "ic-utils",
+ "icp",
  "icp-adapter",
  "icp-canister",
  "icp-dirs",
@@ -2543,8 +2549,8 @@ dependencies = [
 name = "icp-dirs"
 version = "0.1.0"
 dependencies = [
- "camino",
  "directories",
+ "icp",
  "snafu",
 ]
 
@@ -2552,8 +2558,8 @@ dependencies = [
 name = "icp-fs"
 version = "0.1.0"
 dependencies = [
- "camino",
  "fd-lock",
+ "icp",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2565,12 +2571,12 @@ name = "icp-identity"
 version = "0.1.0"
 dependencies = [
  "bip32 0.5.3",
- "camino",
  "clap",
  "directories",
  "ed25519-consensus",
  "elliptic-curve 0.13.8",
  "ic-agent",
+ "icp",
  "icp-dirs",
  "icp-fs",
  "itertools 0.14.0",
@@ -2593,11 +2599,11 @@ dependencies = [
 name = "icp-network"
 version = "0.1.0"
 dependencies = [
- "camino",
  "candid",
  "fd-lock",
  "hex",
  "ic-agent",
+ "icp",
  "icp-fs",
  "pocket-ic",
  "reqwest",
@@ -2614,10 +2620,10 @@ dependencies = [
 name = "icp-project"
 version = "0.1.0"
 dependencies = [
- "camino",
  "camino-tempfile",
  "futures",
  "glob",
+ "icp",
  "icp-adapter",
  "icp-canister",
  "icp-fs",

@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Error;
-use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
+use icp::prelude::*;
 use icp_canister::{handlebars::Handlebars, recipe};
 use icp_dirs::IcpCliDirs;
 use tracing::{Level, subscriber::set_global_default};
@@ -37,10 +37,10 @@ pub const CYCLES_MINTING_CANISTER_CID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 #[derive(Parser)]
 struct Cli {
     #[arg(long, default_value = ".icp/ids.json")]
-    id_store: Utf8PathBuf,
+    id_store: PathBuf,
 
     #[arg(long, default_value = ".icp/artifacts")]
-    artifact_store: Utf8PathBuf,
+    artifact_store: PathBuf,
 
     /// Enable debug logging
     #[arg(long, default_value = "false", global = true)]

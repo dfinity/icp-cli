@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 async-trait = { workspace = true }
-camino = { workspace = true }
 handlebars = { workspace = true }
 icp-adapter = { workspace = true }
 icp-fs = { workspace = true }

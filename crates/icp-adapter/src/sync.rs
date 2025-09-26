@@ -1,14 +1,14 @@
 use crate::{assets::AssetsAdapterSyncError, script::ScriptAdapterSyncError};
 use async_trait::async_trait;
-use camino::Utf8Path;
 use ic_agent::{Agent, export::Principal};
+use icp::prelude::*;
 use snafu::Snafu;
 
 #[async_trait]
 pub trait Adapter {
     async fn sync(
         &self,
-        canister_path: &Utf8Path,
+        canister_path: &Path,
         canister_id: &Principal,
         agent: &Agent,
     ) -> Result<(), AdapterSyncError>;

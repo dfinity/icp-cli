@@ -1,5 +1,5 @@
-use camino::Utf8PathBuf;
 use ic_agent::export::Principal;
+use icp::prelude::*;
 use icp_fs::lockedjson;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -57,10 +57,10 @@ pub enum LookupError {
     EnvironmentNotFound { name: String },
 }
 
-pub struct IdStore(Utf8PathBuf);
+pub struct IdStore(PathBuf);
 
 impl IdStore {
-    pub fn new(path: &Utf8PathBuf) -> Self {
+    pub fn new(path: &PathBuf) -> Self {
         Self(path.clone())
     }
 }

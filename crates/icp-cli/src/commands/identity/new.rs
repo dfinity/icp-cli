@@ -1,7 +1,7 @@
 use crate::context::Context;
 use bip39::{Language, Mnemonic, MnemonicType};
-use camino::Utf8PathBuf;
 use clap::Parser;
+use icp::prelude::*;
 use icp_fs::fs;
 use icp_identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
@@ -13,7 +13,7 @@ use snafu::Snafu;
 pub struct NewCmd {
     name: String,
     #[arg(long, value_name = "FILE")]
-    output_seed: Option<Utf8PathBuf>,
+    output_seed: Option<PathBuf>,
 }
 
 pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {

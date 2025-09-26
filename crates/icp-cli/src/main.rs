@@ -5,9 +5,8 @@ use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
-use icp::prelude::*;
+use icp::{Directories, prelude::*};
 use icp_canister::{handlebars::Handlebars, recipe};
-use icp_dirs::IcpCliDirs;
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
@@ -111,7 +110,7 @@ async fn main() -> Result<(), Error> {
     set_global_default(reg)?;
 
     // Setup project directory structure
-    let dirs = IcpCliDirs::new()?;
+    let dirs = Directories::new()?;
 
     // Canister ID Store
     let ids = IdStore::new(&cli.id_store);

@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{TRILLION, TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp_fs::fs::write;
 use predicates::{
@@ -7,8 +7,6 @@ use predicates::{
 };
 
 mod common;
-
-const TRILLION: u128 = 100_000_000_000;
 
 #[test]
 fn canister_create() {

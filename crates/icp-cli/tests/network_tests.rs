@@ -6,7 +6,7 @@ use predicates::{
 use serial_test::file_serial;
 
 mod common;
-use crate::common::{TestContext, TestNetwork};
+use crate::common::{TRILLION, TestContext, TestNetwork, clients};
 
 #[test]
 #[file_serial(default_local_network)]
@@ -118,6 +118,8 @@ fn deploy_to_other_projects_network() {
     ctx.ping_until_healthy(&proja);
 
     // Deploy project (first time)
+    clients::icp(&ctx, &proja).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&projb)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])

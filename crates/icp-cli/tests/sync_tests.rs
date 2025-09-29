@@ -1,4 +1,4 @@
-use crate::common::TestContext;
+use crate::common::{TRILLION, TestContext, clients};
 use icp_fs::fs::write;
 use icp_network::NETWORK_LOCAL;
 use predicates::{
@@ -48,6 +48,7 @@ fn sync_adapter_script_single() {
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project (it should sync as well)
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["--debug", "deploy", "--subnet-id", common::SUBNET_ID])
@@ -106,6 +107,7 @@ fn sync_adapter_script_multiple() {
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project (it should sync as well)
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["--debug", "deploy", "--subnet-id", common::SUBNET_ID])
@@ -175,6 +177,7 @@ async fn sync_adapter_static_assets() {
     let cid = "tqzl2-p7777-77776-aaaaa-cai";
 
     // Deploy project
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])

@@ -1,4 +1,7 @@
-use crate::common::{TestContext, clients, clients::IcpCliClient};
+use crate::common::{
+    TRILLION, TestContext,
+    clients::{self, IcpCliClient},
+};
 use icp_fs::fs::write;
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -49,6 +52,7 @@ fn canister_settings_update_controllers() {
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])
@@ -290,6 +294,7 @@ fn canister_settings_update_log_visibility() {
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])
@@ -302,7 +307,7 @@ fn canister_settings_update_log_visibility() {
         .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
-        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Public")));
+        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Controllers")));
 
     // Set log visibility to controllers
     ctx.icp()
@@ -313,7 +318,7 @@ fn canister_settings_update_log_visibility() {
             "update",
             "my-canister",
             "--log-visibility",
-            "controllers",
+            "public",
         ])
         .assert()
         .success();
@@ -324,7 +329,7 @@ fn canister_settings_update_log_visibility() {
         .args(["canister", "settings", "show", "my-canister"])
         .assert()
         .success()
-        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Controllers")));
+        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Public")));
 
     // Add log viewer.
     ctx.icp()
@@ -524,14 +529,19 @@ fn canister_settings_update_miscellaneous() {
     // Start network
     ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
-
-    // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
+    clients::icp(&ctx, &project_dir).mint_cycles(200 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--cycles",
+            &format!("{}", 120 * TRILLION), // 120 TCYCLES because compute allocation is expensive
+        ])
         .assert()
         .success();
 
@@ -623,11 +633,10 @@ fn canister_settings_update_environment_variables() {
     // Start network
     ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
-
-    // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
+    clients::icp(&ctx, &project_dir).mint_cycles(200 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])

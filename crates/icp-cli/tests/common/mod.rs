@@ -19,6 +19,8 @@ pub const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
 /// Governance on mainnet
 pub const GOVERNANCE_ID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
+pub const TRILLION: u128 = 1_000_000_000_000;
+
 #[cfg(unix)]
 pub const PATH_SEPARATOR: &str = ":";
 

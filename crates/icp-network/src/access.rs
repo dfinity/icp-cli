@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use camino::Utf8PathBuf;
 use ic_agent::{Agent, AgentError, Identity, export::Principal};
+use icp::prelude::*;
 use icp_fs::lockedjson::LoadJsonWithLockError;
 use snafu::{OptionExt, ResultExt, Snafu};
 
@@ -154,7 +154,7 @@ pub enum GetNetworkAccessError {
     NetworkRunningOtherProject {
         network: String,
         port: u16,
-        project_dir: Utf8PathBuf,
+        project_dir: PathBuf,
     },
 
     #[snafu(display("no descriptor found for port {port}"))]

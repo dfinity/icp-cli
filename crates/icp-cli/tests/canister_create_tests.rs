@@ -1,5 +1,5 @@
 use crate::common::{TestContext, clients};
-use camino_tempfile::NamedUtf8TempFile;
+use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp_fs::fs::write;
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -12,7 +12,7 @@ const TRILLION: u128 = 100_000_000_000;
 
 #[test]
 fn canister_create() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -51,13 +51,13 @@ fn canister_create() {
 
 #[test]
 fn canister_create_with_settings() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(
@@ -121,13 +121,13 @@ fn canister_create_with_settings() {
 
 #[test]
 fn canister_create_with_settings_cmdline_override() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(

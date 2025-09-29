@@ -1,11 +1,11 @@
-use camino::Utf8PathBuf;
 use directories::ProjectDirs;
+use icp::prelude::*;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 #[derive(Debug, Clone)]
 pub enum IcpCliDirs {
     Standard(Utf8ProjectDirs),
-    Overridden(Utf8PathBuf),
+    Overridden(PathBuf),
 }
 
 impl IcpCliDirs {
@@ -22,22 +22,22 @@ impl IcpCliDirs {
         }
     }
 
-    pub fn identity_dir(&self) -> Utf8PathBuf {
+    pub fn identity_dir(&self) -> PathBuf {
         self.data_dir().join("identity")
     }
 
-    pub fn port_descriptor_dir(&self) -> Utf8PathBuf {
+    pub fn port_descriptor_dir(&self) -> PathBuf {
         self.cache_dir().join("port-descriptors")
     }
 
-    fn data_dir(&self) -> Utf8PathBuf {
+    fn data_dir(&self) -> PathBuf {
         match self {
             Self::Standard(dirs) => dirs.data_dir.clone(),
             Self::Overridden(path) => path.clone(),
         }
     }
 
-    fn cache_dir(&self) -> Utf8PathBuf {
+    fn cache_dir(&self) -> PathBuf {
         match self {
             Self::Standard(dirs) => dirs.cache_dir.clone(),
             Self::Overridden(path) => path.clone(),
@@ -48,7 +48,7 @@ impl IcpCliDirs {
 #[derive(Debug, Snafu)]
 pub enum DiscoverDirsError {
     #[snafu(display("user directories are non-UTF-8"))]
-    NonUtf8 { source: camino::FromPathBufError },
+    NonUtf8 { source: FromPathBufError },
 
     #[snafu(display("home directory could not be located"))]
     CannotFindHome,
@@ -56,13 +56,13 @@ pub enum DiscoverDirsError {
 
 #[derive(Debug, Clone)]
 pub struct Utf8ProjectDirs {
-    pub data_dir: Utf8PathBuf,
-    pub config_dir: Utf8PathBuf,
-    pub cache_dir: Utf8PathBuf,
+    pub data_dir: PathBuf,
+    pub config_dir: PathBuf,
+    pub cache_dir: PathBuf,
 }
 
 impl Utf8ProjectDirs {
-    pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, camino::FromPathBufError> {
+    pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, FromPathBufError> {
         Ok(Self {
             data_dir: dirs.data_dir().to_owned().try_into()?,
             config_dir: dirs.config_dir().to_owned().try_into()?,

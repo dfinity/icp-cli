@@ -57,12 +57,6 @@ pub struct TestNetwork {
     pub root_key: String,
 }
 
-// A network run by icp-cli, but set up in ~/.config/dfx/networks.json for dfx to connect to.
-pub struct TestNetworkForDfx {
-    pub dfx_network_name: String,
-    pub gateway_port: u16,
-}
-
 pub struct ChildGuard {
     child: Child,
 }

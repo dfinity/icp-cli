@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-camino = { workspace = true }
 glob = { workspace = true }
 futures = { workspace = true }
+icp = { workspace = true }
 icp-canister = { workspace = true }
 icp-fs = { workspace = true }
 icp-network = { workspace = true }

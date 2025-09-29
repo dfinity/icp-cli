@@ -9,7 +9,7 @@ mod common;
 
 #[test]
 fn canister_settings_update_controllers() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -250,7 +250,7 @@ fn get_principal(client: &IcpCliClient, identity: &str) -> String {
 
 #[test]
 fn canister_settings_update_log_visibility() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -494,7 +494,7 @@ fn canister_settings_update_log_visibility() {
 
 #[test]
 fn canister_settings_update_miscellaneous() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -593,7 +593,7 @@ fn canister_settings_update_miscellaneous() {
 
 #[test]
 fn canister_settings_update_environment_variables() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");

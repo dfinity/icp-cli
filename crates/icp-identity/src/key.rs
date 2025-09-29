@@ -6,11 +6,11 @@ use crate::{
     },
     paths::{ensure_key_pem_path, key_pem_path},
 };
-use camino::{Utf8Path, Utf8PathBuf};
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
+use icp::prelude::*;
 use icp_dirs::IcpCliDirs;
 use icp_fs::fs;
 use pem::Pem;
@@ -53,15 +53,12 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
     ParsePemError {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: pem::PemError,
     },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
-    ParseKeyError {
-        path: Utf8PathBuf,
-        source: pkcs8::Error,
-    },
+    ParseKeyError { path: PathBuf, source: pkcs8::Error },
 
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
@@ -92,7 +89,7 @@ fn load_pbes2_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
     password_func: impl FnOnce() -> Result<String, String>,
-    path: &Utf8Path,
+    path: &Path,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
@@ -112,7 +109,7 @@ fn load_pbes2_identity(
 fn load_plaintext_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
-    path: &Utf8Path,
+    path: &Path,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == PrivateKeyInfo::PEM_LABEL,

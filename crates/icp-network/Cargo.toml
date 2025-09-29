@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-camino = { workspace = true }
 candid = { workspace = true }
 fd-lock = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
+icp = { workspace = true }
 icp-fs = { workspace = true }
 pocket-ic = { workspace = true }
 reqwest = { workspace = true }

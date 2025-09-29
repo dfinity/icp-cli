@@ -1,5 +1,5 @@
-use camino::Utf8Path;
 use candid::Principal;
+use icp::prelude::*;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
@@ -18,7 +18,7 @@ pub struct PocketIcInstance {
     pub root_key: String,
 }
 
-pub fn spawn_pocketic(pocketic_path: &Utf8Path, port_file: &Utf8Path) -> tokio::process::Child {
+pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new(pocketic_path);
     cmd.arg("--port-file");
     cmd.arg(port_file.as_os_str());
@@ -53,7 +53,7 @@ impl PocketIcAdminInterface {
 
     pub async fn create_instance(
         &self,
-        state_dir: &Utf8Path,
+        state_dir: &Path,
     ) -> Result<(InstanceId, Topology), CreateInstanceError> {
         // Specify configuration for network
         let inst_cfg = InstanceConfig {

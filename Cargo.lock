@@ -2443,6 +2443,7 @@ name = "icp"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "directories",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2517,7 +2518,6 @@ dependencies = [
  "icp",
  "icp-adapter",
  "icp-canister",
- "icp-dirs",
  "icp-identity",
  "icp-network",
  "icp-project",
@@ -2548,15 +2548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "icp-dirs"
-version = "0.1.0"
-dependencies = [
- "directories",
- "icp",
- "snafu",
-]
-
-[[package]]
 name = "icp-identity"
 version = "0.1.0"
 dependencies = [
@@ -2567,7 +2558,6 @@ dependencies = [
  "elliptic-curve 0.13.8",
  "ic-agent",
  "icp",
- "icp-dirs",
  "itertools 0.14.0",
  "k256 0.13.4",
  "p256",

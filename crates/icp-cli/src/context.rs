@@ -2,8 +2,8 @@ use std::sync::{Arc, OnceLock};
 
 use console::Term;
 use ic_agent::{Agent, Identity};
+use icp::Directories;
 use icp_canister::recipe;
-use icp_dirs::IcpCliDirs;
 use icp_identity::{
     key::{LoadIdentityInContextError, load_identity, load_identity_in_context},
     manifest::load_identity_list,
@@ -35,7 +35,7 @@ pub struct Context {
     /// A recipe resolver for resolving canister recipes into build/sync steps
     pub recipe_resolver: Arc<dyn recipe::Resolve>,
 
-    dirs: IcpCliDirs,
+    dirs: Directories,
 
     /// The name of the identity to use, set from the command line.
     identity_name: OnceLock<Option<String>>,
@@ -56,7 +56,7 @@ pub struct Context {
 impl Context {
     pub fn new(
         term: Term,
-        dirs: IcpCliDirs,
+        dirs: Directories,
         id_store: IdStore,
         artifact_store: ArtifactStore,
         recipe_resolver: Arc<dyn recipe::Resolve>,
@@ -75,7 +75,7 @@ impl Context {
         }
     }
 
-    pub fn dirs(&self) -> &IcpCliDirs {
+    pub fn dirs(&self) -> &Directories {
         &self.dirs
     }
 }
@@ -224,7 +224,7 @@ impl Context {
             // nd
             project
                 .directory
-                .network(&network_name, self.dirs.port_descriptor_dir()),
+                .network(&network_name, self.dirs.port_descriptor()),
             //
             // config
             project.get_network_config(&network_name)?,

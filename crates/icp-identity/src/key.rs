@@ -10,8 +10,7 @@ use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
-use icp::{fs, prelude::*};
-use icp_dirs::IcpCliDirs;
+use icp::{Directories, fs, prelude::*};
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -25,7 +24,7 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 
 pub fn load_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     list: &IdentityList,
     name: &str,
     password_func: impl FnOnce() -> Result<String, String>,
@@ -67,7 +66,7 @@ pub enum LoadIdentityError {
 }
 
 fn load_pem_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     name: &str,
     format: &PemFormat,
     algorithm: &IdentityKeyAlgorithm,
@@ -124,7 +123,7 @@ fn load_plaintext_identity(
 }
 
 pub fn load_identity_in_context(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
     let defaults = load_identity_defaults(dirs)?;
@@ -143,7 +142,7 @@ pub enum LoadIdentityInContextError {
 }
 
 pub fn create_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     name: &str,
     key: IdentityKey,
     format: CreateFormat,
@@ -205,7 +204,7 @@ pub enum CreateIdentityError {
     IdentityAlreadyExists { name: String },
 }
 
-fn write_identity(dirs: &IcpCliDirs, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
+fn write_identity(dirs: &Directories, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
     let pem_path = ensure_key_pem_path(dirs, name).context(WriteFileSnafu)?;
     fs::write_string(&pem_path, pem).context(WriteFileSnafu)?;
     Ok(())

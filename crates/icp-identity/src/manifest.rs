@@ -3,15 +3,14 @@ use crate::paths::{
     identity_list_path,
 };
 use ic_agent::export::Principal;
-use icp::{fs::json, prelude::*};
-use icp_dirs::IcpCliDirs;
+use icp::{Directories, fs::json, prelude::*};
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use std::{collections::HashMap, io::ErrorKind};
 use strum::{Display, EnumString};
 
 pub fn write_identity_defaults(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     defaults: &IdentityDefaults,
 ) -> Result<(), WriteIdentityManifestError> {
     let defaults_path = ensure_identity_defaults_path(dirs)?;
@@ -20,7 +19,7 @@ pub fn write_identity_defaults(
 }
 
 pub fn write_identity_list(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     list: &IdentityList,
 ) -> Result<(), WriteIdentityManifestError> {
     let defaults_path = ensure_identity_list_path(dirs)?;
@@ -37,7 +36,7 @@ pub enum WriteIdentityManifestError {
     CreateDirectoryError { source: icp::fs::Error },
 }
 
-pub fn load_identity_list(dirs: &IcpCliDirs) -> Result<IdentityList, LoadIdentityManifestError> {
+pub fn load_identity_list(dirs: &Directories) -> Result<IdentityList, LoadIdentityManifestError> {
     let id_list_file = identity_list_path(dirs);
 
     let list = json::load(&id_list_file).or_else(|err| match err {
@@ -68,7 +67,7 @@ pub enum LoadIdentityManifestError {
 }
 
 pub fn load_identity_defaults(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
 ) -> Result<IdentityDefaults, LoadIdentityManifestError> {
     let id_defaults_path = identity_defaults_path(dirs);
 
@@ -93,7 +92,7 @@ pub fn load_identity_defaults(
 }
 
 pub fn change_default_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     list: &IdentityList,
     name: &str,
 ) -> Result<(), ChangeDefaultsError> {

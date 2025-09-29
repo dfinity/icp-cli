@@ -7,7 +7,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] crate::fs::Error),
 
-    #[error("failed to parse json file at {path}")]
+    #[error("failed to parse yaml file at {path}")]
     Parse {
         path: PathBuf,
 

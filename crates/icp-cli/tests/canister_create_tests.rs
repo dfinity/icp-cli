@@ -8,7 +8,7 @@ use predicates::{
 
 mod common;
 
-const HUNDRED_TRILLION: u128 = 100_000_000_000_000;
+const TRILLION: u128 = 100_000_000_000;
 
 #[test]
 fn canister_create() {
@@ -41,7 +41,7 @@ fn canister_create() {
     ctx.ping_until_healthy(&project_dir);
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(HUNDRED_TRILLION);
+    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "create"])
@@ -91,14 +91,14 @@ fn canister_create_with_settings() {
     ctx.ping_until_healthy(&project_dir);
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(HUNDRED_TRILLION);
+    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
             "create",
             "--cycles",
-            "70000000000000", /* 70 TCYCLES because compute allocation is expensive */
+            &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
         .assert()
         .success();
@@ -158,7 +158,7 @@ fn canister_create_with_settings_cmdline_override() {
     ctx.ping_until_healthy(&project_dir);
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(HUNDRED_TRILLION);
+    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([

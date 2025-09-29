@@ -1,10 +1,15 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Deserializer};
+
+use crate::canister::Settings;
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct EnvironmentInner {
     pub name: String,
     pub network: Option<String>,
     pub canisters: Option<Vec<String>>,
+    pub settings: Option<HashMap<String, Settings>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Default)]
@@ -24,9 +29,17 @@ pub enum CanisterSelection {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
+    // environment name
     pub name: String,
+
+    // target network for canister deployment
     pub network: String,
+
+    // canisters the environment should contain
     pub canisters: CanisterSelection,
+
+    // canister settings overrides
+    pub settings: Option<HashMap<String, Settings>>,
 }
 
 impl From<EnvironmentInner> for Environment {
@@ -35,6 +48,7 @@ impl From<EnvironmentInner> for Environment {
             name,
             network,
             canisters,
+            settings,
         } = v;
 
         // Network
@@ -59,6 +73,9 @@ impl From<EnvironmentInner> for Environment {
             name,
             network,
             canisters,
+
+            // Keep as-is, setting overrides are optional
+            settings,
         }
     }
 }

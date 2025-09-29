@@ -49,6 +49,7 @@ impl Default for Environments {
             name: "local".to_string(),
             network: "local".to_string(),
             canisters: CanisterSelection::Everything,
+            settings: None,
         }])
     }
 }

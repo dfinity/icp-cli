@@ -148,6 +148,8 @@ impl<'de> Deserialize<'de> for Project {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use anyhow::Error;
 
     use crate::{
@@ -356,6 +358,7 @@ mod tests {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                    settings: None,
                 }])
                 .with_defaults()
                 .into(),
@@ -383,6 +386,7 @@ mod tests {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                    settings: None,
                 }])
                 .with_defaults()
                 .into(),
@@ -413,18 +417,67 @@ mod tests {
                         name: "environment-1".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::None,
+                        settings: None,
                     },
                     Environment {
                         name: "environment-2".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                        settings: None,
                     },
                     Environment {
                         name: "environment-3".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Everything,
+                        settings: None,
                     }
                 ])
+                .with_defaults()
+                .into(),
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn environment_settings() -> Result<(), Error> {
+        assert_eq!(
+            serde_yaml::from_str::<Project>(
+                r#"
+                environment:
+                  name: my-environment
+                  settings:
+                    canister-1:
+                      compute_allocation: 1
+                    canister-2:
+                      compute_allocation: 2
+                "#
+            )?,
+            Project {
+                canisters: Canisters::default().into(),
+                networks: Networks::default().into(),
+                environments: Environments::Environments(vec![Environment {
+                    name: "my-environment".to_string(),
+                    network: "local".to_string(),
+                    canisters: CanisterSelection::Everything,
+                    settings: Some(HashMap::from([
+                        (
+                            "canister-1".to_string(),
+                            Settings {
+                                compute_allocation: Some(1),
+                                ..Default::default()
+                            }
+                        ),
+                        (
+                            "canister-2".to_string(),
+                            Settings {
+                                compute_allocation: Some(2),
+                                ..Default::default()
+                            }
+                        )
+                    ])),
+                }])
                 .with_defaults()
                 .into(),
             },

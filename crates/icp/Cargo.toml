@@ -1,12 +1,12 @@
 [package]
-name = "icp-fs"
+name = "icp"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 camino = { workspace = true }
-fd-lock = { workspace = true }
+directories = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-snafu = { workspace = true }
+thiserror = { workspace = true }

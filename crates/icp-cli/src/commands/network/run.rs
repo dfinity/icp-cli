@@ -38,8 +38,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Network directory
     let nd = pd.network(
-        &cmd.name,                        // network_name
-        ctx.dirs().port_descriptor_dir(), // port_descriptor
+        &cmd.name,                    // network_name
+        ctx.dirs().port_descriptor(), // port_descriptor
     );
 
     // Determine ICP accounts to seed

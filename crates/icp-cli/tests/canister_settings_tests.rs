@@ -1,5 +1,5 @@
 use crate::common::{TestContext, clients, clients::IcpCliClient};
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
@@ -9,7 +9,7 @@ mod common;
 
 #[test]
 fn canister_settings_update_controllers() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Prepare principals.
     let client = clients::icp(&ctx);
@@ -35,9 +35,9 @@ fn canister_settings_update_controllers() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -250,7 +250,7 @@ fn get_principal(client: &IcpCliClient, identity: &str) -> String {
 
 #[test]
 fn canister_settings_update_log_visibility() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Prepare principals.
     let client = clients::icp(&ctx);
@@ -276,9 +276,9 @@ fn canister_settings_update_log_visibility() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -494,7 +494,7 @@ fn canister_settings_update_log_visibility() {
 
 #[test]
 fn canister_settings_update_miscellaneous() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -515,9 +515,9 @@ fn canister_settings_update_miscellaneous() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -593,7 +593,7 @@ fn canister_settings_update_miscellaneous() {
 
 #[test]
 fn canister_settings_update_environment_variables() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -614,9 +614,9 @@ fn canister_settings_update_environment_variables() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

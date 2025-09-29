@@ -1,6 +1,6 @@
 use crate::common::TestContext;
-use camino_tempfile::NamedUtf8TempFile;
-use icp_fs::fs::write;
+use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
+use icp::fs::write_string;
 
 mod common;
 
@@ -12,7 +12,7 @@ fn build_adapter_script_single() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(
@@ -27,9 +27,9 @@ fn build_adapter_script_single() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -49,7 +49,7 @@ fn build_adapter_script_multiple() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Create temporary file
-    let f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    let f = NamedTempFile::new().expect("failed to create temporary file");
 
     // Project manifest
     let pm = format!(
@@ -68,9 +68,9 @@ fn build_adapter_script_multiple() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

@@ -1,9 +1,8 @@
 use crate::context::Context;
 use bip39::{Language, Mnemonic};
-use camino::{Utf8Path, Utf8PathBuf};
 use clap::{ArgGroup, Parser};
 use dialoguer::Password;
-use icp_fs::fs;
+use icp::{fs::read_to_string, prelude::*};
 use icp_identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
@@ -25,16 +24,16 @@ pub struct ImportCmd {
     name: String,
 
     #[arg(long, value_name = "FILE", group = "import-from")]
-    from_pem: Option<Utf8PathBuf>,
+    from_pem: Option<PathBuf>,
 
     #[arg(long, group = "import-from")]
     read_seed_phrase: bool,
 
     #[arg(long, value_name = "FILE", group = "import-from")]
-    from_seed_file: Option<Utf8PathBuf>,
+    from_seed_file: Option<PathBuf>,
 
     #[arg(long, value_name = "FILE", requires = "from_pem")]
-    decryption_password_from_file: Option<Utf8PathBuf>,
+    decryption_password_from_file: Option<PathBuf>,
 
     #[arg(long, value_enum)]
     assert_key_type: Option<IdentityKeyAlgorithm>,
@@ -50,7 +49,7 @@ pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
             cmd.assert_key_type,
         )?;
     } else if let Some(path) = &cmd.from_seed_file {
-        let phrase = fs::read_to_string(path).map_err(DeriveKeyError::from)?;
+        let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
         import_from_seed_phrase(ctx, &cmd.name, &phrase)?;
     } else if cmd.read_seed_phrase {
         let phrase = Password::new()
@@ -78,14 +77,14 @@ pub enum ImportCmdError {
 fn import_from_pem(
     ctx: &Context,
     name: &str,
-    path: &Utf8Path,
-    decryption_password_file: Option<&Utf8Path>,
+    path: &Path,
+    decryption_password_file: Option<&Path>,
     known_key_type: Option<IdentityKeyAlgorithm>,
 ) -> Result<(), LoadKeyError> {
     // the pem file may be in SEC1 format or PKCS#8 format
     // - if SEC1, the key algorithm can be embedded, separate, or missing
     // - if PKCS#8, the key may or may not be encrypted
-    let pem = fs::read_to_string(path)?;
+    let pem = read_to_string(path).context(ReadFileSnafu)?;
     let sections = pem::parse_many(&pem).context(BadPemFileSnafu { path })?;
     let section = match sections
         .iter()
@@ -135,8 +134,8 @@ fn import_from_pem(
 
 fn import_pkcs8(
     section: &Pem,
-    path: &Utf8Path,
-    decryption_password_file: Option<&Utf8Path>,
+    path: &Path,
+    decryption_password_file: Option<&Path>,
     known_key_type: Option<IdentityKeyAlgorithm>,
 ) -> Result<IdentityKey, LoadKeyError> {
     // first, grab the actual key structure from the doc, which entails decrypting it if it's encrypted
@@ -147,7 +146,7 @@ fn import_pkcs8(
         let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
             .context(BadPemContentSnafu { path })?;
         let password = if let Some(path) = decryption_password_file {
-            fs::read_to_string(path)?
+            read_to_string(path).context(ReadFileSnafu)?
         } else {
             Password::new()
                 .with_prompt(format!("Enter the password to decrypt {path}"))
@@ -211,7 +210,7 @@ fn import_pkcs8(
 fn import_sec1(
     section: &Pem,
     param_section: Option<&Pem>,
-    path: &Utf8Path,
+    path: &Path,
     known_key_type: Option<IdentityKeyAlgorithm>,
 ) -> Result<IdentityKey, LoadKeyError> {
     let epk = EcPrivateKey::from_der(section.contents()).context(BadPemContentSnafu { path })?;
@@ -284,21 +283,21 @@ pub enum LoadKeyError {
         found: Vec<String>,
     },
 
-    #[snafu(transparent)]
-    ReadFileError { source: fs::ReadToStringError },
+    #[snafu(display("failed to read file"))]
+    ReadFileError { source: icp::fs::Error },
 
     #[snafu(display("expected 1 key block in PEM file `{path}`, found {count}"))]
-    TooManyKeyBlocks { path: Utf8PathBuf, count: usize },
+    TooManyKeyBlocks { path: PathBuf, count: usize },
 
     #[snafu(display("corrupted PEM file `{path}`"))]
     BadPemFile {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: pem::PemError,
     },
 
     #[snafu(display("malformed key in PEM file `{path}`"))]
     BadPemContent {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: pkcs8::der::Error,
     },
 
@@ -306,11 +305,11 @@ pub enum LoadKeyError {
         "incomplete key in PEM file `{path}`: missing field `{field}` \
         (if you know what kind of key it is, use `--assert-key-type`)"
     ))]
-    IncompletePemKey { path: Utf8PathBuf, field: String },
+    IncompletePemKey { path: PathBuf, field: String },
 
     #[snafu(display("malformed key material in PEM file `{path}`"))]
     BadPemKey {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: elliptic_curve::Error,
     },
 
@@ -319,16 +318,13 @@ pub enum LoadKeyError {
 
     #[snafu(display("PEM file `{path}` uses unsupported algorithm {found}, expected {}", expected.iter().format(", ")))]
     UnsupportedAlgorithm {
-        path: Utf8PathBuf,
+        path: PathBuf,
         found: ObjectIdentifier,
         expected: Vec<ObjectIdentifier>,
     },
 
     #[snafu(display("failed to decrypt PEM file `{path}`"))]
-    DecryptionFailed {
-        path: Utf8PathBuf,
-        source: pkcs8::Error,
-    },
+    DecryptionFailed { path: PathBuf, source: pkcs8::Error },
 
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },
@@ -336,8 +332,8 @@ pub enum LoadKeyError {
 
 #[derive(Debug, Snafu)]
 pub enum DeriveKeyError {
-    #[snafu(transparent)]
-    ReadSeedFile { source: fs::ReadToStringError },
+    #[snafu(display("failed to read seed file"))]
+    ReadSeedFile { source: icp::fs::Error },
 
     #[snafu(display("failed to read seed phrase from terminal"))]
     ReadSeedPhraseFromTerminal { source: dialoguer::Error },

@@ -1,5 +1,5 @@
 use crate::common::TestContext;
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
@@ -9,7 +9,7 @@ mod common;
 
 #[test]
 fn canister_start() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -30,9 +30,9 @@ fn canister_start() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

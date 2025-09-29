@@ -1,13 +1,14 @@
-use camino::{Utf8Path, Utf8PathBuf};
-use icp_fs::{
-    fs::{CreateDirAllError, create_dir_all},
-    lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
-    lockedjson::{LoadJsonWithLockError, load_json_with_lock},
+use std::io::ErrorKind;
+
+use icp::{
+    fs::{create_dir_all, json},
+    prelude::*,
 };
 use snafu::prelude::*;
 
 use crate::{
     config::NetworkDescriptorModel,
+    lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
     managed::descriptor::{
         FixedPortLock, NetworkDescriptorCleaner, NetworkDescriptorWriter, NetworkLock,
         TruncateFileError, WriteDescriptorError,
@@ -21,11 +22,7 @@ pub struct NetworkDirectory {
 }
 
 impl NetworkDirectory {
-    pub fn new(
-        network_name: &str,
-        network_root: &Utf8Path,
-        port_descriptor_dir: &Utf8Path,
-    ) -> Self {
+    pub fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
         let network_name = network_name.to_string();
         let structure = NetworkDirectoryStructure::new(network_root, port_descriptor_dir);
 
@@ -41,22 +38,32 @@ impl NetworkDirectory {
         &self.structure
     }
 
-    pub fn ensure_exists(&self) -> Result<(), CreateDirAllError> {
+    pub fn ensure_exists(&self) -> Result<(), icp::fs::Error> {
         create_dir_all(&self.structure.network_root)?;
         create_dir_all(&self.structure.port_descriptor_dir)
     }
 
-    pub fn load_network_descriptor(
-        &self,
-    ) -> Result<Option<NetworkDescriptorModel>, LoadJsonWithLockError> {
-        load_json_with_lock(self.structure.network_descriptor_path())
+    pub fn load_network_descriptor(&self) -> Result<Option<NetworkDescriptorModel>, json::Error> {
+        json::load(&self.structure.network_descriptor_path()).or_else(|err| match err {
+            // Default to empty
+            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+
+            // Other
+            _ => Err(err),
+        })
     }
 
     pub fn load_port_descriptor(
         &self,
         port: u16,
-    ) -> Result<Option<NetworkDescriptorModel>, LoadJsonWithLockError> {
-        load_json_with_lock(self.structure.port_descriptor_path(port))
+    ) -> Result<Option<NetworkDescriptorModel>, json::Error> {
+        json::load(&self.structure.port_descriptor_path(port)).or_else(|err| match err {
+            // Default to empty
+            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+
+            // Other
+            _ => Err(err),
+        })
     }
 
     pub fn open_network_lock_file(&self) -> Result<NetworkLock, OpenFileForWriteLockError> {
@@ -155,7 +162,7 @@ pub enum SaveNetworkDescriptorError {
     WriteDescriptor { source: WriteDescriptorError },
 
     #[snafu(display("failed to obtain descriptor for project network descriptor"))]
-    ObtainProjectNetworkDescriptorLock { path: Utf8PathBuf },
+    ObtainProjectNetworkDescriptorLock { path: PathBuf },
 }
 
 #[derive(Debug, Snafu)]

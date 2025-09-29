@@ -1,15 +1,11 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use icp::{
+    fs::{create_dir_all, remove_dir_all, remove_file},
+    prelude::*,
+};
 use candid::{Encode, Nat, Principal};
 use futures::future::join_all;
-use icp_fs::{
-    fs::{
-        CreateDirAllError, RemoveDirAllError, RemoveFileError, create_dir_all, remove_dir_all,
-        remove_file,
-    },
-    lock::OpenFileForWriteLockError,
-};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use pocket_ic::{common::rest::HttpGatewayBackend, nonblocking::PocketIc};
 use reqwest::Url;
@@ -22,6 +18,7 @@ use crate::{
     RunNetworkError::NoPocketIcPath,
     config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
     directory::SaveNetworkDescriptorError,
+    lock::OpenFileForWriteLockError,
     managed::{
         descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
         pocketic::{
@@ -39,10 +36,10 @@ pub const ICP_LEDGER_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 pub async fn run_network(
     config: &ManagedNetworkModel,
     nd: NetworkDirectory,
-    project_root: &Utf8Path,
+    project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal>,
 ) -> Result<(), RunNetworkError> {
-    let pocketic_path = Utf8PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
+    let pocketic_path = PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
 
     nd.ensure_exists()?;
 
@@ -74,7 +71,7 @@ pub enum RunNetworkError {
     },
 
     #[snafu(transparent)]
-    CreateDirFailed { source: CreateDirAllError },
+    CreateDirFailed { source: icp::fs::Error },
 
     #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
     NoPocketIcPath,
@@ -87,25 +84,25 @@ pub enum RunNetworkError {
 }
 
 async fn run_pocketic(
-    pocketic_path: &Utf8Path,
+    pocketic_path: &Path,
     config: &ManagedNetworkModel,
     nd: &NetworkDirectory,
-    project_root: &Utf8Path,
+    project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal>,
 ) -> Result<(), RunPocketIcError> {
     let nds = nd.structure();
     eprintln!("PocketIC path: {pocketic_path}");
 
-    create_dir_all(nds.pocketic_dir())?;
+    create_dir_all(&nds.pocketic_dir()).context(CreateDirAllSnafu)?;
     let port_file = nds.pocketic_port_file();
     if port_file.exists() {
-        remove_file(&port_file)?;
+        remove_file(&port_file).context(RemoveDirAllSnafu)?;
     }
     eprintln!("Port file: {port_file}");
     if nds.state_dir().exists() {
-        remove_dir_all(nds.state_dir())?;
+        remove_dir_all(&nds.state_dir()).context(RemoveDirAllSnafu)?;
     }
-    create_dir_all(nds.state_dir())?;
+    create_dir_all(&nds.state_dir()).context(CreateDirAllSnafu)?;
     let mut child = spawn_pocketic(pocketic_path, &port_file);
 
     let result = async {
@@ -152,14 +149,14 @@ async fn run_pocketic(
 
 #[derive(Debug, Snafu)]
 pub enum RunPocketIcError {
-    #[snafu(transparent)]
-    CreateDirAll { source: CreateDirAllError },
+    #[snafu(display("failed to create dir"))]
+    CreateDirAll { source: icp::fs::Error },
 
-    #[snafu(transparent)]
-    RemoveDirAll { source: RemoveDirAllError },
+    #[snafu(display("failed to remove dir"))]
+    RemoveDirAll { source: icp::fs::Error },
 
-    #[snafu(transparent)]
-    RemoveFile { source: RemoveFileError },
+    #[snafu(display("failed to remove file"))]
+    RemoveFile { source: icp::fs::Error },
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },
@@ -189,7 +186,7 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     )
 }
 
-pub async fn wait_for_port_file(path: &Utf8Path) -> Result<u16, WaitForPortTimeoutError> {
+pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
     let mut retries = 0;
     while retries < 3000 {
         if let Ok(contents) = read_to_string(path) {
@@ -228,7 +225,7 @@ pub struct ChildExitError {
 
 /// Waits for the child to populate a port number.
 /// Exits early if the child exits or the user interrupts.
-pub async fn wait_for_port(path: &Utf8Path, child: &mut Child) -> Result<u16, WaitForPortError> {
+pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
     tokio::select! {
         res = wait_for_port_file(path) => res.map_err(WaitForPortError::from),
         _ = ctrl_c() => Err(WaitForPortError::Interrupted),
@@ -249,7 +246,7 @@ pub enum WaitForPortError {
 async fn initialize_pocketic(
     pocketic_port: u16,
     gateway_bind_port: &BindPort,
-    state_dir: &Utf8Path,
+    state_dir: &Path,
     seed_accounts: impl Iterator<Item = Principal>,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
     let pic_url = format!("http://localhost:{pocketic_port}")

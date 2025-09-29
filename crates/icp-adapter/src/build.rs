@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use camino::Utf8Path;
+use icp::prelude::*;
 use snafu::Snafu;
 
 use crate::{pre_built::PrebuiltAdapterCompileError, script::ScriptAdapterCompileError};
@@ -8,8 +8,8 @@ use crate::{pre_built::PrebuiltAdapterCompileError, script::ScriptAdapterCompile
 pub trait Adapter {
     async fn compile(
         &self,
-        canister_path: &Utf8Path,
-        wasm_output_path: &Utf8Path,
+        canister_path: &Path,
+        wasm_output_path: &Path,
     ) -> Result<(), AdapterCompileError>;
 }
 

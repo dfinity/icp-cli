@@ -4,13 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use camino::{Utf8Path, Utf8PathBuf};
+use icp::{fs::yaml, prelude::*};
 // Async stream processing utilities for concurrent recipe resolution
 use futures::{StreamExt, TryStreamExt, stream};
 use glob::GlobError;
 use icp_canister::{BuildSteps, CanisterSettings, SyncSteps, recipe};
 use icp_canister::{CanisterInstructions, manifest::CanisterManifest};
-use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 use pathdiff::diff_utf8_paths;
 use serde::Deserialize;
@@ -78,7 +77,7 @@ pub struct Project {
     pub directory: ProjectDirectory,
 
     /// List of canister manifests belonging to this project.
-    pub canisters: Vec<(Utf8PathBuf, Canister)>,
+    pub canisters: Vec<(PathBuf, Canister)>,
 
     /// List of network definition files relevant to the project.
     /// Supports glob patterns to reference multiple network config files.
@@ -137,7 +136,7 @@ impl Project {
                                 ))
                             }
                         })
-                        .collect::<Vec<(Utf8PathBuf, CanisterManifest)>>(),
+                        .collect::<Vec<(PathBuf, CanisterManifest)>>(),
                 );
 
                 // Track names
@@ -174,10 +173,11 @@ impl Project {
                                 .context(GlobWalkSnafu { path: &pattern })?;
 
                             // Convert to Utf8 paths
-                            let paths = paths
-                                .into_iter()
-                                .map(Utf8PathBuf::try_from)
-                                .collect::<Result<Vec<_>, _>>()?;
+                            let paths = paths.into_iter().map(PathBuf::try_from).collect::<Result<
+                                Vec<_>,
+                                _,
+                            >>(
+                            )?;
 
                             // Skip non-canister directories
                             paths
@@ -189,7 +189,7 @@ impl Project {
                         // Explicit path
                         false => {
                             // Path
-                            let path = Utf8PathBuf::from_str(&pattern)
+                            let path = PathBuf::from_str(&pattern)
                                 .expect("this is an infallible operation");
 
                             // Resolve the explicit path against the project root.
@@ -445,7 +445,7 @@ impl Project {
     fn gather_network_paths(
         pd: &ProjectDirectory,
         network_paths: Vec<String>,
-    ) -> Result<Vec<Utf8PathBuf>, GatherNetworkPathsError> {
+    ) -> Result<Vec<PathBuf>, GatherNetworkPathsError> {
         // relative to the project root, not including .yaml extension
         let mut result_paths = vec![];
         for network_path in network_paths {
@@ -453,7 +453,7 @@ impl Project {
                 let mut glob_paths = Self::normalize_glob_networks(&network_path, pd)?;
                 result_paths.append(&mut glob_paths);
             } else {
-                let path = Utf8PathBuf::from(network_path);
+                let path = PathBuf::from(network_path);
                 Self::check_specific_network(&path, pd)?;
                 result_paths.push(path);
             }
@@ -464,7 +464,7 @@ impl Project {
 
     fn load_network_configurations(
         pd: &ProjectDirectory,
-        network_paths: Vec<Utf8PathBuf>,
+        network_paths: Vec<PathBuf>,
     ) -> Result<HashMap<String, NetworkConfig>, LoadNetworkConfigurationsError> {
         let mut networks = HashMap::new();
 
@@ -503,7 +503,7 @@ impl Project {
     fn normalize_glob_networks(
         pattern: &str,
         pd: &ProjectDirectory,
-    ) -> Result<Vec<Utf8PathBuf>, NormalizeGlobNetworksError> {
+    ) -> Result<Vec<PathBuf>, NormalizeGlobNetworksError> {
         let root = pd.structure().root();
         let matches =
             glob::glob(root.join(pattern).as_str()).context(NetworkGlobPatternSnafu { pattern })?;
@@ -513,7 +513,7 @@ impl Project {
 
         paths
             .into_iter()
-            .filter_map(|path| match Utf8PathBuf::try_from(path) {
+            .filter_map(|path| match PathBuf::try_from(path) {
                 Ok(p) if p.extension() == Some("yaml") => {
                     let without_ext = p.with_extension("");
                     let rel = diff_utf8_paths(&without_ext, root)?;
@@ -528,7 +528,7 @@ impl Project {
     // For a specific network path, this function makes sure the
     // network configuration file exists
     fn check_specific_network(
-        network_path: &Utf8Path,
+        network_path: &Path,
         pd: &ProjectDirectory,
     ) -> Result<(), CheckSpecificNetworkError> {
         let config_path = pd.structure().network_config_path(network_path);
@@ -596,34 +596,31 @@ impl Project {
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
     #[snafu(transparent)]
-    Parse { source: LoadYamlFileError },
+    Parse { source: yaml::Error },
 
     #[snafu(transparent)]
-    InvalidPathUtf8 { source: camino::FromPathBufError },
+    InvalidPathUtf8 { source: FromPathBufError },
 
     #[snafu(display("canister path must exist and be a directory '{path}'"))]
-    CanisterPath { path: Utf8PathBuf },
+    CanisterPath { path: PathBuf },
 
     #[snafu(display("no canister manifest found at '{path}'"))]
-    NoManifest { path: Utf8PathBuf },
+    NoManifest { path: PathBuf },
 
     #[snafu(display("failed to glob pattern '{pattern}'"))]
     GlobPattern {
         source: glob::PatternError,
-        pattern: Utf8PathBuf,
+        pattern: PathBuf,
     },
 
     #[snafu(display("failed to glob pattern in '{path}'"))]
     GlobWalk {
         source: glob::GlobError,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 
     #[snafu(display("failed to load canister manifest in path '{path}'"))]
-    CanisterLoad {
-        source: LoadYamlFileError,
-        path: Utf8PathBuf,
-    },
+    CanisterLoad { path: PathBuf, source: yaml::Error },
 
     #[snafu(transparent)]
     GatherNetworkPaths { source: GatherNetworkPathsError },
@@ -677,47 +674,47 @@ pub enum LoadNetworkConfigurationsError {
     #[snafu(display(
         "cannot redefine the 'ic' network; the network path '{network_path}' is invalid"
     ))]
-    CannotRedefineIcNetwork { network_path: Utf8PathBuf },
+    CannotRedefineIcNetwork { network_path: PathBuf },
 
     #[snafu(display("duplicate network name found: '{name}'"))]
     DuplicateNetworkName { name: String },
 
     #[snafu(transparent)]
-    LoadYamlFile { source: LoadYamlFileError },
+    LoadYamlFile { source: yaml::Error },
 
     #[snafu(display("unable to determine network name from path '{network_path}'"))]
-    NoNetworkName { network_path: Utf8PathBuf },
+    NoNetworkName { network_path: PathBuf },
 }
 
 #[derive(Debug, Snafu)]
 pub enum NormalizeGlobNetworksError {
     #[snafu(transparent)]
-    InvalidPathUtf8 { source: camino::FromPathBufError },
+    InvalidPathUtf8 { source: FromPathBufError },
 
     #[snafu(display("failed to glob pattern '{pattern}'"))]
     NetworkGlobPattern {
         source: glob::PatternError,
-        pattern: Utf8PathBuf,
+        pattern: PathBuf,
     },
 
     #[snafu(display("failed to glob pattern in '{path}'"))]
     NetworkGlobWalk {
         source: glob::GlobError,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 }
 
 #[derive(Debug, Snafu)]
 pub enum CheckSpecificNetworkError {
     #[snafu(transparent)]
-    InvalidPathUtf8 { source: camino::FromPathBufError },
+    InvalidPathUtf8 { source: FromPathBufError },
 
     #[snafu(display(
         "configuration file for network '{network_path}' not found at '{config_path}'"
     ))]
     NetworkPath {
-        network_path: Utf8PathBuf,
-        config_path: Utf8PathBuf,
+        network_path: PathBuf,
+        config_path: PathBuf,
     },
 }
 

@@ -5,10 +5,9 @@ edition = "2024"
 
 [dependencies]
 async-trait = { workspace = true }
-camino = { workspace = true }
 handlebars = { workspace = true }
 icp-adapter = { workspace = true }
-icp-fs = { workspace = true }
+icp = { workspace = true }
 mockall = { workspace = true }
 reqwest = { workspace = true }
 schemars = { workspace = true }

@@ -6,13 +6,11 @@ use crate::{
     },
     paths::{ensure_key_pem_path, key_pem_path},
 };
-use camino::{Utf8Path, Utf8PathBuf};
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
-use icp_dirs::IcpCliDirs;
-use icp_fs::fs;
+use icp::{Directories, fs, prelude::*};
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -26,7 +24,7 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 
 pub fn load_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     list: &IdentityList,
     name: &str,
     password_func: impl FnOnce() -> Result<String, String>,
@@ -49,19 +47,16 @@ pub fn load_identity(
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: fs::ReadToStringError },
+    ReadFileError { source: icp::fs::Error },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
     ParsePemError {
-        path: Utf8PathBuf,
+        path: PathBuf,
         source: pem::PemError,
     },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
-    ParseKeyError {
-        path: Utf8PathBuf,
-        source: pkcs8::Error,
-    },
+    ParseKeyError { path: PathBuf, source: pkcs8::Error },
 
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },
@@ -71,7 +66,7 @@ pub enum LoadIdentityError {
 }
 
 fn load_pem_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     name: &str,
     format: &PemFormat,
     algorithm: &IdentityKeyAlgorithm,
@@ -92,7 +87,7 @@ fn load_pbes2_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
     password_func: impl FnOnce() -> Result<String, String>,
-    path: &Utf8Path,
+    path: &Path,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
@@ -112,7 +107,7 @@ fn load_pbes2_identity(
 fn load_plaintext_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
-    path: &Utf8Path,
+    path: &Path,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == PrivateKeyInfo::PEM_LABEL,
@@ -128,7 +123,7 @@ fn load_plaintext_identity(
 }
 
 pub fn load_identity_in_context(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
     let defaults = load_identity_defaults(dirs)?;
@@ -147,7 +142,7 @@ pub enum LoadIdentityInContextError {
 }
 
 pub fn create_identity(
-    dirs: &IcpCliDirs,
+    dirs: &Directories,
     name: &str,
     key: IdentityKey,
     format: CreateFormat,
@@ -209,19 +204,19 @@ pub enum CreateIdentityError {
     IdentityAlreadyExists { name: String },
 }
 
-fn write_identity(dirs: &IcpCliDirs, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
-    let pem_path = ensure_key_pem_path(dirs, name)?;
-    fs::write(&pem_path, pem.as_bytes())?;
+fn write_identity(dirs: &Directories, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
+    let pem_path = ensure_key_pem_path(dirs, name).context(WriteFileSnafu)?;
+    fs::write_string(&pem_path, pem).context(WriteFileSnafu)?;
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
-    #[snafu(transparent)]
-    WriteFileError { source: fs::WriteFileError },
+    #[snafu(display("failed to write file"))]
+    WriteFileError { source: icp::fs::Error },
 
-    #[snafu(transparent)]
-    CreateDirectoryError { source: fs::CreateDirAllError },
+    #[snafu(display("failed to create directory"))]
+    CreateDirectoryError { source: icp::fs::Error },
 }
 
 fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {

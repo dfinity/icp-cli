@@ -3,12 +3,11 @@ use std::{
     io::{Seek, Write},
 };
 
-use camino::{Utf8Path, Utf8PathBuf};
+use crate::lock::{AcquireWriteLockError, RwFileLock};
 use fd_lock::RwLockWriteGuard;
-use icp_fs::{
-    fs::remove_file,
-    lock::{AcquireWriteLockError, RwFileLock},
-    lockedjson::load_json_with_lock,
+use icp::{
+    fs::{json, remove_file},
+    prelude::*,
 };
 use snafu::prelude::*;
 
@@ -49,12 +48,12 @@ pub struct ProjectNetworkAlreadyRunningError {
 /// exclusive access to a resource, such as a network port.
 /// Deletes the lock and releases the lock when dropped.
 pub struct LockFileClaim<'a> {
-    path: Utf8PathBuf,
+    path: PathBuf,
     _guard: RwLockWriteGuard<'a, File>,
 }
 
 impl<'a> LockFileClaim<'a> {
-    pub fn new(path: impl AsRef<Utf8Path>, guard: RwLockWriteGuard<'a, File>) -> Self {
+    pub fn new(path: impl AsRef<Path>, guard: RwLockWriteGuard<'a, File>) -> Self {
         let path = path.as_ref().to_path_buf();
         Self {
             path,
@@ -75,12 +74,12 @@ impl Drop for LockFileClaim<'_> {
 
 pub struct FixedPortLock {
     file_lock: RwFileLock,
-    port_descriptor_path: Utf8PathBuf,
+    port_descriptor_path: PathBuf,
     port: u16,
 }
 
 impl FixedPortLock {
-    pub fn new(file_lock: RwFileLock, port_descriptor_path: &Utf8Path, port: u16) -> Self {
+    pub fn new(file_lock: RwFileLock, port_descriptor_path: &Path, port: u16) -> Self {
         Self {
             file_lock,
             port_descriptor_path: port_descriptor_path.to_path_buf(),
@@ -94,7 +93,7 @@ impl FixedPortLock {
         let lock_path = self.file_lock.path().to_path_buf();
 
         let guard = self.file_lock.rwlock_mut().try_write().map_err(|_| {
-            let network_descriptor = load_json_with_lock(&self.port_descriptor_path)
+            let network_descriptor = json::load(&self.port_descriptor_path)
                 .ok()
                 .flatten()
                 .map(Box::new);
@@ -144,20 +143,20 @@ impl Drop for NetworkDescriptorCleaner<'_> {
 #[snafu(display("failed to truncate file at {path}"))]
 pub struct TruncateFileError {
     source: std::io::Error,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 #[derive(Debug, Snafu)]
 pub enum WriteDescriptorError {
     Write {
         source: std::io::Error,
-        path: Utf8PathBuf,
+        path: PathBuf,
     },
 }
 
 pub struct NetworkDescriptorWriter<'lock> {
     write_guard: RwLockWriteGuard<'lock, File>,
-    path: Utf8PathBuf,
+    path: PathBuf,
 }
 
 impl<'lock> NetworkDescriptorWriter<'lock> {

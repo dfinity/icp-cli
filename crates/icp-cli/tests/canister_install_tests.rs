@@ -1,12 +1,12 @@
 use crate::common::TestContext;
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
 
 #[test]
 fn canister_install() {
-    let ctx = TestContext::new().with_dfx();
+    let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
@@ -27,9 +27,9 @@ fn canister_install() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

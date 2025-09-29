@@ -1,5 +1,5 @@
-use camino::Utf8PathBuf;
 use cycles_ledger::CyclesLedgerPocketIcClient;
+use icp::prelude::PathBuf;
 pub use icp_cli::IcpCliClient;
 use icp_ledger::IcpLedgerPocketIcClient;
 
@@ -9,7 +9,7 @@ mod cycles_ledger;
 mod icp_cli;
 mod icp_ledger;
 
-pub fn icp<'a>(ctx: &'a TestContext, current_dir: &'a Utf8PathBuf) -> IcpCliClient<'a> {
+pub fn icp<'a>(ctx: &'a TestContext, current_dir: &'a PathBuf) -> IcpCliClient<'a> {
     IcpCliClient::new(ctx, current_dir)
 }
 

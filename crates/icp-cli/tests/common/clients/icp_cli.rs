@@ -1,15 +1,15 @@
-use camino::Utf8PathBuf;
 use candid::Principal;
+use icp::prelude::PathBuf;
 
 use crate::common::TestContext;
 
 pub struct IcpCliClient<'a> {
     ctx: &'a TestContext,
-    current_dir: &'a Utf8PathBuf,
+    current_dir: &'a PathBuf,
 }
 
 impl<'a> IcpCliClient<'a> {
-    pub fn new(ctx: &'a TestContext, current_dir: &'a Utf8PathBuf) -> Self {
+    pub fn new(ctx: &'a TestContext, current_dir: &'a PathBuf) -> Self {
         Self { ctx, current_dir }
     }
 

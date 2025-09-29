@@ -52,18 +52,22 @@ pub enum LookupError {
     EnvironmentNotFound { name: String },
 }
 
-pub struct IdStore(PathBuf);
+pub struct IdStore {
+    path: PathBuf,
+}
 
 impl IdStore {
-    pub fn new(path: &PathBuf) -> Self {
-        Self(path.clone())
+    pub fn new(path: &Path) -> Self {
+        Self {
+            path: path.to_owned(),
+        }
     }
 }
 
 impl IdStore {
     pub fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Load JSON
-        let mut cs = json::load::<Vec<Association>>(&self.0)
+        let mut cs = json::load::<Vec<Association>>(&self.path)
             .or_else(|err| match err {
                 // Default to empty
                 json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),
@@ -87,14 +91,14 @@ impl IdStore {
         cs.push(Association(key.to_owned(), cid.to_owned()));
 
         // Store JSON
-        json::save(&self.0, &cs).context(RegisterSaveStoreSnafu)?;
+        json::save(&self.path, &cs).context(RegisterSaveStoreSnafu)?;
 
         Ok(())
     }
 
     pub fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Load JSON
-        let cs = json::load::<Vec<Association>>(&self.0)
+        let cs = json::load::<Vec<Association>>(&self.path)
             .or_else(|err| match err {
                 // Default to empty
                 json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),
@@ -122,7 +126,7 @@ impl IdStore {
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {
         // Load JSON
-        let cs = json::load::<Vec<Association>>(&self.0)
+        let cs = json::load::<Vec<Association>>(&self.path)
             .or_else(|err| match err {
                 // Default to empty
                 json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),

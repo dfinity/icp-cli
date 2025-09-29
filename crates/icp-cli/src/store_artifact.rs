@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use icp::{
     fs::{create_dir_all, read, write},
     prelude::*,
@@ -22,35 +24,53 @@ pub enum LookupError {
     LookupArtifactNotFound { name: String },
 }
 
-pub struct ArtifactStore(PathBuf);
+pub struct ArtifactStore {
+    path: PathBuf,
+    lock: Mutex<()>,
+}
 
 impl ArtifactStore {
-    pub fn new(path: &PathBuf) -> Self {
-        Self(path.clone())
+    pub fn new(path: &Path) -> Self {
+        Self {
+            path: path.to_owned(),
+            lock: Mutex::new(()),
+        }
     }
 }
 
 impl ArtifactStore {
     pub fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+        // Lock Artifact Store
+        let _g = self
+            .lock
+            .lock()
+            .expect("failed to acquire artifact store lock");
+
         // Create artifacts directory
-        create_dir_all(&self.0).context(ArtifactsDirSnafu)?;
+        create_dir_all(&self.path).context(ArtifactsDirSnafu)?;
 
         // Store artifact
-        write(&self.0.join(name), wasm).context(SaveWriteFileSnafu)?;
+        write(&self.path.join(name), wasm).context(SaveWriteFileSnafu)?;
 
         Ok(())
     }
 
     pub fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+        // Lock Artifact Store
+        let _g = self
+            .lock
+            .lock()
+            .expect("failed to acquire artifact store lock");
+
         // Not Found
-        if !self.0.join(name).exists() {
+        if !self.path.join(name).exists() {
             return Err(LookupError::LookupArtifactNotFound {
                 name: name.to_owned(),
             });
         }
 
         // Load artifact
-        let wasm = read(&self.0.join(name)).context(LookupReadFileSnafu)?;
+        let wasm = read(&self.path.join(name)).context(LookupReadFileSnafu)?;
 
         Ok(wasm)
     }

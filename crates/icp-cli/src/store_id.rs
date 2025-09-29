@@ -1,4 +1,4 @@
-use std::io::ErrorKind;
+use std::{io::ErrorKind, sync::Mutex};
 
 use ic_agent::export::Principal;
 use icp::{fs::json, prelude::*};
@@ -54,18 +54,23 @@ pub enum LookupError {
 
 pub struct IdStore {
     path: PathBuf,
+    lock: Mutex<()>,
 }
 
 impl IdStore {
     pub fn new(path: &Path) -> Self {
         Self {
             path: path.to_owned(),
+            lock: Mutex::new(()),
         }
     }
 }
 
 impl IdStore {
     pub fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
+        // Lock ID Store
+        let _g = self.lock.lock().expect("failed to acquire id store lock");
+
         // Load JSON
         let mut cs = json::load::<Vec<Association>>(&self.path)
             .or_else(|err| match err {
@@ -97,6 +102,9 @@ impl IdStore {
     }
 
     pub fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+        // Lock ID Store
+        let _g = self.lock.lock().expect("failed to acquire id store lock");
+
         // Load JSON
         let cs = json::load::<Vec<Association>>(&self.path)
             .or_else(|err| match err {
@@ -125,6 +133,9 @@ impl IdStore {
         &self,
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {
+        // Lock ID Store
+        let _g = self.lock.lock().expect("failed to acquire id store lock");
+
         // Load JSON
         let cs = json::load::<Vec<Association>>(&self.path)
             .or_else(|err| match err {

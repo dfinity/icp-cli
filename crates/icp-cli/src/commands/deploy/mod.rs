@@ -8,7 +8,7 @@ use crate::{
         build,
         canister::{
             binding_env_vars,
-            create::{self, CanisterIDs, CanisterSettings, DEFAULT_EFFECTIVE_ID},
+            create::{self, CanisterSettings},
             install,
         },
         sync,
@@ -40,6 +40,10 @@ pub struct Cmd {
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[arg(long)]
     pub controller: Vec<Principal>,
+
+    /// Cycles to fund canister creation (in cycles).
+    #[arg(long, default_value_t = 2_000_000_000_000u128)]
+    pub cycles: u128,
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -76,40 +80,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         return Ok(());
     }
 
-    // Infer the effective canister id from the subnet id if provided.
-    let mut effective_id = Principal::from_text(DEFAULT_EFFECTIVE_ID).unwrap();
-    if let Some(subnet_id) = cmd.subnet_id {
-        // Load environment
-        let env = pm
-            .environments
-            .iter()
-            .find(|&v| v.name == cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
-            })?;
-
-        // Get network
-        let network = env
-            .network
-            .as_ref()
-            .expect("no network specified in environment");
-
-        // Load identity
-        ctx.require_identity(cmd.identity.name());
-
-        // Setup network
-        ctx.require_network(network);
-
-        // Prepare agent
-        let agent = ctx.agent()?;
-
-        // Get subnet canister ranges
-        let ranges = agent.read_state_subnet_canister_ranges(subnet_id).await?;
-        if !ranges.is_empty() {
-            effective_id = ranges[0].0 // Use the first start canister id as the effective id.
-        }
-    }
-
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
     build::exec(
@@ -129,12 +99,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             identity: cmd.identity.clone(),
             environment: cmd.environment.clone(),
 
-            // Ids
-            ids: CanisterIDs {
-                effective_id: effective_id.to_owned(),
-                specific_id: None,
-            },
-
             // Controllers
             controller: cmd.controller.to_owned(),
 
@@ -144,6 +108,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             },
 
             quiet: false,
+            cycles: cmd.cycles,
         },
     )
     .await;

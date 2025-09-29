@@ -11,13 +11,13 @@ mod common;
 fn canister_settings_update_controllers() {
     let ctx = TestContext::new().with_dfx();
 
-    // Prepare principals.
-    let client = clients::icp(&ctx);
-    let principal_alice = get_principal(&client, "alice");
-    let principal_bob = get_principal(&client, "bob");
-
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
+
+    // Prepare principals.
+    let client = clients::icp(&ctx, &project_dir);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
 
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");
@@ -252,13 +252,13 @@ fn get_principal(client: &IcpCliClient, identity: &str) -> String {
 fn canister_settings_update_log_visibility() {
     let ctx = TestContext::new().with_dfx();
 
-    // Prepare principals.
-    let client = clients::icp(&ctx);
-    let principal_alice = get_principal(&client, "alice");
-    let principal_bob = get_principal(&client, "bob");
-
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
+
+    // Prepare principals.
+    let client = clients::icp(&ctx, &project_dir);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
 
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");

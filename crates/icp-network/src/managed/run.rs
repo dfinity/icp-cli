@@ -1,11 +1,11 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
+use candid::{Encode, Nat, Principal};
+use futures::future::join_all;
 use icp::{
     fs::{create_dir_all, remove_dir_all, remove_file},
     prelude::*,
 };
-use candid::{Encode, Nat, Principal};
-use futures::future::join_all;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use pocket_ic::{common::rest::HttpGatewayBackend, nonblocking::PocketIc};
 use reqwest::Url;

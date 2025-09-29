@@ -2442,8 +2442,10 @@ dependencies = [
 name = "icp"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "camino",
  "directories",
+ "schemars",
  "serde",
  "serde_json",
  "serde_yaml",

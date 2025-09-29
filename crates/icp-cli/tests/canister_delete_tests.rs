@@ -1,5 +1,5 @@
 use crate::common::{TRILLION, TestContext, clients};
-use icp_fs::fs::write;
+use icp::fs::write_string;
 
 mod common;
 
@@ -26,9 +26,9 @@ fn canister_delete() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

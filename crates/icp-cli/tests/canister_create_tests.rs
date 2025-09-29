@@ -1,6 +1,6 @@
 use crate::common::{TRILLION, TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
@@ -25,9 +25,9 @@ fn canister_create() {
             command: echo hi
     "#;
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -75,9 +75,9 @@ fn canister_create_with_settings() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -142,9 +142,9 @@ fn canister_create_with_settings_cmdline_override() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

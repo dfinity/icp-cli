@@ -1,6 +1,6 @@
 use crate::common::TestContext;
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp_fs::fs::write;
+use icp::fs::write_string;
 
 mod common;
 
@@ -27,9 +27,9 @@ fn build_adapter_script_single() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -68,9 +68,9 @@ fn build_adapter_script_multiple() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

@@ -3,13 +3,13 @@ use serde::{Deserialize, Deserializer};
 
 pub mod access;
 pub mod config;
+mod directory;
+mod lock;
+mod managed;
 pub mod status;
 pub mod structure;
 
-mod directory;
 pub use directory::NetworkDirectory;
-
-mod managed;
 pub use managed::run::{RunNetworkError, run_network};
 
 pub const NETWORK_LOCAL: &str = "local";

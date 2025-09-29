@@ -1,5 +1,5 @@
 use crate::common::{TRILLION, TestContext, clients};
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
@@ -17,9 +17,9 @@ fn deploy_empty() {
         - canisters/*
     "#;
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -44,9 +44,9 @@ fn deploy_canister_not_found() {
         - canisters/*
     "#;
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -82,9 +82,9 @@ fn deploy() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -133,9 +133,9 @@ fn deploy_twice_should_succeed() {
         wasm,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

@@ -1,4 +1,4 @@
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -109,9 +109,9 @@ fn deploy_to_other_projects_network() {
         "#,
     );
 
-    write(
-        projb.join("icp.yaml"), // path
-        pm,                     // contents
+    write_string(
+        &projb.join("icp.yaml"), // path
+        &pm,                     // contents
     )
     .expect("failed to write project manifest");
 

@@ -1,5 +1,5 @@
 use crate::common::{TRILLION, TestContext, clients};
-use icp_fs::fs::write;
+use icp::fs::{create_dir_all, write_string};
 use icp_network::NETWORK_LOCAL;
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -34,9 +34,9 @@ fn sync_adapter_script_single() {
         "#,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -93,9 +93,9 @@ fn sync_adapter_script_multiple() {
         "#,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -133,10 +133,10 @@ async fn sync_adapter_static_assets() {
     let assets_dir = project_dir.join("www");
 
     // Create assets directory
-    icp_fs::fs::create_dir_all(&assets_dir).expect("failed to create assets directory");
+    create_dir_all(&assets_dir).expect("failed to create assets directory");
 
     // Create simple index page
-    icp_fs::fs::write(assets_dir.join("index.html"), "hello").expect("failed to create index page");
+    write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
 
     // Project manifest
     let pm = format!(
@@ -157,9 +157,9 @@ async fn sync_adapter_static_assets() {
         "#,
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

@@ -4,9 +4,9 @@ use std::io;
 use camino_tempfile::tempdir;
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
+use icp::fs::read;
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
 use icp_canister::BuildStep;
-use icp_fs::fs::{ReadFileError, read};
 use snafu::{ResultExt, Snafu};
 
 use crate::context::ContextProjectError;
@@ -119,7 +119,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 }
 
                 // Load wasm output
-                let wasm = read(wasm_output_path).context(ReadOutputSnafu)?;
+                let wasm = read(&wasm_output_path).context(ReadOutputSnafu)?;
 
                 // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
@@ -166,7 +166,7 @@ pub enum CommandError {
     BuildAdapter { source: AdapterCompileError },
 
     #[snafu(display("failed to read output wasm artifact"))]
-    ReadOutput { source: ReadFileError },
+    ReadOutput { source: icp::fs::Error },
 
     #[snafu(display("no output has been set"))]
     NoOutput,

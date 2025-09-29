@@ -2,7 +2,6 @@ use fd_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use icp::prelude::*;
 use snafu::prelude::*;
 use std::fs::{File, OpenOptions};
-use std::io::Read;
 
 pub struct RwFileLock {
     lock: RwLock<File>,
@@ -38,19 +37,6 @@ impl RwFileLock {
         self.lock.read().context(AcquireReadLockSnafu {
             path: self.path.clone(),
         })
-    }
-
-    pub fn read(path: impl AsRef<Path>) -> Result<Vec<u8>, ReadWithLockError> {
-        let path = path.as_ref();
-        let mut lock = Self::open_for_read(path)?;
-        let guard = lock.acquire_read_lock()?;
-
-        let mut buf = vec![];
-        (&*guard)
-            .read_to_end(&mut buf)
-            .context(ReadFileSnafu { path })?;
-
-        Ok(buf)
     }
 
     pub fn open_for_write(path: impl AsRef<Path>) -> Result<Self, OpenFileForWriteLockError> {
@@ -109,10 +95,4 @@ pub enum ReadWithLockError {
 
     #[snafu(transparent)]
     OpenFileForReadLock { source: OpenFileForReadLockError },
-
-    #[snafu(display("failed to read file at {path}"))]
-    ReadFile {
-        source: std::io::Error,
-        path: PathBuf,
-    },
 }

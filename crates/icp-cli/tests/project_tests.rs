@@ -1,6 +1,6 @@
 use crate::common::TestContext;
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp_fs::fs::{create_dir_all, write};
+use icp::fs::{create_dir_all, write_string};
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
@@ -28,9 +28,9 @@ fn single_canister_project() {
         f.path()
     );
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
@@ -55,9 +55,9 @@ fn multi_canister_project() {
       - my-canister
     "#;
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -76,11 +76,11 @@ fn multi_canister_project() {
         f.path()
     );
 
-    create_dir_all(project_dir.join("my-canister")).expect("failed to create canister directory");
+    create_dir_all(&project_dir.join("my-canister")).expect("failed to create canister directory");
 
-    write(
-        project_dir.join("my-canister/canister.yaml"), // path
-        cm,                                            // contents
+    write_string(
+        &project_dir.join("my-canister/canister.yaml"), // path
+        &cm,                                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -105,9 +105,9 @@ fn glob_path() {
       - canisters/*
     "#;
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -126,12 +126,12 @@ fn glob_path() {
         f.path()
     );
 
-    create_dir_all(project_dir.join("canisters/my-canister"))
+    create_dir_all(&project_dir.join("canisters/my-canister"))
         .expect("failed to create canister directory");
 
-    write(
-        project_dir.join("canisters/my-canister/canister.yaml"), // path
-        cm,                                                      // contents
+    write_string(
+        &project_dir.join("canisters/my-canister/canister.yaml"), // path
+        &cm,                                                      // contents
     )
     .expect("failed to write project manifest");
 
@@ -156,9 +156,9 @@ fn explicit_path_missing() {
       - my-canister
     "#;
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        pm,                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -178,9 +178,9 @@ fn redefine_ic_network_disallowed() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        "",                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        "",                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -209,8 +209,8 @@ fn missing_specific_network() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    write(
-        project_dir.join("icp.yaml"), // path
+    write_string(
+        &project_dir.join("icp.yaml"), // path
         r#"
         networks:
           - missing

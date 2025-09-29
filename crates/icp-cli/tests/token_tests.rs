@@ -1,5 +1,5 @@
 use crate::common::{TestContext, clients};
-use icp_fs::fs::write;
+use icp::fs::write_string;
 use predicates::str::contains;
 
 mod common;
@@ -12,9 +12,9 @@ async fn token_balance() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    write(
-        project_dir.join("icp.yaml"), // path
-        "",                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        "",                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -58,9 +58,9 @@ async fn token_transfer() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
-    write(
-        project_dir.join("icp.yaml"), // path
-        "",                           // contents
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        "",                            // contents
     )
     .expect("failed to write project manifest");
 

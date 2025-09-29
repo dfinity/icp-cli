@@ -2443,6 +2443,10 @@ name = "icp"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -2457,7 +2461,6 @@ dependencies = [
  "ic-asset",
  "ic-utils",
  "icp",
- "icp-fs",
  "reqwest",
  "schemars",
  "serde",
@@ -2475,8 +2478,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "handlebars 6.3.2",
+ "icp",
  "icp-adapter",
- "icp-fs",
  "mockall",
  "reqwest",
  "schemars",
@@ -2515,7 +2518,6 @@ dependencies = [
  "icp-adapter",
  "icp-canister",
  "icp-dirs",
- "icp-fs",
  "icp-identity",
  "icp-network",
  "icp-project",
@@ -2555,18 +2557,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "icp-fs"
-version = "0.1.0"
-dependencies = [
- "fd-lock",
- "icp",
- "serde",
- "serde_json",
- "serde_yaml",
- "snafu",
-]
-
-[[package]]
 name = "icp-identity"
 version = "0.1.0"
 dependencies = [
@@ -2578,7 +2568,6 @@ dependencies = [
  "ic-agent",
  "icp",
  "icp-dirs",
- "icp-fs",
  "itertools 0.14.0",
  "k256 0.13.4",
  "p256",
@@ -2604,7 +2593,6 @@ dependencies = [
  "hex",
  "ic-agent",
  "icp",
- "icp-fs",
  "pocket-ic",
  "reqwest",
  "schemars",
@@ -2626,7 +2614,6 @@ dependencies = [
  "icp",
  "icp-adapter",
  "icp-canister",
- "icp-fs",
  "icp-network",
  "pathdiff",
  "schemars",

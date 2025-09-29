@@ -11,7 +11,6 @@ ic-agent = { workspace = true }
 ic-asset = { workspace = true }
 ic-utils = { workspace = true }
 icp = { workspace = true }
-icp-fs = { workspace = true }
 reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }

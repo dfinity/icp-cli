@@ -4,13 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use icp::prelude::*;
+use icp::{fs::yaml, prelude::*};
 // Async stream processing utilities for concurrent recipe resolution
 use futures::{StreamExt, TryStreamExt, stream};
 use glob::GlobError;
 use icp_canister::{BuildSteps, CanisterSettings, SyncSteps, recipe};
 use icp_canister::{CanisterInstructions, manifest::CanisterManifest};
-use icp_fs::yaml::LoadYamlFileError;
 use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 use pathdiff::diff_utf8_paths;
 use serde::Deserialize;
@@ -597,7 +596,7 @@ impl Project {
 #[derive(Debug, Snafu)]
 pub enum LoadProjectManifestError {
     #[snafu(transparent)]
-    Parse { source: LoadYamlFileError },
+    Parse { source: yaml::Error },
 
     #[snafu(transparent)]
     InvalidPathUtf8 { source: FromPathBufError },
@@ -621,10 +620,7 @@ pub enum LoadProjectManifestError {
     },
 
     #[snafu(display("failed to load canister manifest in path '{path}'"))]
-    CanisterLoad {
-        source: LoadYamlFileError,
-        path: PathBuf,
-    },
+    CanisterLoad { path: PathBuf, source: yaml::Error },
 
     #[snafu(transparent)]
     GatherNetworkPaths { source: GatherNetworkPathsError },
@@ -684,7 +680,7 @@ pub enum LoadNetworkConfigurationsError {
     DuplicateNetworkName { name: String },
 
     #[snafu(transparent)]
-    LoadYamlFile { source: LoadYamlFileError },
+    LoadYamlFile { source: yaml::Error },
 
     #[snafu(display("unable to determine network name from path '{network_path}'"))]
     NoNetworkName { network_path: PathBuf },

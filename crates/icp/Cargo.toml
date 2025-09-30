@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 camino = { workspace = true }
-candid = { workspace = true }
 directories = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

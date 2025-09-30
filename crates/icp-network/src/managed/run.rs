@@ -3,7 +3,11 @@ use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 use candid::Principal;
 use futures::future::{join, join_all};
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
-use icp::system_canisters::{
+use icp::{
+    fs::{create_dir_all, remove_dir_all, remove_file},
+    prelude::*,
+};
+use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
@@ -11,10 +15,6 @@ use icp::system_canisters::{
     },
     governance::GOVERNANCE_PRINCIPAL,
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
-};
-use icp::{
-    fs::{create_dir_all, remove_dir_all, remove_file},
-    prelude::*,
 };
 use pocket_ic::{
     common::rest::{HttpGatewayBackend, RawEffectivePrincipal},

@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 use crate::manifest::{
     environment::{CanisterSelection, Environment},
-    network::{Mode, Network},
+    network::{Configuration, Gateway, Network},
     project::{Canisters, Environments, Networks},
 };
 
@@ -33,11 +33,19 @@ impl Default for Networks {
         Networks::Networks(vec![
             Item::Manifest(Network {
                 name: "local".to_string(),
-                mode: Mode::Managed,
+                configuration: Configuration::Managed(network::Managed {
+                    gateway: Gateway {
+                        host: "localhost".to_string(),
+                        port: network::Port::Fixed(8080),
+                    },
+                }),
             }),
             Item::Manifest(Network {
                 name: "mainnet".to_string(),
-                mode: Mode::Connected,
+                configuration: Configuration::Connected(network::Connected {
+                    url: "https://ic0.app".to_string(),
+                    root_key: None,
+                }),
             }),
         ])
     }

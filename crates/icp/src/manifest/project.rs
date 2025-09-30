@@ -154,7 +154,9 @@ mod tests {
 
     use crate::{
         canister::{Settings, build, sync},
-        manifest::{canister::Instructions, environment::CanisterSelection, network::Mode},
+        manifest::{
+            canister::Instructions, environment::CanisterSelection, network::Configuration,
+        },
     };
 
     use super::*;
@@ -268,14 +270,13 @@ mod tests {
                 r#"
                 network:
                   name: my-network
-                  mode: managed
                 "#
             )?,
             Project {
                 canisters: Canisters::default().into(),
                 networks: Networks::Networks(vec![Item::Manifest(Network {
                     name: "my-network".to_string(),
-                    mode: Mode::Managed,
+                    configuration: Configuration::default(),
                 }),])
                 .with_defaults()
                 .into(),
@@ -293,14 +294,13 @@ mod tests {
                 r#"
                 networks:
                   - name: my-network
-                    mode: managed
                 "#
             )?,
             Project {
                 canisters: Canisters::default().into(),
                 networks: Networks::Networks(vec![Item::Manifest(Network {
                     name: "my-network".to_string(),
-                    mode: Mode::Managed,
+                    configuration: Configuration::default(),
                 }),])
                 .with_defaults()
                 .into(),
@@ -319,7 +319,6 @@ mod tests {
                 networks:
                   - networks/*
                   - name: my-network
-                    mode: managed
                 "#
             )?,
             Project {
@@ -328,7 +327,7 @@ mod tests {
                     Item::Path("networks/*".to_string()),
                     Item::Manifest(Network {
                         name: "my-network".to_string(),
-                        mode: Mode::Managed,
+                        configuration: Configuration::default(),
                     }),
                 ])
                 .with_defaults()

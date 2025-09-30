@@ -1,5 +1,5 @@
 use candid::{Decode, Encode, Nat, Principal};
-use icp_canister_interfaces::{governance::GOVERNANCE_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL};
+use icp::system_canisters::{governance::GOVERNANCE_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL};
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::TransferArg,

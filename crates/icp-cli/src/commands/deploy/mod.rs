@@ -42,7 +42,7 @@ pub struct Cmd {
     pub controller: Vec<Principal>,
 
     /// Cycles to fund canister creation (in cycles).
-    #[arg(long, default_value_t = 2_000_000_000_000u128)]
+    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES)]
     pub cycles: u128,
 }
 

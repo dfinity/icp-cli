@@ -14,6 +14,8 @@ use crate::{
     store_id::{Key, LookupError, RegisterError},
 };
 
+pub const DEFAULT_CANISTER_CYCLES: u128 = 2_000_000_000_000;
+
 #[derive(Clone, Debug, Default, Parser)]
 pub struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
@@ -57,7 +59,7 @@ pub struct Cmd {
     pub quiet: bool,
 
     /// Cycles to fund canister creation (in raw cycles).
-    #[arg(long, default_value_t = 2_000_000_000_000u128)]
+    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
     pub cycles: u128,
 }
 

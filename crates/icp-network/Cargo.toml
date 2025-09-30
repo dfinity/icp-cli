@@ -11,7 +11,6 @@ hex = { workspace = true }
 ic-agent = { workspace = true }
 icp = { workspace = true }
 ic-ledger-types = { workspace = true }
-icp-canister-interfaces = { path = "../icp-canister-interfaces" }
 icrc-ledger-types = { workspace = true }
 pocket-ic = { workspace = true }
 reqwest = { workspace = true }

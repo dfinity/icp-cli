@@ -2443,6 +2443,7 @@ name = "icp"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "candid",
  "directories",
  "serde",
  "serde_json",
@@ -2492,14 +2493,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "icp-canister-interfaces"
-version = "0.1.0"
-dependencies = [
- "candid",
- "serde",
-]
-
-[[package]]
 name = "icp-cli"
 version = "0.1.0"
 dependencies = [
@@ -2526,7 +2519,6 @@ dependencies = [
  "icp",
  "icp-adapter",
  "icp-canister",
- "icp-canister-interfaces",
  "icp-identity",
  "icp-network",
  "icp-project",
@@ -2594,7 +2586,6 @@ dependencies = [
  "ic-agent",
  "ic-ledger-types",
  "icp",
- "icp-canister-interfaces",
  "icrc-ledger-types",
  "pocket-ic",
  "reqwest",

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_LEDGER_CID};
+use icp::system_canisters::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_LEDGER_CID};
 use phf::phf_map;
 use snafu::Snafu;
 

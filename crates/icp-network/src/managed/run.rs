@@ -365,7 +365,9 @@ async fn mint_cycles_to_account(
 ) -> Result<(), InitializePocketicError> {
     let icp_to_convert =
         (amount + CYCLES_LEDGER_BLOCK_FEE).div_ceil(icp_xdr_conversion_rate as u128) as u64;
+    // First mint to the non-CMC account because notify_mint_cycles will fail if the depositing transaction is a mint TX
     mint_icp_to_account(pic, account, icp_to_convert + ICP_LEDGER_BLOCK_FEE_E8S).await?;
+    // Then transfer to the CMC account
     let (transfer_result,): (TransferResult,) = call_candid_as(
         pic,
         ICP_LEDGER_PRINCIPAL,
@@ -431,7 +433,7 @@ async fn mint_icp_to_account(
         pic,
         ICP_LEDGER_PRINCIPAL,
         RawEffectivePrincipal::None,
-        GOVERNANCE_PRINCIPAL,
+        GOVERNANCE_PRINCIPAL, // Governance with no subaccount is configured as the minter on the ICP ledger
         "transfer",
         (TransferArgs {
             memo: Memo(0),

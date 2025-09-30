@@ -38,12 +38,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run unit tests
         run: cargo test --workspace --lib --bins
@@ -63,12 +64,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: install pocket-ic
         run: |

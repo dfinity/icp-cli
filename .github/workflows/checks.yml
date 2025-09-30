@@ -18,12 +18,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: build
         run: cargo build
@@ -41,12 +42,13 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run Lint
         run: cargo clippy --verbose --tests --benches -- -D warnings -D clippy::all
@@ -68,12 +70,13 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -102,12 +105,13 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: generate docs
         run: ./scripts/generate-cli-docs.sh
@@ -142,12 +146,13 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: |
+            ~/.rustup/
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ubuntu-latest-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: generate icp.yaml schema
         run: ./scripts/generate-config-schema.sh

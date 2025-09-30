@@ -43,7 +43,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     );
 
     // Determine ICP accounts to seed
-    let seed_accounts = identities.identities.iter().map(|(_, id)| id.principal());
+    let seed_accounts = identities.identities.values().map(|id| id.principal());
 
     eprintln!("Project root: {}", pd.structure().root());
     eprintln!("Network root: {}", nd.structure().network_root);

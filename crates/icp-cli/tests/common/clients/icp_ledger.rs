@@ -6,7 +6,7 @@ use icrc_ledger_types::icrc1::{
 use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
-use crate::common::{GOVERNANCE_ID, ICP_LEDGER_CID, TestContext};
+use crate::common::{GOVERNANCE_CID, ICP_LEDGER_CID, TestContext};
 
 pub struct IcpLedgerPocketIcClient<'a> {
     pic: Ref<'a, PocketIc>,
@@ -53,7 +53,7 @@ impl<'a> IcpLedgerPocketIcClient<'a> {
         self.pic
             .update_call(
                 Principal::from_text(ICP_LEDGER_CID).unwrap(),
-                Principal::from_text(GOVERNANCE_ID).unwrap(),
+                Principal::from_text(GOVERNANCE_CID).unwrap(),
                 "icrc1_transfer",
                 bytes,
             )

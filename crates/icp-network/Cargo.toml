@@ -10,6 +10,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 icp = { workspace = true }
+ic-ledger-types = { workspace = true }
 icrc-ledger-types = { workspace = true }
 pocket-ic = { workspace = true }
 reqwest = { workspace = true }

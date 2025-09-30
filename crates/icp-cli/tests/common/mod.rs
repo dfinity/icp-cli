@@ -17,7 +17,7 @@ pub const ICP_LEDGER_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 pub const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
 
 /// Governance on mainnet
-pub const GOVERNANCE_ID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+pub const GOVERNANCE_CID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
 #[cfg(unix)]
 pub const PATH_SEPARATOR: &str = ":";

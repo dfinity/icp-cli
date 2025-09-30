@@ -2583,6 +2583,7 @@ dependencies = [
  "futures",
  "hex",
  "ic-agent",
+ "ic-ledger-types",
  "icp",
  "icrc-ledger-types",
  "pocket-ic",

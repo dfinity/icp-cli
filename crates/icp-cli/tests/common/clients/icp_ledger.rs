@@ -1,4 +1,5 @@
 use candid::{Decode, Encode, Nat, Principal};
+use icp_canister_interfaces::{governance::GOVERNANCE_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL};
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::TransferArg,
@@ -6,7 +7,7 @@ use icrc_ledger_types::icrc1::{
 use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
-use crate::common::{GOVERNANCE_ID, ICP_LEDGER_CID, TestContext};
+use crate::common::TestContext;
 
 pub struct IcpLedgerPocketIcClient<'a> {
     pic: Ref<'a, PocketIc>,
@@ -25,7 +26,7 @@ impl<'a> IcpLedgerPocketIcClient<'a> {
         let result = &self
             .pic
             .query_call(
-                Principal::from_text(ICP_LEDGER_CID).unwrap(),
+                ICP_LEDGER_PRINCIPAL,
                 Principal::anonymous(),
                 "icrc1_balance_of",
                 bytes,
@@ -52,8 +53,8 @@ impl<'a> IcpLedgerPocketIcClient<'a> {
         let bytes = Encode!(&arg).unwrap();
         self.pic
             .update_call(
-                Principal::from_text(ICP_LEDGER_CID).unwrap(),
-                Principal::from_text(GOVERNANCE_ID).unwrap(),
+                ICP_LEDGER_PRINCIPAL,
+                GOVERNANCE_PRINCIPAL,
                 "icrc1_transfer",
                 bytes,
             )

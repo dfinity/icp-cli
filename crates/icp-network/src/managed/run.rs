@@ -1,18 +1,26 @@
 use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
-use candid::{CandidType, Nat, Principal};
+use candid::Principal;
 use futures::future::{join, join_all};
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
 use icp::{
     fs::{create_dir_all, remove_dir_all, remove_file},
     prelude::*,
 };
+use icp_canister_interfaces::{
+    cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
+    cycles_minting_canister::{
+        CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
+        NotifyMintArgs, NotifyMintResponse,
+    },
+    governance::GOVERNANCE_PRINCIPAL,
+    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
+};
 use pocket_ic::{
     common::rest::{HttpGatewayBackend, RawEffectivePrincipal},
     nonblocking::{PocketIc, call_candid, call_candid_as},
 };
 use reqwest::Url;
-use serde::Deserialize;
 use snafu::prelude::*;
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
@@ -33,23 +41,6 @@ use crate::{
     },
     status,
 };
-
-pub const MEMO_MINT_CYCLES: u64 = 0x544e494d; // == 'MINT'
-
-/// 0.0001 ICP, a.k.a. 10k e8s
-const ICP_TRANSFER_FEE_E8S: u64 = 10_000;
-
-/// 100m cycles
-const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
-
-/// ICP ledger on mainnet
-pub const ICP_LEDGER_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
-
-/// Governance on mainnet
-pub const GOVERNANCE_CID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
-
-/// Cycles minting canister on mainnet
-pub const CYCLES_MINTING_CANISTER_CID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 
 pub async fn run_network(
     config: &ManagedNetworkModel,
@@ -374,20 +365,20 @@ async fn mint_cycles_to_account(
 ) -> Result<(), InitializePocketicError> {
     let icp_to_convert =
         (amount + CYCLES_LEDGER_BLOCK_FEE).div_ceil(icp_xdr_conversion_rate as u128) as u64;
-    mint_icp_to_account(pic, account, icp_to_convert + ICP_TRANSFER_FEE_E8S).await?;
+    mint_icp_to_account(pic, account, icp_to_convert + ICP_LEDGER_BLOCK_FEE_E8S).await?;
     let (transfer_result,): (TransferResult,) = call_candid_as(
         pic,
-        Principal::from_text(ICP_LEDGER_CID).unwrap(),
+        ICP_LEDGER_PRINCIPAL,
         RawEffectivePrincipal::None,
         account,
         "transfer",
         (TransferArgs {
             memo: Memo(MEMO_MINT_CYCLES),
             amount: Tokens::from_e8s(icp_to_convert),
-            fee: Tokens::from_e8s(ICP_TRANSFER_FEE_E8S),
+            fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
             from_subaccount: None,
             to: AccountIdentifier::new(
-                &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
+                &CYCLES_MINTING_CANISTER_PRINCIPAL,
                 &Subaccount::from(account),
             ),
             created_at_time: None,
@@ -403,7 +394,7 @@ async fn mint_cycles_to_account(
 
     let mint_result: (NotifyMintResponse,) = call_candid_as(
         pic,
-        Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
+        CYCLES_MINTING_CANISTER_PRINCIPAL,
         RawEffectivePrincipal::None,
         account,
         "notify_mint_cycles",
@@ -438,9 +429,9 @@ async fn mint_icp_to_account(
 ) -> Result<(), InitializePocketicError> {
     let response: (TransferResult,) = call_candid_as(
         pic,
-        Principal::from_text(ICP_LEDGER_CID).unwrap(),
+        ICP_LEDGER_PRINCIPAL,
         RawEffectivePrincipal::None,
-        Principal::from_text(GOVERNANCE_CID).unwrap(),
+        GOVERNANCE_PRINCIPAL,
         "transfer",
         (TransferArgs {
             memo: Memo(0),
@@ -467,7 +458,7 @@ async fn mint_icp_to_account(
 async fn get_icp_xdr_conversion_rate(pic: &PocketIc) -> Result<u64, InitializePocketicError> {
     let response: (ConversionRateResponse,) = call_candid(
         pic,
-        Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
+        CYCLES_MINTING_CANISTER_PRINCIPAL,
         RawEffectivePrincipal::None,
         "get_icp_xdr_conversion_rate",
         ((),),
@@ -477,56 +468,4 @@ async fn get_icp_xdr_conversion_rate(pic: &PocketIc) -> Result<u64, InitializePo
         error: format!("Failed to get ICP XDR conversion rate: {e}"),
     })?;
     Ok(response.0.data.xdr_permyriad_per_icp)
-}
-
-/// Response from get_icp_xdr_conversion_rate on the cycles minting canister
-#[derive(Debug, Deserialize, CandidType)]
-struct ConversionRateResponse {
-    pub data: ConversionRateData,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-struct ConversionRateData {
-    pub xdr_permyriad_per_icp: u64,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintArgs {
-    pub block_index: u64,
-    pub deposit_memo: Option<Vec<u8>>,
-    pub to_subaccount: Option<Vec<u8>>,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintOk {
-    pub balance: Nat,
-    pub block_index: Nat,
-    pub minted: Nat,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintRefunded {
-    pub block_index: Option<u64>,
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintOther {
-    pub error_message: String,
-    pub error_code: u64,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintErr {
-    Refunded(NotifyMintRefunded),
-    InvalidTransaction(String),
-    Other(NotifyMintOther),
-    Processing,
-    TransactionTooOld(u64),
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintResponse {
-    Ok(NotifyMintOk),
-    Err(NotifyMintErr),
 }

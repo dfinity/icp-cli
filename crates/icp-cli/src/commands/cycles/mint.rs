@@ -1,25 +1,25 @@
 use bigdecimal::{BigDecimal, ToPrimitive};
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{Decode, Encode, Principal};
 use clap::Parser;
 use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
+use icp_canister_interfaces::{
+    cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
+    cycles_minting_canister::{
+        CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
+        NotifyMintArgs, NotifyMintErr, NotifyMintResponse,
+    },
+    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_CID},
+};
 use icp_identity::key::LoadIdentityInContextError;
-use serde::Deserialize;
 use snafu::Snafu;
 
 use crate::{
-    CYCLES_MINTING_CANISTER_CID, ICP_LEDGER_CID,
     context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
 };
-
-pub const MEMO_MINT_CYCLES: u64 = 0x544e494d; // == 'MINT'
-/// 0.0001 ICP, a.k.a. 10k e8s
-const ICP_TRANSFER_FEE_E8S: u64 = 10_000;
-/// 100m cycles
-const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -78,7 +78,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     } else if let Some(cycles_amount) = cmd.cycles {
         let cmc_response = agent
             .query(
-                &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
+                &CYCLES_MINTING_CANISTER_PRINCIPAL,
                 "get_icp_xdr_conversion_rate",
             )
             .with_arg(Encode!(&()).expect("Failed to encode get ICP XDR conversion rate args"))
@@ -103,14 +103,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     };
 
     let account_id = AccountIdentifier::new(
-        &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
+        &CYCLES_MINTING_CANISTER_PRINCIPAL,
         &Subaccount::from(user_principal),
     );
     let memo = Memo(MEMO_MINT_CYCLES);
     let transfer_args = TransferArgs {
         memo,
         amount: Tokens::from_e8s(icp_e8s_to_deposit),
-        fee: Tokens::from_e8s(ICP_TRANSFER_FEE_E8S),
+        fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
         from_subaccount: None,
         to: account_id,
         created_at_time: None,
@@ -133,7 +133,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             TransferError::TxDuplicate { duplicate_of } => duplicate_of,
             TransferError::InsufficientFunds { balance } => {
                 let required =
-                    BigDecimal::new((icp_e8s_to_deposit + ICP_TRANSFER_FEE_E8S).into(), 8);
+                    BigDecimal::new((icp_e8s_to_deposit + ICP_LEDGER_BLOCK_FEE_E8S).into(), 8);
                 let available = BigDecimal::new(balance.e8s().into(), 8);
                 return Err(CommandError::InsufficientFunds {
                     required,
@@ -147,10 +147,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     };
 
     let notify_response = agent
-        .update(
-            &Principal::from_text(CYCLES_MINTING_CANISTER_CID).unwrap(),
-            "notify_mint_cycles",
-        )
+        .update(&CYCLES_MINTING_CANISTER_PRINCIPAL, "notify_mint_cycles")
         .with_arg(
             Encode!(&NotifyMintArgs {
                 block_index,
@@ -182,58 +179,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     ));
 
     Ok(())
-}
-
-/// Response from get_icp_xdr_conversion_rate on the cycles minting canister
-#[derive(Debug, Deserialize, CandidType)]
-struct ConversionRateResponse {
-    data: ConversionRateData,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-struct ConversionRateData {
-    xdr_permyriad_per_icp: u64,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintArgs {
-    pub block_index: u64,
-    pub deposit_memo: Option<Vec<u8>>,
-    pub to_subaccount: Option<Vec<u8>>,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintOk {
-    pub balance: Nat,
-    pub block_index: Nat,
-    pub minted: Nat,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintRefunded {
-    pub block_index: Option<u64>,
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub struct NotifyMintOther {
-    pub error_message: String,
-    pub error_code: u64,
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintErr {
-    Refunded(NotifyMintRefunded),
-    InvalidTransaction(String),
-    Other(NotifyMintOther),
-    Processing,
-    TransactionTooOld(u64),
-}
-
-#[derive(Debug, Deserialize, CandidType)]
-pub enum NotifyMintResponse {
-    Ok(NotifyMintOk),
-    Err(NotifyMintErr),
 }
 
 #[derive(Debug, Snafu)]

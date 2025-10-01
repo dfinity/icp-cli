@@ -1,5 +1,5 @@
 use cycles_ledger::CyclesLedgerPocketIcClient;
-use icp::prelude::PathBuf;
+use icp::prelude::*;
 pub use icp_cli::IcpCliClient;
 use icp_ledger::IcpLedgerPocketIcClient;
 
@@ -9,8 +9,8 @@ mod cycles_ledger;
 mod icp_cli;
 mod icp_ledger;
 
-pub fn icp<'a>(ctx: &'a TestContext, current_dir: &'a PathBuf) -> IcpCliClient<'a> {
-    IcpCliClient::new(ctx, current_dir)
+pub fn icp(ctx: &TestContext, current_dir: impl Into<PathBuf>) -> IcpCliClient<'_> {
+    IcpCliClient::new(ctx, current_dir.into())
 }
 
 pub fn icp_ledger(ctx: &TestContext) -> IcpLedgerPocketIcClient<'_> {

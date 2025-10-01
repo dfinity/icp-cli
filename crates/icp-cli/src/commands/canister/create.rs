@@ -14,7 +14,7 @@ use crate::{
     store_id::{Key, LookupError, RegisterError},
 };
 use icp_canister_interfaces::cycles_ledger::{
-    CYCLES_LEDGER_CID, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
+    CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
     CreationArgs,
 };
 
@@ -234,10 +234,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Call cycles ledger create_canister
                 let resp = agent
-                    .update(
-                        &Principal::from_text(CYCLES_LEDGER_CID).unwrap(),
-                        "create_canister",
-                    )
+                    .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
                     .with_arg(Encode!(&arg).map_err(|source| CommandError::Candid { source })?)
                     .call_and_wait()
                     .await

@@ -1,8 +1,8 @@
 use crate::common::{
-    TRILLION, TestContext,
+    TestContext,
     clients::{self, IcpCliClient},
 };
-use icp::fs::write_string;
+use icp::{TRILLION, fs::write_string};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},

@@ -1,6 +1,6 @@
-use crate::common::{TRILLION, TestContext, clients};
+use crate::common::{TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp::fs::write_string;
+use icp::{TRILLION, fs::write_string};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},

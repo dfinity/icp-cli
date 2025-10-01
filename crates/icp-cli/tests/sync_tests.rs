@@ -1,5 +1,8 @@
-use crate::common::{TRILLION, TestContext, clients};
-use icp::fs::{create_dir_all, write_string};
+use crate::common::{TestContext, clients};
+use icp::{
+    TRILLION,
+    fs::{create_dir_all, write_string},
+};
 use icp_network::NETWORK_LOCAL;
 use predicates::{
     prelude::PredicateBooleanExt,

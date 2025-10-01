@@ -7,12 +7,12 @@ use ic_agent::{AgentError, export::Principal};
 use snafu::Snafu;
 
 use crate::{
-    CYCLES_LEDGER_CID,
     context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
 };
+use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_CID;
 
 pub const DEFAULT_CANISTER_CYCLES: u128 = 2_000_000_000_000;
 

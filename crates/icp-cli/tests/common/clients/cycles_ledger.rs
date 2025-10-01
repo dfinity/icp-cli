@@ -1,9 +1,10 @@
 use candid::{Decode, Encode, Nat, Principal};
+use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use pocket_ic::nonblocking::PocketIc;
 use std::cell::Ref;
 
-use crate::common::{CYCLES_LEDGER_CID, TestContext};
+use crate::common::TestContext;
 
 pub struct CyclesLedgerPocketIcClient<'a> {
     pic: Ref<'a, PocketIc>,
@@ -22,7 +23,7 @@ impl<'a> CyclesLedgerPocketIcClient<'a> {
         let result = &self
             .pic
             .query_call(
-                Principal::from_text(CYCLES_LEDGER_CID).unwrap(),
+                CYCLES_LEDGER_PRINCIPAL,
                 Principal::anonymous(),
                 "icrc1_balance_of",
                 bytes,

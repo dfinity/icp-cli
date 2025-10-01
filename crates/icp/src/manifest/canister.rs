@@ -102,7 +102,10 @@ impl<'de> Deserialize<'de> for Canister {
 mod tests {
     use anyhow::Error;
 
-    use crate::manifest::adapter::prebuilt::{self, LocalSource, RemoteSource, SourceField};
+    use crate::manifest::adapter::{
+        assets,
+        prebuilt::{self, RemoteSource, SourceField},
+    };
 
     use super::*;
 
@@ -191,9 +194,6 @@ mod tests {
                     - type: pre-built
                       url: http://example.com/hello_world.wasm
                       sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-                    - type: pre-built
-                      path: dist/hello_world.wasm
-                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
                 "#
             )?,
             Canister {
@@ -201,22 +201,48 @@ mod tests {
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
                     build: build::Steps {
-                        steps: vec![
-                            build::Step::Prebuilt(prebuilt::Adapter {
-                                source: SourceField::Remote(RemoteSource {
-                                    url: "http://example.com/hello_world.wasm".to_string()
-                                }),
-                                sha256: Some("17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a".to_string())
+                        steps: vec![build::Step::Prebuilt(prebuilt::Adapter {
+                            source: SourceField::Remote(RemoteSource {
+                                url: "http://example.com/hello_world.wasm".to_string()
                             }),
-                            build::Step::Prebuilt(prebuilt::Adapter {
-                                source: SourceField::Local(LocalSource {
-                                    path: "dist/hello_world.wasm".into(),
-                                }),
-                                sha256: Some("17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a".to_string())
-                            })
-                        ]
+                            sha256: Some(
+                                "17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a"
+                                    .to_string()
+                            )
+                        }),]
                     },
                     sync: sync::Steps { steps: vec![] },
+                },
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_steps() -> Result<(), Error> {
+        assert_eq!(
+            serde_yaml::from_str::<Canister>(
+                r#"
+                name: my-canister
+                build:
+                  steps: []
+                sync:
+                  steps:
+                    - type: assets
+                      dir: dist
+                "#
+            )?,
+            Canister {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                instructions: Instructions::BuildSync {
+                    build: build::Steps { steps: vec![] },
+                    sync: sync::Steps {
+                        steps: vec![sync::Step::Assets(assets::Adapter {
+                            dir: assets::DirField::Dir("dist".to_string()),
+                        })]
+                    },
                 },
             },
         );

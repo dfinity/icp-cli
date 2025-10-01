@@ -5,11 +5,15 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 camino = { workspace = true }
 directories = { workspace = true }
+handlebars = { workspace = true }
+reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+url = { workspace = true }

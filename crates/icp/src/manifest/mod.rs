@@ -11,11 +11,11 @@ use crate::manifest::{
 };
 
 pub mod adapter;
-mod canister;
+pub mod canister;
 mod environment;
 mod network;
 mod project;
-mod recipe;
+pub mod recipe;
 
 const PROJECT_MANIFEST: &str = "icp.yaml";
 

@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 pub mod build;
+pub mod recipe;
 pub mod sync;
 
 /// Canister settings, such as compute and memory allocation.

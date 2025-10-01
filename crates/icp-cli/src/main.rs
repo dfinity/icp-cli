@@ -1,12 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
-use icp::{Directories, prelude::*};
-use icp_canister::{handlebars::Handlebars, recipe};
+use icp::{Directories, manifest, prelude::*};
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
@@ -106,6 +105,14 @@ async fn main() -> Result<(), Error> {
     // Set the configured subscriber registry as the global default for tracing
     // This enables the logging and telemetry layers we configured above
     set_global_default(reg)?;
+
+    // Project Manifest (Locator and Loader)
+    let mloc = manifest::Locator::new(
+        current_dir()?.try_into()?, // cwd
+        cli.project_dir,            // dir
+    );
+
+    let mload = manifest::Loader::new(Arc::new(mloc));
 
     // Setup project directory structure
     let dirs = Directories::new()?;

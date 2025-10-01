@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createActor } from "./backend/api";
+import { createActor } from "./backend/api/hello_world";
 import { getCanisterEnv } from "@icp-sdk/canister-env";
 import "./App.css";
 

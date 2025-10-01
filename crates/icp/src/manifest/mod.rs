@@ -162,12 +162,8 @@ impl Load for Loader {
         // Read file
         let mbs = read(&mdir.join(PROJECT_MANIFEST)).context(LoadError::Read)?;
 
-        println!("{}", String::from_utf8(mbs.clone()).unwrap());
-
         // Load YAML
         let pm = serde_yaml::from_slice::<Project>(&mbs).context(LoadError::Deserialize)?;
-
-        println!("{pm:?}");
 
         Ok(pm)
     }

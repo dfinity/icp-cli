@@ -24,15 +24,6 @@ mod store_artifact;
 mod store_id;
 mod telemetry;
 
-/// ICP ledger on mainnet
-pub const ICP_LEDGER_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
-
-/// Cycles ledger on mainnet
-pub const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
-
-/// Cycles minting canister on mainnet
-pub const CYCLES_MINTING_CANISTER_CID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
-
 #[derive(Parser)]
 struct Cli {
     /// Path to the project directory containing icp.yaml

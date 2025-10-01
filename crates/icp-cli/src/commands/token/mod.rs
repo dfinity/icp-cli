@@ -1,8 +1,9 @@
 use clap::{Parser, Subcommand};
+use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_LEDGER_CID};
 use phf::phf_map;
 use snafu::Snafu;
 
-use crate::{CYCLES_LEDGER_CID, ICP_LEDGER_CID, context::Context};
+use crate::context::Context;
 
 pub mod balance;
 mod transfer;

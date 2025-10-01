@@ -59,6 +59,7 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ###### **Options:**
 
+* `--project-dir <PROJECT_DIR>` — Directory to look for icp.yaml file
 * `--id-store <ID_STORE>`
 
   Default value: `.icp/ids.json`

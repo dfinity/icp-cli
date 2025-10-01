@@ -90,33 +90,56 @@ pub struct Network {
     pub configuration: Configuration,
 }
 
-impl From<NetworkInner> for Network {
-    fn from(v: NetworkInner) -> Self {
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error("Overriding the local network is not supported.")]
+    OverrideLocal,
+
+    #[error("Overriding the mainnet network is not supported.")]
+    OverrideMainnet,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+impl TryFrom<NetworkInner> for Network {
+    type Error = ParseError;
+
+    fn try_from(v: NetworkInner) -> Result<Self, Self::Error> {
         let NetworkInner {
             name,
             configuration,
         } = v;
 
+        // Name
+        if name == "local" {
+            return Err(ParseError::OverrideLocal);
+        }
+
+        if name == "mainnet" {
+            return Err(ParseError::OverrideMainnet);
+        }
+
         // Configuration
         let configuration = configuration.unwrap_or_default();
 
-        Network {
+        Ok(Network {
             name,
             configuration,
-        }
+        })
     }
 }
 
 impl<'de> Deserialize<'de> for Network {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: NetworkInner = Deserialize::deserialize(d)?;
-        Ok(inner.into())
+        inner.try_into().map_err(serde::de::Error::custom)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Error;
+    use anyhow::{Error, anyhow};
 
     use super::*;
 
@@ -138,6 +161,48 @@ mod tests {
                 })
             },
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn override_local() -> Result<(), Error> {
+        match serde_yaml::from_str::<Network>(r#"name: local"#) {
+            // No Error
+            Ok(_) => {
+                return Err(anyhow!("a network named local should result in an error"));
+            }
+
+            // Wrong Error
+            Err(err) => {
+                if !format!("{err}").starts_with("Overriding the local network") {
+                    return Err(anyhow!(
+                        "a network named local resulted in the wrong error: {err}"
+                    ));
+                };
+            }
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn override_mainnet() -> Result<(), Error> {
+        match serde_yaml::from_str::<Network>(r#"name: mainnet"#) {
+            // No Error
+            Ok(_) => {
+                return Err(anyhow!("a network named mainnet should result in an error"));
+            }
+
+            // Wrong Error
+            Err(err) => {
+                if !format!("{err}").starts_with("Overriding the mainnet network") {
+                    return Err(anyhow!(
+                        "a network named mainnet resulted in the wrong error: {err}"
+                    ));
+                };
+            }
+        };
 
         Ok(())
     }

@@ -125,7 +125,7 @@ mod tests {
             Err(err) => {
                 if !format!("{err}").starts_with("Please provide instructions") {
                     return Err(anyhow!(
-                        "an empty canister manifest resulted in wrong error"
+                        "an empty canister manifest resulted in the wrong error: {err}"
                     ));
                 };
             }

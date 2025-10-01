@@ -42,14 +42,30 @@ pub struct Environment {
     pub settings: Option<HashMap<String, Settings>>,
 }
 
-impl From<EnvironmentInner> for Environment {
-    fn from(v: EnvironmentInner) -> Self {
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error("Overriding the local environment is not supported.")]
+    OverrideLocal,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+impl TryFrom<EnvironmentInner> for Environment {
+    type Error = ParseError;
+
+    fn try_from(v: EnvironmentInner) -> Result<Self, Self::Error> {
         let EnvironmentInner {
             name,
             network,
             canisters,
             settings,
         } = v;
+
+        // Name
+        if name == "local" {
+            return Err(ParseError::OverrideLocal);
+        }
 
         // Network
         let network = network.unwrap_or("local".to_string());
@@ -69,20 +85,69 @@ impl From<EnvironmentInner> for Environment {
             None => CanisterSelection::Everything,
         };
 
-        Self {
+        Ok(Self {
             name,
             network,
             canisters,
 
-            // Keep as-is, setting overrides are optional
+            // Keep as-is, setting overrides is optional
             settings,
-        }
+        })
     }
 }
 
 impl<'de> Deserialize<'de> for Environment {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: EnvironmentInner = Deserialize::deserialize(d)?;
-        Ok(inner.into())
+        inner.try_into().map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::{Error, anyhow};
+
+    use super::*;
+
+    #[test]
+    fn empty() -> Result<(), Error> {
+        assert_eq!(
+            serde_yaml::from_str::<Environment>(
+                r#"
+                name: my-environment
+                "#
+            )?,
+            Environment {
+                name: "my-environment".to_string(),
+                network: "local".to_string(),
+                canisters: CanisterSelection::Everything,
+                settings: None,
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn override_local() -> Result<(), Error> {
+        match serde_yaml::from_str::<Environment>(r#"name: local"#) {
+            // No Error
+            Ok(_) => {
+                return Err(anyhow!(
+                    "an environment named local should result in an error"
+                ));
+            }
+
+            // Wrong Error
+            Err(err) => {
+                if !format!("{err}").starts_with("Overriding the local environment") {
+                    return Err(anyhow!(
+                        "an environment named local resulted in the wrong error: {err}"
+                    ));
+                };
+            }
+        };
+
+        Ok(())
     }
 }

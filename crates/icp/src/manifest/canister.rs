@@ -102,7 +102,7 @@ impl<'de> Deserialize<'de> for Canister {
 mod tests {
     use anyhow::Error;
 
-    use crate::canister::build::prebuilt::{LocalSource, RemoteSource, SourceField};
+    use crate::manifest::adapter::prebuilt::{self, LocalSource, RemoteSource, SourceField};
 
     use super::*;
 
@@ -202,13 +202,13 @@ mod tests {
                 instructions: Instructions::BuildSync {
                     build: build::Steps {
                         steps: vec![
-                            build::Step::Prebuilt(build::prebuilt::Adapter {
+                            build::Step::Prebuilt(prebuilt::Adapter {
                                 source: SourceField::Remote(RemoteSource {
                                     url: "http://example.com/hello_world.wasm".to_string()
                                 }),
                                 sha256: Some("17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a".to_string())
                             }),
-                            build::Step::Prebuilt(build::prebuilt::Adapter {
+                            build::Step::Prebuilt(prebuilt::Adapter {
                                 source: SourceField::Local(LocalSource {
                                     path: "dist/hello_world.wasm".into(),
                                 }),

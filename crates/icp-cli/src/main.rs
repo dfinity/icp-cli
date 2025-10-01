@@ -1,15 +1,11 @@
-use std::{collections::HashMap, env::current_dir, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
-use icp::{
-    Directories,
-    manifest::{self, Load},
-    prelude::*,
-};
+use icp::{Directories, prelude::*};
 use icp_canister::{handlebars::Handlebars, recipe};
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
@@ -64,19 +60,6 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
-
-    // Project Locator
-    let mlocator = Arc::new(manifest::Locator::new(
-        current_dir()?.try_into()?, // cwd
-        cli.project_dir.to_owned(), // dir
-    ));
-
-    let mloader = Arc::new(manifest::Loader::new(mlocator));
-
-    mloader.load()?;
-    if true {
-        return Ok(());
-    }
 
     // Generate markdown documentation if requested
     if cli.markdown_help {

@@ -3,8 +3,7 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-pub mod assets;
-pub mod script;
+use crate::manifest::adapter::{assets, script};
 
 /// Identifies the type of adapter used to sync the canister,
 /// along with its configuration.

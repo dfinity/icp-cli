@@ -3,8 +3,7 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-pub mod prebuilt;
-pub mod script;
+use crate::manifest::adapter::{prebuilt, script};
 
 /// Identifies the type of adapter used to build the canister,
 /// along with its configuration.

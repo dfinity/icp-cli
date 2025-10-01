@@ -10,6 +10,7 @@ use crate::manifest::{
     project::{Canisters, Environments, Networks, Project},
 };
 
+pub mod adapter;
 mod canister;
 mod environment;
 mod network;

@@ -1,11 +1,15 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
-use icp::{Directories, prelude::*};
+use icp::{
+    Directories,
+    manifest::{self, Load},
+    prelude::*,
+};
 use icp_canister::{handlebars::Handlebars, recipe};
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
@@ -35,6 +39,10 @@ pub const CYCLES_MINTING_CANISTER_CID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 
 #[derive(Parser)]
 struct Cli {
+    /// Path to the project directory containing icp.yaml
+    #[arg(long, global = true, help = "Directory to look for icp.yaml file")]
+    project_dir: Option<PathBuf>,
+
     #[arg(long, default_value = ".icp/ids.json")]
     id_store: PathBuf,
 
@@ -56,6 +64,19 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
+
+    // Project Locator
+    let mlocator = Arc::new(manifest::Locator::new(
+        current_dir()?.try_into()?, // cwd
+        cli.project_dir.to_owned(), // dir
+    ));
+
+    let mloader = Arc::new(manifest::Loader::new(mlocator));
+
+    mloader.load()?;
+    if true {
+        return Ok(());
+    }
 
     // Generate markdown documentation if requested
     if cli.markdown_help {

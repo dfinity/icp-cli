@@ -28,7 +28,7 @@ pub struct Recipe {
     #[serde(rename = "type")]
     pub recipe_type: RecipeType,
 
-    #[serde(rename = "configuration")]
+    #[serde(default)]
     #[schemars(with = "HashMap<String, serde_json::Value>")]
-    pub instructions: HashMap<String, serde_yaml::Value>,
+    pub configuration: HashMap<String, serde_yaml::Value>,
 }

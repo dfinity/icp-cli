@@ -7,7 +7,7 @@ use crate::canister::{Settings, build, sync};
 pub mod canister;
 mod directories;
 pub mod fs;
-mod manifest;
+pub mod manifest;
 pub mod prelude;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]

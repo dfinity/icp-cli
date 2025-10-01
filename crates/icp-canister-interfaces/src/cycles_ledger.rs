@@ -1,4 +1,5 @@
-use candid::Principal;
+use candid::{CandidType, Nat, Principal};
+use serde::Deserialize;
 
 /// 100m cycles
 pub const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
@@ -6,6 +7,121 @@ pub const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
 pub const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
 pub const CYCLES_LEDGER_PRINCIPAL: Principal =
     Principal::from_slice(&[0, 0, 0, 0, 2, 16, 0, 2, 1, 1]);
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CanisterSettingsArg {
+    pub freezing_threshold: Option<Nat>,
+    pub controllers: Option<Vec<Principal>>,
+    pub reserved_cycles_limit: Option<Nat>,
+    pub memory_allocation: Option<Nat>,
+    pub compute_allocation: Option<Nat>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum SubnetSelectionArg {
+    Filter { subnet_type: Option<String> },
+    Subnet { subnet: Principal },
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CreationArgs {
+    pub subnet_selection: Option<SubnetSelectionArg>,
+    pub settings: Option<CanisterSettingsArg>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CreateCanisterArgs {
+    pub from_subaccount: Option<Vec<u8>>,
+    pub created_at_time: Option<u64>,
+    pub amount: Nat,
+    pub creation_args: Option<CreationArgs>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum CreateCanisterResponse {
+    Ok {
+        block_id: Nat,
+        canister_id: Principal,
+    },
+    Err(CreateCanisterError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum CreateCanisterError {
+    GenericError {
+        message: String,
+        error_code: Nat,
+    },
+    TemporarilyUnavailable,
+    Duplicate {
+        duplicate_of: Nat,
+        canister_id: Option<Principal>,
+    },
+    CreatedInFuture {
+        ledger_time: u64,
+    },
+    FailedToCreate {
+        error: String,
+        refund_block: Option<Nat>,
+        fee_block: Option<Nat>,
+    },
+    TooOld,
+    InsufficientFunds {
+        balance: Nat,
+    },
+}
+
+impl CreateCanisterError {
+    pub fn format_error(self, requested_cycles: u128) -> String {
+        match self {
+            CreateCanisterError::GenericError {
+                message,
+                error_code,
+            } => {
+                format!("Cycles ledger error (code {}): {}", error_code, message)
+            }
+            CreateCanisterError::TemporarilyUnavailable => {
+                "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
+            }
+            CreateCanisterError::Duplicate {
+                duplicate_of,
+                canister_id,
+            } => {
+                if let Some(canister_id) = canister_id {
+                    format!(
+                        "Duplicate request of block {duplicate_of}. Canister already created: {canister_id}"
+                    )
+                } else {
+                    format!("Duplicate request of block {duplicate_of}.")
+                }
+            }
+            CreateCanisterError::CreatedInFuture { .. } => {
+                "created_at_time is too far in the future.".to_string()
+            }
+            CreateCanisterError::FailedToCreate {
+                error,
+                refund_block,
+                fee_block,
+            } => {
+                let mut msg = format!("Failed to create canister: {}", error);
+                if let Some(b) = refund_block {
+                    msg.push_str(&format!(". Refund block: {}", b));
+                }
+                if let Some(b) = fee_block {
+                    msg.push_str(&format!(". Fee block: {}", b));
+                }
+                msg
+            }
+            CreateCanisterError::TooOld => "created_at_time is too old.".to_string(),
+            CreateCanisterError::InsufficientFunds { balance } => {
+                format!(
+                    "Insufficient cycles. Requested: {requested_cycles} cycles, available balance: {balance} cycles. 
+                    use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount."
+                )
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use candid::{CandidType, Decode, Deserialize, Encode, Nat};
+use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
@@ -13,7 +13,10 @@ use crate::{
     progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
 };
-use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_CID;
+use icp_canister_interfaces::cycles_ledger::{
+    CYCLES_LEDGER_CID, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
+    CreationArgs,
+};
 
 pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -62,114 +65,6 @@ pub struct Cmd {
     /// Cycles to fund canister creation (in raw cycles).
     #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
     pub cycles: u128,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct CanisterSettingsArg {
-    freezing_threshold: Option<Nat>,
-    controllers: Option<Vec<Principal>>,
-    reserved_cycles_limit: Option<Nat>,
-    memory_allocation: Option<Nat>,
-    compute_allocation: Option<Nat>,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-enum SubnetSelectionArg {
-    Filter { subnet_type: Option<String> },
-    Subnet { subnet: Principal },
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct CreationArgs {
-    subnet_selection: Option<SubnetSelectionArg>,
-    settings: Option<CanisterSettingsArg>,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct CreateCanisterArgs {
-    from_subaccount: Option<Vec<u8>>,
-    created_at_time: Option<u64>,
-    amount: Nat,
-    creation_args: Option<CreationArgs>,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-enum CreateCanisterResponse {
-    Ok {
-        block_id: Nat,
-        canister_id: Principal,
-    },
-    Err(CreateCanisterError),
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-enum CreateCanisterError {
-    GenericError {
-        message: String,
-        error_code: Nat,
-    },
-    TemporarilyUnavailable,
-    Duplicate {
-        duplicate_of: Nat,
-        canister_id: Option<Principal>,
-    },
-    CreatedInFuture {
-        ledger_time: u64,
-    },
-    FailedToCreate {
-        error: String,
-        refund_block: Option<Nat>,
-        fee_block: Option<Nat>,
-    },
-    TooOld,
-    InsufficientFunds {
-        balance: Nat,
-    },
-}
-
-impl CreateCanisterError {
-    pub fn format_error(self, requested_cycles: u128) -> String {
-        match self {
-            CreateCanisterError::GenericError {
-                message,
-                error_code,
-            } => {
-                format!("Cycles ledger error (code {}): {}", error_code, message)
-            }
-            CreateCanisterError::TemporarilyUnavailable => {
-                "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
-            }
-            CreateCanisterError::Duplicate { .. } => {
-                unreachable!("no created_at_time is set therefore the request is not deduplicated")
-            }
-            CreateCanisterError::CreatedInFuture { .. } => {
-                unreachable!("no created_at_time is set therefore the request is not in the future")
-            }
-            CreateCanisterError::FailedToCreate {
-                error,
-                refund_block,
-                fee_block,
-            } => {
-                let mut msg = format!("Failed to create canister: {}", error);
-                if let Some(b) = refund_block {
-                    msg.push_str(&format!(". Refund block: {}", b));
-                }
-                if let Some(b) = fee_block {
-                    msg.push_str(&format!(". Fee block: {}", b));
-                }
-                msg
-            }
-            CreateCanisterError::TooOld => {
-                unreachable!("no created_at_time is set therefore the request is not too old")
-            }
-            CreateCanisterError::InsufficientFunds { balance } => {
-                format!(
-                    "Insufficient cycles. Requested: {requested_cycles} cycles, available balance: {balance} cycles. 
-                    use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount."
-                )
-            }
-        }
-    }
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {

@@ -1,15 +1,10 @@
-use std::collections::HashMap;
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::recipe::{Recipe, RecipeType},
+    manifest::recipe::Recipe,
 };
-
-const HELLO_WORLD_RECIPE: &str =
-    "https://github.com/dfinity/icp-recipes/releases/download/hello-world/recipe.hbs";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(untagged)]
@@ -27,17 +22,6 @@ pub enum Instructions {
         #[serde(default)]
         sync: sync::Steps,
     },
-}
-
-impl Default for Instructions {
-    fn default() -> Self {
-        Self::Recipe {
-            recipe: Recipe {
-                recipe_type: RecipeType::Unknown(HELLO_WORLD_RECIPE.to_string()),
-                configuration: HashMap::new(),
-            },
-        }
-    }
 }
 
 /// Represents the manifest describing a single canister.
@@ -72,8 +56,21 @@ pub struct Canister {
     pub instructions: Instructions,
 }
 
-impl From<CanisterInner> for Canister {
-    fn from(v: CanisterInner) -> Self {
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error(
+        "Please provide instructions for building your canister in the form of a recipe or build/sync steps."
+    )]
+    MissingInstructions,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+impl TryFrom<CanisterInner> for Canister {
+    type Error = ParseError;
+
+    fn try_from(v: CanisterInner) -> Result<Self, Self::Error> {
         let CanisterInner {
             name,
             settings,
@@ -81,48 +78,58 @@ impl From<CanisterInner> for Canister {
         } = v;
 
         // Instructions
-        let instructions = instructions.unwrap_or_default();
+        let instructions = instructions.ok_or(ParseError::MissingInstructions)?;
 
-        Canister {
+        Ok(Canister {
             name,
             settings,
             instructions,
-        }
+        })
     }
 }
 
 impl<'de> Deserialize<'de> for Canister {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: CanisterInner = Deserialize::deserialize(d)?;
-        Ok(inner.into())
+        inner.try_into().map_err(serde::de::Error::custom)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Error;
+    use std::collections::HashMap;
 
-    use crate::manifest::adapter::{
-        assets,
-        prebuilt::{self, RemoteSource, SourceField},
+    use anyhow::{Error, anyhow};
+
+    use crate::manifest::{
+        adapter::{
+            assets,
+            prebuilt::{self, RemoteSource, SourceField},
+        },
+        recipe::RecipeType,
     };
 
     use super::*;
 
     #[test]
     fn empty() -> Result<(), Error> {
-        assert_eq!(
-            serde_yaml::from_str::<Canister>(
-                r#"
-                name: my-canister
-                "#
-            )?,
-            Canister {
-                name: "my-canister".to_string(),
-                settings: Settings::default(),
-                instructions: Instructions::default(),
-            },
-        );
+        match serde_yaml::from_str::<Canister>(r#"name: my-canister"#) {
+            // No Error
+            Ok(_) => {
+                return Err(anyhow!(
+                    "an empty canister manifest should result in an error"
+                ));
+            }
+
+            // Wrong Error
+            Err(err) => {
+                if !format!("{err}").starts_with("Please provide instructions") {
+                    return Err(anyhow!(
+                        "an empty canister manifest resulted in wrong error"
+                    ));
+                };
+            }
+        };
 
         Ok(())
     }

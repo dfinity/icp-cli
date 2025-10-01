@@ -26,8 +26,11 @@ mod telemetry;
 
 #[derive(Parser)]
 struct Cli {
-    /// Path to the project directory containing icp.yaml
-    #[arg(long, global = true, help = "Directory to look for icp.yaml file")]
+    #[arg(
+        long,
+        global = true,
+        help = "Directory to use as your project base directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
+    )]
     project_dir: Option<PathBuf>,
 
     #[arg(long, default_value = ".icp/ids.json")]

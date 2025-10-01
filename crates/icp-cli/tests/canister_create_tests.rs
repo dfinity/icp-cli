@@ -165,7 +165,7 @@ fn canister_create_with_settings_cmdline_override() {
             "--compute-allocation",
             "2",
             "--cycles",
-            "70000000000000", /* 70 TCYCLES because compute allocation is expensive */
+            &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
         .assert()
         .success();

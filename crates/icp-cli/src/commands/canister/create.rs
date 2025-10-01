@@ -4,6 +4,7 @@ use candid::{CandidType, Decode, Deserialize, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
+use icp::TRILLION;
 use snafu::Snafu;
 
 use crate::{
@@ -14,7 +15,7 @@ use crate::{
 };
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_CID;
 
-pub const DEFAULT_CANISTER_CYCLES: u128 = 2_000_000_000_000;
+pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
 #[derive(Clone, Debug, Default, Parser)]
 pub struct CanisterSettings {
@@ -126,46 +127,47 @@ enum CreateCanisterError {
     },
 }
 
-fn format_create_canister_error(err: &CreateCanisterError, requested_cycles: u128) -> String {
-    match err {
-        CreateCanisterError::GenericError {
-            message,
-            error_code,
-        } => {
-            format!("Cycles ledger error (code {}): {}", error_code, message)
-        }
-        CreateCanisterError::TemporarilyUnavailable => {
-            "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
-        }
-        CreateCanisterError::Duplicate { .. } => {
-            unreachable!("no created_at_time is set therefore the request is not deduplicated")
-        }
-        CreateCanisterError::CreatedInFuture { .. } => {
-            unreachable!("no created_at_time is set therefore the request is not in the future")
-        }
-        CreateCanisterError::FailedToCreate {
-            error,
-            refund_block,
-            fee_block,
-        } => {
-            let mut msg = format!("Failed to create canister: {}", error);
-            if let Some(b) = refund_block {
-                msg.push_str(&format!(". Refund block: {}", b));
+impl CreateCanisterError {
+    pub fn format_error(self, requested_cycles: u128) -> String {
+        match self {
+            CreateCanisterError::GenericError {
+                message,
+                error_code,
+            } => {
+                format!("Cycles ledger error (code {}): {}", error_code, message)
             }
-            if let Some(b) = fee_block {
-                msg.push_str(&format!(". Fee block: {}", b));
+            CreateCanisterError::TemporarilyUnavailable => {
+                "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
             }
-            msg
-        }
-        CreateCanisterError::TooOld => {
-            unreachable!("no created_at_time is set therefore the request is not too old")
-        }
-        CreateCanisterError::InsufficientFunds { balance } => {
-            format!(
-                "Insufficient cycles. Requested: {} cycles, available balance: {} cycles. 
-                use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount.",
-                requested_cycles, balance
-            )
+            CreateCanisterError::Duplicate { .. } => {
+                unreachable!("no created_at_time is set therefore the request is not deduplicated")
+            }
+            CreateCanisterError::CreatedInFuture { .. } => {
+                unreachable!("no created_at_time is set therefore the request is not in the future")
+            }
+            CreateCanisterError::FailedToCreate {
+                error,
+                refund_block,
+                fee_block,
+            } => {
+                let mut msg = format!("Failed to create canister: {}", error);
+                if let Some(b) = refund_block {
+                    msg.push_str(&format!(". Refund block: {}", b));
+                }
+                if let Some(b) = fee_block {
+                    msg.push_str(&format!(". Fee block: {}", b));
+                }
+                msg
+            }
+            CreateCanisterError::TooOld => {
+                unreachable!("no created_at_time is set therefore the request is not too old")
+            }
+            CreateCanisterError::InsufficientFunds { balance } => {
+                format!(
+                    "Insufficient cycles. Requested: {requested_cycles} cycles, available balance: {balance} cycles. 
+                    use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount."
+                )
+            }
         }
     }
 }
@@ -353,7 +355,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
                     CreateCanisterResponse::Err(err) => {
                         return Err(CommandError::LedgerCreate {
-                            err: format_create_canister_error(&err, cmd.cycles),
+                            err: err.format_error(cmd.cycles),
                         });
                     }
                 };

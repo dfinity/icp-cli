@@ -59,7 +59,6 @@ pub enum NotifyMintResponse {
     Err(NotifyMintErr),
 }
 
-pub type GetDefaultSubnetsRequest = ();
 pub type GetDefaultSubnetsResponse = Vec<Principal>;
 
 #[cfg(test)]

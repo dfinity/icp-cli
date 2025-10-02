@@ -1,8 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use candid::{Decode, Encode, Nat};
 use clap::Parser;
-use futures::{StreamExt, stream::FuturesOrdered};
+use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use icp::prelude::*;
+use rand::seq::IndexedRandom;
 use snafu::Snafu;
 
 use crate::{
@@ -11,9 +14,13 @@ use crate::{
     progress::ProgressManager,
     store_id::{Key, RegisterError},
 };
-use icp_canister_interfaces::cycles_ledger::{
-    CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
-    CreationArgs,
+use icp_canister_interfaces::{
+    cycles_ledger::{
+        CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
+        CreationArgs, SubnetSelectionArg,
+    },
+    cycles_minting_canister::{CYCLES_MINTING_CANISTER_PRINCIPAL, GetDefaultSubnetsResponse},
+    registry::{GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL},
 };
 
 pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -63,6 +70,10 @@ pub struct Cmd {
     /// Cycles to fund canister creation (in raw cycles).
     #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
     pub cycles: u128,
+
+    /// The subnet to create canisters on.
+    #[arg(long)]
+    pub subnet: Option<Principal>,
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
@@ -166,6 +177,67 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare agent
     let agent = ctx.agent()?;
 
+    // Subnet choice:
+    // 1. If --subnet is provided, use it
+    // 2. If there are existing canisters, if they are on the same subnet, use it, otherwise make the user choose explicitly
+    // 3. If there are no existing canisters, pick an open subnet at random
+    let subnet = if let Some(subnet) = cmd.subnet {
+        subnet
+    } else if !existing_keys.is_empty() {
+        let mapping = try_join_all(existing_keys.iter().map(|key| async {
+            let canister = ctx.id_store.lookup(key).expect("Canister already exists");
+            let response_bytes = agent
+                .query(&REGISTRY_PRINCIPAL, "get_subnet_for_canister")
+                .with_arg(
+                    Encode!(&GetSubnetForCanisterRequest {
+                        principal: Some(canister),
+                    })
+                    .expect("Failed to encode GetSubnetForCanisterRequest"),
+                )
+                .call()
+                .await
+                .map_err(|source| CommandError::GetSubnet {
+                    err: source.to_string(),
+                })?;
+            let response: GetSubnetForCanisterResult =
+                Decode!(&response_bytes, GetSubnetForCanisterResult)
+                    .expect("Failed to decode GetSubnetForCanisterResult");
+            response
+                .map(|success| {
+                    (
+                        key.canister.to_owned(),
+                        success
+                            .subnet_id
+                            .expect("Canister exists, therefore it must be assigned to a subnet."),
+                    )
+                })
+                .map_err(|err| CommandError::GetSubnet { err })
+        }))
+        .await?;
+        if HashSet::<_>::from_iter(mapping.iter().map(|(_, subnet)| subnet)).len() == 1 {
+            mapping.first().expect("existing_keys is not empty").1
+        } else {
+            return Err(CommandError::AmbiguousSubnet {
+                mapping: mapping.into_iter().collect(),
+            });
+        }
+    } else {
+        let response_bytes = agent
+            .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
+            .with_arg(Encode!(&()).expect("Failed to encode GetDefaultSubnetsRequest"))
+            .call()
+            .await
+            .map_err(|err| CommandError::GetSubnet {
+                err: err.to_string(),
+            })?;
+        let response: GetDefaultSubnetsResponse =
+            Decode!(&response_bytes, GetDefaultSubnetsResponse)
+                .expect("Failed to decode GetDefaultSubnetsResponse");
+        *response
+            .choose(&mut rand::rng())
+            .expect("No default subnets")
+    };
+
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
@@ -219,7 +291,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 let creation_args = CreationArgs {
-                    subnet_selection: None,
+                    subnet_selection: Some(SubnetSelectionArg::Subnet { subnet }),
                     settings: Some(settings),
                 };
 
@@ -289,6 +361,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     Ok(())
 }
 
+fn format_ambiguous_subnet(mappings: &HashMap<String, Principal>) -> String {
+    let mut result = String::new();
+    for (canister, subnet) in mappings {
+        result.push_str(&format!("   {canister}: {subnet}\n"));
+    }
+    result
+}
+
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
@@ -326,4 +406,13 @@ pub enum CommandError {
 
     #[snafu(display("{err}"))]
     LedgerCreate { err: String },
+
+    #[snafu(display("Failed to get subnet for canister: {err}"))]
+    GetSubnet { err: String },
+
+    #[snafu(display(
+        "No obvious subnet choice. Use --subnet to manually pick a subnet. Current locations:\n{}",
+        format_ambiguous_subnet(mapping)
+    ))]
+    AmbiguousSubnet { mapping: HashMap<String, Principal> },
 }

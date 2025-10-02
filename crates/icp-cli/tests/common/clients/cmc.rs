@@ -18,7 +18,7 @@ impl<'a> Client<'a> {
         }
     }
 
-    pub async fn get_default_subnets(&self) -> GetDefaultSubnetsResponse {
+    pub async fn get_default_subnets(&self) -> Vec<Principal> {
         let bytes = Encode!(&()).unwrap();
         let result = &self
             .pic

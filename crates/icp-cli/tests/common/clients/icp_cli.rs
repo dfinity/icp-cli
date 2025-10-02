@@ -76,4 +76,26 @@ impl<'a> Client<'a> {
             .assert()
             .success();
     }
+
+    pub fn get_canister_id(&self, canister_name: &str) -> Principal {
+        let output = self
+            .ctx
+            .icp()
+            .current_dir(&self.current_dir)
+            .args(["canister", "show", canister_name])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+
+        let output_str = String::from_utf8(output).unwrap();
+        // Output format is: "{canister_id} => {canister_info}"
+        let id_str = output_str
+            .split(" => ")
+            .next()
+            .expect("Failed to parse canister show output")
+            .trim();
+        Principal::from_text(id_str).unwrap()
+    }
 }

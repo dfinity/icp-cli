@@ -74,6 +74,9 @@ impl PocketIcAdminInterface {
                 // Same as above
                 cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
 
+                // Same as above
+                registry: Some(IcpFeaturesConfig::DefaultConfig),
+
                 // The rest of the features are disabled by default
                 ..Default::default()
             }),

@@ -18,7 +18,7 @@ impl<'a> Client<'a> {
         }
     }
 
-    pub async fn get_subnet_for_canister(&self, canister: Principal) -> GetSubnetForCanisterResult {
+    pub async fn get_subnet_for_canister(&self, canister: Principal) -> Principal {
         let arg = GetSubnetForCanisterRequest {
             principal: Some(canister),
         };
@@ -33,6 +33,10 @@ impl<'a> Client<'a> {
             )
             .await
             .unwrap();
-        Decode!(result, GetSubnetForCanisterResult).unwrap()
+        Decode!(result, GetSubnetForCanisterResult)
+            .unwrap()
+            .unwrap()
+            .subnet_id
+            .unwrap()
     }
 }

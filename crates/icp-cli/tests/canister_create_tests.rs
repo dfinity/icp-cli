@@ -186,8 +186,6 @@ fn canister_create_with_settings_cmdline_override() {
 #[test]
 fn canister_create_nonexistent_canister() {
     let ctx = TestContext::new();
-
-    // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest with canister named "a"
@@ -206,7 +204,6 @@ fn canister_create_nonexistent_canister() {
     )
     .expect("failed to write project manifest");
 
-    // Try to create canister "b" which doesn't exist in the project
     ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "create", "b"])
@@ -218,11 +215,8 @@ fn canister_create_nonexistent_canister() {
 #[test]
 fn canister_create_canister_not_in_environment() {
     let ctx = TestContext::new();
-
-    // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    // Project manifest with canisters "a" and "b", but environment only includes "a"
     let pm = r#"
     canisters:
       - name: a
@@ -248,7 +242,6 @@ fn canister_create_canister_not_in_environment() {
     )
     .expect("failed to write project manifest");
 
-    // Try to create canister "b" which is not included in the environment
     ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "create", "b", "--environment", "test-env"])
@@ -334,7 +327,6 @@ async fn canister_create_colocates_canisters() {
         .get_subnet_for_canister(icp_client.get_canister_id("canister-c"))
         .await;
 
-    // Assert canisters are on the same subnet
     assert_eq!(
         subnet_a, subnet_b,
         "Canister A and B should be on the same subnet"
@@ -367,7 +359,6 @@ async fn canister_create_colocates_canisters() {
         .get_subnet_for_canister(icp_client.get_canister_id("canister-f"))
         .await;
 
-    // Assert canisters are on the same subnet
     assert_eq!(
         subnet_a, subnet_d,
         "Canister D should be on the same subnet as canister A"
@@ -449,7 +440,6 @@ async fn canister_create_fails_when_canisters_on_different_subnets() {
         .assert()
         .success();
 
-    // Verify they are on different subnets and get subnet IDs
     let registry = clients::registry(&ctx);
     let subnet_a_id = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-a"))
@@ -465,6 +455,6 @@ async fn canister_create_fails_when_canisters_on_different_subnets() {
         .failure()
         .stderr(contains("No obvious subnet choice"))
         .stderr(contains("Use --subnet to manually pick a subnet"))
-        .stderr(contains(format!("canister-a: subnet {}", subnet_a_id)))
-        .stderr(contains(format!("canister-b: subnet {}", subnet_b_id)));
+        .stderr(contains(format!("canister-a: {}", subnet_a_id)))
+        .stderr(contains(format!("canister-b: {}", subnet_b_id)));
 }

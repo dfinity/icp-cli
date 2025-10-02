@@ -88,8 +88,8 @@ impl<'a> Client<'a> {
             .get_output()
             .stdout
             .clone();
-
         let output_str = String::from_utf8(output).unwrap();
+
         // Output format is: "{canister_id} => {canister_info}"
         let id_str = output_str
             .split(" => ")

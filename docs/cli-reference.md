@@ -142,6 +142,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--cycles <CYCLES>` — Cycles to fund canister creation (in raw cycles)
 
   Default value: `2000000000000`
+* `--subnet <SUBNET>` — The subnet to create canisters on
 
 
 

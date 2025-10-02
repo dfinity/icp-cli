@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
@@ -11,7 +9,7 @@ use crate::{
     context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     progress::ProgressManager,
-    store_id::{Key, LookupError, RegisterError},
+    store_id::{Key, RegisterError},
 };
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
@@ -83,64 +81,76 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             name: cmd.environment.name().to_owned(),
         })?;
 
-    // Choose canisters to create
-    let cs = pm
-        .canisters
-        .iter()
-        .filter(|(_, c)| match &cmd.names.is_empty() {
-            // If no names specified, create all canisters
-            true => true,
-
-            // If names specified, only create matching canisters
-            false => cmd.names.contains(&c.name),
-        })
-        .collect::<Vec<_>>();
-
-    // Check if selected canisters exists
-    if !cmd.names.is_empty() {
-        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
-
-        for name in &cmd.names {
-            if !names.contains(name) {
-                return Err(CommandError::CanisterNotFound {
-                    name: name.to_owned(),
-                });
-            }
-        }
-    }
-
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
-
-    // Filter for environment canisters
-    let cs = cs
-        .iter()
-        .filter(|(_, c)| ecs.contains(&c.name))
-        .collect::<Vec<_>>();
-
-    // Ensure canister is included in the environment
-    if !cmd.names.is_empty() {
-        for name in &cmd.names {
-            if !ecs.contains(name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: name.to_owned(),
-                });
-            }
-        }
-    }
-
     // TODO(or.ricon): Support default networks (`local` and `ic`)
     //
     let network = env
         .network
         .as_ref()
         .expect("no network specified in environment");
+
+    // Collect environment canisters
+    let canisters_in_environment = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
+
+    // Check if explicitly requested canisters are declared in the project AND environment
+    for name in &cmd.names {
+        pm.canisters.iter().find(|(_, c)| c.name == *name).ok_or(
+            CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            },
+        )?;
+        if !canisters_in_environment.contains(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
+
+    // Determine canisters that shall exist at the end of the command
+    let keys_to_exist = if cmd.names.is_empty() {
+        canisters_in_environment
+            .iter()
+            .map(|name| Key {
+                network: network.to_owned(),
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            })
+            .collect::<Vec<_>>()
+    } else {
+        cmd.names
+            .clone()
+            .into_iter()
+            .filter(|name| canisters_in_environment.contains(name))
+            .map(|name| Key {
+                network: network.to_owned(),
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let keys_in_environment = canisters_in_environment
+        .iter()
+        .map(|name| Key {
+            network: network.to_owned(),
+            environment: env.name.to_owned(),
+            canister: name.to_owned(),
+        })
+        .collect::<Vec<_>>();
+
+    let keys_to_create = keys_to_exist
+        .into_iter()
+        .filter(|key| ctx.id_store.lookup(key).is_err())
+        .collect::<Vec<_>>();
+    let existing_keys = keys_in_environment
+        .into_iter()
+        .filter(|key| ctx.id_store.lookup(key).is_ok())
+        .collect::<Vec<_>>();
 
     // Load identity
     ctx.require_identity(cmd.identity.name());
@@ -161,9 +171,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let progress_manager = ProgressManager::new();
 
-    for (_, c) in cs {
+    for key in keys_to_create {
+        let (_, canister_declaration) = pm
+            .canisters
+            .iter()
+            .find(|(_, c)| c.name == key.canister)
+            .expect("Canister must be present in project");
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let pb = progress_manager.create_progress_bar(&canister_declaration.name);
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
@@ -174,32 +189,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                // Create canister-network association-key
-                let k = Key {
-                    network: network.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                };
-
-                match ctx.id_store.lookup(&k) {
-                    // Exists (skip)
-                    Ok(principal) => {
-                        return Err(CommandError::CanisterExists { principal });
-                    }
-
-                    // Doesn't exist (include)
-                    Err(LookupError::IdNotFound { .. }) => {}
-
-                    // Lookup failed
-                    Err(err) => panic!("{err}"),
-                };
-
                 // Build cycles ledger create_canister args
                 let settings = CanisterSettingsArg {
                     freezing_threshold: cmd
                         .settings
                         .freezing_threshold
-                        .or(c.settings.freezing_threshold)
+                        .or(canister_declaration.settings.freezing_threshold)
                         .map(Nat::from),
                     controllers: if cmd.controller.is_empty() {
                         None
@@ -209,17 +204,17 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     reserved_cycles_limit: cmd
                         .settings
                         .reserved_cycles_limit
-                        .or(c.settings.reserved_cycles_limit)
+                        .or(canister_declaration.settings.reserved_cycles_limit)
                         .map(Nat::from),
                     memory_allocation: cmd
                         .settings
                         .memory_allocation
-                        .or(c.settings.memory_allocation)
+                        .or(canister_declaration.settings.memory_allocation)
                         .map(Nat::from),
                     compute_allocation: cmd
                         .settings
                         .compute_allocation
-                        .or(c.settings.compute_allocation)
+                        .or(canister_declaration.settings.compute_allocation)
                         .map(Nat::from),
                 };
 
@@ -254,7 +249,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 // Register the canister ID
-                ctx.id_store.register(&k, &cid)?;
+                ctx.id_store.register(&key, &cid)?;
 
                 Ok::<_, CommandError>(())
             }

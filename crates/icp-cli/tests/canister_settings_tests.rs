@@ -1,6 +1,6 @@
 use crate::common::{
     TestContext,
-    clients::{self, IcpCliClient},
+    clients::{self, icp_cli},
 };
 use icp::{fs::write_string, prelude::*};
 use predicates::{
@@ -247,7 +247,7 @@ fn canister_settings_update_controllers() {
         );
 }
 
-fn get_principal(client: &IcpCliClient, identity: &str) -> String {
+fn get_principal(client: &icp_cli::Client<'_>, identity: &str) -> String {
     client.create_identity(identity);
     client.get_principal(identity).to_string()
 }

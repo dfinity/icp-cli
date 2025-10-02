@@ -3,12 +3,12 @@ use icp::prelude::*;
 
 use crate::common::TestContext;
 
-pub struct IcpCliClient<'a> {
+pub struct Client<'a> {
     ctx: &'a TestContext,
     current_dir: PathBuf,
 }
 
-impl<'a> IcpCliClient<'a> {
+impl<'a> Client<'a> {
     pub fn new(ctx: &'a TestContext, current_dir: PathBuf) -> Self {
         Self { ctx, current_dir }
     }

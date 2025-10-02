@@ -6,11 +6,11 @@ use std::cell::Ref;
 
 use crate::common::TestContext;
 
-pub struct CyclesLedgerPocketIcClient<'a> {
+pub struct Client<'a> {
     pic: Ref<'a, PocketIc>,
 }
 
-impl<'a> CyclesLedgerPocketIcClient<'a> {
+impl<'a> Client<'a> {
     pub fn new(ctx: &'a TestContext) -> Self {
         Self {
             pic: ctx.pocketic(),

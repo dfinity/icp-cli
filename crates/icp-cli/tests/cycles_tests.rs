@@ -35,7 +35,7 @@ async fn cycles_balance() {
         .success();
 
     // Mint ICP to cycles, specify ICP amount
-    clients::icp_ledger(&ctx)
+    clients::ledger(&ctx)
         .mint_icp(identity, None, 123456789_u64)
         .await;
     ctx.icp()
@@ -49,7 +49,7 @@ async fn cycles_balance() {
 
     // Mint ICP to cycles, specify cycles amount
     let identity = clients::icp(&ctx, &project_dir).use_new_random_identity();
-    clients::icp_ledger(&ctx)
+    clients::ledger(&ctx)
         .mint_icp(identity, None, 123456789_u64)
         .await;
     ctx.icp()

@@ -67,6 +67,9 @@ pub struct Cmd {
     pub cycles: u128,
 }
 
+// Creates canister(s) by asking the cycles ledger to create them.
+// The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
+// The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
     let pm = ctx.project()?;
@@ -239,10 +242,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     .call_and_wait()
                     .await
                     .map_err(|source| CommandError::CreateCanister { source })?;
-
                 let resp: CreateCanisterResponse = Decode!(&resp, CreateCanisterResponse)
                     .map_err(|source| CommandError::Candid { source })?;
-
                 let cid = match resp {
                     CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
                     CreateCanisterResponse::Err(err) => {

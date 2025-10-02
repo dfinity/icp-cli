@@ -59,6 +59,7 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ###### **Options:**
 
+* `--project-dir <PROJECT_DIR>` — Directory to use as your project base directory. If not specified the directory structure is traversed up until an icp.yaml file is found
 * `--id-store <ID_STORE>`
 
   Default value: `.icp/ids.json`

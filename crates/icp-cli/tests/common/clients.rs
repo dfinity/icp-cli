@@ -1,21 +1,19 @@
-use cycles_ledger::CyclesLedgerPocketIcClient;
-pub use icp_cli::IcpCliClient;
-use icp_ledger::IcpLedgerPocketIcClient;
+use icp::prelude::*;
 
 use crate::common::TestContext;
 
-mod cycles_ledger;
-mod icp_cli;
-mod icp_ledger;
+pub mod cycles_ledger;
+pub mod icp_cli;
+pub mod ledger;
 
-pub fn icp(ctx: &TestContext) -> IcpCliClient<'_> {
-    IcpCliClient::new(ctx)
+pub fn icp(ctx: &TestContext, current_dir: impl Into<PathBuf>) -> icp_cli::Client<'_> {
+    icp_cli::Client::new(ctx, current_dir.into())
 }
 
-pub fn icp_ledger(ctx: &TestContext) -> IcpLedgerPocketIcClient<'_> {
-    IcpLedgerPocketIcClient::new(ctx)
+pub fn ledger(ctx: &TestContext) -> ledger::Client<'_> {
+    ledger::Client::new(ctx)
 }
 
-pub fn cycles_ledger(ctx: &TestContext) -> CyclesLedgerPocketIcClient<'_> {
-    CyclesLedgerPocketIcClient::new(ctx)
+pub fn cycles_ledger(ctx: &TestContext) -> cycles_ledger::Client<'_> {
+    cycles_ledger::Client::new(ctx)
 }

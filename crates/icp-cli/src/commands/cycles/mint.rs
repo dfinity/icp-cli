@@ -1,5 +1,5 @@
 use bigdecimal::{BigDecimal, ToPrimitive};
-use candid::{Decode, Encode, Principal};
+use candid::{Decode, Encode};
 use clap::Parser;
 use ic_agent::AgentError;
 use ic_ledger_types::{
@@ -11,7 +11,7 @@ use icp_canister_interfaces::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
         NotifyMintArgs, NotifyMintErr, NotifyMintResponse,
     },
-    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_CID},
+    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
 use icp_identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
@@ -117,7 +117,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     };
 
     let transfer_result = agent
-        .update(&Principal::from_text(ICP_LEDGER_CID).unwrap(), "transfer")
+        .update(&ICP_LEDGER_PRINCIPAL, "transfer")
         .with_arg(Encode!(&transfer_args).expect("Failed to encode transfer args"))
         .call_and_wait()
         .await

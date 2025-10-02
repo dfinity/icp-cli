@@ -1,5 +1,5 @@
-use crate::common::TestContext;
-use icp::fs::write_string;
+use crate::common::{TestContext, clients};
+use icp::{fs::write_string, prelude::*};
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
@@ -36,8 +36,6 @@ fn canister_install() {
     // Start network
     ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
-
-    // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
     // Build canister
@@ -48,14 +46,11 @@ fn canister_install() {
         .success();
 
     // Create canister
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([
-            "canister",
-            "create",
-            "--quiet", // Set quiet so only the canister ID is output
-            "--effective-id",
-            "ghsi2-tqaaa-aaaan-aaaca-cai",
+            "canister", "create", "--quiet", // Set quiet so only the canister ID is output
         ])
         .assert()
         .success();

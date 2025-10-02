@@ -2442,12 +2442,15 @@ dependencies = [
 name = "icp"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "camino",
  "directories",
+ "schemars",
  "serde",
  "serde_json",
  "serde_yaml",
  "thiserror 2.0.17",
+ "tokio",
 ]
 
 [[package]]

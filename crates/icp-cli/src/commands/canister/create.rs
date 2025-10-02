@@ -364,7 +364,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 fn format_ambiguous_subnet(mappings: &HashMap<String, Principal>) -> String {
     let mut result = String::new();
     for (canister, subnet) in mappings {
-        result.push_str(&format!("   {canister}: {subnet}\n"));
+        result.push_str(&format!("   {canister}: subnet {subnet}\n"));
     }
     result
 }

@@ -82,8 +82,8 @@ impl PocketIcAdminInterface {
             }),
 
             subnet_config_set: (SubnetConfigSet {
-                // Configure a single application subnet
-                application: 1,
+                // Configure two application subnets
+                application: 2,
 
                 // The rest of the subnets are disabled by default
                 ..Default::default()

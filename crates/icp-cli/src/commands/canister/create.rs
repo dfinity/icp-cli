@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 
+use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
-use ic_utils::interfaces::management_canister::{LogVisibility, builders::EnvironmentVariable};
+use icp::prelude::*;
 use snafu::Snafu;
 
 use crate::{
@@ -12,24 +13,12 @@ use crate::{
     progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
 };
+use icp_canister_interfaces::cycles_ledger::{
+    CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
+    CreationArgs,
+};
 
-/// This CID is dependent on the toplogy being served by pocket-ic
-/// NOTE: If the topology is changed (another subnet is added, etc) the CID may change.
-/// References:
-/// - http://localhost:8000/_/topology
-/// - http://localhost:8000/_/dashboard
-pub const DEFAULT_EFFECTIVE_ID: &str = "tqzl2-p7777-77776-aaaaa-cai";
-
-#[derive(Clone, Debug, Parser)]
-pub struct CanisterIDs {
-    /// The effective canister ID to use when calling the management canister.
-    #[arg(long, default_value = DEFAULT_EFFECTIVE_ID)]
-    pub effective_id: Principal,
-
-    /// The specific canister ID to assign if creating with a fixed principal.
-    #[arg(long)]
-    pub specific_id: Option<Principal>,
-}
+pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
 #[derive(Clone, Debug, Default, Parser)]
 pub struct CanisterSettings {
@@ -48,14 +37,6 @@ pub struct CanisterSettings {
     /// Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles.
     #[arg(long)]
     pub reserved_cycles_limit: Option<u64>,
-
-    /// Optional Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    #[arg(long)]
-    pub wasm_memory_limit: Option<u64>,
-
-    /// Optional Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    #[arg(long)]
-    pub wasm_memory_threshold: Option<u64>,
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -69,10 +50,6 @@ pub struct Cmd {
     #[command(flatten)]
     pub environment: EnvironmentOpt,
 
-    // Canister ID configuration, including the effective and optionally specific ID.
-    #[command(flatten)]
-    pub ids: CanisterIDs,
-
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[arg(long)]
     pub controller: Vec<Principal>,
@@ -84,8 +61,15 @@ pub struct Cmd {
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
     #[arg(long, short = 'q')]
     pub quiet: bool,
+
+    /// Cycles to fund canister creation (in raw cycles).
+    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
+    pub cycles: u128,
 }
 
+// Creates canister(s) by asking the cycles ledger to create them.
+// The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
+// The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
     let pm = ctx.project()?;
@@ -172,9 +156,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare agent
     let agent = ctx.agent()?;
 
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
-
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
@@ -187,7 +168,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
             let cmd = cmd.clone();
-            let mgmt = mgmt.clone();
             let pb = pb.clone();
 
             async move {
@@ -214,97 +194,64 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     Err(err) => panic!("{err}"),
                 };
 
-                // Create canister
-                let mut builder = mgmt.create_canister();
-
-                // Cycles amount
-                builder = builder.as_provisional_create_with_amount(None);
-
-                // Canister ID (effective)
-                builder = builder.with_effective_canister_id(cmd.ids.effective_id);
-
-                // Configure canister environment variables
-                // Environment variables are key-value pairs that are accessible within the canister
-                // and can be used to configure behavior without hardcoding values in the WASM
-                builder = {
-                    let environment_variables = c
+                // Build cycles ledger create_canister args
+                let settings = CanisterSettingsArg {
+                    freezing_threshold: cmd
                         .settings
-                        .environment_variables
-                        .to_owned()
-                        .unwrap_or_default();
-
-                    // Convert from HashMap<String, String> to Vec<EnvironmentVariable>
-                    // as required by the IC management canister interface
-                    let environment_variables = environment_variables
-                        .into_iter()
-                        .map(|(name, value)| EnvironmentVariable { name, value })
-                        .collect::<Vec<_>>();
-
-                    builder.with_environment_variables(environment_variables)
+                        .freezing_threshold
+                        .or(c.settings.freezing_threshold)
+                        .map(Nat::from),
+                    controllers: if cmd.controller.is_empty() {
+                        None
+                    } else {
+                        Some(cmd.controller.clone())
+                    },
+                    reserved_cycles_limit: cmd
+                        .settings
+                        .reserved_cycles_limit
+                        .or(c.settings.reserved_cycles_limit)
+                        .map(Nat::from),
+                    memory_allocation: cmd
+                        .settings
+                        .memory_allocation
+                        .or(c.settings.memory_allocation)
+                        .map(Nat::from),
+                    compute_allocation: cmd
+                        .settings
+                        .compute_allocation
+                        .or(c.settings.compute_allocation)
+                        .map(Nat::from),
                 };
 
-                // Logs
-                builder = builder.with_optional_log_visibility(Some(LogVisibility::Public));
+                let creation_args = CreationArgs {
+                    subnet_selection: None,
+                    settings: Some(settings),
+                };
 
-                // Canister ID (specific)
-                if let Some(id) = cmd.ids.specific_id {
-                    builder = builder.as_provisional_create_with_specified_id(id);
-                }
+                let arg = CreateCanisterArgs {
+                    from_subaccount: None,
+                    created_at_time: None,
+                    amount: Nat::from(cmd.cycles),
+                    creation_args: Some(creation_args),
+                };
 
-                // Controllers
-                for c in &cmd.controller {
-                    builder = builder.with_controller(c.to_owned());
-                }
-
-                // Compute
-                builder = builder.with_optional_compute_allocation(
-                    cmd.settings
-                        .compute_allocation
-                        .or(c.settings.compute_allocation),
-                );
-
-                // Memory
-                builder = builder.with_optional_memory_allocation(
-                    cmd.settings
-                        .memory_allocation
-                        .or(c.settings.memory_allocation),
-                );
-
-                // Freezing Threshold
-                builder = builder.with_optional_freezing_threshold(
-                    cmd.settings
-                        .freezing_threshold
-                        .or(c.settings.freezing_threshold),
-                );
-
-                // Reserved Cycles (limit)
-                builder = builder.with_optional_reserved_cycles_limit(
-                    cmd.settings
-                        .reserved_cycles_limit
-                        .or(c.settings.reserved_cycles_limit),
-                );
-
-                // Wasm (memory limit)
-                builder = builder.with_optional_wasm_memory_limit(
-                    cmd.settings
-                        .wasm_memory_limit
-                        .or(c.settings.wasm_memory_limit),
-                );
-
-                // Wasm (memory threshold)
-                builder = builder.with_optional_wasm_memory_threshold(
-                    cmd.settings
-                        .wasm_memory_threshold
-                        .or(c.settings.wasm_memory_threshold),
-                );
-
-                // Logs
-                builder = builder.with_optional_log_visibility(
-                    Some(LogVisibility::Public), //
-                );
-
-                // Create the canister
-                let (cid,) = builder.await?;
+                // Call cycles ledger create_canister
+                let resp = agent
+                    .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
+                    .with_arg(Encode!(&arg).map_err(|source| CommandError::Candid { source })?)
+                    .call_and_wait()
+                    .await
+                    .map_err(|source| CommandError::CreateCanister { source })?;
+                let resp: CreateCanisterResponse = Decode!(&resp, CreateCanisterResponse)
+                    .map_err(|source| CommandError::Candid { source })?;
+                let cid = match resp {
+                    CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+                    CreateCanisterResponse::Err(err) => {
+                        return Err(CommandError::LedgerCreate {
+                            err: err.format_error(cmd.cycles),
+                        });
+                    }
+                };
 
                 // Register the canister ID
                 ctx.id_store.register(&k, &cid)?;
@@ -378,4 +325,10 @@ pub enum CommandError {
 
     #[snafu(transparent)]
     RegisterCanister { source: RegisterError },
+
+    #[snafu(transparent)]
+    Candid { source: candid::Error },
+
+    #[snafu(display("{err}"))]
+    LedgerCreate { err: String },
 }

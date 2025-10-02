@@ -1,5 +1,5 @@
-use crate::common::TestContext;
-use icp::fs::write_string;
+use crate::common::{TestContext, clients};
+use icp::{fs::write_string, prelude::*};
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
@@ -91,11 +91,10 @@ fn deploy() {
     // Start network
     ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
-
-    // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])
@@ -143,11 +142,10 @@ fn deploy_twice_should_succeed() {
     // Start network
     ctx.configure_icp_local_network_random_port(&project_dir);
     let _g = ctx.start_network_in(&project_dir);
-
-    // Wait for network
     ctx.ping_until_healthy(&project_dir);
 
     // Deploy project (first time)
+    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])

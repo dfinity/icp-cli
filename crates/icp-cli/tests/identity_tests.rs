@@ -141,6 +141,7 @@ fn identity_import_pem() {
 #[test]
 fn identity_create() {
     let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
 
     let new_out = ctx
         .icp()
@@ -148,8 +149,8 @@ fn identity_create() {
         .assert()
         .success();
 
-    let alice_principal = clients::icp(&ctx).get_principal("alice");
-    let anonymous_principal = clients::icp(&ctx).get_principal("anonymous");
+    let alice_principal = clients::icp(&ctx, &project_dir).get_principal("alice");
+    let anonymous_principal = clients::icp(&ctx, &project_dir).get_principal("anonymous");
 
     let seed = str::from_utf8(&new_out.get_output().stdout)
         .unwrap()

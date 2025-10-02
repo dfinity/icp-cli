@@ -1,6 +1,6 @@
-use crate::common::TestContext;
+use crate::common::{TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp::fs::write_string;
+use icp::{fs::write_string, prelude::*};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
@@ -39,14 +39,10 @@ fn canister_create() {
     ctx.ping_until_healthy(&project_dir);
 
     // Create canister
+    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "canister",
-            "create",
-            "--effective-id",
-            "ghsi2-tqaaa-aaaan-aaaca-cai",
-        ])
+        .args(["canister", "create"])
         .assert()
         .success();
 }
@@ -71,12 +67,10 @@ fn canister_create_with_settings() {
               - type: script
                 command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           settings:
-            compute_allocation: 10
+            compute_allocation: 1
             memory_allocation: 4294967296
             freezing_threshold: 2592000
             reserved_cycles_limit: 1000000000000
-            wasm_memory_limit: 1073741824
-            wasm_memory_threshold: 536870912
         "#,
         f.path()
     );
@@ -95,13 +89,14 @@ fn canister_create_with_settings() {
     ctx.ping_until_healthy(&project_dir);
 
     // Create canister
+    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
             "create",
-            "--effective-id",
-            "ghsi2-tqaaa-aaaan-aaaca-cai",
+            "--cycles",
+            &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
         .assert()
         .success();
@@ -115,12 +110,10 @@ fn canister_create_with_settings() {
         .stderr(
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
-                .and(contains("Compute allocation: 10"))
+                .and(contains("Compute allocation: 1"))
                 .and(contains("Memory allocation: 4_294_967_296"))
                 .and(contains("Freezing threshold: 2_592_000"))
-                .and(contains("Reserved cycles limit: 1_000_000_000_000"))
-                .and(contains("Wasm memory limit: 1_073_741_824"))
-                .and(contains("Wasm memory threshold: 536_870_912")),
+                .and(contains("Reserved cycles limit: 1_000_000_000_000")),
         );
 }
 
@@ -144,7 +137,7 @@ fn canister_create_with_settings_cmdline_override() {
               - type: script
                 command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           settings:
-            compute_allocation: 10
+            compute_allocation: 1
         "#,
         f.path()
     );
@@ -163,15 +156,16 @@ fn canister_create_with_settings_cmdline_override() {
     ctx.ping_until_healthy(&project_dir);
 
     // Create canister
+    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
             "create",
-            "--effective-id",
-            "ghsi2-tqaaa-aaaan-aaaca-cai",
             "--compute-allocation",
-            "20",
+            "2",
+            "--cycles",
+            &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
         .assert()
         .success();
@@ -185,6 +179,6 @@ fn canister_create_with_settings_cmdline_override() {
         .stderr(
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
-                .and(contains("Compute allocation: 20")),
+                .and(contains("Compute allocation: 2")),
         );
 }

@@ -9,11 +9,11 @@ use std::cell::Ref;
 
 use crate::common::TestContext;
 
-pub struct IcpLedgerPocketIcClient<'a> {
+pub struct Client<'a> {
     pic: Ref<'a, PocketIc>,
 }
 
-impl<'a> IcpLedgerPocketIcClient<'a> {
+impl<'a> Client<'a> {
     pub fn new(ctx: &'a TestContext) -> Self {
         Self {
             pic: ctx.pocketic(),

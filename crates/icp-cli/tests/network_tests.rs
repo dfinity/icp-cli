@@ -1,4 +1,4 @@
-use icp::fs::write_string;
+use icp::{fs::write_string, prelude::*};
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -6,8 +6,7 @@ use predicates::{
 use serial_test::file_serial;
 
 mod common;
-use crate::common::clients;
-use crate::common::{TestContext, TestNetwork};
+use crate::common::{TestContext, TestNetwork, clients};
 
 #[test]
 #[file_serial(default_local_network)]
@@ -119,6 +118,8 @@ fn deploy_to_other_projects_network() {
     ctx.ping_until_healthy(&proja);
 
     // Deploy project (first time)
+    clients::icp(&ctx, &proja).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&projb)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])
@@ -150,9 +151,10 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
+    let icp_client = clients::icp(&ctx, &project_dir);
 
     // Create identities BEFORE starting the network
-    clients::icp(&ctx).create_identity("before");
+    icp_client.create_identity("before");
 
     // Time how long it takes to configure and start the network
     let start = std::time::Instant::now();
@@ -166,10 +168,10 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     );
 
     // Create identities AFTER starting the network
-    clients::icp(&ctx).create_identity("after");
+    icp_client.create_identity("after");
 
     // Anonymouys starts with massive initial balance
-    clients::icp(&ctx).use_identity("anonymous");
+    icp_client.use_identity("anonymous");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])
@@ -178,7 +180,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .success();
 
     // Identities created before starting should have a large seeded ICP balance
-    clients::icp(&ctx).use_identity("before");
+    icp_client.use_identity("before");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])
@@ -187,7 +189,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .success();
 
     // Identities created after starting should have 0 ICP balance
-    clients::icp(&ctx).use_identity("after");
+    icp_client.use_identity("after");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])
@@ -196,7 +198,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .success();
 
     // Identities created before starting should have a large seeded cycles balance
-    clients::icp(&ctx).use_identity("before");
+    icp_client.use_identity("before");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "balance"])
@@ -205,7 +207,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .success();
 
     // Identities created after starting should have 0 cycles balance
-    clients::icp(&ctx).use_identity("after");
+    icp_client.use_identity("after");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "balance"])

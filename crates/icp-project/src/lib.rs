@@ -8,8 +8,6 @@ use icp::{fs::yaml, prelude::*};
 // Async stream processing utilities for concurrent recipe resolution
 use futures::{StreamExt, TryStreamExt, stream};
 use glob::GlobError;
-use icp_canister::{BuildSteps, CanisterSettings, SyncSteps, recipe};
-use icp_canister::{CanisterInstructions, manifest::CanisterManifest};
 use icp_network::{NETWORK_IC, NETWORK_LOCAL, NetworkConfig};
 use pathdiff::diff_utf8_paths;
 use serde::Deserialize;
@@ -21,7 +19,6 @@ use crate::{
 };
 
 pub mod directory;
-pub mod manifest;
 pub mod structure;
 
 pub const ENVIRONMENT_LOCAL: &str = "local";
@@ -29,45 +26,6 @@ pub const ENVIRONMENT_IC: &str = "ic";
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
-}
-
-/// Provides the default glob pattern for locating canister manifests
-/// when no `canisters` are explicitly specified in the YAML.
-pub fn default_canisters() -> CanistersField {
-    CanistersField::Canisters(
-        ["canisters/*"]
-            .into_iter()
-            .map(String::from)
-            .map(Item::Path)
-            .collect::<Vec<_>>(),
-    )
-}
-
-/// Provides the default glob pattern for locating network definition files
-/// when the `networks` field is not explicitly specified in the YAML.
-pub fn default_networks() -> Vec<Item<NetworkManifest>> {
-    ["networks/*"]
-        .into_iter()
-        .map(String::from)
-        .map(Item::Path)
-        .collect::<Vec<_>>()
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Canister {
-    /// Canister name
-    pub name: String,
-
-    /// Canister settings
-    #[serde(default)]
-    pub settings: CanisterSettings,
-
-    /// Canister build instructions
-    pub build: BuildSteps,
-
-    /// Canister sync instructions
-    #[serde(default)]
-    pub sync: SyncSteps,
 }
 
 /// Represents the manifest for an ICP project, typically loaded from `icp.yaml`.
@@ -728,7 +686,6 @@ pub struct NoSuchNetworkError {
 mod tests {
     use camino_tempfile::tempdir;
     use icp_adapter::script::{CommandField, ScriptAdapter};
-    use icp_canister::{BuildStep, BuildSteps, CanisterSettings, SyncSteps};
     use icp_network::{BindPort, NETWORK_LOCAL, NetworkConfig};
 
     use crate::{Canister, LoadProjectManifestError, Project, directory::ProjectDirectory};
@@ -787,7 +744,7 @@ mod tests {
             project_dir.path().to_owned(),
             Canister {
                 name: "canister-1".into(),
-                settings: CanisterSettings::default(),
+                settings: Settings::default(),
                 build: BuildSteps {
                     steps: vec![BuildStep::Script(ScriptAdapter {
                         command: CommandField::Command(
@@ -850,7 +807,7 @@ mod tests {
             project_dir.path().join("canister-1"),
             Canister {
                 name: "canister-1".into(),
-                settings: CanisterSettings::default(),
+                settings: Settings::default(),
                 build: BuildSteps {
                     steps: vec![BuildStep::Script(ScriptAdapter {
                         command: CommandField::Command(

@@ -2,8 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use console::Term;
 use ic_agent::{Agent, Identity};
-use icp::Directories;
-use icp_canister::recipe;
+use icp::{Directories, Project};
 use icp_identity::{
     key::{LoadIdentityInContextError, load_identity, load_identity_in_context},
     manifest::load_identity_list,
@@ -11,10 +10,6 @@ use icp_identity::{
 use icp_network::{
     NETWORK_IC,
     access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
-};
-use icp_project::{
-    LoadProjectManifestError, NoSuchNetworkError, Project,
-    directory::{FindProjectError, ProjectDirectory},
 };
 use snafu::Snafu;
 use tokio::task::JoinError;
@@ -32,9 +27,6 @@ pub struct Context {
     /// An artifact store for canister build artifacts
     pub artifact_store: ArtifactStore,
 
-    /// A recipe resolver for resolving canister recipes into build/sync steps
-    pub recipe_resolver: Arc<dyn recipe::Resolve>,
-
     dirs: Directories,
 
     /// The name of the identity to use, set from the command line.
@@ -43,8 +35,8 @@ pub struct Context {
     /// The network name, set from the command line for those commands that access a network.
     network_name: OnceLock<String>,
 
-    /// The current project, instantiated on-demand.
-    project: TryOnceLock<Project>,
+    /// Project loader
+    pub project: Arc<dyn icp::Load>,
 
     /// The identity to use for the agent, instantiated on-demand.
     identity: TryOnceLock<Arc<dyn Identity>>,
@@ -59,18 +51,17 @@ impl Context {
         dirs: Directories,
         id_store: IdStore,
         artifact_store: ArtifactStore,
-        recipe_resolver: Arc<dyn recipe::Resolve>,
+        project: Arc<dyn icp::Load>,
     ) -> Self {
         Self {
             term,
             id_store,
             artifact_store,
-            recipe_resolver,
+            project,
             dirs,
             identity_name: OnceLock::new(),
             network_name: OnceLock::new(),
             identity: TryOnceLock::new(),
-            project: TryOnceLock::new(),
             agent: TryOnceLock::new(),
         }
     }
@@ -131,53 +122,7 @@ impl Context {
 }
 
 #[derive(Debug, Snafu)]
-pub enum ContextProjectError {
-    #[snafu(transparent)]
-    FindProjectDirectory { source: FindProjectError },
-
-    #[snafu(transparent)]
-    LoadProjectManifest { source: LoadProjectManifestError },
-
-    #[snafu(transparent)]
-    Join { source: JoinError },
-
-    #[snafu(display("no project (icp.yaml) found in current directory or its parents"))]
-    ProjectNotFound,
-}
-
-impl Context {
-    pub fn project(&self) -> Result<&Project, ContextProjectError> {
-        self.project.get_or_try_init(|| {
-            let pd = ProjectDirectory::find()?.ok_or(ProjectNotFound)?;
-            let recipe_resolver = self.recipe_resolver.to_owned();
-
-            // Bridge between sync and async worlds: Project::load is async because
-            // recipe resolution may require HTTP requests for remote templates.
-            // We spawn a blocking task with its own runtime to handle this.
-            let handle = tokio::task::spawn_blocking(move || {
-                tokio::runtime::Runtime::new()
-                    .expect("failed to create runtime")
-                    .block_on(async move {
-                        let p = Project::load(pd, Some(recipe_resolver))
-                            .await
-                            .map_err(|err| ContextProjectError::LoadProjectManifest {
-                                source: err,
-                            })?;
-
-                        Ok(p)
-                    })
-            });
-
-            futures::executor::block_on(handle)?
-        })
-    }
-}
-
-#[derive(Debug, Snafu)]
 pub enum CreateNetworkError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
     #[snafu(transparent)]
     GetNetworkAccess { source: GetNetworkAccessError },
 

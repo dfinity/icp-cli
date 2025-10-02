@@ -1314,12 +1314,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
-name = "downcast"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
-
-[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1628,12 +1622,6 @@ checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
 ]
-
-[[package]]
-name = "fragile"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 
 [[package]]
 name = "fslock"
@@ -2481,24 +2469,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "icp-canister"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "handlebars 6.3.2",
- "icp",
- "icp-adapter",
- "mockall",
- "reqwest",
- "schemars",
- "serde",
- "serde_json",
- "serde_yaml",
- "snafu",
- "url",
-]
-
-[[package]]
 name = "icp-canister-interfaces"
 version = "0.1.0"
 dependencies = [
@@ -2532,11 +2502,9 @@ dependencies = [
  "ic-utils",
  "icp",
  "icp-adapter",
- "icp-canister",
  "icp-canister-interfaces",
  "icp-identity",
  "icp-network",
- "icp-project",
  "icrc-ledger-types",
  "indicatif",
  "itertools 0.14.0",
@@ -2623,7 +2591,6 @@ dependencies = [
  "glob",
  "icp",
  "icp-adapter",
- "icp-canister",
  "icp-network",
  "pathdiff",
  "schemars",
@@ -3217,32 +3184,6 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "mockall"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39a6bfcc6c8c7eed5ee98b9c3e33adc726054389233e201c95dab2d41a3839d2"
-dependencies = [
- "cfg-if",
- "downcast",
- "fragile",
- "mockall_derive",
- "predicates",
- "predicates-tree",
-]
-
-[[package]]
-name = "mockall_derive"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ca3004c2efe9011bd4e461bd8256445052b9615405b4f7ea43fc8ca5c20898"
-dependencies = [
- "cfg-if",
- "proc-macro2",
- "quote",
- "syn 2.0.106",
 ]
 
 [[package]]
@@ -4454,9 +4395,8 @@ dependencies = [
 name = "schema-gen"
 version = "0.1.0"
 dependencies = [
- "icp-canister",
+ "icp",
  "icp-network",
- "icp-project",
  "schemars",
  "serde",
  "serde_json",

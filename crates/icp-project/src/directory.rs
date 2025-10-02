@@ -1,7 +1,6 @@
 use std::io;
 
 use icp::{fs::yaml, prelude::*};
-use icp_canister::manifest::CanisterManifest;
 use icp_network::{NetworkConfig, NetworkDirectory};
 use snafu::{ResultExt, Snafu};
 

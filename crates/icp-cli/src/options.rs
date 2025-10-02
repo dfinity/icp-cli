@@ -1,5 +1,4 @@
 use clap::{ArgGroup, Args};
-use icp_project::{ENVIRONMENT_IC, ENVIRONMENT_LOCAL};
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct IdentityOpt {
@@ -35,10 +34,10 @@ impl EnvironmentOpt {
     pub fn name(&self) -> &str {
         // Support --ic
         if self.ic {
-            return ENVIRONMENT_IC;
+            return "ic";
         }
 
         // Otherwise, default to `local`
-        self.environment.as_deref().unwrap_or(ENVIRONMENT_LOCAL)
+        self.environment.as_deref().unwrap_or("local")
     }
 }

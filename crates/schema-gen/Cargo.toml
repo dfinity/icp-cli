@@ -8,8 +8,7 @@ name = "schema-gen"
 path = "src/main.rs"
 
 [dependencies]
-icp-project = { workspace = true }
-icp-canister = { workspace = true }
+icp = { workspace = true }
 icp-network = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }

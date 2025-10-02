@@ -1,7 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
+use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
+
+use crate::{
+    Canister,
+    manifest::{self, canister::Instructions},
+};
 
 pub mod build;
 pub mod recipe;
@@ -32,4 +38,85 @@ pub struct Settings {
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
     pub environment_variables: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoadError {
+    #[error("failed to resolve recipe: {0}")]
+    Recipe(#[from] recipe::ResolveError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Load: Sync + Send {
+    async fn load(&self, m: manifest::Canister) -> Result<Canister, LoadError>;
+}
+
+pub struct Loader {
+    recipe: Arc<dyn recipe::Resolve>,
+}
+
+impl Loader {
+    pub fn new(recipe: Arc<dyn recipe::Resolve>) -> Self {
+        Self { recipe }
+    }
+}
+
+#[async_trait]
+impl Load for Loader {
+    async fn load(&self, m: manifest::Canister) -> Result<Canister, LoadError> {
+        let (build, sync) = match m.instructions {
+            Instructions::Recipe { recipe } => self.recipe.resolve(&recipe).await?,
+            Instructions::BuildSync { build, sync } => (build, sync),
+        };
+
+        Ok(Canister {
+            name: m.name,
+            settings: m.settings,
+            build,
+            sync,
+        })
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Build: Sync + Send {
+    async fn build(step: build::Step) -> Result<(), BuildError>;
+}
+
+pub struct Builder;
+
+#[async_trait]
+impl Build for Builder {
+    async fn build(step: build::Step) -> Result<(), BuildError> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SyncError {
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Synchronize: Sync + Send {
+    async fn sync(step: sync::Step) -> Result<(), SyncError>;
+}
+
+pub struct Syncer;
+
+#[async_trait]
+impl Synchronize for Syncer {
+    async fn sync(step: sync::Step) -> Result<(), SyncError> {
+        Ok(())
+    }
 }

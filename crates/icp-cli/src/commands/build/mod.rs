@@ -5,8 +5,6 @@ use camino_tempfile::tempdir;
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::fs::read;
-use icp_adapter::build::{Adapter as _, AdapterCompileError};
-use icp_canister::BuildStep;
 use snafu::{ResultExt, Snafu};
 
 use crate::context::ContextProjectError;

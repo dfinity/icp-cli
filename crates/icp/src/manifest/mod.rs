@@ -5,17 +5,19 @@ use anyhow::Context as _;
 use serde::Deserialize;
 
 use crate::manifest::{
-    environment::{CanisterSelection, Environment},
-    network::{Configuration, Gateway, Network},
+    environment::CanisterSelection,
+    network::{Configuration, Gateway},
     project::{Canisters, Environments, Networks, Project},
 };
 
 pub mod adapter;
 pub mod canister;
-mod environment;
-mod network;
-mod project;
+pub mod environment;
+pub mod network;
+pub mod project;
 pub mod recipe;
+
+pub use {canister::Canister, environment::Environment, network::Network};
 
 const PROJECT_MANIFEST: &str = "icp.yaml";
 

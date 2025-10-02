@@ -5,7 +5,18 @@ use clap::{CommandFactory, Parser};
 use commands::Subcmd;
 use console::Term;
 use context::Context;
-use icp::{Directories, manifest, prelude::*};
+use icp::{
+    Directories,
+    canister::{
+        self,
+        recipe::{
+            self,
+            handlebars::{Handlebars, TEMPLATES},
+        },
+    },
+    environment, manifest, network,
+    prelude::*,
+};
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
@@ -113,6 +124,7 @@ async fn main() -> Result<(), Error> {
     );
 
     let mload = manifest::Loader::new(Arc::new(mloc));
+    let mload = Arc::new(mload);
 
     // Setup project directory structure
     let dirs = Directories::new()?;
@@ -124,18 +136,39 @@ async fn main() -> Result<(), Error> {
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
     // Handlebar Templates (for recipes)
-    let tmpls = recipe::TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
+    let tmpls = TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
 
     // Prepare http client
     let http_client = reqwest::Client::new();
 
     // Recipes
-    let recipe_resolver = Arc::new(recipe::Resolver {
-        handlebars_resolver: Arc::new(Handlebars {
+    let recipe = Arc::new(recipe::Resolver {
+        handlebars: Arc::new(Handlebars {
             recipes: HashMap::from_iter(tmpls),
             http_client,
         }),
     });
+
+    // Canister loader
+    let cload = canister::Loader::new(recipe);
+    let cload = Arc::new(cload);
+
+    // Network loader
+    let nload = Arc::new(network::Loader);
+
+    // Environment loader
+    let eload = Arc::new(environment::Loader);
+
+    // Canister builder
+    let cbuild = Arc::new(canister::Builder);
+
+    // Canister syncer
+    let csync = Arc::new(canister::Syncer);
+
+    // Project Loader
+    let pload = icp::Loader::new(mload, cload, nload, eload);
+    let pload = icp::Lazy::new(pload);
+    let pload = Arc::new(pload);
 
     // Setup environment
     let ctx = Context::new(
@@ -143,7 +176,7 @@ async fn main() -> Result<(), Error> {
         dirs,      // dirs
         ids,       // id_store
         artifacts, // artifact_store
-        recipe_resolver,
+        pload,     // project
     );
 
     commands::dispatch(&ctx, command).await?;

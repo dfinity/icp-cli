@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-mod handlebars;
+pub mod handlebars;
 
 /// A recipe resolver takes a recipe that is specified in a canister manifest
 /// and resolves it into a set of build/sync steps

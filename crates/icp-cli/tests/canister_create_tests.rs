@@ -182,3 +182,79 @@ fn canister_create_with_settings_cmdline_override() {
                 .and(contains("Compute allocation: 2")),
         );
 }
+
+#[test]
+fn canister_create_nonexistent_canister() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest with canister named "a"
+    let pm = r#"
+    canister:
+      name: a
+      build:
+        steps:
+          - type: script
+            command: echo hi
+    "#;
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Try to create canister "b" which doesn't exist in the project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "create", "b"])
+        .assert()
+        .failure()
+        .stderr(contains("project does not contain a canister named 'b'"));
+}
+
+#[test]
+fn canister_create_canister_not_in_environment() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest with canisters "a" and "b", but environment only includes "a"
+    let pm = r#"
+    canisters:
+      - name: a
+        build:
+          steps:
+            - type: script
+              command: echo hi
+      - name: b
+        build:
+          steps:
+            - type: script
+              command: echo hi
+
+    environments:
+      - name: test-env
+        network: local
+        canisters: [a]
+    "#;
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Try to create canister "b" which is not included in the environment
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "create", "b", "--environment", "test-env"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "environment 'test-env' does not include canister 'b'",
+        ));
+}

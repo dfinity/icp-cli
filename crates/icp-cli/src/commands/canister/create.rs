@@ -4,7 +4,7 @@ use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
-use icp::TRILLION;
+use icp::prelude::*;
 use snafu::Snafu;
 
 use crate::{

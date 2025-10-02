@@ -1,5 +1,5 @@
 use crate::common::{TestContext, clients};
-use icp::{TRILLION, fs::write_string};
+use icp::{fs::write_string, prelude::*};
 use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;

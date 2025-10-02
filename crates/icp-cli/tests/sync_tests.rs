@@ -1,7 +1,7 @@
 use crate::common::{TestContext, clients};
 use icp::{
-    TRILLION,
     fs::{create_dir_all, write_string},
+    prelude::*,
 };
 use icp_network::NETWORK_LOCAL;
 use predicates::{

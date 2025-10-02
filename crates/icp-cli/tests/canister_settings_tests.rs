@@ -2,7 +2,7 @@ use crate::common::{
     TestContext,
     clients::{self, IcpCliClient},
 };
-use icp::{TRILLION, fs::write_string};
+use icp::{fs::write_string, prelude::*};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},

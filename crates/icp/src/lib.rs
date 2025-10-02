@@ -10,8 +10,6 @@ pub mod fs;
 pub mod manifest;
 pub mod prelude;
 
-pub const TRILLION: u128 = 1_000_000_000_000;
-
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Canister {
     pub name: String,

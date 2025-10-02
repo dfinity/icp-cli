@@ -177,7 +177,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare agent
     let agent = ctx.agent()?;
 
-    let subnet = resolve_subnet(&agent, ctx, cmd.subnet, &existing_keys).await?;
+    let subnet = resolve_subnet(agent, ctx, cmd.subnet, &existing_keys).await?;
 
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();

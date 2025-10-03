@@ -231,14 +231,7 @@ pub struct ChildExitError {
 }
 
 /// Waits for a child process to populate a port number in a file.
-/// Exits early if the child exits or the user interrupts (Ctrl-C).
-///
-/// # Arguments
-/// * `path` - Path to the port file
-/// * `child` - The child process to monitor
-///
-/// # Returns
-/// The port number on success, or an error if interrupted, timeout, or child exits
+/// Exits early if the child exits or the user interrupts.
 pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
     tokio::select! {
         res = wait_for_port_file(path) => res.map_err(WaitForPortError::from),
@@ -272,13 +265,6 @@ async fn initialize_pocketic(
     initialize_instance(pocketic_port, instance_config, gateway_port, seed_accounts).await
 }
 
-/// Initializes a PocketIC instance with the given configuration.
-///
-/// # Arguments
-/// * `pocketic_port` - Port where PocketIC server is running
-/// * `instance_config` - Configuration for the PocketIC instance (topology, features, etc.)
-/// * `gateway_port` - Optional fixed port for HTTP gateway (None for random)
-/// * `seed_accounts` - Accounts to seed with ICP and cycles
 pub async fn initialize_instance(
     pocketic_port: u16,
     instance_config: InstanceConfig,
@@ -378,7 +364,7 @@ pub enum InitializePocketicError {
 }
 
 async fn mint_cycles_to_account(
-    pic: &pocket_ic::nonblocking::PocketIc,
+    pic: &PocketIc,
     account: Principal,
     amount: u128,
     icp_xdr_conversion_rate: u64,
@@ -445,7 +431,7 @@ async fn mint_cycles_to_account(
 }
 
 async fn mint_icp_to_account(
-    pic: &pocket_ic::nonblocking::PocketIc,
+    pic: &PocketIc,
     account: Principal,
     amount: u64,
 ) -> Result<(), InitializePocketicError> {
@@ -477,9 +463,7 @@ async fn mint_icp_to_account(
     Ok(())
 }
 
-async fn get_icp_xdr_conversion_rate(
-    pic: &pocket_ic::nonblocking::PocketIc,
-) -> Result<u64, InitializePocketicError> {
+async fn get_icp_xdr_conversion_rate(pic: &PocketIc) -> Result<u64, InitializePocketicError> {
     let response: (ConversionRateResponse,) = call_candid(
         pic,
         CYCLES_MINTING_CANISTER_PRINCIPAL,

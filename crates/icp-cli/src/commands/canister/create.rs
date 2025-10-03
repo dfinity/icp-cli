@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
-use ic_agent::{Agent, AgentError, export::Principal};
+use ic_agent::{AgentError, export::Principal};
 use icp::prelude::*;
 use rand::seq::IndexedRandom;
 use snafu::Snafu;
@@ -176,7 +176,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare agent
     let agent = ctx.agent()?;
 
-    let subnet = resolve_subnet(agent, ctx, cmd.subnet, &existing_keys).await?;
+    let subnet = resolve_subnet(ctx, cmd.subnet, &existing_keys).await?;
 
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
@@ -302,7 +302,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 }
 
 async fn resolve_subnet(
-    agent: &Agent,
     ctx: &Context,
     specified_subnet: Option<Principal>,
     existing_keys: &[Key],
@@ -316,7 +315,8 @@ async fn resolve_subnet(
     } else if !existing_keys.is_empty() {
         let mapping = try_join_all(existing_keys.iter().map(|key| async {
             let canister = ctx.id_store.lookup(key).expect("Canister already exists");
-            let response_bytes = agent
+            let response_bytes = ctx
+                .agent()?
                 .query(&REGISTRY_PRINCIPAL, "get_subnet_for_canister")
                 .with_arg(
                     Encode!(&GetSubnetForCanisterRequest {
@@ -345,14 +345,15 @@ async fn resolve_subnet(
         }))
         .await?;
         if HashSet::<_>::from_iter(mapping.iter().map(|(_, subnet)| subnet)).len() == 1 {
-            Ok(mapping.first().expect("existing_keys is not empty").1)
+            Ok(mapping.first().expect("existing_keys has len() == 1").1)
         } else {
             return Err(CommandError::AmbiguousSubnet {
                 mapping: mapping.into_iter().collect(),
             });
         }
     } else {
-        let response_bytes = agent
+        let response_bytes = ctx
+            .agent()?
             .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
             .with_arg(Encode!(&()).expect("Failed to encode GetDefaultSubnetsRequest"))
             .call()
@@ -419,7 +420,7 @@ pub enum CommandError {
     GetSubnet { err: String },
 
     #[snafu(display(
-        "No obvious subnet choice. Use --subnet to manually pick a subnet. Current locations:\n{}",
+        "No obvious subnet choice. Use --subnet to manually pick a subnet. Current locations:\n{}\n",
         format_ambiguous_subnet_map(mapping)
     ))]
     AmbiguousSubnet { mapping: HashMap<String, Principal> },

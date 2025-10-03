@@ -1,17 +1,17 @@
-use assert_cmd::Command;
-use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
-use candid::Principal;
-use icp::prelude::*;
-use icp_network::managed::pocketic;
-use icp_network::managed::run::initialize_instance;
-use icp_network::{NETWORK_LOCAL, managed::run::wait_for_port_file};
-use pocket_ic::nonblocking::PocketIc;
 use std::{
     cell::{Ref, RefCell},
     env,
     ffi::OsString,
     fs::{self, create_dir_all},
 };
+
+use assert_cmd::Command;
+use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
+use candid::Principal;
+use icp::prelude::*;
+use icp_network::managed::run::initialize_instance;
+use icp_network::{NETWORK_LOCAL, managed::run::wait_for_port_file};
+use pocket_ic::{common::rest::InstanceConfig, nonblocking::PocketIc};
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork};
@@ -118,12 +118,21 @@ impl TestContext {
         child_guard
     }
 
+    pub fn state_dir(&self, project_dir: &Path) -> PathBuf {
+        project_dir
+            .join(".icp")
+            .join("networks")
+            .join(NETWORK_LOCAL)
+            .join("pocketic")
+            .join("state")
+    }
+
     /// Start a network with a custom number of application subnets.
     /// This bypasses the CLI and directly spawns PocketIC with the specified configuration.
-    pub async fn start_network_with_subnets(
+    pub async fn start_network_with_config(
         &self,
         project_dir: &Path,
-        application_subnets: usize,
+        configuration: InstanceConfig,
     ) -> ChildGuard {
         let pocketic_path =
             PathBuf::from(env::var("ICP_POCKET_IC_PATH").expect("ICP_POCKET_IC_PATH must be set"));
@@ -143,10 +152,7 @@ impl TestContext {
 
         let port_file = pocketic_dir.join("port");
 
-        eprintln!(
-            "Starting PocketIC with {} application subnet(s)",
-            application_subnets
-        );
+        eprintln!("Starting PocketIC with cusotm configuration");
 
         // Spawn PocketIC
         let mut cmd = std::process::Command::new(&pocketic_path);
@@ -172,10 +178,9 @@ impl TestContext {
         eprintln!("PocketIC started on port {}", pocketic_port);
 
         // Initialize PocketIC instance with custom config
-        let inst_cfg = pocketic::custom_instance_config(&state_dir, application_subnets);
         let instance = initialize_instance(
             pocketic_port,
-            inst_cfg,
+            configuration,
             None,                                    // Random gateway port
             std::iter::once(Principal::anonymous()), // Seed anonymous account only for tests
         )

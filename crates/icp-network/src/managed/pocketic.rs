@@ -10,10 +10,6 @@ use snafu::prelude::*;
 use time::OffsetDateTime;
 
 pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
-    custom_instance_config(state_dir, 1)
-}
-
-pub fn custom_instance_config(state_dir: &Path, application_subnets: usize) -> InstanceConfig {
     InstanceConfig {
         // State directory
         state_dir: Some(state_dir.to_path_buf().into()),
@@ -40,7 +36,7 @@ pub fn custom_instance_config(state_dir: &Path, application_subnets: usize) -> I
         }),
 
         subnet_config_set: (SubnetConfigSet {
-            application: application_subnets,
+            application: 1,
 
             // The rest of the subnets are disabled by default
             ..Default::default()

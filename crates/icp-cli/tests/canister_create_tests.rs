@@ -1,6 +1,8 @@
 use crate::common::{TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp::{fs::write_string, prelude::*};
+use icp_network::managed::pocketic::default_instance_config;
+use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
@@ -297,7 +299,19 @@ async fn canister_create_colocates_canisters() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_with_subnets(&project_dir, 2).await;
+    let _g = ctx
+        .start_network_with_config(
+            &project_dir,
+            InstanceConfig {
+                subnet_config_set: (SubnetConfigSet {
+                    application: 3,
+                    ..Default::default()
+                })
+                .into(),
+                ..default_instance_config(&ctx.state_dir(&project_dir))
+            },
+        )
+        .await;
     ctx.ping_until_healthy(&project_dir);
 
     // Create first three canisters
@@ -402,7 +416,19 @@ async fn canister_create_fails_when_canisters_on_different_subnets() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_with_subnets(&project_dir, 2).await;
+    let _g = ctx
+        .start_network_with_config(
+            &project_dir,
+            InstanceConfig {
+                subnet_config_set: (SubnetConfigSet {
+                    application: 3,
+                    ..Default::default()
+                })
+                .into(),
+                ..default_instance_config(&ctx.state_dir(&project_dir))
+            },
+        )
+        .await;
     ctx.ping_until_healthy(&project_dir);
 
     let icp_client = clients::icp(&ctx, &project_dir);

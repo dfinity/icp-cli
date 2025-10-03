@@ -34,9 +34,9 @@ impl<'a> Client<'a> {
             .await
             .unwrap();
         Decode!(result, GetSubnetForCanisterResult)
-            .unwrap()
-            .unwrap()
+            .expect("Failed to decode GetSubnetForCanisterResult")
+            .expect("GetSubnetForCanisterResult returned an error")
             .subnet_id
-            .unwrap()
+            .expect("Canister not assigned to any subnet")
     }
 }

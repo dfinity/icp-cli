@@ -1,17 +1,26 @@
-use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
-
 use candid::Principal;
 use futures::future::{join, join_all};
+use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
 use icp::{
     fs::{create_dir_all, remove_dir_all, remove_file},
     prelude::*,
 };
+use icp_canister_interfaces::{
+    cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
+    cycles_minting_canister::{
+        CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
+        NotifyMintArgs, NotifyMintResponse,
+    },
+    governance::GOVERNANCE_PRINCIPAL,
+    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
+};
 use pocket_ic::{
-    common::rest::{HttpGatewayBackend, InstanceConfig},
-    nonblocking::PocketIc,
+    common::rest::{HttpGatewayBackend, InstanceConfig, RawEffectivePrincipal},
+    nonblocking::{PocketIc, call_candid, call_candid_as},
 };
 use reqwest::Url;
 use snafu::prelude::*;
+use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
@@ -184,10 +193,6 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     )
 }
 
-/// Waits for a port file to be written and contain a valid port number.
-/// Returns the port number or an error if timeout occurs.
-///
-/// This function polls the file every 100ms for up to 5 minutes (3000 retries).
 pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
     let mut retries = 0;
     while retries < 3000 {
@@ -285,7 +290,7 @@ pub async fn initialize_instance(
         .unwrap();
     let pic = PocketIcAdminInterface::new(pic_url.clone());
 
-    eprintln!("Creating PocketIC instance");
+    eprintln!("Initializing PocketIC instance");
     let (instance_id, topology) = pic.create_instance_with_config(instance_config).await?;
     let default_effective_canister_id = topology.default_effective_canister_id;
     eprintln!("Created instance with id {}", instance_id);
@@ -297,7 +302,7 @@ pub async fn initialize_instance(
     let artificial_delay = 600;
     pic.auto_progress(instance_id, artificial_delay).await?;
 
-    eprintln!("Seeding ICP and cycles account balances");
+    eprintln!("Seeding ICP and TCYCLES account balances");
     let pocket_ic_client = PocketIc::new_from_existing_instance(pic_url.clone(), instance_id, None);
     let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&pocket_ic_client).await?;
     let seed_icp = join_all(
@@ -310,7 +315,7 @@ pub async fn initialize_instance(
         mint_cycles_to_account(
             &pocket_ic_client,
             account,
-            1_000_000_000_000_000u128, // 1k Trillion cycles
+            1_000_000_000_000_000u128, // 1k TCYCLES
             icp_xdr_conversion_rate,
         )
     }));
@@ -322,17 +327,19 @@ pub async fn initialize_instance(
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    eprintln!("Creating HTTP gateway");
     let gateway_info = pic
         .create_http_gateway(
             HttpGatewayBackend::PocketIcInstance(instance_id),
             gateway_port,
         )
         .await?;
-    eprintln!("Created HTTP gateway on port {}", gateway_info.port);
+    eprintln!(
+        "Created HTTP gateway instance={} port={}",
+        gateway_info.instance_id, gateway_info.port
+    );
 
     let agent_url = format!("http://localhost:{}", gateway_info.port);
-    eprintln!("Pinging network at {}", agent_url);
+    eprintln!("Agent url is {}", agent_url);
     let status = crate::status::ping_and_wait(&agent_url).await?;
 
     let root_key = status.root_key.ok_or(InitializePocketicError::NoRootKey)?;
@@ -376,19 +383,6 @@ async fn mint_cycles_to_account(
     amount: u128,
     icp_xdr_conversion_rate: u64,
 ) -> Result<(), InitializePocketicError> {
-    use ic_ledger_types::{
-        AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult,
-    };
-    use icp_canister_interfaces::{
-        cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
-        cycles_minting_canister::{
-            CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_MINT_CYCLES, NotifyMintArgs, NotifyMintResponse,
-        },
-        icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
-    };
-    use pocket_ic::common::rest::RawEffectivePrincipal;
-    use pocket_ic::nonblocking::call_candid_as;
-
     let icp_to_convert =
         (amount + CYCLES_LEDGER_BLOCK_FEE).div_ceil(icp_xdr_conversion_rate as u128) as u64;
     // First mint to the non-CMC account because notify_mint_cycles will fail if the depositing transaction is a mint TX
@@ -455,15 +449,6 @@ async fn mint_icp_to_account(
     account: Principal,
     amount: u64,
 ) -> Result<(), InitializePocketicError> {
-    use ic_ledger_types::{
-        AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult,
-    };
-    use icp_canister_interfaces::{
-        governance::GOVERNANCE_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
-    };
-    use pocket_ic::common::rest::RawEffectivePrincipal;
-    use pocket_ic::nonblocking::call_candid_as;
-
     let response: (TransferResult,) = call_candid_as(
         pic,
         ICP_LEDGER_PRINCIPAL,
@@ -495,12 +480,6 @@ async fn mint_icp_to_account(
 async fn get_icp_xdr_conversion_rate(
     pic: &pocket_ic::nonblocking::PocketIc,
 ) -> Result<u64, InitializePocketicError> {
-    use icp_canister_interfaces::cycles_minting_canister::{
-        CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse,
-    };
-    use pocket_ic::common::rest::RawEffectivePrincipal;
-    use pocket_ic::nonblocking::call_candid;
-
     let response: (ConversionRateResponse,) = call_candid(
         pic,
         CYCLES_MINTING_CANISTER_PRINCIPAL,

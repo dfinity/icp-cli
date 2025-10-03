@@ -9,12 +9,10 @@ use reqwest::Url;
 use snafu::prelude::*;
 use time::OffsetDateTime;
 
-/// Creates a default InstanceConfig for production use with 1 application subnet
 pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
     custom_instance_config(state_dir, 1)
 }
 
-/// Creates a custom InstanceConfig with specified number of application subnets
 pub fn custom_instance_config(state_dir: &Path, application_subnets: usize) -> InstanceConfig {
     InstanceConfig {
         // State directory
@@ -59,7 +57,6 @@ pub fn custom_instance_config(state_dir: &Path, application_subnets: usize) -> I
     }
 }
 
-/// Result of initializing a PocketIC instance
 pub struct PocketIcInstance {
     pub admin: PocketIcAdminInterface,
     pub gateway_port: u16,
@@ -78,7 +75,6 @@ pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process:
     cmd.stderr(std::process::Stdio::inherit());
     #[cfg(unix)]
     {
-        //use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
 

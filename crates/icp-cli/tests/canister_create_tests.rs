@@ -297,8 +297,7 @@ async fn canister_create_colocates_canisters() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_with_subnets(&project_dir, 2).await;
     ctx.ping_until_healthy(&project_dir);
 
     // Create first three canisters
@@ -403,8 +402,7 @@ async fn canister_create_fails_when_canisters_on_different_subnets() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_with_subnets(&project_dir, 2).await;
     ctx.ping_until_healthy(&project_dir);
 
     let icp_client = clients::icp(&ctx, &project_dir);

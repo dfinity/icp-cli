@@ -164,8 +164,10 @@ impl TestContext {
         let child = cmd.spawn().expect("failed to spawn PocketIC");
         let pocketic_pid = child.id();
 
-        // Wait for port file
-        let pocketic_port = self.wait_for_port_file(&port_file);
+        // Wait for port file using the function from icp-network
+        let pocketic_port = icp_network::wait_for_port_file(&port_file)
+            .await
+            .expect("Timeout waiting for port file");
         eprintln!("PocketIC started on port {}", pocketic_port);
 
         // Initialize PocketIC instance with custom config
@@ -214,22 +216,6 @@ impl TestContext {
 
         // Wrap child in ChildGuard
         ChildGuard { child }
-    }
-
-    fn wait_for_port_file(&self, port_file: &Path) -> u16 {
-        let mut retries = 0;
-        while retries < 300 {
-            if let Ok(contents) = fs::read_to_string(port_file) {
-                if contents.ends_with('\n') {
-                    if let Ok(port) = contents.trim().parse::<u16>() {
-                        return port;
-                    }
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            retries += 1;
-        }
-        panic!("Timeout waiting for port file");
     }
 
     pub fn ping_until_healthy(&self, project_dir: &Path) {

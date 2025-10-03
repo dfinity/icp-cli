@@ -1,4 +1,4 @@
-use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
+use std::env::var;
 
 use candid::Principal;
 use icp::{
@@ -6,7 +6,7 @@ use icp::{
     prelude::*,
 };
 use snafu::prelude::*;
-use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
+use tokio::{process::Child, select, signal::ctrl_c};
 use uuid::Uuid;
 
 use crate::{
@@ -18,8 +18,8 @@ use crate::{
     managed::{
         descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
         pocketic::{
-            self, CreateHttpGatewayError, CreateInstanceError, PocketIcInstance,
-            default_instance_config, spawn_pocketic,
+            self, CreateHttpGatewayError, CreateInstanceError, PocketIcInstance, WaitForPortError,
+            default_instance_config, notice_child_exit, spawn_pocketic, wait_for_port,
         },
     },
     status,
@@ -176,63 +176,6 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
             ShutdownReason::ChildExited
         }
     )
-}
-
-pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
-    let mut retries = 0;
-    while retries < 3000 {
-        if let Ok(contents) = read_to_string(path) {
-            if contents.ends_with('\n') {
-                if let Ok(port) = contents.trim().parse::<u16>() {
-                    return Ok(port);
-                }
-            }
-        }
-
-        sleep(Duration::from_millis(100)).await;
-        retries += 1;
-    }
-    Err(WaitForPortTimeoutError)
-}
-
-#[derive(Debug, Snafu)]
-#[snafu(display("timeout waiting for port file"))]
-pub struct WaitForPortTimeoutError;
-
-/// Yields immediately if the child exits.
-pub async fn notice_child_exit(child: &mut Child) -> ChildExitError {
-    loop {
-        if let Some(status) = child.try_wait().expect("child status query failed") {
-            return ChildExitError { status };
-        }
-        sleep(Duration::from_millis(100)).await;
-    }
-}
-
-#[derive(Debug, Snafu)]
-#[snafu(display("Child process exited early with status {status}"))]
-pub struct ChildExitError {
-    pub status: ExitStatus,
-}
-
-/// Waits for the child to populate a port number.
-/// Exits early if the child exits or the user interrupts.
-pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
-    tokio::select! {
-        res = wait_for_port_file(path) => res.map_err(WaitForPortError::from),
-        _ = ctrl_c() => Err(WaitForPortError::Interrupted),
-        err = notice_child_exit(child) => Err(WaitForPortError::ChildExited { source: err }),
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum WaitForPortError {
-    #[snafu(display("Interrupted"))]
-    Interrupted,
-    #[snafu(transparent)]
-    PortFile { source: WaitForPortTimeoutError },
-    #[snafu(transparent)]
-    ChildExited { source: ChildExitError },
 }
 
 async fn initialize_pocketic(

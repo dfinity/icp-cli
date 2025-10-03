@@ -1,3 +1,5 @@
+use std::{fs::read_to_string, process::ExitStatus, time::Duration};
+
 use candid::Principal;
 use futures::future::{join, join_all};
 use icp::prelude::*;
@@ -12,6 +14,7 @@ use pocket_ic::{
 use reqwest::Url;
 use snafu::prelude::*;
 use time::OffsetDateTime;
+use tokio::{process::Child, signal::ctrl_c, time::sleep};
 
 use crate::managed::run::InitializePocketicError;
 
@@ -303,6 +306,75 @@ pub async fn initialize_instance(
         root_key,
     };
     Ok(props)
+}
+
+/// Waits for a port file to be written and contain a valid port number.
+/// Returns the port number or an error if timeout occurs.
+///
+/// This function polls the file every 100ms for up to 5 minutes (3000 retries).
+pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
+    let mut retries = 0;
+    while retries < 3000 {
+        if let Ok(contents) = read_to_string(path) {
+            if contents.ends_with('\n') {
+                if let Ok(port) = contents.trim().parse::<u16>() {
+                    return Ok(port);
+                }
+            }
+        }
+
+        sleep(Duration::from_millis(100)).await;
+        retries += 1;
+    }
+    Err(WaitForPortTimeoutError)
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("timeout waiting for port file"))]
+pub struct WaitForPortTimeoutError;
+
+/// Continuously monitors a child process and returns when it exits.
+/// Yields immediately if the child exits.
+pub async fn notice_child_exit(child: &mut Child) -> ChildExitError {
+    loop {
+        if let Some(status) = child.try_wait().expect("child status query failed") {
+            return ChildExitError { status };
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Child process exited early with status {status}"))]
+pub struct ChildExitError {
+    pub status: ExitStatus,
+}
+
+/// Waits for a child process to populate a port number in a file.
+/// Exits early if the child exits or the user interrupts (Ctrl-C).
+///
+/// # Arguments
+/// * `path` - Path to the port file
+/// * `child` - The child process to monitor
+///
+/// # Returns
+/// The port number on success, or an error if interrupted, timeout, or child exits
+pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
+    tokio::select! {
+        res = wait_for_port_file(path) => res.map_err(WaitForPortError::from),
+        _ = ctrl_c() => Err(WaitForPortError::Interrupted),
+        err = notice_child_exit(child) => Err(WaitForPortError::ChildExited { source: err }),
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum WaitForPortError {
+    #[snafu(display("Interrupted"))]
+    Interrupted,
+    #[snafu(transparent)]
+    PortFile { source: WaitForPortTimeoutError },
+    #[snafu(transparent)]
+    ChildExited { source: ChildExitError },
 }
 
 async fn get_icp_xdr_conversion_rate(

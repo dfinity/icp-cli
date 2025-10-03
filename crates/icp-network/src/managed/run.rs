@@ -326,7 +326,7 @@ pub async fn initialize_instance(
 
     let agent_url = format!("http://localhost:{}", gateway_info.port);
     eprintln!("Agent url is {}", agent_url);
-    let status = crate::status::ping_and_wait(&agent_url).await?;
+    let status = status::ping_and_wait(&agent_url).await?;
 
     let root_key = status.root_key.ok_or(InitializePocketicError::NoRootKey)?;
     let root_key = hex::encode(root_key);

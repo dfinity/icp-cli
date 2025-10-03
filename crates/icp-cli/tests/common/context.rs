@@ -2,8 +2,9 @@ use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
 use icp::prelude::*;
-use icp_network::NETWORK_LOCAL;
 use icp_network::managed::pocketic;
+use icp_network::managed::run::initialize_instance;
+use icp_network::{NETWORK_LOCAL, managed::run::wait_for_port_file};
 use pocket_ic::nonblocking::PocketIc;
 use std::{
     cell::{Ref, RefCell},
@@ -165,14 +166,14 @@ impl TestContext {
         let pocketic_pid = child.id();
 
         // Wait for port file using the function from icp-network
-        let pocketic_port = icp_network::wait_for_port_file(&port_file)
+        let pocketic_port = wait_for_port_file(&port_file)
             .await
             .expect("Timeout waiting for port file");
         eprintln!("PocketIC started on port {}", pocketic_port);
 
         // Initialize PocketIC instance with custom config
         let inst_cfg = pocketic::custom_instance_config(&state_dir, application_subnets);
-        let instance = pocketic::initialize_instance(
+        let instance = initialize_instance(
             pocketic_port,
             inst_cfg,
             None,                                    // Random gateway port

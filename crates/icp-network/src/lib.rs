@@ -12,12 +12,6 @@ pub mod structure;
 pub use directory::NetworkDirectory;
 pub use managed::run::{RunNetworkError, run_network};
 
-// Re-export commonly used types and functions for external use (e.g., tests)
-pub use managed::pocketic::{
-    ChildExitError, PocketIcInstance, WaitForPortError, WaitForPortTimeoutError, wait_for_port,
-    wait_for_port_file,
-};
-
 pub const NETWORK_LOCAL: &str = "local";
 pub const NETWORK_IC: &str = "ic";
 

@@ -136,7 +136,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         cmd.names
             .clone()
             .into_iter()
-            .filter(|name| canisters_in_environment.contains(name))
             .map(|name| Key {
                 network: network.to_owned(),
                 environment: env.name.to_owned(),

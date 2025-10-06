@@ -40,7 +40,7 @@ impl Default for Canisters {
 impl Default for Networks {
     fn default() -> Self {
         Networks::Networks(vec![
-            Item::Manifest(Network {
+            Network {
                 name: "local".to_string(),
                 configuration: Configuration::Managed(network::Managed {
                     gateway: Gateway {
@@ -48,14 +48,14 @@ impl Default for Networks {
                         port: network::Port::Fixed(8080),
                     },
                 }),
-            }),
-            Item::Manifest(Network {
+            },
+            Network {
                 name: "mainnet".to_string(),
                 configuration: Configuration::Connected(network::Connected {
                     url: "https://ic0.app".to_string(),
                     root_key: None,
                 }),
-            }),
+            },
         ])
     }
 }

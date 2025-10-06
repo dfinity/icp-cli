@@ -23,25 +23,25 @@ impl From<Canisters> for Vec<Item<Canister>> {
 #[serde(rename_all = "lowercase")]
 pub enum Networks {
     Network(Network),
-    Networks(Vec<Item<Network>>),
+    Networks(Vec<Network>),
 }
 
 impl Networks {
     pub fn with_defaults(self) -> Self {
         Self::Networks(
             [
-                Into::<Vec<Item<Network>>>::into(Self::default()),
-                Into::<Vec<Item<Network>>>::into(self),
+                Into::<Vec<Network>>::into(Self::default()),
+                Into::<Vec<Network>>::into(self),
             ]
             .concat(),
         )
     }
 }
 
-impl From<Networks> for Vec<Item<Network>> {
+impl From<Networks> for Vec<Network> {
     fn from(value: Networks) -> Self {
         match value {
-            Networks::Network(v) => vec![Item::Manifest(v)],
+            Networks::Network(v) => vec![v],
             Networks::Networks(items) => items,
         }
     }
@@ -90,7 +90,7 @@ pub struct ProjectInner {
 #[derive(Debug, PartialEq)]
 pub struct Project {
     pub canisters: Vec<Item<Canister>>,
-    pub networks: Vec<Item<Network>>,
+    pub networks: Vec<Network>,
     pub environments: Vec<Environment>,
 }
 
@@ -112,8 +112,8 @@ impl From<ProjectInner> for Project {
 
             // Network(s) specified, append to default
             Some(vs) => [
-                Into::<Vec<Item<Network>>>::into(Networks::default()),
-                Into::<Vec<Item<Network>>>::into(vs),
+                Into::<Vec<Network>>::into(Networks::default()),
+                Into::<Vec<Network>>::into(vs),
             ]
             .concat(),
         };
@@ -274,10 +274,10 @@ mod tests {
             )?,
             Project {
                 canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![Item::Manifest(Network {
+                networks: Networks::Networks(vec![Network {
                     name: "my-network".to_string(),
                     configuration: Configuration::default(),
-                }),])
+                }])
                 .with_defaults()
                 .into(),
                 environments: Environments::default().into(),
@@ -298,38 +298,10 @@ mod tests {
             )?,
             Project {
                 canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![Item::Manifest(Network {
+                networks: Networks::Networks(vec![Network {
                     name: "my-network".to_string(),
                     configuration: Configuration::default(),
-                }),])
-                .with_defaults()
-                .into(),
-                environments: Environments::default().into(),
-            },
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn networks_mixed() -> Result<(), Error> {
-        assert_eq!(
-            serde_yaml::from_str::<Project>(
-                r#"
-                networks:
-                  - networks/*
-                  - name: my-network
-                "#
-            )?,
-            Project {
-                canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![
-                    Item::Path("networks/*".to_string()),
-                    Item::Manifest(Network {
-                        name: "my-network".to_string(),
-                        configuration: Configuration::default(),
-                    }),
-                ])
+                }])
                 .with_defaults()
                 .into(),
                 environments: Environments::default().into(),

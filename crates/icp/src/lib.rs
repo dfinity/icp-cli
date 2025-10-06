@@ -131,11 +131,8 @@ impl Load for Loader {
         // Networks
         let mut networks = vec![];
 
-        for i in m.networks {
-            networks.push(match i {
-                Item::Path(p) => todo!(),
-                Item::Manifest(m) => self.network.load(m).await?,
-            });
+        for m in m.networks {
+            networks.push(self.network.load(m).await?);
         }
 
         // Environments
@@ -144,8 +141,6 @@ impl Load for Loader {
         for m in m.environments {
             environments.push(self.environment.load(m).await?);
         }
-
-        let environments: Vec<_> = m.environments.into_iter().map(|v| todo!()).collect();
 
         Ok(Project {
             canisters,

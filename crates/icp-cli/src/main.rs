@@ -28,7 +28,6 @@ use tracing_subscriber::{
 use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
 
 mod commands;
-mod context;
 mod options;
 mod progress;
 mod store_artifact;

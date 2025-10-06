@@ -11,6 +11,7 @@ use crate::{
     prelude::*,
 };
 
+pub mod agent;
 pub mod canister;
 mod directories;
 pub mod fs;

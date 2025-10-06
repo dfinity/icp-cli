@@ -1,53 +1,48 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use console::Term;
-use icp::{Directories, identity};
+use async_trait::async_trait;
+use ic_agent::{Agent, AgentError, Identity};
 
-use crate::{store_artifact::ArtifactStore, store_id::IdStore};
+use crate::prelude::*;
 
-pub struct Context {
-    /// Various cli-related directories (cache, configuration, etc).
-    pub dirs: Directories,
+#[derive(Debug, thiserror::Error)]
+pub enum CreateError {
+    #[error(transparent)]
+    Agent(#[from] AgentError),
 
-    /// Terminal for printing messages for the user to see
-    pub term: Term,
-
-    /// Canisters ID Store for lookup and storage
-    pub id_store: IdStore,
-
-    /// An artifact store for canister build artifacts
-    pub artifact_store: ArtifactStore,
-
-    /// Project loader
-    pub project: Arc<dyn icp::Load>,
-
-    /// Identity loader
-    pub identity: Arc<dyn identity::Load>,
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
 }
 
-impl Context {
-    pub fn new(
-        term: Term,
-        dirs: Directories,
-        id_store: IdStore,
-        artifact_store: ArtifactStore,
-        project: Arc<dyn icp::Load>,
-        identity: Arc<dyn identity::Load>,
-    ) -> Self {
-        Self {
-            dirs,
+#[async_trait]
+pub trait Create: Sync + Send {
+    async fn create(&self, id: Arc<dyn Identity>) -> Result<Agent, CreateError>;
+}
 
-            // Display
-            term,
+pub struct Creator;
 
-            // Storage
-            id_store,
-            artifact_store,
+#[async_trait]
+impl Create for Creator {
+    async fn create(&self, id: Arc<dyn Identity>) -> Result<Agent, CreateError> {
+        let mut b = Agent::builder();
 
-            // Loaders
-            project,
-            identity,
+        // Url
+        // let b = b.with_url(todo!());
+
+        // Identity
+        let b = b.with_arc_identity(id);
+
+        // Ingress Expiration
+        let b = b.with_ingress_expiry(Duration::from_secs(4 * MINUTE));
+
+        let agent = b.build()?;
+
+        // Key
+        if let Some(k) = todo!() {
+            agent.set_root_key(k);
         }
+
+        Ok(agent)
     }
 }
 

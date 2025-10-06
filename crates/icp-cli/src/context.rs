@@ -2,7 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use console::Term;
 use ic_agent::{Agent, Identity};
-use icp::{Directories, Project};
+use icp::Directories;
 use icp_identity::{
     key::{LoadIdentityInContextError, load_identity, load_identity_in_context},
     manifest::load_identity_list,
@@ -12,9 +12,7 @@ use icp_network::{
     access::{CreateAgentError, GetNetworkAccessError, NetworkAccess},
 };
 use snafu::Snafu;
-use tokio::task::JoinError;
 
-use crate::context::ContextProjectError::ProjectNotFound;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub struct Context {

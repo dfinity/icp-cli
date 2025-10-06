@@ -74,7 +74,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         let pdir = self.locate.locate().context(LoadManifestError::Locate)?;
 
         // Canisters
-        let mut canisters = vec![];
+        let mut canisters: Vec<(PathBuf, Canister)> = vec![];
 
         for i in &m.canisters {
             let ms = match i {
@@ -112,21 +112,33 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                     let mut ms = vec![];
 
                     for p in paths {
-                        ms.push(
+                        ms.push((
+                            //
+                            // Canister root
+                            p.to_owned(),
+                            //
+                            // Canister manifest
                             self.canister
                                 .load(&p)
                                 .await
                                 .context(LoadManifestError::Canister)?,
-                        );
+                        ));
                     }
 
                     ms
                 }
 
-                Item::Manifest(m) => vec![m.to_owned()],
+                Item::Manifest(m) => vec![(
+                    //
+                    // Caniser root
+                    pdir.to_owned(),
+                    //
+                    // Canister manifest
+                    m.to_owned(),
+                )],
             };
 
-            for m in ms {
+            for (cdir, m) in ms {
                 let (build, sync) = match &m.instructions {
                     // Build/Sync
                     Instructions::BuildSync { build, sync } => (build.to_owned(), sync.to_owned()),
@@ -139,12 +151,19 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         .context(LoadManifestError::Recipe)?,
                 };
 
-                canisters.push(Canister {
-                    name: m.name.to_owned(),
-                    settings: m.settings.to_owned(),
-                    build,
-                    sync,
-                });
+                canisters.push((
+                    //
+                    // Caniser root
+                    cdir,
+                    //
+                    // Canister
+                    Canister {
+                        name: m.name.to_owned(),
+                        settings: m.settings.to_owned(),
+                        build,
+                        sync,
+                    },
+                ));
             }
         }
 

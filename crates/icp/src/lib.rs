@@ -32,10 +32,10 @@ pub struct Canister {
 
     /// The build configuration specifying how to compile the canister's source
     /// code into a WebAssembly module, including the adapter to use.
-    build: build::Steps,
+    pub build: build::Steps,
 
     /// The configuration specifying how to sync the canister
-    sync: sync::Steps,
+    pub sync: sync::Steps,
 }
 
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
@@ -50,9 +50,9 @@ pub struct Environment {
     canisters: Vec<Canister>,
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Project {
-    pub canisters: Vec<Canister>,
+    pub canisters: Vec<(PathBuf, Canister)>,
     pub networks: Vec<Network>,
     pub environments: Vec<Environment>,
 }

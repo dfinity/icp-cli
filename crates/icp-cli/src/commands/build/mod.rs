@@ -1,17 +1,14 @@
 use std::collections::HashSet;
-use std::io;
 
+use anyhow::Context as _;
 use camino_tempfile::tempdir;
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp::fs::read;
-use snafu::{ResultExt, Snafu};
+use icp::{canister::build, fs::read};
 
-use crate::context::ContextProjectError;
 use crate::{
     context::Context,
     progress::{ProgressManager, ScriptProgressHandler},
-    store_artifact::SaveError,
 };
 
 #[derive(Parser, Debug)]
@@ -20,13 +17,31 @@ pub struct Cmd {
     pub names: Vec<String>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error("project does not contain a canister named '{name}'")]
+    CanisterNotFound { name: String },
+
+    #[error("build did not result in output")]
+    MissingOutput,
+
+    #[error("failed to read output wasm artifact")]
+    ReadOutput,
+
+    #[error("failed to store build artifact")]
+    ArtifactStore,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
 /// Executes the build command, compiling canisters defined in the project manifest.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = ctx.project()?;
+    let p = ctx.project.load().await.context("failed to load project")?;
 
     // Choose canisters to build
-    let canisters = pm
+    let canisters = p
         .canisters
         .iter()
         .filter(|(_, c)| match &cmd.names.is_empty() {
@@ -72,7 +87,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
             async move {
                 // Create a temporary directory for build artifacts
-                let build_dir = tempdir().context(BuildDirSnafu)?;
+                let build_dir =
+                    tempdir().context("failed to create a temporary build directory")?;
 
                 // Prepare a path for our output wasm
                 let wasm_output_path = build_dir.path().join("out.wasm");
@@ -87,7 +103,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                     match step {
                         // Compile using the custom script adapter.
-                        BuildStep::Script(adapter) => {
+                        build::Step::Script(adapter) => {
                             // Setup script progress handling and receiver join handle
                             let (tx, rx) = script_handler.setup_output_handler();
 
@@ -104,7 +120,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                         }
 
                         // Compile using the Pre-built adapter.
-                        BuildStep::Prebuilt(adapter) => {
+                        build::Step::Prebuilt(adapter) => {
                             pb.set_message(pb_hdr);
                             adapter.compile(&canister_path, &wasm_output_path).await?
                         }
@@ -113,16 +129,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Verify a file exists in the wasm output path
                 if !wasm_output_path.exists() {
-                    return Err(CommandError::NoOutput);
+                    return Err(CommandError::MissingOutput);
                 }
 
                 // Load wasm output
-                let wasm = read(&wasm_output_path).context(ReadOutputSnafu)?;
+                let wasm = read(&wasm_output_path).context(CommandError::ReadOutput)?;
 
                 // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
                 // Save the wasm artifact
-                ctx.artifact_store.save(&c.name, &wasm)?;
+                ctx.artifact_store
+                    .save(&c.name, &wasm)
+                    .context(CommandError::ArtifactStore)?;
 
                 Ok::<_, CommandError>(())
             }
@@ -147,28 +165,4 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
-    #[snafu(display("failed to create a temporary build directory"))]
-    BuildDir { source: io::Error },
-
-    #[snafu(transparent)]
-    BuildAdapter { source: AdapterCompileError },
-
-    #[snafu(display("failed to read output wasm artifact"))]
-    ReadOutput { source: icp::fs::Error },
-
-    #[snafu(display("no output has been set"))]
-    NoOutput,
-
-    #[snafu(transparent)]
-    ArtifactStore { source: SaveError },
 }

@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::Item,
+    manifest::{Item, Locate},
 };
 
 pub mod canister;
@@ -79,27 +79,20 @@ pub trait Load: Sync + Send {
     async fn load(&self) -> Result<Project, LoadError>;
 }
 
-pub struct Loader {
-    manifest: Arc<dyn manifest::Load>,
-    canister: Arc<dyn canister::Load>,
-    network: Arc<dyn network::Load>,
-    environment: Arc<dyn environment::Load>,
+#[async_trait]
+pub trait LoadManifest<M, T, E>: Sync + Send {
+    async fn load(&self, m: &M) -> Result<T, E>;
 }
 
-impl Loader {
-    pub fn new(
-        manifest: Arc<dyn manifest::Load>,
-        canister: Arc<dyn canister::Load>,
-        network: Arc<dyn network::Load>,
-        environment: Arc<dyn environment::Load>,
-    ) -> Self {
-        Self {
-            manifest,
-            canister,
-            network,
-            environment,
-        }
-    }
+pub struct CanisterLoaders {
+    manifest: Arc<dyn LoadManifest<manifest::Canister, Canister, canister::LoadError>>,
+}
+
+pub struct Loader {
+    manifest: Arc<dyn manifest::Load>,
+    canister: CanisterLoaders,
+    network: Arc<dyn network::Load>,
+    environment: Arc<dyn environment::Load>,
 }
 
 #[async_trait]
@@ -125,7 +118,7 @@ impl Load for Loader {
             };
 
             for m in ms {
-                canisters.push(self.canister.load(m).await?);
+                canisters.push(self.canister.manifest.load(&m).await?);
             }
         }
 

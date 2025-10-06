@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{
-    Canister,
+    Canister, LoadManifest,
     manifest::{self, canister::Instructions},
 };
 
@@ -49,32 +49,27 @@ pub enum LoadError {
     Unexpected(#[from] anyhow::Error),
 }
 
-#[async_trait]
-pub trait Load: Sync + Send {
-    async fn load(&self, m: manifest::Canister) -> Result<Canister, LoadError>;
-}
-
-pub struct Loader {
+pub struct ManifestLoader {
     recipe: Arc<dyn recipe::Resolve>,
 }
 
-impl Loader {
+impl ManifestLoader {
     pub fn new(recipe: Arc<dyn recipe::Resolve>) -> Self {
         Self { recipe }
     }
 }
 
 #[async_trait]
-impl Load for Loader {
-    async fn load(&self, m: manifest::Canister) -> Result<Canister, LoadError> {
-        let (build, sync) = match m.instructions {
-            Instructions::Recipe { recipe } => self.recipe.resolve(&recipe).await?,
-            Instructions::BuildSync { build, sync } => (build, sync),
+impl LoadManifest<manifest::Canister, Canister, LoadError> for ManifestLoader {
+    async fn load(&self, m: &manifest::Canister) -> Result<Canister, LoadError> {
+        let (build, sync) = match &m.instructions {
+            Instructions::Recipe { recipe } => self.recipe.resolve(recipe).await?,
+            Instructions::BuildSync { build, sync } => (build.to_owned(), sync.to_owned()),
         };
 
         Ok(Canister {
-            name: m.name,
-            settings: m.settings,
+            name: m.name.to_owned(),
+            settings: m.settings.to_owned(),
             build,
             sync,
         })

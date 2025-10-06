@@ -150,7 +150,7 @@ async fn main() -> Result<(), Error> {
     });
 
     // Canister loader
-    let cload = canister::Loader::new(recipe);
+    let cload = canister::ManifestLoader::new(recipe);
     let cload = Arc::new(cload);
 
     // Network loader

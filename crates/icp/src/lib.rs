@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{CanisterManifest, Item, Locate},
+    manifest::{CANISTER_MANIFEST, CanisterManifest, Item, Locate},
     prelude::*,
 };
 
@@ -63,17 +63,20 @@ pub enum LoadError {
     #[error("failed to locate project directory")]
     Locate,
 
+    #[error("failed to perform glob parsing")]
+    Glob,
+
     #[error("failed to load manifest: {0}")]
     Manifest(#[from] manifest::LoadError),
 
-    #[error("failed to load canister: {0}")]
-    Canister(#[from] canister::LoadManifestError),
+    #[error("failed to load canister manifest")]
+    Canister,
 
-    #[error("failed to load network: {0}")]
-    Network(#[from] network::LoadError),
+    #[error("failed to load network")]
+    Network,
 
-    #[error("failed to load environment: {0}")]
-    Environment(#[from] environment::LoadError),
+    #[error("failed to load environment")]
+    Environment,
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -121,19 +124,63 @@ impl Load for Loader {
 
         for i in m.canisters {
             let ms = match i {
-                Item::Path(pattern) => match is_glob(&pattern) {
-                    // Glob
-                    true => todo!(),
+                Item::Path(pattern) => {
+                    let paths = match is_glob(&pattern) {
+                        // Explicit path
+                        false => vec![pdir.join(pattern)],
 
-                    // Explicit path
-                    false => todo!(),
-                },
+                        // Glob pattern
+                        true => {
+                            // Resolve glob
+                            let paths =
+                                glob::glob(pdir.join(pattern).as_str()).context(LoadError::Glob)?;
+
+                            // Extract paths
+                            let paths = paths
+                                .collect::<Result<Vec<_>, _>>()
+                                .context(LoadError::Glob)?;
+
+                            // Convert to utf-8
+                            paths
+                                .into_iter()
+                                .map(PathBuf::try_from)
+                                .collect::<Result<Vec<_>, _>>()
+                                .context(LoadError::Glob)?
+                        }
+                    };
+
+                    let paths = paths
+                        .into_iter()
+                        .filter(|p| p.is_dir()) // Skip missing directories
+                        .filter(|p| p.join(CANISTER_MANIFEST).exists()) // Skip non-canister directories
+                        .collect::<Vec<_>>();
+
+                    let mut ms = vec![];
+
+                    for p in paths {
+                        ms.push(
+                            self.canister
+                                .path
+                                .load(&p)
+                                .await
+                                .context(LoadError::Canister)?,
+                        );
+                    }
+
+                    ms
+                }
 
                 Item::Manifest(m) => vec![m],
             };
 
             for m in ms {
-                canisters.push(self.canister.manifest.load(&m).await?);
+                canisters.push(
+                    self.canister
+                        .manifest
+                        .load(&m)
+                        .await
+                        .context(LoadError::Canister)?,
+                );
             }
         }
 
@@ -141,14 +188,19 @@ impl Load for Loader {
         let mut networks = vec![];
 
         for m in m.networks {
-            networks.push(self.network.load(m).await?);
+            networks.push(self.network.load(m).await.context(LoadError::Network)?);
         }
 
         // Environments
         let mut environments = vec![];
 
         for m in m.environments {
-            environments.push(self.environment.load(m).await?);
+            environments.push(
+                self.environment
+                    .load(m)
+                    .await
+                    .context(LoadError::Environment)?,
+            );
         }
 
         Ok(Project {

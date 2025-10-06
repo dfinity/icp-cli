@@ -8,6 +8,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 camino = { workspace = true }
 directories = { workspace = true }
+glob = { workspace = true }
 handlebars = { workspace = true }
 reqwest = { workspace = true }
 schemars = { workspace = true }

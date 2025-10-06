@@ -7,7 +7,6 @@ use tokio::sync::Mutex;
 
 use crate::{
     canister::{Settings, build, sync},
-    fs::read,
     manifest::Item,
 };
 
@@ -18,6 +17,10 @@ pub mod fs;
 pub mod manifest;
 pub mod network;
 pub mod prelude;
+
+fn is_glob(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
+}
 
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub struct Canister {
@@ -109,23 +112,21 @@ impl Load for Loader {
         let mut canisters = vec![];
 
         for i in m.canisters {
-            let m = match i {
-                Item::Path(p) => {
-                    // // Read file
-                    // let bs = read(&p.join("icp.yaml"))?;
+            let ms = match i {
+                Item::Path(pattern) => match is_glob(&pattern) {
+                    // Glob
+                    true => todo!(),
 
-                    // // Load YAML
-                    // let m = serde_yaml::from_slice::<manifest::Canister>(&bs)?;
+                    // Explicit path
+                    false => todo!(),
+                },
 
-                    // m
-
-                    todo!()
-                }
-
-                Item::Manifest(m) => m,
+                Item::Manifest(m) => vec![m],
             };
 
-            canisters.push(self.canister.load(m).await?);
+            for m in ms {
+                canisters.push(self.canister.load(m).await?);
+            }
         }
 
         // Networks

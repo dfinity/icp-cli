@@ -1,12 +1,15 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::Context as _;
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{
-    Canister, LoadManifest,
-    manifest::{self, canister::Instructions},
+    Canister, LoadManifest, LoadPath,
+    fs::read,
+    manifest::{CANISTER_MANIFEST, CanisterManifest, canister::Instructions},
+    prelude::*,
 };
 
 pub mod build;
@@ -41,7 +44,35 @@ pub struct Settings {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum LoadError {
+pub enum LoadPathError {
+    #[error("failed to read canister manifest")]
+    Read,
+
+    #[error("failed to deserialize canister manifest")]
+    Deserialize,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+pub struct PathLoader;
+
+#[async_trait]
+impl LoadPath<CanisterManifest, LoadPathError> for PathLoader {
+    async fn load(&self, path: &Path) -> Result<CanisterManifest, LoadPathError> {
+        // Read file
+        let mbs = read(&path.join(CANISTER_MANIFEST)).context(LoadPathError::Read)?;
+
+        // Load YAML
+        let m =
+            serde_yaml::from_slice::<CanisterManifest>(&mbs).context(LoadPathError::Deserialize)?;
+
+        Ok(m)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoadManifestError {
     #[error("failed to resolve recipe: {0}")]
     Recipe(#[from] recipe::ResolveError),
 
@@ -60,8 +91,8 @@ impl ManifestLoader {
 }
 
 #[async_trait]
-impl LoadManifest<manifest::Canister, Canister, LoadError> for ManifestLoader {
-    async fn load(&self, m: &manifest::Canister) -> Result<Canister, LoadError> {
+impl LoadManifest<CanisterManifest, Canister, LoadManifestError> for ManifestLoader {
+    async fn load(&self, m: &CanisterManifest) -> Result<Canister, LoadManifestError> {
         let (build, sync) = match &m.instructions {
             Instructions::Recipe { recipe } => self.recipe.resolve(recipe).await?,
             Instructions::BuildSync { build, sync } => (build.to_owned(), sync.to_owned()),

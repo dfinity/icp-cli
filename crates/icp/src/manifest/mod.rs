@@ -17,9 +17,10 @@ pub mod network;
 pub mod project;
 pub mod recipe;
 
-pub use {canister::Canister, environment::Environment, network::Network};
+pub use {canister::CanisterManifest, environment::Environment, network::Network};
 
-const PROJECT_MANIFEST: &str = "icp.yaml";
+pub const PROJECT_MANIFEST: &str = "icp.yaml";
+pub const CANISTER_MANIFEST: &str = "icp.yaml";
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(untagged)]

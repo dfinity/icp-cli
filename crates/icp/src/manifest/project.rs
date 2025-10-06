@@ -1,16 +1,18 @@
 use serde::{Deserialize, Deserializer};
 
-use crate::manifest::{Item, canister::Canister, environment::Environment, network::Network};
+use crate::manifest::{
+    Item, canister::CanisterManifest, environment::Environment, network::Network,
+};
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)]
 pub enum Canisters {
-    Canister(Canister),
-    Canisters(Vec<Item<Canister>>),
+    Canister(CanisterManifest),
+    Canisters(Vec<Item<CanisterManifest>>),
 }
 
-impl From<Canisters> for Vec<Item<Canister>> {
+impl From<Canisters> for Vec<Item<CanisterManifest>> {
     fn from(value: Canisters) -> Self {
         match value {
             Canisters::Canister(v) => vec![Item::Manifest(v)],
@@ -89,7 +91,7 @@ pub struct ProjectInner {
 
 #[derive(Debug, PartialEq)]
 pub struct Project {
-    pub canisters: Vec<Item<Canister>>,
+    pub canisters: Vec<Item<CanisterManifest>>,
     pub networks: Vec<Network>,
     pub environments: Vec<Environment>,
 }
@@ -187,7 +189,7 @@ mod tests {
                 "#
             )?,
             Project {
-                canisters: vec![Item::Manifest(Canister {
+                canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
@@ -215,7 +217,7 @@ mod tests {
                 "#
             )?,
             Project {
-                canisters: vec![Item::Manifest(Canister {
+                canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
@@ -245,7 +247,7 @@ mod tests {
             )?,
             Project {
                 canisters: vec![
-                    Item::Manifest(Canister {
+                    Item::Manifest(CanisterManifest {
                         name: "my-canister".to_string(),
                         settings: Settings::default(),
                         instructions: crate::manifest::canister::Instructions::BuildSync {

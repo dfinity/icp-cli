@@ -2584,25 +2584,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "icp-project"
-version = "0.1.0"
-dependencies = [
- "camino-tempfile",
- "futures",
- "glob",
- "icp",
- "icp-adapter",
- "icp-network",
- "pathdiff",
- "schemars",
- "serde",
- "serde_json",
- "serde_yaml",
- "snafu",
- "tokio",
-]
-
-[[package]]
 name = "icrc-cbor"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3471,15 +3452,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pathdiff"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
-dependencies = [
- "camino",
-]
 
 [[package]]
 name = "pbkdf2"

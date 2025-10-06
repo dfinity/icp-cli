@@ -1,9 +1,8 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
 use async_trait::async_trait;
 pub use directories::{Directories, DirectoriesError};
-use schemars::JsonSchema;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -23,11 +22,11 @@ fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Canister {
     pub name: String,
 
-    #[serde(default)]
+    /// Canister settings, such as memory constaints, etc.
     pub settings: Settings,
 
     /// The build configuration specifying how to compile the canister's source
@@ -38,23 +37,23 @@ pub struct Canister {
     pub sync: sync::Steps,
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Network {
     name: String,
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
     name: String,
     network: Network,
-    canisters: Vec<Canister>,
+    canisters: HashMap<String, (PathBuf, Canister)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Project {
-    pub canisters: Vec<(PathBuf, Canister)>,
-    pub networks: Vec<Network>,
-    pub environments: Vec<Environment>,
+    pub canisters: HashMap<String, (PathBuf, Canister)>,
+    pub networks: HashMap<String, Network>,
+    pub environments: HashMap<String, Environment>,
 }
 
 #[derive(Debug, thiserror::Error)]

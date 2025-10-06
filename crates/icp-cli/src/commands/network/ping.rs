@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use anyhow::Context as _;
 use clap::Parser;
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
@@ -30,11 +31,11 @@ pub enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("failed to create agent")]
+    #[error(transparent)]
     Agent(#[from] agent::CreateError),
 
-    #[error("failed to query network status")]
-    Status { err: AgentError },
+    #[error(transparent)]
+    Status(#[from] AgentError),
 
     #[error("timed-out waiting for replica to become healthy")]
     Timeout,
@@ -51,13 +52,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let agent = ctx.agent.create(id).await?;
 
-    let status = if cmd.wait_healthy {
-        ping_until_healthy(&agent).await?
-    } else {
-        agent
-            .status()
-            .await
-            .map_err(|source| CommandError::Status { source })?
+    // Query
+    let status = match cmd.wait_healthy {
+        // wait
+        true => ping_until_healthy(&agent).await?,
+
+        // dont wait
+        false => agent.status().await?,
     };
 
     println!("{}", status);
@@ -73,6 +74,8 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
             let is_ok = match &status.replica_health_status {
                 // Ok
                 Some(s) if s == "healthy" => true,
+
+                // Ok
                 None => true,
 
                 // Fail

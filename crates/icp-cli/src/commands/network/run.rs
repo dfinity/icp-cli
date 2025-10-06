@@ -1,8 +1,8 @@
 use clap::Parser;
+use icp::identity::{self, manifest::load_identity_list};
 use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
-use snafu::Snafu;
 
-use crate::context::{Context, ContextProjectError};
+use crate::commands::Context;
 
 /// Run a given network
 #[derive(Parser, Debug)]
@@ -12,11 +12,26 @@ pub struct Cmd {
     name: String,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error(transparent)]
+    RunNetwork { source: RunNetworkError },
+
+    #[error("network configuration '{network_name}' must be a managed network")]
+    NetworkConfigMustBeManaged { network_name: String },
+}
+
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
-    let project = ctx.project()?;
-    let dirs = ctx.dirs();
-    let identities = load_identity_list(dirs)?;
+    let project = ctx.project.load().await?;
+
+    let identities = load_identity_list(&ctx.dirs.identity())?;
 
     // Obtain network configuration
     let cfg = match project.get_network_config(&cmd.name)? {
@@ -55,24 +70,4 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     .await?;
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(transparent)]
-    LoadIdentity {
-        source: icp_identity::manifest::LoadIdentityManifestError,
-    },
-
-    #[snafu(transparent)]
-    NoSuchNetwork { source: NoSuchNetworkError },
-
-    #[snafu(transparent)]
-    RunNetwork { source: RunNetworkError },
-
-    #[snafu(display("network configuration '{network_name}' must be a managed network"))]
-    NetworkConfigMustBeManaged { network_name: String },
 }

@@ -14,8 +14,9 @@ use icp::{
             handlebars::{Handlebars, TEMPLATES},
         },
     },
-    environment, manifest, network,
+    manifest,
     prelude::*,
+    project,
 };
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
@@ -117,15 +118,6 @@ async fn main() -> Result<(), Error> {
     // This enables the logging and telemetry layers we configured above
     set_global_default(reg)?;
 
-    // Project Manifest (Locator and Loader)
-    let mloc = manifest::Locator::new(
-        current_dir()?.try_into()?, // cwd
-        cli.project_dir,            // dir
-    );
-
-    let mload = manifest::Loader::new(Arc::new(mloc));
-    let mload = Arc::new(mload);
-
     // Setup project directory structure
     let dirs = Directories::new()?;
 
@@ -149,15 +141,14 @@ async fn main() -> Result<(), Error> {
         }),
     });
 
+    // Project Manifest Locator
+    let mloc = Arc::new(manifest::Locator::new(
+        current_dir()?.try_into()?, // cwd
+        cli.project_dir,            // dir
+    ));
+
     // Canister loader
-    let cload = canister::ManifestLoader::new(recipe);
-    let cload = Arc::new(cload);
-
-    // Network loader
-    let nload = Arc::new(network::Loader);
-
-    // Environment loader
-    let eload = Arc::new(environment::Loader);
+    let cload = Arc::new(canister::PathLoader);
 
     // Canister builder
     let cbuild = Arc::new(canister::Builder);
@@ -165,8 +156,21 @@ async fn main() -> Result<(), Error> {
     // Canister syncer
     let csync = Arc::new(canister::Syncer);
 
-    // Project Loader
-    let pload = icp::Loader::new(mload, cload, nload, eload);
+    // Project Loaders
+    let ploaders = icp::ProjectLoaders {
+        path: Arc::new(project::PathLoader),
+        manifest: Arc::new(project::ManifestLoader {
+            locate: mloc.clone(),
+            recipe,
+            canister: cload,
+        }),
+    };
+
+    let pload = icp::Loader {
+        locate: mloc.clone(),
+        project: ploaders,
+    };
+
     let pload = icp::Lazy::new(pload);
     let pload = Arc::new(pload);
 

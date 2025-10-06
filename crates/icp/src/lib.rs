@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{CanisterManifest, Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    manifest::{Locate, PROJECT_MANIFEST, project::ProjectManifest},
     prelude::*,
 };
 
@@ -87,19 +87,14 @@ pub trait LoadManifest<M, T, E>: Sync + Send {
     async fn load(&self, m: &M) -> Result<T, E>;
 }
 
-pub struct CanisterLoaders {
-    path: Arc<dyn LoadPath<CanisterManifest, canister::LoadPathError>>,
-    manifest: Arc<dyn LoadManifest<CanisterManifest, Canister, canister::LoadManifestError>>,
-}
-
 pub struct ProjectLoaders {
-    path: Arc<dyn LoadPath<ProjectManifest, project::LoadPathError>>,
-    manifest: Arc<dyn LoadManifest<ProjectManifest, Project, project::LoadManifestError>>,
+    pub path: Arc<dyn LoadPath<ProjectManifest, project::LoadPathError>>,
+    pub manifest: Arc<dyn LoadManifest<ProjectManifest, Project, project::LoadManifestError>>,
 }
 
 pub struct Loader {
-    locate: Arc<dyn Locate>,
-    project: ProjectLoaders,
+    pub locate: Arc<dyn Locate>,
+    pub project: ProjectLoaders,
 }
 
 #[async_trait]

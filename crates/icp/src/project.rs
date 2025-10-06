@@ -4,10 +4,14 @@ use anyhow::Context;
 use async_trait::async_trait;
 
 use crate::{
-    CanisterLoaders, Environment, LoadManifest, LoadPath, Network, Project,
+    Canister, Environment, LoadManifest, LoadPath, Network, Project,
+    canister::{self, recipe},
     fs::read,
     is_glob,
-    manifest::{CANISTER_MANIFEST, Item, Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    manifest::{
+        CANISTER_MANIFEST, CanisterManifest, Item, Locate, PROJECT_MANIFEST,
+        canister::Instructions, project::ProjectManifest,
+    },
     prelude::*,
 };
 
@@ -50,13 +54,17 @@ pub enum LoadManifestError {
     #[error("failed to load canister manifest")]
     Canister,
 
+    #[error("failed to resolve canister recipe")]
+    Recipe,
+
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
 
 pub struct ManifestLoader {
-    locate: Arc<dyn Locate>,
-    canister: CanisterLoaders,
+    pub locate: Arc<dyn Locate>,
+    pub recipe: Arc<dyn recipe::Resolve>,
+    pub canister: Arc<dyn LoadPath<CanisterManifest, canister::LoadPathError>>,
 }
 
 #[async_trait]
@@ -106,7 +114,6 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                     for p in paths {
                         ms.push(
                             self.canister
-                                .path
                                 .load(&p)
                                 .await
                                 .context(LoadManifestError::Canister)?,
@@ -120,13 +127,24 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
             };
 
             for m in ms {
-                canisters.push(
-                    self.canister
-                        .manifest
-                        .load(&m)
+                let (build, sync) = match &m.instructions {
+                    // Build/Sync
+                    Instructions::BuildSync { build, sync } => (build.to_owned(), sync.to_owned()),
+
+                    // Recipe
+                    Instructions::Recipe { recipe } => self
+                        .recipe
+                        .resolve(recipe)
                         .await
-                        .context(LoadManifestError::Canister)?,
-                );
+                        .context(LoadManifestError::Recipe)?,
+                };
+
+                canisters.push(Canister {
+                    name: m.name.to_owned(),
+                    settings: m.settings.to_owned(),
+                    build,
+                    sync,
+                });
             }
         }
 

@@ -123,9 +123,6 @@ impl Context {
 pub enum CreateNetworkError {
     #[snafu(transparent)]
     GetNetworkAccess { source: GetNetworkAccessError },
-
-    #[snafu(transparent)]
-    NoSuchNetwork { source: NoSuchNetworkError },
 }
 
 impl Context {
@@ -147,7 +144,7 @@ impl Context {
         }
     }
 
-    fn create_network_access(&self) -> Result<NetworkAccess, CreateNetworkError> {
+    async fn create_network_access(&self) -> Result<NetworkAccess, CreateNetworkError> {
         let network_name = self
             .network_name
             .get()

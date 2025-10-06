@@ -1,10 +1,11 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
 use crate::manifest::{
     Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
 };
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)]
 pub enum Canisters {
@@ -21,7 +22,7 @@ impl From<Canisters> for Vec<Item<CanisterManifest>> {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Networks {
     Network(NetworkManifest),
@@ -49,7 +50,7 @@ impl From<Networks> for Vec<NetworkManifest> {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Environments {
     Environment(EnvironmentManifest),
@@ -77,7 +78,7 @@ impl From<Environments> for Vec<EnvironmentManifest> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProjectInner {
     #[serde(flatten)]
     pub canisters: Option<Canisters>,

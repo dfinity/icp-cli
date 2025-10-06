@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
 use crate::canister::Settings;
@@ -12,7 +13,7 @@ pub struct EnvironmentInner {
     pub settings: Option<HashMap<String, Settings>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Default)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub enum CanisterSelection {
     /// No canisters are selected.
     None,
@@ -27,7 +28,7 @@ pub enum CanisterSelection {
     Everything,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub struct EnvironmentManifest {
     // environment name
     pub name: String,

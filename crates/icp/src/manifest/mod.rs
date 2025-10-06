@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::manifest::{
@@ -19,7 +20,7 @@ pub use {canister::CanisterManifest, environment::EnvironmentManifest, network::
 pub const PROJECT_MANIFEST: &str = "icp.yaml";
 pub const CANISTER_MANIFEST: &str = "icp.yaml";
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {
     /// Path to a manifest

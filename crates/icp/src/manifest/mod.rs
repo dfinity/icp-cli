@@ -1,13 +1,10 @@
-use std::sync::Arc;
-
-use crate::{fs::read, prelude::*};
-use anyhow::Context as _;
+use crate::prelude::*;
 use serde::Deserialize;
 
 use crate::manifest::{
     environment::CanisterSelection,
     network::{Configuration, Gateway},
-    project::{Canisters, Environments, Networks, ProjectManifest},
+    project::{Canisters, Environments, Networks},
 };
 
 pub mod adapter;

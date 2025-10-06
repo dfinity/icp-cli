@@ -14,10 +14,8 @@ use crate::{
 
 pub mod canister;
 mod directories;
-pub mod environment;
 pub mod fs;
 pub mod manifest;
-pub mod network;
 pub mod prelude;
 pub mod project;
 

@@ -4,14 +4,10 @@ use anyhow::Context;
 use async_trait::async_trait;
 
 use crate::{
-    CanisterLoaders, Environment, LoadManifest, LoadPath, Network, Project, environment,
+    CanisterLoaders, Environment, LoadManifest, LoadPath, Network, Project,
     fs::read,
     is_glob,
-    manifest::{
-        CANISTER_MANIFEST, EnvironmentManifest, Item, Locate, NetworkManifest, PROJECT_MANIFEST,
-        project::ProjectManifest,
-    },
-    network,
+    manifest::{CANISTER_MANIFEST, Item, Locate, PROJECT_MANIFEST, project::ProjectManifest},
     prelude::*,
 };
 
@@ -54,12 +50,6 @@ pub enum LoadManifestError {
     #[error("failed to load canister manifest")]
     Canister,
 
-    #[error("failed to load network")]
-    Network,
-
-    #[error("failed to load environment")]
-    Environment,
-
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
@@ -67,9 +57,6 @@ pub enum LoadManifestError {
 pub struct ManifestLoader {
     locate: Arc<dyn Locate>,
     canister: CanisterLoaders,
-    network: Arc<dyn LoadManifest<NetworkManifest, Network, network::LoadManifestError>>,
-    environment:
-        Arc<dyn LoadManifest<EnvironmentManifest, Environment, environment::LoadManifestError>>,
 }
 
 #[async_trait]
@@ -147,24 +134,20 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         let mut networks = vec![];
 
         for m in &m.networks {
-            networks.push(
-                self.network
-                    .load(m)
-                    .await
-                    .context(LoadManifestError::Network)?,
-            );
+            networks.push(Network {
+                name: m.name.to_owned(),
+            });
         }
 
         // Environments
         let mut environments = vec![];
 
         for m in &m.environments {
-            environments.push(
-                self.environment
-                    .load(m)
-                    .await
-                    .context(LoadManifestError::Environment)?,
-            );
+            environments.push(Environment {
+                name: m.name.to_owned(),
+                network: todo!(),
+                canisters: todo!(),
+            });
         }
 
         Ok(Project {

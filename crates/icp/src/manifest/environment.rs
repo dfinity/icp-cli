@@ -28,7 +28,7 @@ pub enum CanisterSelection {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Environment {
+pub struct EnvironmentManifest {
     // environment name
     pub name: String,
 
@@ -51,7 +51,7 @@ pub enum ParseError {
     Unexpected(#[from] anyhow::Error),
 }
 
-impl TryFrom<EnvironmentInner> for Environment {
+impl TryFrom<EnvironmentInner> for EnvironmentManifest {
     type Error = ParseError;
 
     fn try_from(v: EnvironmentInner) -> Result<Self, Self::Error> {
@@ -96,7 +96,7 @@ impl TryFrom<EnvironmentInner> for Environment {
     }
 }
 
-impl<'de> Deserialize<'de> for Environment {
+impl<'de> Deserialize<'de> for EnvironmentManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: EnvironmentInner = Deserialize::deserialize(d)?;
         inner.try_into().map_err(serde::de::Error::custom)
@@ -112,12 +112,12 @@ mod tests {
     #[test]
     fn empty() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Environment>(
+            serde_yaml::from_str::<EnvironmentManifest>(
                 r#"
                 name: my-environment
                 "#
             )?,
-            Environment {
+            EnvironmentManifest {
                 name: "my-environment".to_string(),
                 network: "local".to_string(),
                 canisters: CanisterSelection::Everything,
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn override_local() -> Result<(), Error> {
-        match serde_yaml::from_str::<Environment>(r#"name: local"#) {
+        match serde_yaml::from_str::<EnvironmentManifest>(r#"name: local"#) {
             // No Error
             Ok(_) => {
                 return Err(anyhow!(

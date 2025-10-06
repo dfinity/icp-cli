@@ -85,7 +85,7 @@ pub struct NetworkInner {
 }
 
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
-pub struct Network {
+pub struct NetworkManifest {
     pub name: String,
     pub configuration: Configuration,
 }
@@ -102,7 +102,7 @@ pub enum ParseError {
     Unexpected(#[from] anyhow::Error),
 }
 
-impl TryFrom<NetworkInner> for Network {
+impl TryFrom<NetworkInner> for NetworkManifest {
     type Error = ParseError;
 
     fn try_from(v: NetworkInner) -> Result<Self, Self::Error> {
@@ -123,14 +123,14 @@ impl TryFrom<NetworkInner> for Network {
         // Configuration
         let configuration = configuration.unwrap_or_default();
 
-        Ok(Network {
+        Ok(NetworkManifest {
             name,
             configuration,
         })
     }
 }
 
-impl<'de> Deserialize<'de> for Network {
+impl<'de> Deserialize<'de> for NetworkManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: NetworkInner = Deserialize::deserialize(d)?;
         inner.try_into().map_err(serde::de::Error::custom)
@@ -146,12 +146,12 @@ mod tests {
     #[test]
     fn default_configuration() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Network>(
+            serde_yaml::from_str::<NetworkManifest>(
                 r#"
                 name: my-network
                 "#
             )?,
-            Network {
+            NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn override_local() -> Result<(), Error> {
-        match serde_yaml::from_str::<Network>(r#"name: local"#) {
+        match serde_yaml::from_str::<NetworkManifest>(r#"name: local"#) {
             // No Error
             Ok(_) => {
                 return Err(anyhow!("a network named local should result in an error"));
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn override_mainnet() -> Result<(), Error> {
-        match serde_yaml::from_str::<Network>(r#"name: mainnet"#) {
+        match serde_yaml::from_str::<NetworkManifest>(r#"name: mainnet"#) {
             // No Error
             Ok(_) => {
                 return Err(anyhow!("a network named mainnet should result in an error"));
@@ -210,14 +210,14 @@ mod tests {
     #[test]
     fn connected_network() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Network>(
+            serde_yaml::from_str::<NetworkManifest>(
                 r#"
                 name: my-network
                 mode: connected
                 url: https://ic0.app
                 "#
             )?,
-            Network {
+            NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Configuration::Connected(Connected {
                     url: "https://ic0.app".to_string(),
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn connected_network_with_key() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Network>(
+            serde_yaml::from_str::<NetworkManifest>(
                 r#"
                 name: my-network
                 mode: connected
@@ -240,7 +240,7 @@ mod tests {
                 root-key: root-key
                 "#
             )?,
-            Network {
+            NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Configuration::Connected(Connected {
                     url: "https://ic0.app".to_string(),
@@ -255,13 +255,13 @@ mod tests {
     #[test]
     fn managed_network() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Network>(
+            serde_yaml::from_str::<NetworkManifest>(
                 r#"
                 name: my-network
                 mode: managed
                 "#
             )?,
-            Network {
+            NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn managed_network_with_host_port() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Network>(
+            serde_yaml::from_str::<NetworkManifest>(
                 r#"
                 name: my-network
                 mode: managed
@@ -287,7 +287,7 @@ mod tests {
                   port: 1234
                 "#
             )?,
-            Network {
+            NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
@@ -304,7 +304,7 @@ mod tests {
     #[test]
     fn managed_network_with_random_port() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Network>(
+            serde_yaml::from_str::<NetworkManifest>(
                 r#"
                 name: my-network
                 mode: managed
@@ -312,7 +312,7 @@ mod tests {
                   port: 0
                 "#
             )?,
-            Network {
+            NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Configuration::Managed(Managed {
                     gateway: Gateway {

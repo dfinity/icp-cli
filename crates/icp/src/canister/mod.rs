@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::Context as _;
+use anyhow::Context;
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;

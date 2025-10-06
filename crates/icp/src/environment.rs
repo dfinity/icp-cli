@@ -1,25 +1,20 @@
 use async_trait::async_trait;
 
-use crate::{Environment, manifest};
+use crate::{Environment, LoadManifest, manifest::EnvironmentManifest};
 
 #[derive(Debug, thiserror::Error)]
-pub enum LoadError {
+pub enum LoadManifestError {
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
-}
-
-#[async_trait]
-pub trait Load: Sync + Send {
-    async fn load(&self, m: manifest::Environment) -> Result<Environment, LoadError>;
 }
 
 pub struct Loader;
 
 #[async_trait]
-impl Load for Loader {
-    async fn load(&self, m: manifest::Environment) -> Result<Environment, LoadError> {
+impl LoadManifest<EnvironmentManifest, Environment, LoadManifestError> for Loader {
+    async fn load(&self, m: &EnvironmentManifest) -> Result<Environment, LoadManifestError> {
         Ok(Environment {
-            name: m.name,
+            name: m.name.to_owned(),
             network: todo!(),
             canisters: todo!(),
         })

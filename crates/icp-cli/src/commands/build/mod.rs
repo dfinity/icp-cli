@@ -7,7 +7,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{canister::build, fs::read};
 
 use crate::{
-    context::Context,
+    commands::Context,
     progress::{ProgressManager, ScriptProgressHandler},
 };
 

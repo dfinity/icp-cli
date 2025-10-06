@@ -2,9 +2,9 @@ use std::{collections::HashMap, env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
+use commands::Context;
 use commands::Subcmd;
 use console::Term;
-use context::Context;
 use icp::{
     Directories,
     canister::{

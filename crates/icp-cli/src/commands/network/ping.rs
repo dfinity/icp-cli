@@ -1,12 +1,14 @@
 use std::time::Duration;
 
 use clap::Parser;
-use ic_agent::agent::status::Status;
-use ic_agent::{Agent, AgentError};
-use icp::identity::{self, IdentitySelection};
+use ic_agent::{Agent, AgentError, agent::status::Status};
+use icp::{
+    agent,
+    identity::{self, IdentitySelection},
+};
 use tokio::time::sleep;
 
-use crate::{context::Context, options::EnvironmentOpt};
+use crate::{commands::Context, options::EnvironmentOpt};
 
 /// Try to connect to a network, and print out its status.
 #[derive(Parser, Debug)]
@@ -29,7 +31,7 @@ pub enum CommandError {
     Identity(#[from] identity::LoadError),
 
     #[error("failed to create agent")]
-    Agent { err: AgentError },
+    Agent(#[from] agent::CreateError),
 
     #[error("failed to query network status")]
     Status { err: AgentError },
@@ -47,10 +49,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
-    let agent = ctx.agent()?;
+    let agent = ctx.agent.create(id).await?;
 
     let status = if cmd.wait_healthy {
-        ping_until_healthy(agent).await?
+        ping_until_healthy(&agent).await?
     } else {
         agent
             .status()

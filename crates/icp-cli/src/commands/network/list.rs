@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Parser;
 
-use crate::context::Context;
+use crate::commands::Context;
 
 /// List networks in the project
 #[derive(Parser, Debug)]

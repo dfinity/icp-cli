@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::commands::Context;
 use crate::options::IdentityOpt;
 use clap::Parser;
 use icp_identity::key::LoadIdentityInContextError;

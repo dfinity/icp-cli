@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::commands::Context;
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 

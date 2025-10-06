@@ -3,7 +3,7 @@ use snafu::Snafu;
 
 mod list;
 
-use crate::context::Context;
+use crate::commands::Context;
 
 #[derive(Parser, Debug)]
 pub struct Cmd {

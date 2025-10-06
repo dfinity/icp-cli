@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::commands::Context;
 use clap::Parser;
 use icp_identity::manifest::{change_default_identity, load_identity_defaults, load_identity_list};
 use snafu::Snafu;

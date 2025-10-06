@@ -1,11 +1,11 @@
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
+use crate::commands::Context;
+
 mod list;
 mod ping;
 mod run;
-
-use crate::context::Context;
 
 #[derive(Parser, Debug)]
 pub struct NetworkCmd {

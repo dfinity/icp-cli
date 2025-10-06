@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::commands::Context;
 use bip39::{Language, Mnemonic};
 use clap::{ArgGroup, Parser};
 use dialoguer::Password;

@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::commands::Context;
 use clap::Parser;
 use icp_identity::manifest::{load_identity_defaults, load_identity_list};
 use itertools::Itertools;

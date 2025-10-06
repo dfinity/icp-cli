@@ -3,7 +3,7 @@ use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_
 use phf::phf_map;
 use snafu::Snafu;
 
-use crate::context::Context;
+use crate::commands::Context;
 
 pub mod balance;
 mod transfer;

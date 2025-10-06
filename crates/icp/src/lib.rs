@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use async_trait::async_trait;
 pub use directories::{Directories, DirectoriesError};
 use schemars::JsonSchema;
@@ -7,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{CanisterManifest, Item},
+    manifest::{CanisterManifest, Item, Locate},
     prelude::*,
 };
 
@@ -59,6 +60,9 @@ pub struct Project {
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
+    #[error("failed to locate project directory")]
+    Locate,
+
     #[error("failed to load manifest: {0}")]
     Manifest(#[from] manifest::LoadError),
 
@@ -96,6 +100,7 @@ pub struct CanisterLoaders {
 }
 
 pub struct Loader {
+    locate: Arc<dyn Locate>,
     manifest: Arc<dyn manifest::Load>,
     canister: CanisterLoaders,
     network: Arc<dyn network::Load>,
@@ -105,6 +110,9 @@ pub struct Loader {
 #[async_trait]
 impl Load for Loader {
     async fn load(&self) -> Result<Project, LoadError> {
+        // Locate project root
+        let pdir = self.locate.locate().context(LoadError::Locate)?;
+
         // Load manifest
         let m = self.manifest.load()?;
 

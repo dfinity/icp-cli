@@ -6,7 +6,6 @@ pub mod config;
 mod directory;
 mod lock;
 mod managed;
-pub mod status;
 pub mod structure;
 
 pub use directory::NetworkDirectory;

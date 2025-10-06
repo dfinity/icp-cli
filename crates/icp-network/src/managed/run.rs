@@ -2,6 +2,7 @@ use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 
 use candid::Principal;
 use futures::future::{join, join_all};
+use ic_agent::{Agent, AgentError, agent::status::Status};
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
 use icp::{
     fs::{create_dir_all, remove_dir_all, remove_file},
@@ -39,7 +40,6 @@ use crate::{
         },
         run::InitializePocketicError::NoRootKey,
     },
-    status,
 };
 
 pub async fn run_network(
@@ -320,7 +320,7 @@ async fn initialize_pocketic(
     let agent_url = format!("http://localhost:{}", gateway_info.port);
 
     eprintln!("Agent url is {}", agent_url);
-    let status = status::ping_and_wait(&agent_url).await?;
+    let status = ping_and_wait(&agent_url).await?;
 
     let root_key = status.root_key.ok_or(NoRootKey)?;
     let root_key = hex::encode(root_key);
@@ -348,7 +348,7 @@ pub enum InitializePocketicError {
     NoRootKey,
 
     #[snafu(transparent)]
-    PingAndWait { source: status::PingAndWaitError },
+    PingAndWait { source: PingAndWaitError },
 
     #[snafu(transparent)]
     Reqwest { source: reqwest::Error },
@@ -470,4 +470,45 @@ async fn get_icp_xdr_conversion_rate(pic: &PocketIc) -> Result<u64, InitializePo
         error: format!("Failed to get ICP XDR conversion rate: {e}"),
     })?;
     Ok(response.0.data.xdr_permyriad_per_icp)
+}
+
+pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {
+    let agent = Agent::builder()
+        .with_url(url)
+        .build()
+        .context(BuildAgentSnafu { url })?;
+
+    let mut retries = 0;
+
+    loop {
+        let status = agent.status().await;
+        match status {
+            Ok(status) => {
+                if matches!(&status.replica_health_status, Some(status) if status == "healthy") {
+                    break Ok(status);
+                }
+            }
+
+            Err(e) => {
+                if retries >= 60 {
+                    break Err(PingAndWaitError::Timeout { source: e });
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                retries += 1;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum PingAndWaitError {
+    #[snafu(display("failed to build agent for url {}", url))]
+    BuildAgent {
+        source: AgentError,
+        url: String,
+    },
+
+    Timeout {
+        source: AgentError,
+    },
 }

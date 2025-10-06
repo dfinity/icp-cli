@@ -6,15 +6,32 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+bip32 = { workspace = true }
 camino = { workspace = true }
+clap = { workspace = true, optional = true }
 directories = { workspace = true }
+ed25519-consensus = { workspace = true }
+elliptic-curve = { workspace = true }
 glob = { workspace = true }
 handlebars = { workspace = true }
+ic-agent = { workspace = true }
+itertools = { workspace = true }
+k256 = { workspace = true }
+p256 = { workspace = true }
+pem = { workspace = true }
+pkcs8 = { workspace = true }
+rand = { workspace = true }
 reqwest = { workspace = true }
 schemars = { workspace = true }
+scrypt = { workspace = true }
+sec1 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+snafu = { workspace = true }
+strum = { workspace = true }
 thiserror = { workspace = true }
+tiny-bip39 = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }
+zeroize = { workspace = true }

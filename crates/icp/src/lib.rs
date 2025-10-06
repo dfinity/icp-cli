@@ -14,6 +14,7 @@ use crate::{
 pub mod canister;
 mod directories;
 pub mod fs;
+pub mod identity;
 pub mod manifest;
 pub mod prelude;
 pub mod project;

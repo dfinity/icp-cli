@@ -1,7 +1,5 @@
 use clap::Parser;
-use icp_identity::manifest::load_identity_list;
 use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
-use icp_project::NoSuchNetworkError;
 use snafu::Snafu;
 
 use crate::context::{Context, ContextProjectError};

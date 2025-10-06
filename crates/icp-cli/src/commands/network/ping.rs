@@ -1,10 +1,12 @@
-use crate::context::{Context, ContextAgentError};
-use crate::options::EnvironmentOpt;
+use std::time::Duration;
+
 use clap::Parser;
 use ic_agent::agent::status::Status;
 use ic_agent::{Agent, AgentError};
-use snafu::Snafu;
-use std::time::Duration;
+use icp::identity::{self, IdentitySelection};
+use tokio::time::sleep;
+
+use crate::{context::Context, options::EnvironmentOpt};
 
 /// Try to connect to a network, and print out its status.
 #[derive(Parser, Debug)]
@@ -21,13 +23,29 @@ pub struct Cmd {
     wait_healthy: bool,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error("failed to create agent")]
+    Agent { err: AgentError },
+
+    #[error("failed to query network status")]
+    Status { err: AgentError },
+
+    #[error("timed-out waiting for replica to become healthy")]
+    Timeout,
+}
+
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let network = cmd
         .positional_network_name
         .unwrap_or(cmd.network.name().to_string());
 
-    ctx.require_network(&network);
-    ctx.require_identity(Some("anonymous"));
+    // ctx.require_network(&network);
+
+    let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
     let agent = ctx.agent()?;
 
@@ -45,45 +63,33 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     Ok(())
 }
 
-async fn ping_until_healthy(agent: &Agent) -> Result<Status, TimeoutWaitingForHealthyError> {
+async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
     let mut retries = 0;
 
     loop {
-        let status = agent.status().await;
-        if let Ok(status) = status {
-            let healthy = match &status.replica_health_status {
+        if let Ok(status) = agent.status().await {
+            let is_ok = match &status.replica_health_status {
+                // Ok
                 Some(s) if s == "healthy" => true,
                 None => true,
+
+                // Fail
                 _ => false,
             };
-            if healthy {
-                break Ok(status);
-            } else {
-                eprintln!("{}", status);
+
+            if is_ok {
+                return Ok(status);
             }
+
+            eprintln!("{}", status);
         }
+
         if retries >= 60 {
-            break Err(TimeoutWaitingForHealthyError {});
+            break Err(CommandError::Timeout);
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        sleep(Duration::from_secs(1)).await;
+
         retries += 1;
     }
 }
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(display("failed to ping the network"))]
-    Status { source: AgentError },
-
-    #[snafu(transparent)]
-    TimeoutWaitingForHealthy {
-        source: TimeoutWaitingForHealthyError,
-    },
-}
-
-#[derive(Debug, Snafu)]
-#[snafu(display("timed out waiting for replica to become healthy"))]
-pub struct TimeoutWaitingForHealthyError {}

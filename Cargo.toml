@@ -36,7 +36,6 @@ ic-management-canister-types = { version = "0.4.1" }
 ic-utils = { version = "0.44.1" }
 icp = { path = "crates/icp" }
 icp-adapter = { path = "crates/icp-adapter" }
-icp-identity = { path = "crates/icp-identity", features = ["clap"] }
 icp-network = { path = "crates/icp-network" }
 icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
@@ -50,6 +49,7 @@ phf = { version = "0.13.1", features = ["macros"] }
 pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
 pocket-ic = "10.0.0"
 rand = "0.9.1"
+scrypt = "0.11.0"
 sec1 = { version = "0.7.3", features = ["pkcs8"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

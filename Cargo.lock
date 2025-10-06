@@ -2432,18 +2432,35 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bip32 0.5.3",
  "camino",
+ "clap",
  "directories",
+ "ed25519-consensus",
+ "elliptic-curve 0.13.8",
  "glob",
  "handlebars 6.3.2",
+ "ic-agent",
+ "itertools 0.14.0",
+ "k256 0.13.4",
+ "p256",
+ "pem 3.0.5",
+ "pkcs8 0.10.2",
+ "rand 0.9.2",
  "reqwest",
  "schemars",
+ "scrypt",
+ "sec1 0.7.3",
  "serde",
  "serde_json",
  "serde_yaml",
+ "snafu",
+ "strum 0.27.2",
  "thiserror 2.0.17",
+ "tiny-bip39 2.0.0",
  "tokio",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -2504,7 +2521,6 @@ dependencies = [
  "icp",
  "icp-adapter",
  "icp-canister-interfaces",
- "icp-identity",
  "icp-network",
  "icrc-ledger-types",
  "indicatif",
@@ -2530,33 +2546,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
-]
-
-[[package]]
-name = "icp-identity"
-version = "0.1.0"
-dependencies = [
- "bip32 0.5.3",
- "clap",
- "directories",
- "ed25519-consensus",
- "elliptic-curve 0.13.8",
- "ic-agent",
- "icp",
- "itertools 0.14.0",
- "k256 0.13.4",
- "p256",
- "pem 3.0.5",
- "pkcs8 0.10.2",
- "rand 0.9.2",
- "scrypt",
- "sec1 0.7.3",
- "serde",
- "serde_json",
- "snafu",
- "strum 0.27.2",
- "tiny-bip39 2.0.0",
- "zeroize",
 ]
 
 [[package]]

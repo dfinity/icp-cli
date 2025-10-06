@@ -14,7 +14,7 @@ use icp::{
             handlebars::{Handlebars, TEMPLATES},
         },
     },
-    manifest,
+    identity, manifest,
     prelude::*,
     project,
 };
@@ -174,6 +174,11 @@ async fn main() -> Result<(), Error> {
     let pload = icp::Lazy::new(pload);
     let pload = Arc::new(pload);
 
+    // Identity loader
+    let idload = identity::Loader {
+        dir: dirs.identity(),
+    };
+
     // Setup environment
     let ctx = Context::new(
         term,      // term
@@ -181,6 +186,7 @@ async fn main() -> Result<(), Error> {
         ids,       // id_store
         artifacts, // artifact_store
         pload,     // project
+        idload,    // identity
     );
 
     commands::dispatch(&ctx, command).await?;

@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use snafu::Snafu;
 
 use crate::commands::Context;
 
@@ -18,6 +17,15 @@ pub enum Subcmd {
     Update(Box<update::Cmd>),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Show(#[from] show::CommandError),
+
+    #[error(transparent)]
+    Update(#[from] update::CommandError),
+}
+
 pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     match cmd.subcmd {
         Subcmd::Show(cmd) => show::exec(ctx, cmd).await?,
@@ -25,13 +33,4 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    Show { source: show::CommandError },
-
-    #[snafu(transparent)]
-    Update { source: update::CommandError },
 }

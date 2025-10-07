@@ -8,6 +8,7 @@ use predicates::{
 mod common;
 
 #[tokio::test]
+#[allow(clippy::await_holding_refcell_ref)]
 async fn canister_top_up() {
     let ctx = TestContext::new();
 

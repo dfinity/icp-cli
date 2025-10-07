@@ -153,7 +153,7 @@ impl<'de> Deserialize<'de> for ProjectManifest {
 mod tests {
     use std::collections::HashMap;
 
-    use anyhow::Error;
+    use anyhow::{Error, anyhow};
 
     use crate::{
         canister::{Settings, build, sync},
@@ -455,6 +455,17 @@ mod tests {
                 .into(),
             },
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid() -> Result<(), Error> {
+        if serde_yaml::from_str::<ProjectManifest>(r#"invalid-content"#).is_ok() {
+            return Err(anyhow!(
+                "expected invalid manifest to fail deserializeation"
+            ));
+        }
 
         Ok(())
     }

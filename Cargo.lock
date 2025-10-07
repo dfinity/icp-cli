@@ -2537,6 +2537,7 @@ dependencies = [
  "indicatif",
  "itertools 0.14.0",
  "k256 0.13.4",
+ "lazy_static",
  "nix",
  "pem 3.0.5",
  "phf",

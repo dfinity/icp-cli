@@ -1,21 +1,20 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
-use icp::prelude::*;
-use snafu::Snafu;
-
-use crate::{
-    context::{Context, ContextAgentError, ContextProjectError},
-    options::{EnvironmentOpt, IdentityOpt},
-    progress::ProgressManager,
-    store_id::{Key, LookupError, RegisterError},
-};
+use icp::{agent, identity, network, prelude::*};
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
     CreationArgs,
+};
+
+use crate::{
+    commands::Context,
+    options::{EnvironmentOpt, IdentityOpt},
+    progress::ProgressManager,
+    store_id::{Key, LookupError, RegisterError},
 };
 
 pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -67,101 +66,110 @@ pub struct Cmd {
     pub cycles: u128,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error(transparent)]
+    Access(#[from] network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] agent::CreateError),
+
+    #[error("project does not contain a canister named '{name}'")]
+    CanisterNotFound { name: String },
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
+
+    #[error("no canisters available to create")]
+    NoCanisters,
+
+    #[error("canister exists already: {principal}")]
+    CanisterExists { principal: Principal },
+
+    #[error(transparent)]
+    CreateCanister(#[from] AgentError),
+
+    #[error(transparent)]
+    RegisterCanister(#[from] RegisterError),
+
+    #[error(transparent)]
+    Candid(#[from] candid::Error),
+
+    #[error("{err}")]
+    LedgerCreate { err: String },
+}
+
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
-    let pm = ctx.project()?;
-
-    // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
-
-    // Choose canisters to create
-    let cs = pm
-        .canisters
-        .iter()
-        .filter(|(_, c)| match &cmd.names.is_empty() {
-            // If no names specified, create all canisters
-            true => true,
-
-            // If names specified, only create matching canisters
-            false => cmd.names.contains(&c.name),
-        })
-        .collect::<Vec<_>>();
-
-    // Check if selected canisters exists
-    if !cmd.names.is_empty() {
-        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
-
-        for name in &cmd.names {
-            if !names.contains(name) {
-                return Err(CommandError::CanisterNotFound {
-                    name: name.to_owned(),
-                });
-            }
-        }
-    }
-
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
-
-    // Filter for environment canisters
-    let cs = cs
-        .iter()
-        .filter(|(_, c)| ecs.contains(&c.name))
-        .collect::<Vec<_>>();
-
-    // Ensure canister is included in the environment
-    if !cmd.names.is_empty() {
-        for name in &cmd.names {
-            if !ecs.contains(name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: name.to_owned(),
-                });
-            }
-        }
-    }
-
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    let network = env
-        .network
-        .as_ref()
-        .expect("no network specified in environment");
+    let p = ctx.project.load().await?;
 
     // Load identity
-    ctx.require_identity(cmd.identity.name());
+    let id = ctx.identity.load(cmd.identity.into()).await?;
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    ctx.require_network(
-        env.network
-            .as_ref()
-            .expect("no network specified in environment"),
-    );
+    // Load target environment
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
-    // Prepare agent
-    let agent = ctx.agent()?;
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
+
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
+
+    let cnames = match cmd.names.is_empty() {
+        // No canisters specified
+        true => env.canisters.keys().cloned().collect(),
+
+        // Individual canisters specified
+        false => cmd.names,
+    };
+
+    for name in cmd.names {
+        if !p.canisters.contains_key(&name) {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+
+        if !env.canisters.contains_key(&name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
+
+    let cs = env
+        .canisters
+        .iter()
+        .filter(|(k, _)| cmd.names.contains(k))
+        .collect::<HashMap<_, _>>();
 
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
     let progress_manager = ProgressManager::new();
 
-    for (_, c) in cs {
+    for (_, (_, c)) in cs {
         // Create progress bar with standard configuration
         let pb = progress_manager.create_progress_bar(&c.name);
 
@@ -176,12 +184,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Create canister-network association-key
                 let k = Key {
-                    network: network.to_owned(),
+                    network: env.network.name.to_owned(),
                     environment: env.name.to_owned(),
                     canister: c.name.to_owned(),
                 };
 
-                match ctx.id_store.lookup(&k) {
+                match ctx.ids.lookup(&k) {
                     // Exists (skip)
                     Ok(principal) => {
                         return Err(CommandError::CanisterExists { principal });
@@ -238,12 +246,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Call cycles ledger create_canister
                 let resp = agent
                     .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
-                    .with_arg(Encode!(&arg).map_err(|source| CommandError::Candid { source })?)
+                    .with_arg(Encode!(&arg)?)
                     .call_and_wait()
-                    .await
-                    .map_err(|source| CommandError::CreateCanister { source })?;
-                let resp: CreateCanisterResponse = Decode!(&resp, CreateCanisterResponse)
-                    .map_err(|source| CommandError::Candid { source })?;
+                    .await?;
+
+                let resp: CreateCanisterResponse = Decode!(&resp, CreateCanisterResponse)?;
+
                 let cid = match resp {
                     CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
                     CreateCanisterResponse::Err(err) => {
@@ -254,7 +262,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 // Register the canister ID
-                ctx.id_store.register(&k, &cid)?;
+                ctx.ids.register(&k, &cid)?;
 
                 Ok::<_, CommandError>(())
             }
@@ -292,43 +300,4 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
-    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[snafu(display("no canisters available to create"))]
-    NoCanisters,
-
-    #[snafu(display("canister exists already: {principal}"))]
-    CanisterExists { principal: Principal },
-
-    #[snafu(transparent)]
-    CreateCanister { source: AgentError },
-
-    #[snafu(transparent)]
-    RegisterCanister { source: RegisterError },
-
-    #[snafu(transparent)]
-    Candid { source: candid::Error },
-
-    #[snafu(display("{err}"))]
-    LedgerCreate { err: String },
 }

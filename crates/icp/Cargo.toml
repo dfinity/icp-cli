@@ -19,7 +19,9 @@ glob = { workspace = true }
 handlebars = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
+ic-asset = { workspace = true }
 ic-ledger-types = { workspace = true }
+ic-utils = { workspace = true }
 icp-canister-interfaces = { workspace = true }
 icrc-ledger-types = { workspace = true }
 itertools = { workspace = true }
@@ -36,6 +38,7 @@ sec1 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+slog = { workspace = true }
 snafu = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }

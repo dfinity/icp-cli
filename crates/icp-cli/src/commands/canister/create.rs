@@ -119,7 +119,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
 
     // Load target environment
     let env =
@@ -140,7 +140,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         true => env.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names,
+        false => cmd.names.clone(),
     };
 
     for name in &cnames {
@@ -176,6 +176,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
             let cmd = cmd.clone();
+            let agent = agent.clone();
             let pb = pb.clone();
 
             async move {

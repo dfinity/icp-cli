@@ -1,4 +1,4 @@
-use icp::prelude::*;
+use crate::prelude::*;
 
 pub struct NetworkDirectoryStructure {
     pub network_root: PathBuf,

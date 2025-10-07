@@ -5,6 +5,7 @@ use clap::{CommandFactory, Parser};
 use commands::Context;
 use commands::Subcmd;
 use console::Term;
+use icp::agent;
 use icp::{
     Directories,
     canister::{
@@ -174,18 +175,22 @@ async fn main() -> Result<(), Error> {
     let pload = Arc::new(pload);
 
     // Identity loader
-    let idload = identity::Loader {
+    let idload = Arc::new(identity::Loader {
         dir: dirs.identity(),
-    };
+    });
+
+    // Agent creator
+    let agent_creator = Arc::new(agent::Creator);
 
     // Setup environment
     let ctx = Context::new(
-        term,      // term
-        dirs,      // dirs
-        ids,       // id_store
-        artifacts, // artifact_store
-        pload,     // project
-        idload,    // identity
+        term,          // term
+        dirs,          // dirs
+        ids,           // id_store
+        artifacts,     // artifact_store
+        pload,         // project
+        idload,        // identity
+        agent_creator, // agent
     );
 
     commands::dispatch(&ctx, command).await?;

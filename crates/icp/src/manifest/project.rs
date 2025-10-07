@@ -157,9 +157,8 @@ mod tests {
 
     use crate::{
         canister::{Settings, build, sync},
-        manifest::{
-            canister::Instructions, environment::CanisterSelection, network::Configuration,
-        },
+        manifest::{canister::Instructions, environment::CanisterSelection},
+        network::Configuration,
     };
 
     use super::*;

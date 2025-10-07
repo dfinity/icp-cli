@@ -4,10 +4,6 @@ use candid::Principal;
 use futures::future::{join, join_all};
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
-use icp::{
-    fs::{create_dir_all, remove_dir_all, remove_file},
-    prelude::*,
-};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
@@ -27,19 +23,23 @@ use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
 use crate::{
-    BindPort, ManagedNetworkModel, NetworkDirectory,
-    RunNetworkError::NoPocketIcPath,
-    config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
-    directory::SaveNetworkDescriptorError,
-    lock::OpenFileForWriteLockError,
-    managed::{
-        descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
-        pocketic::{
-            CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
-            spawn_pocketic,
+    fs::{create_dir_all, remove_dir_all, remove_file},
+    network::{
+        NetworkDirectory, Port,
+        RunNetworkError::NoPocketIcPath,
+        config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
+        directory::SaveNetworkDescriptorError,
+        lock::OpenFileForWriteLockError,
+        managed::{
+            descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
+            pocketic::{
+                CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
+                PocketIcInstance, spawn_pocketic,
+            },
+            run::InitializePocketicError::NoRootKey,
         },
-        run::InitializePocketicError::NoRootKey,
     },
+    prelude::*,
 };
 
 pub async fn run_network(
@@ -58,8 +58,8 @@ pub async fn run_network(
     let mut port_lock;
     let _port_claim;
 
-    if let BindPort::Fixed(port) = &config.gateway.port {
-        port_lock = Some(nd.open_port_lock_file(*port)?);
+    if let Port::Fixed(port) = &config.gateway.port {
+        port_lock = Some(nd.open_port_lock_file(port)?);
         _port_claim = Some(port_lock.as_mut().unwrap().try_acquire()?);
     }
 
@@ -80,7 +80,7 @@ pub enum RunNetworkError {
     },
 
     #[snafu(transparent)]
-    CreateDirFailed { source: icp::fs::Error },
+    CreateDirFailed { source: crate::fs::Error },
 
     #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
     NoPocketIcPath,
@@ -127,7 +127,7 @@ async fn run_pocketic(
 
         let gateway = NetworkDescriptorGatewayPort {
             port: instance.gateway_port,
-            fixed: matches!(config.gateway.port, BindPort::Fixed(_)),
+            fixed: matches!(config.gateway.port, Port::Fixed(_)),
         };
         let default_effective_canister_id = instance.effective_canister_id;
         let descriptor = NetworkDescriptorModel {
@@ -159,13 +159,13 @@ async fn run_pocketic(
 #[derive(Debug, Snafu)]
 pub enum RunPocketIcError {
     #[snafu(display("failed to create dir"))]
-    CreateDirAll { source: icp::fs::Error },
+    CreateDirAll { source: crate::fs::Error },
 
     #[snafu(display("failed to remove dir"))]
-    RemoveDirAll { source: icp::fs::Error },
+    RemoveDirAll { source: crate::fs::Error },
 
     #[snafu(display("failed to remove file"))]
-    RemoveFile { source: icp::fs::Error },
+    RemoveFile { source: crate::fs::Error },
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },
@@ -254,7 +254,7 @@ pub enum WaitForPortError {
 
 async fn initialize_pocketic(
     pocketic_port: u16,
-    gateway_bind_port: &BindPort,
+    gateway_bind_port: &Port,
     state_dir: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
@@ -303,8 +303,8 @@ async fn initialize_pocketic(
         .collect::<Result<Vec<_>, _>>()?;
 
     let gateway_port = match gateway_bind_port {
-        BindPort::Fixed(port) => Some(*port),
-        BindPort::Random => None,
+        Port::Fixed(port) => Some(*port),
+        Port::Random => None,
     };
     let gateway_info = pic
         .create_http_gateway(

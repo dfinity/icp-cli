@@ -2,12 +2,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ic_agent::{Agent, AgentError, Identity, export::Principal};
-use icp::fs::json;
-use icp::prelude::*;
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::access::GetNetworkAccessError::DecodeRootKey;
-use crate::{NetworkConfig, NetworkDirectory};
+use crate::{
+    Network,
+    fs::json,
+    network::{Configuration, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey},
+    prelude::*,
+};
 
 pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
 
@@ -41,36 +43,13 @@ impl NetworkAccess {
     }
 }
 
-impl NetworkAccess {
-    pub fn create_agent(&self, identity: Arc<dyn Identity>) -> Result<Agent, CreateAgentError> {
-        let builder = Agent::builder();
-
-        // Specify url
-        let builder = builder.with_url(&self.url);
-
-        // Create agent
-        let agent = builder
-            .with_arc_identity(identity)
-            .with_ingress_expiry(Duration::from_secs(4 * MINUTE))
-            .build()
-            .map_err(|err| CreateAgentError { source: err })?;
-
-        // Set root-key
-        if let Some(root_key) = &self.root_key {
-            agent.set_root_key(root_key.clone());
-        }
-
-        Ok(agent)
-    }
-}
-
 pub fn get_network_access(
     nd: NetworkDirectory,
-    config: &NetworkConfig,
+    network: &Network,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
-    Ok(match config {
+    Ok(match &network.configuration {
         // Managed
-        NetworkConfig::Managed(_) => {
+        Configuration::Managed(_) => {
             // Load network descriptor
             let desc =
                 nd.load_network_descriptor()?
@@ -111,8 +90,8 @@ pub fn get_network_access(
         }
 
         // Connected
-        NetworkConfig::Connected(connected) => {
-            let root_key = connected
+        Configuration::Connected(cfg) => {
+            let root_key = cfg
                 .root_key
                 .as_ref()
                 .map(hex::decode)
@@ -122,7 +101,7 @@ pub fn get_network_access(
             NetworkAccess {
                 default_effective_canister_id: None,
                 root_key,
-                url: connected.url.to_owned(),
+                url: cfg.url.to_owned(),
             }
         }
     })

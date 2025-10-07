@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use crate::{
     canister::{Settings, build, sync},
     manifest::{Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    network::Configuration,
     prelude::*,
 };
 
@@ -17,6 +18,7 @@ mod directories;
 pub mod fs;
 pub mod identity;
 pub mod manifest;
+pub mod network;
 pub mod prelude;
 pub mod project;
 
@@ -42,6 +44,7 @@ pub struct Canister {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Network {
     name: String,
+    configuration: Configuration,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,7 +1,9 @@
-use fd_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use icp::prelude::*;
-use snafu::prelude::*;
 use std::fs::{File, OpenOptions};
+
+use fd_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use snafu::prelude::*;
+
+use crate::prelude::*;
 
 pub struct RwFileLock {
     lock: RwLock<File>,

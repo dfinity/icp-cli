@@ -1,5 +1,4 @@
 use candid::Principal;
-use icp::prelude::*;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
@@ -8,6 +7,8 @@ use pocket_ic::common::rest::{
 use reqwest::Url;
 use snafu::prelude::*;
 use time::OffsetDateTime;
+
+use crate::prelude::*;
 
 #[allow(dead_code)]
 pub struct PocketIcInstance {

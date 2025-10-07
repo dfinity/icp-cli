@@ -1,19 +1,19 @@
 use std::io::ErrorKind;
 
-use icp::{
-    fs::{create_dir_all, json},
-    prelude::*,
-};
 use snafu::prelude::*;
 
 use crate::{
-    config::NetworkDescriptorModel,
-    lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
-    managed::descriptor::{
-        FixedPortLock, NetworkDescriptorCleaner, NetworkDescriptorWriter, NetworkLock,
-        TruncateFileError, WriteDescriptorError,
+    fs::{create_dir_all, json},
+    network::{
+        config::NetworkDescriptorModel,
+        lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
+        managed::descriptor::{
+            FixedPortLock, NetworkDescriptorCleaner, NetworkDescriptorWriter, NetworkLock,
+            TruncateFileError, WriteDescriptorError,
+        },
+        structure::NetworkDirectoryStructure,
     },
-    structure::NetworkDirectoryStructure,
+    prelude::*,
 };
 
 pub struct NetworkDirectory {
@@ -38,7 +38,7 @@ impl NetworkDirectory {
         &self.structure
     }
 
-    pub fn ensure_exists(&self) -> Result<(), icp::fs::Error> {
+    pub fn ensure_exists(&self) -> Result<(), crate::fs::Error> {
         create_dir_all(&self.structure.network_root)?;
         create_dir_all(&self.structure.port_descriptor_dir)
     }

@@ -223,6 +223,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Entry::Vacant(e) => {
                     e.insert(Network {
                         name: m.name.to_owned(),
+                        configuration: m.configuration.to_owned(),
                     });
                 }
             }

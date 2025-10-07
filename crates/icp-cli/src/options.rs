@@ -1,4 +1,5 @@
 use clap::{ArgGroup, Args};
+use icp::identity::IdentitySelection;
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct IdentityOpt {
@@ -7,11 +8,26 @@ pub struct IdentityOpt {
     identity: Option<String>,
 }
 
-impl IdentityOpt {
-    pub fn name(&self) -> Option<&str> {
-        self.identity.as_deref()
+impl From<IdentityOpt> for IdentitySelection {
+    fn from(v: IdentityOpt) -> Self {
+        match v.identity {
+            // Anonymous
+            Some(id) if id.to_string() == "anonymous" => IdentitySelection::Anonymous,
+
+            // Named
+            Some(id) => IdentitySelection::Named(id),
+
+            // Default
+            None => IdentitySelection::Default,
+        }
     }
 }
+
+// impl IdentityOpt {
+//     pub fn name(&self) -> Option<&str> {
+//         self.identity.as_deref()
+//     }
+// }
 
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("environment-select").multiple(false)))]

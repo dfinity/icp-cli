@@ -16,18 +16,18 @@ pub enum CreateError {
 
 #[async_trait]
 pub trait Create: Sync + Send {
-    async fn create(&self, id: Arc<dyn Identity>) -> Result<Agent, CreateError>;
+    async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateError>;
 }
 
 pub struct Creator;
 
 #[async_trait]
 impl Create for Creator {
-    async fn create(&self, id: Arc<dyn Identity>) -> Result<Agent, CreateError> {
-        let mut b = Agent::builder();
+    async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateError> {
+        let b = Agent::builder();
 
         // Url
-        // let b = b.with_url(todo!());
+        let b = b.with_url(url);
 
         // Identity
         let b = b.with_arc_identity(id);
@@ -35,14 +35,12 @@ impl Create for Creator {
         // Ingress Expiration
         let b = b.with_ingress_expiry(Duration::from_secs(4 * MINUTE));
 
-        let agent = b.build()?;
+        // // Key
+        // if let Some(k) = todo!() {
+        //     agent.set_root_key(k);
+        // }
 
-        // Key
-        if let Some(k) = todo!() {
-            agent.set_root_key(k);
-        }
-
-        Ok(agent)
+        Ok(b.build()?)
     }
 }
 
@@ -68,24 +66,5 @@ impl Create for Creator {
 //         )?;
 
 //         Ok(ac)
-//     }
-// }
-
-// impl Context {
-//     pub async fn agent(
-//         &self,
-//         network: &str,
-//         identity: Option<String>,
-//     ) -> Result<Agent, ContextAgentError> {
-//         // Setup network
-//         let network_access = self.create_network_access(network).await?;
-
-//         // Setup identity
-//         let identity = self.identity(identity)?;
-
-//         // Setup agent
-//         let agent = network_access.create_agent(identity)?;
-
-//         Ok(agent)
 //     }
 // }

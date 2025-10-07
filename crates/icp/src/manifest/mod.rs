@@ -1,10 +1,12 @@
-use crate::prelude::*;
+use crate::{
+    network::{Configuration, Connected, Gateway, Managed, Port},
+    prelude::*,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::manifest::{
     environment::CanisterSelection,
-    network::{Configuration, Gateway},
     project::{Canisters, Environments, Networks},
 };
 
@@ -41,16 +43,16 @@ impl Default for Networks {
         Networks::Networks(vec![
             NetworkManifest {
                 name: "local".to_string(),
-                configuration: Configuration::Managed(network::Managed {
+                configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
                         host: "localhost".to_string(),
-                        port: network::Port::Fixed(8080),
+                        port: Port::Fixed(8080),
                     },
                 }),
             },
             NetworkManifest {
                 name: "mainnet".to_string(),
-                configuration: Configuration::Connected(network::Connected {
+                configuration: Configuration::Connected(Connected {
                     url: "https://ic0.app".to_string(),
                     root_key: None,
                 }),

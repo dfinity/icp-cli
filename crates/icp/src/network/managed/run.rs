@@ -25,7 +25,7 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, remove_dir_all, remove_file},
     network::{
-        NetworkDirectory, Port,
+        Managed, NetworkDirectory, Port,
         RunNetworkError::NoPocketIcPath,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::SaveNetworkDescriptorError,
@@ -43,7 +43,7 @@ use crate::{
 };
 
 pub async fn run_network(
-    config: &ManagedNetworkModel,
+    config: &Managed,
     nd: NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
@@ -59,7 +59,7 @@ pub async fn run_network(
     let _port_claim;
 
     if let Port::Fixed(port) = &config.gateway.port {
-        port_lock = Some(nd.open_port_lock_file(port)?);
+        port_lock = Some(nd.open_port_lock_file(*port)?);
         _port_claim = Some(port_lock.as_mut().unwrap().try_acquire()?);
     }
 
@@ -94,7 +94,7 @@ pub enum RunNetworkError {
 
 async fn run_pocketic(
     pocketic_path: &Path,
-    config: &ManagedNetworkModel,
+    config: &Managed,
     nd: &NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,

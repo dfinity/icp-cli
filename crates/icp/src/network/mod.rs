@@ -10,6 +10,8 @@ pub use managed::run::{RunNetworkError, run_network};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
+pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
+
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub enum Port {
     Fixed(u16),

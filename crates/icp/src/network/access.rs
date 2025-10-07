@@ -1,30 +1,25 @@
-use std::sync::Arc;
-use std::time::Duration;
-
-use ic_agent::{Agent, AgentError, Identity, export::Principal};
+use ic_agent::export::Principal;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::{
     Network,
     fs::json,
-    network::{Configuration, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey},
+    network::{
+        Configuration, DEFAULT_IC_GATEWAY, NetworkDirectory,
+        access::GetNetworkAccessError::DecodeRootKey,
+    },
     prelude::*,
 };
-
-pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
-
-pub const SECOND: u64 = 1;
-pub const MINUTE: u64 = 60 * SECOND;
 
 pub struct NetworkAccess {
     /// Effective canister ID corresponding to a subnet
     pub default_effective_canister_id: Option<Principal>,
 
     /// Network's root-key
-    root_key: Option<Vec<u8>>,
+    pub root_key: Option<Vec<u8>>,
 
     /// Routing configuration
-    url: String,
+    pub url: String,
 }
 
 impl NetworkAccess {
@@ -43,11 +38,39 @@ impl NetworkAccess {
     }
 }
 
+#[derive(Debug, Snafu)]
+pub enum GetNetworkAccessError {
+    #[snafu(display("failed to decode root key"))]
+    DecodeRootKey { source: hex::FromHexError },
+
+    #[snafu(transparent)]
+    LoadJsonWithLock { source: json::Error },
+
+    #[snafu(display("failed to load port {port} descriptor"))]
+    LoadPortDescriptor { port: u16, source: json::Error },
+
+    #[snafu(display("the {network} network for this project is not running"))]
+    NetworkNotRunning { network: String },
+
+    #[snafu(display(
+        "port {port} is already in use by the {network} network of another project at {project_dir}"
+    ))]
+    NetworkRunningOtherProject {
+        network: String,
+        port: u16,
+        project_dir: PathBuf,
+    },
+
+    #[snafu(display("no descriptor found for port {port}"))]
+    NoPortDescriptor { port: u16 },
+}
+
 pub fn get_network_access(
     nd: NetworkDirectory,
     network: &Network,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
-    Ok(match &network.configuration {
+    let access = match &network.configuration {
+        //
         // Managed
         Configuration::Managed(_) => {
             // Load network descriptor
@@ -89,6 +112,7 @@ pub fn get_network_access(
             }
         }
 
+        //
         // Connected
         Configuration::Connected(cfg) => {
             let root_key = cfg
@@ -104,41 +128,7 @@ pub fn get_network_access(
                 url: cfg.url.to_owned(),
             }
         }
-    })
-}
+    };
 
-#[derive(Debug, Snafu)]
-pub enum GetNetworkAccessError {
-    #[snafu(display("failed to create route provider"))]
-    CreateRouteProvider { source: AgentError },
-
-    #[snafu(display("failed to decode root key"))]
-    DecodeRootKey { source: hex::FromHexError },
-
-    #[snafu(transparent)]
-    LoadJsonWithLock { source: json::Error },
-
-    #[snafu(display("failed to load port {port} descriptor"))]
-    LoadPortDescriptor { port: u16, source: json::Error },
-
-    #[snafu(display("the {network} network for this project is not running"))]
-    NetworkNotRunning { network: String },
-
-    #[snafu(display(
-        "port {port} is already in use by the {network} network of another project at {project_dir}"
-    ))]
-    NetworkRunningOtherProject {
-        network: String,
-        port: u16,
-        project_dir: PathBuf,
-    },
-
-    #[snafu(display("no descriptor found for port {port}"))]
-    NoPortDescriptor { port: u16 },
-}
-
-#[derive(Debug, Snafu)]
-#[snafu(display("failed to build agent"))]
-pub struct CreateAgentError {
-    source: AgentError,
+    Ok(access)
 }

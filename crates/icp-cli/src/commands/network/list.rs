@@ -1,4 +1,3 @@
-use anyhow::Context as _;
 use clap::Parser;
 
 use crate::commands::Context;
@@ -10,12 +9,15 @@ pub struct Cmd;
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
     #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
 
 pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
     // Load project
-    let p = ctx.project.load().await.context("failed to load project")?;
+    let p = ctx.project.load().await?;
 
     // List networks
     for (name, cfg) in &p.networks {

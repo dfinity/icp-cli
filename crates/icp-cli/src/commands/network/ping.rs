@@ -6,20 +6,18 @@ use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
     agent,
     identity::{self, IdentitySelection},
+    network::access::get_network_access,
 };
 use tokio::time::sleep;
 
-use crate::{commands::Context, options::EnvironmentOpt};
+use crate::commands::Context;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    #[command(flatten)]
-    network: EnvironmentOpt,
-
     /// The compute network to connect to. By default, ping the local network.
-    #[arg(group = "network-select", value_name = "NETWORK")]
-    positional_network_name: Option<String>,
+    #[arg(value_name = "NETWORK", default_value = "local")]
+    network: String,
 
     /// Repeatedly ping until the replica is healthy or 1 minute has passed.
     #[arg(long)]
@@ -28,6 +26,12 @@ pub struct Cmd {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error("network not found")]
+    Network,
+
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
@@ -42,15 +46,24 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    let network = cmd
-        .positional_network_name
-        .unwrap_or(cmd.network.name().to_string());
+    // Load Project
+    let p = ctx.project.load().await?;
 
-    // ctx.require_network(&network);
-
+    // Identity
     let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
-    let agent = ctx.agent.create(id).await?;
+    // Network
+    let network = p.networks.get(&cmd.network).ok_or(CommandError::Network)?;
+
+    // NetworkAccess
+    let acceess = get_network_access(nd, network).context("failed to load network access")?;
+
+    // Agent
+    let mut agent = ctx.agent.create(id, &acceess.url).await?;
+
+    if let Some(k) = acceess.root_key {
+        agent.set_root_key(k);
+    }
 
     // Query
     let status = match cmd.wait_healthy {

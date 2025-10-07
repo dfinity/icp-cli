@@ -43,15 +43,15 @@ pub struct Canister {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Network {
-    name: String,
-    configuration: Configuration,
+    pub name: String,
+    pub configuration: Configuration,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
-    name: String,
-    network: Network,
-    canisters: HashMap<String, (PathBuf, Canister)>,
+    pub name: String,
+    pub network: Network,
+    pub canisters: HashMap<String, (PathBuf, Canister)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

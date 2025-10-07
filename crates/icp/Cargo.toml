@@ -11,6 +11,7 @@ camino = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true, optional = true }
 directories = { workspace = true }
+dunce = { workspace = true }
 ed25519-consensus = { workspace = true }
 elliptic-curve = { workspace = true }
 fd-lock = { workspace = true }
@@ -39,6 +40,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 sha2 = { workspace = true }
+shellwords = { workspace = true }
 slog = { workspace = true }
 snafu = { workspace = true }
 strum = { workspace = true }

@@ -6,7 +6,7 @@ use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    canister::build,
+    canister::{build, script::ScriptError},
     manifest::adapter::{prebuilt, script},
     prelude::*,
 };
@@ -61,6 +61,9 @@ pub struct Params {
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    #[error(transparent)]
+    Script(#[from] ScriptError),
+
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

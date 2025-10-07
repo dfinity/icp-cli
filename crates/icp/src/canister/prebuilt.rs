@@ -13,6 +13,7 @@ use crate::{
     manifest::adapter::prebuilt::SourceField,
 };
 
+// TODO(or.ricon): Put an http client in the struct
 pub struct Prebuilt;
 
 #[async_trait]

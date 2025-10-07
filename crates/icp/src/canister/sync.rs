@@ -8,7 +8,7 @@ use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    canister::sync,
+    canister::{script::ScriptError, sync},
     manifest::adapter::{assets, script},
     prelude::*,
 };
@@ -61,6 +61,9 @@ pub struct Params {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SynchronizeError {
+    #[error(transparent)]
+    Script(#[from] ScriptError),
+
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

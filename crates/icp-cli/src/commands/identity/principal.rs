@@ -1,8 +1,7 @@
-use crate::commands::Context;
-use crate::options::IdentityOpt;
 use clap::Parser;
-use icp_identity::key::LoadIdentityInContextError;
-use snafu::Snafu;
+use icp::identity;
+
+use crate::{commands::Context, options::IdentityOpt};
 
 #[derive(Debug, Parser)]
 pub struct PrincipalCmd {
@@ -10,22 +9,23 @@ pub struct PrincipalCmd {
     pub identity: IdentityOpt,
 }
 
-pub fn exec(ctx: &Context, cmd: PrincipalCmd) -> Result<(), PrincipalError> {
-    ctx.require_identity(cmd.identity.name());
+#[derive(Debug, thiserror::Error)]
+pub enum PrincipalError {
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
 
-    let identity = ctx.identity()?;
-    let principal = identity
-        .sender()
-        .map_err(|message| PrincipalError::IdentityError { message })?;
-    println!("{principal}");
-    Ok(())
+    #[error("failed to load identity principal: {message}")]
+    Sender { message: String },
 }
 
-#[derive(Debug, Snafu)]
-pub enum PrincipalError {
-    #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
+pub async fn exec(ctx: &Context, cmd: PrincipalCmd) -> Result<(), PrincipalError> {
+    let id = ctx.identity.load(cmd.identity.into()).await?;
 
-    #[snafu(display("failed to load identity principal: {message}"))]
-    IdentityError { message: String },
+    let principal = id
+        .sender()
+        .map_err(|message| PrincipalError::Sender { message })?;
+
+    println!("{principal}");
+
+    Ok(())
 }

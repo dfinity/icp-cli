@@ -23,17 +23,6 @@ pub enum IdentitySubcmd {
     Principal(principal::PrincipalCmd),
 }
 
-pub async fn dispatch(ctx: &Context, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
-    match cmd.subcmd {
-        IdentitySubcmd::Default(subcmd) => default::exec(ctx, subcmd)?,
-        IdentitySubcmd::Import(subcmd) => import::exec(ctx, subcmd)?,
-        IdentitySubcmd::List(subcmd) => list::exec(ctx, subcmd)?,
-        IdentitySubcmd::New(subcmd) => new::exec(ctx, subcmd)?,
-        IdentitySubcmd::Principal(subcmd) => principal::exec(ctx, subcmd)?,
-    }
-    Ok(())
-}
-
 #[derive(Debug, Snafu)]
 pub enum IdentityCommandError {
     #[snafu(transparent)]
@@ -52,4 +41,16 @@ pub enum IdentityCommandError {
 
     #[snafu(transparent)]
     Principal { source: principal::PrincipalError },
+}
+
+pub async fn dispatch(ctx: &Context, cmd: IdentityCmd) -> Result<(), IdentityCommandError> {
+    match cmd.subcmd {
+        IdentitySubcmd::Default(subcmd) => default::exec(ctx, subcmd)?,
+        IdentitySubcmd::Import(subcmd) => import::exec(ctx, subcmd)?,
+        IdentitySubcmd::List(subcmd) => list::exec(ctx, subcmd)?,
+        IdentitySubcmd::New(subcmd) => new::exec(ctx, subcmd)?,
+        IdentitySubcmd::Principal(subcmd) => principal::exec(ctx, subcmd).await?,
+    }
+
+    Ok(())
 }

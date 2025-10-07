@@ -1,16 +1,27 @@
-use crate::commands::Context;
 use clap::Parser;
-use icp_identity::manifest::{load_identity_defaults, load_identity_list};
+use icp::identity::manifest::{
+    LoadIdentityManifestError, load_identity_defaults, load_identity_list,
+};
 use itertools::Itertools;
 use snafu::Snafu;
+
+use crate::commands::Context;
 
 #[derive(Debug, Parser)]
 pub struct ListCmd;
 
+#[derive(Debug, Snafu)]
+pub enum ListKeysError {
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityManifestError },
+}
+
 pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
-    let dirs = ctx.dirs();
-    let list = load_identity_list(dirs)?;
-    let defaults = load_identity_defaults(dirs)?;
+    let dir = ctx.dirs.identity();
+
+    let list = load_identity_list(&dir)?;
+    let defaults = load_identity_defaults(&dir)?;
+
     // sorted alphabetically by name
     let sorted_identities = list
         .identities
@@ -18,11 +29,13 @@ pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
         .sorted_by_key(|(name, _)| name.len())
         .rev()
         .collect::<Vec<_>>();
+
     let longest_identity_name_length = sorted_identities
         .iter()
         .map(|(name, _)| name.len())
         .max()
         .unwrap_or(0);
+
     for (name, id) in sorted_identities.iter() {
         let principal = id.principal();
         let padded_name = format!("{: <1$}", name, longest_identity_name_length);
@@ -32,13 +45,6 @@ pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
             println!("  {padded_name} {principal}");
         }
     }
-    Ok(())
-}
 
-#[derive(Debug, Snafu)]
-pub enum ListKeysError {
-    #[snafu(transparent)]
-    LoadIdentity {
-        source: icp_identity::manifest::LoadIdentityManifestError,
-    },
+    Ok(())
 }

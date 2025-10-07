@@ -1,13 +1,12 @@
-use crate::commands::Context;
 use bip39::{Language, Mnemonic};
 use clap::{ArgGroup, Parser};
 use dialoguer::Password;
-use icp::{fs::read_to_string, prelude::*};
-use icp_identity::{
+use icp::identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
     seed::derive_default_key_from_seed,
 };
+use icp::{fs::read_to_string, prelude::*};
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
 use pem::Pem;
@@ -17,6 +16,8 @@ use pkcs8::{
 };
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu};
+
+use crate::commands::Context;
 
 #[derive(Debug, Parser)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
@@ -128,7 +129,9 @@ fn import_from_pem(
         )?,
         _ => unreachable!(),
     };
-    create_identity(ctx.dirs(), name, key, CreateFormat::Plaintext)?;
+
+    create_identity(&ctx.dirs.identity(), name, key, CreateFormat::Plaintext)?;
+
     Ok(())
 }
 
@@ -267,7 +270,7 @@ fn import_from_seed_phrase(ctx: &Context, name: &str, phrase: &str) -> Result<()
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
     let key = derive_default_key_from_seed(&mnemonic);
     create_identity(
-        ctx.dirs(),
+        &ctx.dirs.identity(),
         name,
         IdentityKey::Secp256k1(key),
         CreateFormat::Plaintext,

@@ -1,11 +1,11 @@
 use crate::commands::Context;
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Parser;
-use icp::{fs::write, prelude::*};
-use icp_identity::{
+use icp::identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     seed::derive_default_key_from_seed,
 };
+use icp::{fs::write, prelude::*};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Parser)]
@@ -19,7 +19,7 @@ pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
     let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
     let key = derive_default_key_from_seed(&mnemonic);
     create_identity(
-        ctx.dirs(),
+        &ctx.dirs.identity(),
         &cmd.name,
         IdentityKey::Secp256k1(key),
         CreateFormat::Plaintext,

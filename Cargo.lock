@@ -2498,6 +2498,7 @@ dependencies = [
 name = "icp-canister-interfaces"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "candid",
  "serde",
 ]

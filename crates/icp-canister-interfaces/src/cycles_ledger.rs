@@ -1,8 +1,10 @@
+use bigdecimal::BigDecimal;
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
 
 /// 100m cycles
 pub const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
+pub const CYCLES_LEDGER_DECIMALS: i64 = 12;
 
 pub const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
 pub const CYCLES_LEDGER_PRINCIPAL: Principal =
@@ -189,18 +191,14 @@ impl WithdrawError {
                 "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
             }
             WithdrawError::FailedToWithdraw {
-                fee_block,
                 rejection_code,
                 rejection_reason,
+                fee_block: _,
             } => {
-                let mut msg = format!(
+                format!(
                     "Failed to withdraw cycles: {} (rejection code: {:?})",
                     rejection_reason, rejection_code
-                );
-                if let Some(b) = fee_block {
-                    msg.push_str(&format!(". Fee block: {}", b));
-                }
-                msg
+                )
             }
             WithdrawError::Duplicate { duplicate_of } => {
                 format!("Duplicate request of block {duplicate_of}.")
@@ -217,7 +215,9 @@ impl WithdrawError {
             WithdrawError::TooOld => "created_at_time is too old.".to_string(),
             WithdrawError::InsufficientFunds { balance } => {
                 format!(
-                    "Insufficient cycles. Requested: {requested_amount} cycles, available balance: {balance} cycles."
+                    "Insufficient cycles. Requested: {}T cycles, balance: {}T cycles.",
+                    BigDecimal::new(requested_amount.into(), CYCLES_LEDGER_DECIMALS),
+                    BigDecimal::from_biguint(balance.0.clone(), CYCLES_LEDGER_DECIMALS)
                 )
             }
         }

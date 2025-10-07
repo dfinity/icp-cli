@@ -6,6 +6,7 @@ use commands::Context;
 use commands::Subcmd;
 use console::Term;
 use icp::agent;
+use icp::network;
 use icp::{
     Directories,
     canister::{
@@ -179,19 +180,26 @@ async fn main() -> Result<(), Error> {
         dir: dirs.identity(),
     });
 
+    // Network accessor
+    let netaccess = Arc::new(network::Accessor {
+        project: mloc.clone(),
+        descriptors: dirs.port_descriptor(),
+    });
+
     // Agent creator
     let agent_creator = Arc::new(agent::Creator);
 
     // Setup environment
-    let ctx = Context::new(
-        term,          // term
-        dirs,          // dirs
-        ids,           // id_store
-        artifacts,     // artifact_store
-        pload,         // project
-        idload,        // identity
-        agent_creator, // agent
-    );
+    let ctx = Context {
+        term,
+        dirs,
+        ids,
+        artifacts,
+        project: pload,
+        identity: idload,
+        network: netaccess,
+        agent: agent_creator,
+    };
 
     commands::dispatch(&ctx, command).await?;
 

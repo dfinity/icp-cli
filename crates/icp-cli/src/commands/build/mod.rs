@@ -138,7 +138,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
 
                 // Save the wasm artifact
-                ctx.artifact_store
+                ctx.artifacts
                     .save(&c.name, &wasm)
                     .context(CommandError::ArtifactStore)?;
 

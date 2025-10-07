@@ -29,10 +29,10 @@ pub struct Context {
     pub dirs: Directories,
 
     /// Canisters ID Store for lookup and storage
-    pub id_store: IdStore,
+    pub ids: IdStore,
 
     /// An artifact store for canister build artifacts
-    pub artifact_store: ArtifactStore,
+    pub artifacts: ArtifactStore,
 
     /// Project loader
     pub project: Arc<dyn icp::Load>,

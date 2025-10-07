@@ -1,9 +1,10 @@
 use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
-use icp_identity::key::LoadIdentityInContextError;
+use icp::identity::key::LoadIdentityInContextError;
 use snafu::Snafu;
 
 use crate::{
+    commands::Context,
     commands::{
         build,
         canister::{
@@ -13,7 +14,6 @@ use crate::{
         },
         sync,
     },
-    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::LookupError,
 };
@@ -46,9 +46,50 @@ pub struct Cmd {
     pub cycles: u128,
 }
 
+#[derive(Debug, Snafu)]
+pub enum CommandError {
+    #[snafu(transparent)]
+    Project { source: icp::LoadError },
+
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityInContextError },
+
+    #[snafu(display("project does not contain a canister named '{name}'"))]
+    CanisterNotFound { name: String },
+
+    #[snafu(display("project does not contain an environment named '{name}'"))]
+    EnvironmentNotFound { name: String },
+
+    #[snafu(transparent)]
+    Build { source: build::CommandError },
+
+    #[snafu(transparent)]
+    Create { source: create::CommandError },
+
+    #[snafu(transparent)]
+    Install { source: install::CommandError },
+
+    #[snafu(transparent)]
+    SetEnvironmentVariables {
+        source: binding_env_vars::CommandError,
+    },
+
+    #[snafu(transparent)]
+    Sync { source: sync::CommandError },
+
+    #[snafu(transparent)]
+    GetAgent { source: ContextAgentError },
+
+    #[snafu(transparent)]
+    Agent { source: AgentError },
+
+    #[snafu(transparent)]
+    LookupCanisterId { source: LookupError },
+}
+
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = ctx.project()?;
+    let pm = ctx.project.load().await?;
 
     // Choose canisters to create
     let canisters = pm
@@ -174,45 +215,4 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
-
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(transparent)]
-    Build { source: build::CommandError },
-
-    #[snafu(transparent)]
-    Create { source: create::CommandError },
-
-    #[snafu(transparent)]
-    Install { source: install::CommandError },
-
-    #[snafu(transparent)]
-    SetEnvironmentVariables {
-        source: binding_env_vars::CommandError,
-    },
-
-    #[snafu(transparent)]
-    Sync { source: sync::CommandError },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(transparent)]
-    Agent { source: AgentError },
-
-    #[snafu(transparent)]
-    LookupCanisterId { source: LookupError },
 }

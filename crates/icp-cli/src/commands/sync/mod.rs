@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The names of the canisters within the current project
+    /// Canister names
     pub names: Vec<String>,
 
     #[command(flatten)]

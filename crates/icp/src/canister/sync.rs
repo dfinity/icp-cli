@@ -1,6 +1,8 @@
 use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
+use candid::Principal;
+use ic_agent::Agent;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
@@ -8,6 +10,7 @@ use tokio::sync::mpsc::Sender;
 use crate::{
     canister::sync,
     manifest::adapter::{assets, script},
+    prelude::*,
 };
 
 /// Identifies the type of adapter used to sync the canister,
@@ -51,6 +54,11 @@ pub struct Steps {
     pub steps: Vec<Step>,
 }
 
+pub struct Params {
+    pub path: PathBuf,
+    pub cid: Principal,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SynchronizeError {
     #[error(transparent)]
@@ -61,7 +69,9 @@ pub enum SynchronizeError {
 pub trait Synchronize: Sync + Send {
     async fn sync(
         &self,
-        step: sync::Step,
+        step: &sync::Step,
+        params: &Params,
+        agent: &Agent,
         stdio: Option<Sender<String>>,
     ) -> Result<(), SynchronizeError>;
 }
@@ -75,12 +85,14 @@ pub struct Syncer {
 impl Synchronize for Syncer {
     async fn sync(
         &self,
-        step: sync::Step,
+        step: &sync::Step,
+        params: &Params,
+        agent: &Agent,
         stdio: Option<Sender<String>>,
     ) -> Result<(), SynchronizeError> {
         match step {
-            sync::Step::Assets(_) => self.assets.sync(step, stdio).await,
-            sync::Step::Script(_) => self.script.sync(step, stdio).await,
+            sync::Step::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
+            sync::Step::Script(_) => self.script.sync(step, params, agent, stdio).await,
         }
     }
 }

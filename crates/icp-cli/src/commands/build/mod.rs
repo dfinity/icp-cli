@@ -1,10 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use anyhow::Context as _;
 use camino_tempfile::tempdir;
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp::{canister::build, fs::read};
+use icp::{
+    canister::build::{BuildError, Params},
+    fs::read,
+};
 
 use crate::{
     commands::Context,
@@ -21,6 +24,9 @@ pub struct Cmd {
 pub enum CommandError {
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },
+
+    #[error(transparent)]
+    Build(#[from] BuildError),
 
     #[error("build did not result in output")]
     MissingOutput,
@@ -94,30 +100,23 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                     let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
 
-                    match step {
-                        // Compile using the custom script adapter.
-                        build::Step::Script(adapter) => {
-                            // Setup script progress handling and receiver join handle
-                            let (tx, rx) = script_handler.setup_output_handler();
+                    // Setup script progress handling and receiver join handle
+                    let (tx, rx) = script_handler.setup_output_handler();
 
-                            // Run compile which will feed lines into the channel
-                            adapter
-                                .with_stdio_sender(tx)
-                                .compile(&canister_path, &wasm_output_path)
-                                .await?;
+                    // Perform build step
+                    ctx.builder
+                        .build(
+                            step, // step
+                            &Params {
+                                path: canister_path.to_owned(),
+                                output: wasm_output_path.to_owned(),
+                            },
+                            Some(tx),
+                        )
+                        .await?;
 
-                            // Ensure background receiver drains all messages
-                            let _ = rx.await;
-
-                            Ok::<_, CommandError>(())?
-                        }
-
-                        // Compile using the Pre-built adapter.
-                        build::Step::Prebuilt(adapter) => {
-                            pb.set_message(pb_hdr);
-                            adapter.compile(&canister_path, &wasm_output_path).await?
-                        }
-                    };
+                    // Ensure background receiver drains all messages
+                    let _ = rx.await;
                 }
 
                 // Verify a file exists in the wasm output path

@@ -8,6 +8,7 @@ use tokio::sync::mpsc::Sender;
 use crate::{
     canister::build,
     manifest::adapter::{prebuilt, script},
+    prelude::*,
 };
 
 /// Identifies the type of adapter used to build the canister,
@@ -53,6 +54,11 @@ pub struct Steps {
     pub steps: Vec<Step>,
 }
 
+pub struct Params {
+    pub path: PathBuf,
+    pub output: PathBuf,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
     #[error(transparent)]
@@ -63,7 +69,8 @@ pub enum BuildError {
 pub trait Build: Sync + Send {
     async fn build(
         &self,
-        step: build::Step,
+        step: &build::Step,
+        params: &Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError>;
 }
@@ -77,12 +84,13 @@ pub struct Builder {
 impl Build for Builder {
     async fn build(
         &self,
-        step: build::Step,
+        step: &build::Step,
+        params: &Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
         match step {
-            build::Step::Prebuilt(_) => self.prebuilt.build(step, stdio).await,
-            build::Step::Script(_) => self.script.build(step, stdio).await,
+            build::Step::Prebuilt(_) => self.prebuilt.build(step, params, stdio).await,
+            build::Step::Script(_) => self.script.build(step, params, stdio).await,
         }
     }
 }

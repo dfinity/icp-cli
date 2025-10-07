@@ -2,8 +2,11 @@ use std::collections::HashMap;
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp::{agent, canister::sync, identity, network};
-use icp_adapter::sync::{Adapter, AdapterSyncError};
+use icp::{
+    agent,
+    canister::sync::{Params, SynchronizeError},
+    identity, network,
+};
 
 use crate::{
     commands::Context,
@@ -57,7 +60,7 @@ pub enum CommandError {
     IdLookup(#[from] LookupError),
 
     #[error(transparent)]
-    SyncAdapter(#[from] AdapterSyncError),
+    Synchronize(#[from] SynchronizeError),
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -139,6 +142,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Create an async closure that handles the sync process for this specific canister
         let sync_fn = {
             let pb = pb.clone();
+            let agent = agent.clone();
 
             async move {
                 for step in &c.sync.steps {
@@ -147,30 +151,24 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                     let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
 
-                    match step {
-                        // Synchronize the canister using the custom script adapter.
-                        sync::Step::Script(adapter) => {
-                            // Setup script progress handling and receiver join handle
-                            let (tx, rx) = script_handler.setup_output_handler();
+                    // Setup script progress handling and receiver join handle
+                    let (tx, rx) = script_handler.setup_output_handler();
 
-                            // Run sync which will feed lines into the channel
-                            adapter
-                                .with_stdio_sender(tx)
-                                .sync(canister_path, &cid, agent)
-                                .await?;
+                    // Execute step
+                    ctx.syncer
+                        .sync(
+                            step, // step
+                            &Params {
+                                path: canister_path.to_owned(),
+                                cid: cid.to_owned(),
+                            },
+                            &agent,
+                            Some(tx),
+                        )
+                        .await?;
 
-                            // Ensure background receiver drains all messages
-                            let _ = rx.await;
-
-                            Ok::<_, CommandError>(())?
-                        }
-
-                        // Synchronize the canister using the assets adapter.
-                        sync::Step::Assets(adapter) => {
-                            pb.set_message(pb_hdr);
-                            adapter.sync(canister_path, &cid, agent).await?
-                        }
-                    };
+                    // Ensure background receiver drains all messages
+                    let _ = rx.await;
                 }
 
                 Ok::<_, CommandError>(())

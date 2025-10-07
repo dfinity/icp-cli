@@ -7,7 +7,11 @@ use crate::{
 };
 use clap::{Parser, Subcommand};
 use console::Term;
-use icp::{Directories, manifest::Locate};
+use icp::{
+    Directories,
+    canister::{build::Build, sync::Synchronize},
+    manifest::Locate,
+};
 use identity::IdentityCommandError;
 use snafu::Snafu;
 
@@ -48,6 +52,12 @@ pub struct Context {
 
     /// Agent creator
     pub agent: Arc<dyn icp::agent::Create>,
+
+    /// Canister builder
+    pub builder: Arc<dyn Build>,
+
+    /// Canister synchronizer
+    pub syncer: Arc<dyn Synchronize>,
 }
 
 #[derive(Parser, Debug)]

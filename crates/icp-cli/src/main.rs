@@ -159,13 +159,13 @@ async fn main() -> Result<(), Error> {
     let cscript = Arc::new(Script);
 
     // Canister builder
-    let cbuild = Arc::new(Builder {
+    let builder = Arc::new(Builder {
         prebuilt: cprebuilt.to_owned(),
         script: cscript.to_owned(),
     });
 
     // Canister syncer
-    let csync = Arc::new(Syncer {
+    let syncer = Arc::new(Syncer {
         assets: cassets.to_owned(),
         script: cscript.to_owned(),
     });
@@ -213,6 +213,8 @@ async fn main() -> Result<(), Error> {
         identity: idload,
         network: netaccess,
         agent: agent_creator,
+        builder,
+        syncer,
     };
 
     commands::dispatch(&ctx, command).await?;

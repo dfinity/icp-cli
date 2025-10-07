@@ -23,12 +23,6 @@ impl From<IdentityOpt> for IdentitySelection {
     }
 }
 
-// impl IdentityOpt {
-//     pub fn name(&self) -> Option<&str> {
-//         self.identity.as_deref()
-//     }
-// }
-
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("environment-select").multiple(false)))]
 pub struct EnvironmentOpt {

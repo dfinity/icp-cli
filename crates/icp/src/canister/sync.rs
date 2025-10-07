@@ -1,9 +1,13 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
+use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::manifest::adapter::{assets, script};
+use crate::{
+    canister::sync,
+    manifest::adapter::{assets, script},
+};
 
 /// Identifies the type of adapter used to sync the canister,
 /// along with its configuration.
@@ -44,4 +48,30 @@ impl fmt::Display for Step {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub struct Steps {
     pub steps: Vec<Step>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SynchronizeError {
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Synchronize: Sync + Send {
+    async fn sync(&self, step: sync::Step) -> Result<(), SynchronizeError>;
+}
+
+pub struct Syncer {
+    assets: Arc<dyn Synchronize>,
+    script: Arc<dyn Synchronize>,
+}
+
+#[async_trait]
+impl Synchronize for Syncer {
+    async fn sync(&self, step: sync::Step) -> Result<(), SynchronizeError> {
+        match step {
+            sync::Step::Assets(_) => self.assets.sync(step).await,
+            sync::Step::Script(_) => self.script.sync(step).await,
+        }
+    }
 }

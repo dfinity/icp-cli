@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Context as _;
 use camino_tempfile::tempdir;
@@ -41,34 +41,27 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let p = ctx.project.load().await.context("failed to load project")?;
 
     // Choose canisters to build
-    let canisters = p
-        .canisters
-        .iter()
-        .filter(|(_, c)| match &cmd.names.is_empty() {
-            // If no names specified, build all canisters
-            true => true,
+    let cnames = match cmd.names.is_empty() {
+        // No canisters specified
+        true => p.canisters.keys().cloned().collect(),
 
-            // If names specified, only build matching canisters
-            false => cmd.names.contains(&c.name),
-        })
-        .cloned()
-        .collect::<Vec<_>>();
+        // Individual canisters specified
+        false => cmd.names.clone(),
+    };
 
-    // Check if selected canisters exists
-    if !cmd.names.is_empty() {
-        let names = canisters
-            .iter()
-            .map(|(_, c)| &c.name)
-            .collect::<HashSet<_>>();
-
-        for name in &cmd.names {
-            if !names.contains(name) {
-                return Err(CommandError::CanisterNotFound {
-                    name: name.to_owned(),
-                });
-            }
+    for name in &cnames {
+        if !p.canisters.contains_key(name) {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
         }
     }
+
+    let cs = p
+        .canisters
+        .iter()
+        .filter(|(k, _)| cnames.contains(k))
+        .collect::<HashMap<_, _>>();
 
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
@@ -76,7 +69,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let progress_manager = ProgressManager::new();
 
     // Iterate through each resolved canister and trigger its build process.
-    for (canister_path, c) in canisters {
+    for (_, (canister_path, c)) in cs {
         // Create progress bar with standard configuration
         let pb = progress_manager.create_progress_bar(&c.name);
 

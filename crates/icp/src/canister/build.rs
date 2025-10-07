@@ -1,9 +1,13 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
+use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::manifest::adapter::{prebuilt, script};
+use crate::{
+    canister::build,
+    manifest::adapter::{prebuilt, script},
+};
 
 /// Identifies the type of adapter used to build the canister,
 /// along with its configuration.
@@ -46,4 +50,30 @@ impl fmt::Display for Step {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Steps {
     pub steps: Vec<Step>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Build: Sync + Send {
+    async fn build(&self, step: build::Step) -> Result<(), BuildError>;
+}
+
+pub struct Builder {
+    pub prebuilt: Arc<dyn Build>,
+    pub script: Arc<dyn Build>,
+}
+
+#[async_trait]
+impl Build for Builder {
+    async fn build(&self, step: build::Step) -> Result<(), BuildError> {
+        match step {
+            build::Step::Prebuilt(_) => self.prebuilt.build(step).await,
+            build::Step::Script(_) => self.script.build(step).await,
+        }
+    }
 }

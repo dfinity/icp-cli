@@ -12,8 +12,11 @@ use crate::{
     prelude::*,
 };
 
+pub mod assets;
 pub mod build;
+pub mod prebuilt;
 pub mod recipe;
+pub mod script;
 pub mod sync;
 
 /// Canister settings, such as compute and memory allocation.
@@ -68,45 +71,5 @@ impl LoadPath<CanisterManifest, LoadPathError> for PathLoader {
             serde_yaml::from_slice::<CanisterManifest>(&mbs).context(LoadPathError::Deserialize)?;
 
         Ok(m)
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum BuildError {
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-#[async_trait]
-pub trait Build: Sync + Send {
-    async fn build(step: build::Step) -> Result<(), BuildError>;
-}
-
-pub struct Builder;
-
-#[async_trait]
-impl Build for Builder {
-    async fn build(step: build::Step) -> Result<(), BuildError> {
-        Ok(())
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum SyncError {
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-#[async_trait]
-pub trait Synchronize: Sync + Send {
-    async fn sync(step: sync::Step) -> Result<(), SyncError>;
-}
-
-pub struct Syncer;
-
-#[async_trait]
-impl Synchronize for Syncer {
-    async fn sync(step: sync::Step) -> Result<(), SyncError> {
-        Ok(())
     }
 }

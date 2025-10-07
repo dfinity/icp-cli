@@ -15,6 +15,7 @@ pub mod show;
 pub mod start;
 pub mod status;
 pub mod stop;
+pub mod top_up;
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -35,6 +36,7 @@ pub enum CanisterSubcmd {
     Start(start::Cmd),
     Status(status::Cmd),
     Stop(stop::Cmd),
+    TopUp(top_up::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandError> {
@@ -50,6 +52,7 @@ pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandErro
         CanisterSubcmd::Show(subcmd) => show::exec(ctx, subcmd).await?,
         CanisterSubcmd::Status(subcmd) => status::exec(ctx, subcmd).await?,
         CanisterSubcmd::Stop(subcmd) => stop::exec(ctx, subcmd).await?,
+        CanisterSubcmd::TopUp(subcmd) => top_up::exec(ctx, subcmd).await?,
     }
     Ok(())
 }
@@ -88,4 +91,7 @@ pub enum CanisterCommandError {
 
     #[snafu(transparent)]
     Stop { source: stop::CommandError },
+
+    #[snafu(transparent)]
+    TopUp { source: top_up::CommandError },
 }

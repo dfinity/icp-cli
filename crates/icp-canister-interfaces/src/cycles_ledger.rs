@@ -123,6 +123,103 @@ impl CreateCanisterError {
     }
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RejectionCode {
+    NoError,
+    CanisterError,
+    SysTransient,
+    DestinationInvalid,
+    Unknown,
+    SysFatal,
+    CanisterReject,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct WithdrawArgs {
+    pub amount: Nat,
+    pub from_subaccount: Option<Vec<u8>>,
+    pub to: Principal,
+    pub created_at_time: Option<u64>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum WithdrawError {
+    GenericError {
+        message: String,
+        error_code: Nat,
+    },
+    TemporarilyUnavailable,
+    FailedToWithdraw {
+        fee_block: Option<Nat>,
+        rejection_code: RejectionCode,
+        rejection_reason: String,
+    },
+    Duplicate {
+        duplicate_of: Nat,
+    },
+    BadFee {
+        expected_fee: Nat,
+    },
+    InvalidReceiver {
+        receiver: Principal,
+    },
+    CreatedInFuture {
+        ledger_time: u64,
+    },
+    TooOld,
+    InsufficientFunds {
+        balance: Nat,
+    },
+}
+
+impl WithdrawError {
+    pub fn format_error(self, requested_amount: u128) -> String {
+        match self {
+            WithdrawError::GenericError {
+                message,
+                error_code,
+            } => {
+                format!("Cycles ledger error (code {}): {}", error_code, message)
+            }
+            WithdrawError::TemporarilyUnavailable => {
+                "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
+            }
+            WithdrawError::FailedToWithdraw {
+                fee_block,
+                rejection_code,
+                rejection_reason,
+            } => {
+                let mut msg = format!(
+                    "Failed to withdraw cycles: {} (rejection code: {:?})",
+                    rejection_reason, rejection_code
+                );
+                if let Some(b) = fee_block {
+                    msg.push_str(&format!(". Fee block: {}", b));
+                }
+                msg
+            }
+            WithdrawError::Duplicate { duplicate_of } => {
+                format!("Duplicate request of block {duplicate_of}.")
+            }
+            WithdrawError::BadFee { expected_fee } => {
+                format!("Bad fee. Expected fee: {expected_fee} cycles.")
+            }
+            WithdrawError::InvalidReceiver { receiver } => {
+                format!("Invalid receiver: {receiver}")
+            }
+            WithdrawError::CreatedInFuture { .. } => {
+                "created_at_time is too far in the future.".to_string()
+            }
+            WithdrawError::TooOld => "created_at_time is too old.".to_string(),
+            WithdrawError::InsufficientFunds { balance } => {
+                format!(
+                    "Insufficient cycles. Requested: {requested_amount} cycles, available balance: {balance} cycles."
+                )
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

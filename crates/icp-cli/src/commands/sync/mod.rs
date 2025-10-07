@@ -93,14 +93,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         false => cmd.names,
     };
 
-    for name in cmd.names {
-        if !p.canisters.contains_key(&name) {
+    for name in &cnames {
+        if !p.canisters.contains_key(name) {
             return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
             });
         }
 
-        if !env.canisters.contains_key(&name) {
+        if !env.canisters.contains_key(name) {
             return Err(CommandError::EnvironmentCanister {
                 environment: env.name.to_owned(),
                 canister: name.to_owned(),
@@ -111,7 +111,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cs = env
         .canisters
         .iter()
-        .filter(|(k, _)| cmd.names.contains(k))
+        .filter(|(k, _)| cnames.contains(k))
         .collect::<HashMap<_, _>>();
 
     // Verify at least one canister is selected to sync

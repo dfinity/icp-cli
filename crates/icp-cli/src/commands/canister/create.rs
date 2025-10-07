@@ -143,14 +143,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         false => cmd.names,
     };
 
-    for name in cmd.names {
-        if !p.canisters.contains_key(&name) {
+    for name in &cnames {
+        if !p.canisters.contains_key(name) {
             return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
             });
         }
 
-        if !env.canisters.contains_key(&name) {
+        if !env.canisters.contains_key(name) {
             return Err(CommandError::EnvironmentCanister {
                 environment: env.name.to_owned(),
                 canister: name.to_owned(),
@@ -161,7 +161,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cs = env
         .canisters
         .iter()
-        .filter(|(k, _)| cmd.names.contains(k))
+        .filter(|(k, _)| cnames.contains(k))
         .collect::<HashMap<_, _>>();
 
     // Prepare a futures set for concurrent operations
@@ -209,21 +209,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                         .freezing_threshold
                         .or(c.settings.freezing_threshold)
                         .map(Nat::from),
+
                     controllers: if cmd.controller.is_empty() {
                         None
                     } else {
                         Some(cmd.controller.clone())
                     },
+
                     reserved_cycles_limit: cmd
                         .settings
                         .reserved_cycles_limit
                         .or(c.settings.reserved_cycles_limit)
                         .map(Nat::from),
+
                     memory_allocation: cmd
                         .settings
                         .memory_allocation
                         .or(c.settings.memory_allocation)
                         .map(Nat::from),
+
                     compute_allocation: cmd
                         .settings
                         .compute_allocation

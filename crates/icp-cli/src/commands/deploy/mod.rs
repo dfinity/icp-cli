@@ -109,6 +109,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
             quiet: false,
             cycles: cmd.cycles,
+            subnet: cmd.subnet_id,
         },
     )
     .await;

@@ -5,7 +5,7 @@ pub mod access;
 pub mod config;
 mod directory;
 mod lock;
-mod managed;
+pub mod managed;
 pub mod status;
 pub mod structure;
 

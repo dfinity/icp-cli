@@ -1,21 +1,26 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use candid::{Decode, Encode, Nat};
 use clap::Parser;
-use futures::{StreamExt, stream::FuturesOrdered};
+use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use icp::prelude::*;
+use rand::seq::IndexedRandom;
 use snafu::Snafu;
 
 use crate::{
     context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
     progress::ProgressManager,
-    store_id::{Key, LookupError, RegisterError},
+    store_id::{Key, RegisterError},
 };
-use icp_canister_interfaces::cycles_ledger::{
-    CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
-    CreationArgs,
+use icp_canister_interfaces::{
+    cycles_ledger::{
+        CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
+        CreationArgs, SubnetSelectionArg,
+    },
+    cycles_minting_canister::{CYCLES_MINTING_CANISTER_PRINCIPAL, GetDefaultSubnetsResponse},
+    registry::{GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL},
 };
 
 pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -65,6 +70,10 @@ pub struct Cmd {
     /// Cycles to fund canister creation (in raw cycles).
     #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
     pub cycles: u128,
+
+    /// The subnet to create canisters on.
+    #[arg(long)]
+    pub subnet: Option<Principal>,
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
@@ -83,64 +92,75 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             name: cmd.environment.name().to_owned(),
         })?;
 
-    // Choose canisters to create
-    let cs = pm
-        .canisters
-        .iter()
-        .filter(|(_, c)| match &cmd.names.is_empty() {
-            // If no names specified, create all canisters
-            true => true,
-
-            // If names specified, only create matching canisters
-            false => cmd.names.contains(&c.name),
-        })
-        .collect::<Vec<_>>();
-
-    // Check if selected canisters exists
-    if !cmd.names.is_empty() {
-        let names = cs.iter().map(|(_, c)| &c.name).collect::<HashSet<_>>();
-
-        for name in &cmd.names {
-            if !names.contains(name) {
-                return Err(CommandError::CanisterNotFound {
-                    name: name.to_owned(),
-                });
-            }
-        }
-    }
-
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
-
-    // Filter for environment canisters
-    let cs = cs
-        .iter()
-        .filter(|(_, c)| ecs.contains(&c.name))
-        .collect::<Vec<_>>();
-
-    // Ensure canister is included in the environment
-    if !cmd.names.is_empty() {
-        for name in &cmd.names {
-            if !ecs.contains(name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: name.to_owned(),
-                });
-            }
-        }
-    }
-
     // TODO(or.ricon): Support default networks (`local` and `ic`)
     //
     let network = env
         .network
         .as_ref()
         .expect("no network specified in environment");
+
+    // Collect environment canisters
+    let canisters_in_environment = env.canisters.clone().unwrap_or(
+        pm.canisters
+            .iter()
+            .map(|(_, c)| c.name.to_owned())
+            .collect(),
+    );
+
+    // Check if explicitly requested canisters are declared in the project AND environment
+    for name in &cmd.names {
+        if !pm.canisters.iter().any(|(_, c)| c.name == *name) {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+        if !canisters_in_environment.contains(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
+
+    // Determine canisters that shall exist at the end of the command
+    let keys_to_exist = if cmd.names.is_empty() {
+        canisters_in_environment
+            .iter()
+            .map(|name| Key {
+                network: network.to_owned(),
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            })
+            .collect::<Vec<_>>()
+    } else {
+        cmd.names
+            .clone()
+            .into_iter()
+            .map(|name| Key {
+                network: network.to_owned(),
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let keys_in_environment = canisters_in_environment
+        .iter()
+        .map(|name| Key {
+            network: network.to_owned(),
+            environment: env.name.to_owned(),
+            canister: name.to_owned(),
+        })
+        .collect::<Vec<_>>();
+
+    let keys_to_create = keys_to_exist
+        .into_iter()
+        .filter(|key| ctx.id_store.lookup(key).is_err())
+        .collect::<Vec<_>>();
+    let existing_keys = keys_in_environment
+        .into_iter()
+        .filter(|key| ctx.id_store.lookup(key).is_ok())
+        .collect::<Vec<_>>();
 
     // Load identity
     ctx.require_identity(cmd.identity.name());
@@ -156,14 +176,21 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare agent
     let agent = ctx.agent()?;
 
+    let subnet = resolve_subnet(ctx, cmd.subnet, &existing_keys).await?;
+
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
     let progress_manager = ProgressManager::new();
 
-    for (_, c) in cs {
+    for key in keys_to_create {
+        let (_, canister_declaration) = pm
+            .canisters
+            .iter()
+            .find(|(_, c)| c.name == key.canister)
+            .expect("Canister must be present in project");
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let pb = progress_manager.create_progress_bar(&canister_declaration.name);
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
@@ -174,32 +201,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                // Create canister-network association-key
-                let k = Key {
-                    network: network.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                };
-
-                match ctx.id_store.lookup(&k) {
-                    // Exists (skip)
-                    Ok(principal) => {
-                        return Err(CommandError::CanisterExists { principal });
-                    }
-
-                    // Doesn't exist (include)
-                    Err(LookupError::IdNotFound { .. }) => {}
-
-                    // Lookup failed
-                    Err(err) => panic!("{err}"),
-                };
-
                 // Build cycles ledger create_canister args
                 let settings = CanisterSettingsArg {
                     freezing_threshold: cmd
                         .settings
                         .freezing_threshold
-                        .or(c.settings.freezing_threshold)
+                        .or(canister_declaration.settings.freezing_threshold)
                         .map(Nat::from),
                     controllers: if cmd.controller.is_empty() {
                         None
@@ -209,22 +216,22 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     reserved_cycles_limit: cmd
                         .settings
                         .reserved_cycles_limit
-                        .or(c.settings.reserved_cycles_limit)
+                        .or(canister_declaration.settings.reserved_cycles_limit)
                         .map(Nat::from),
                     memory_allocation: cmd
                         .settings
                         .memory_allocation
-                        .or(c.settings.memory_allocation)
+                        .or(canister_declaration.settings.memory_allocation)
                         .map(Nat::from),
                     compute_allocation: cmd
                         .settings
                         .compute_allocation
-                        .or(c.settings.compute_allocation)
+                        .or(canister_declaration.settings.compute_allocation)
                         .map(Nat::from),
                 };
 
                 let creation_args = CreationArgs {
-                    subnet_selection: None,
+                    subnet_selection: Some(SubnetSelectionArg::Subnet { subnet }),
                     settings: Some(settings),
                 };
 
@@ -254,7 +261,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 };
 
                 // Register the canister ID
-                ctx.id_store.register(&k, &cid)?;
+                ctx.id_store.register(&key, &cid)?;
 
                 Ok::<_, CommandError>(())
             }
@@ -294,6 +301,83 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     Ok(())
 }
 
+async fn resolve_subnet(
+    ctx: &Context,
+    specified_subnet: Option<Principal>,
+    existing_keys: &[Key],
+) -> Result<Principal, CommandError> {
+    // Subnet choice:
+    // 1. If --subnet is provided, use it
+    // 2. If there are existing canisters, if they are on the same subnet, use it, otherwise make the user choose explicitly
+    // 3. If there are no existing canisters, pick an open subnet at random
+    if let Some(subnet) = specified_subnet {
+        Ok(subnet)
+    } else if !existing_keys.is_empty() {
+        let mapping = try_join_all(existing_keys.iter().map(|key| async {
+            let canister = ctx.id_store.lookup(key).expect("Canister already exists");
+            let response_bytes = ctx
+                .agent()?
+                .query(&REGISTRY_PRINCIPAL, "get_subnet_for_canister")
+                .with_arg(
+                    Encode!(&GetSubnetForCanisterRequest {
+                        principal: Some(canister),
+                    })
+                    .expect("Failed to encode GetSubnetForCanisterRequest"),
+                )
+                .call()
+                .await
+                .map_err(|source| CommandError::GetSubnet {
+                    err: source.to_string(),
+                })?;
+            let response: GetSubnetForCanisterResult =
+                Decode!(&response_bytes, GetSubnetForCanisterResult)
+                    .expect("Failed to decode GetSubnetForCanisterResult");
+            response
+                .map(|success| {
+                    (
+                        key.canister.to_owned(),
+                        success
+                            .subnet_id
+                            .expect("Canister exists, therefore it must be assigned to a subnet."),
+                    )
+                })
+                .map_err(|err| CommandError::GetSubnet { err })
+        }))
+        .await?;
+        if HashSet::<_>::from_iter(mapping.iter().map(|(_, subnet)| subnet)).len() == 1 {
+            Ok(mapping.first().expect("existing_keys has len() == 1").1)
+        } else {
+            return Err(CommandError::AmbiguousSubnet {
+                mapping: mapping.into_iter().collect(),
+            });
+        }
+    } else {
+        let response_bytes = ctx
+            .agent()?
+            .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
+            .with_arg(Encode!(&()).expect("Failed to encode GetDefaultSubnetsRequest"))
+            .call()
+            .await
+            .map_err(|err| CommandError::GetSubnet {
+                err: err.to_string(),
+            })?;
+        let response: GetDefaultSubnetsResponse =
+            Decode!(&response_bytes, GetDefaultSubnetsResponse)
+                .expect("Failed to decode GetDefaultSubnetsResponse");
+        Ok(*response
+            .choose(&mut rand::rng())
+            .expect("No default subnets"))
+    }
+}
+
+fn format_ambiguous_subnet_map(mappings: &HashMap<String, Principal>) -> String {
+    let mut result = String::new();
+    for (canister, subnet) in mappings {
+        result.push_str(&format!("   {canister}: {subnet}\n"));
+    }
+    result
+}
+
 #[derive(Debug, Snafu)]
 pub enum CommandError {
     #[snafu(transparent)]
@@ -331,4 +415,13 @@ pub enum CommandError {
 
     #[snafu(display("{err}"))]
     LedgerCreate { err: String },
+
+    #[snafu(display("Failed to get subnet for canister: {err}"))]
+    GetSubnet { err: String },
+
+    #[snafu(display(
+        "No obvious subnet choice. Use --subnet to manually pick a subnet. Current locations:\n{}\n",
+        format_ambiguous_subnet_map(mapping)
+    ))]
+    AmbiguousSubnet { mapping: HashMap<String, Principal> },
 }

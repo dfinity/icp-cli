@@ -8,7 +8,6 @@ use std::{
 use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use icp::prelude::*;
-use icp_network::NETWORK_LOCAL;
 use pocket_ic::nonblocking::PocketIc;
 use url::Url;
 
@@ -127,7 +126,7 @@ impl TestContext {
 
     // wait up to 30 seconds for descriptor path to contain valid json
     pub fn wait_for_local_network_descriptor(&self, project_dir: &Path) -> TestNetwork {
-        self.wait_for_network_descriptor(project_dir, NETWORK_LOCAL)
+        self.wait_for_network_descriptor(project_dir, "local")
     }
 
     pub fn wait_for_network_descriptor(

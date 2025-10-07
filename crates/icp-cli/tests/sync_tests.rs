@@ -3,7 +3,6 @@ use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
 };
-use icp_network::NETWORK_LOCAL;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
@@ -173,7 +172,7 @@ async fn sync_adapter_static_assets() {
     // Wait for network
     ctx.ping_until_healthy(&project_dir);
     let network_port = ctx
-        .wait_for_network_descriptor(&project_dir, NETWORK_LOCAL)
+        .wait_for_network_descriptor(&project_dir, "local")
         .gateway_port;
 
     // Canister ID

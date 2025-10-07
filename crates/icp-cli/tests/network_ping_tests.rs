@@ -1,4 +1,3 @@
-use icp_network::NETWORK_LOCAL;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -70,7 +69,7 @@ fn attempt_ping_other_project() {
         let _g = ctx.start_network_in(&project_dir_a);
 
         // load network descriptor
-        let network_descriptor = ctx.read_network_descriptor(&project_dir_a, NETWORK_LOCAL);
+        let network_descriptor = ctx.read_network_descriptor(&project_dir_a, "local");
         eprintln!(
             "Network descriptor for project 'a': {}",
             serde_json::to_string_pretty(&network_descriptor).unwrap()
@@ -79,7 +78,7 @@ fn attempt_ping_other_project() {
         network_descriptor
     };
 
-    ctx.write_network_descriptor(&project_dir_a, NETWORK_LOCAL, &network_descriptor);
+    ctx.write_network_descriptor(&project_dir_a, "local", &network_descriptor);
 
     let project_dir_b = ctx.create_project_dir("b");
 

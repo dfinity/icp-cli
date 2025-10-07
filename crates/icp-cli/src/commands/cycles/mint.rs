@@ -55,7 +55,7 @@ pub enum CommandError {
     Agent(#[from] agent::CreateError),
 
     #[error("Failed to get identity principal: {message}")]
-    GetPrincipalError { message: String },
+    Principal { message: String },
 
     #[error("Failed to talk to {canister} canister: {source}")]
     CanisterError {
@@ -110,7 +110,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare deposit
     let user_principal = id
         .sender()
-        .map_err(|e| CommandError::GetPrincipalError { message: e })?;
+        .map_err(|e| CommandError::Principal { message: e })?;
 
     let icp_e8s_to_deposit = if let Some(icp_amount) = cmd.icp {
         (icp_amount * 100_000_000_u64)

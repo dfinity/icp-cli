@@ -1,12 +1,13 @@
 use async_trait::async_trait;
+use tokio::sync::mpsc::Sender;
 
 use crate::canister::build::{Build, BuildError, Step};
 
-pub struct Script;
+pub struct Prebuilt;
 
 #[async_trait]
-impl Build for Script {
-    async fn build(&self, step: Step) -> Result<(), BuildError> {
+impl Build for Prebuilt {
+    async fn build(&self, step: Step, stdio: Option<Sender<String>>) -> Result<(), BuildError> {
         Ok(())
     }
 }

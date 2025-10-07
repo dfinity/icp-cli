@@ -3,6 +3,7 @@ use std::{fmt, sync::Arc};
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use tokio::sync::mpsc::Sender;
 
 use crate::{
     canister::sync,
@@ -58,20 +59,28 @@ pub enum SynchronizeError {
 
 #[async_trait]
 pub trait Synchronize: Sync + Send {
-    async fn sync(&self, step: sync::Step) -> Result<(), SynchronizeError>;
+    async fn sync(
+        &self,
+        step: sync::Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError>;
 }
 
 pub struct Syncer {
-    assets: Arc<dyn Synchronize>,
-    script: Arc<dyn Synchronize>,
+    pub assets: Arc<dyn Synchronize>,
+    pub script: Arc<dyn Synchronize>,
 }
 
 #[async_trait]
 impl Synchronize for Syncer {
-    async fn sync(&self, step: sync::Step) -> Result<(), SynchronizeError> {
+    async fn sync(
+        &self,
+        step: sync::Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
         match step {
-            sync::Step::Assets(_) => self.assets.sync(step).await,
-            sync::Step::Script(_) => self.script.sync(step).await,
+            sync::Step::Assets(_) => self.assets.sync(step, stdio).await,
+            sync::Step::Script(_) => self.script.sync(step, stdio).await,
         }
     }
 }

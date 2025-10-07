@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tokio::sync::mpsc::Sender;
 
 use crate::canister::{
     build::{self, Build, BuildError},
@@ -9,14 +10,22 @@ pub struct Script;
 
 #[async_trait]
 impl Build for Script {
-    async fn build(&self, step: build::Step) -> Result<(), BuildError> {
+    async fn build(
+        &self,
+        step: build::Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError> {
         Ok(())
     }
 }
 
 #[async_trait]
 impl Synchronize for Script {
-    async fn sync(&self, step: sync::Step) -> Result<(), SynchronizeError> {
+    async fn sync(
+        &self,
+        step: sync::Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
         Ok(())
     }
 }

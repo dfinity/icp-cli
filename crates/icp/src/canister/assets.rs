@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tokio::sync::mpsc::Sender;
 
 use crate::canister::sync::{Step, Synchronize, SynchronizeError};
 
@@ -6,7 +7,11 @@ pub struct Assets;
 
 #[async_trait]
 impl Synchronize for Assets {
-    async fn sync(&self, step: Step) -> Result<(), SynchronizeError> {
+    async fn sync(
+        &self,
+        step: Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
         Ok(())
     }
 }

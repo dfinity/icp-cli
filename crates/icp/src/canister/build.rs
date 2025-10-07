@@ -3,6 +3,7 @@ use std::{fmt, sync::Arc};
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use tokio::sync::mpsc::Sender;
 
 use crate::{
     canister::build,
@@ -60,7 +61,11 @@ pub enum BuildError {
 
 #[async_trait]
 pub trait Build: Sync + Send {
-    async fn build(&self, step: build::Step) -> Result<(), BuildError>;
+    async fn build(
+        &self,
+        step: build::Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError>;
 }
 
 pub struct Builder {
@@ -70,10 +75,14 @@ pub struct Builder {
 
 #[async_trait]
 impl Build for Builder {
-    async fn build(&self, step: build::Step) -> Result<(), BuildError> {
+    async fn build(
+        &self,
+        step: build::Step,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError> {
         match step {
-            build::Step::Prebuilt(_) => self.prebuilt.build(step).await,
-            build::Step::Script(_) => self.script.build(step).await,
+            build::Step::Prebuilt(_) => self.prebuilt.build(step, stdio).await,
+            build::Step::Script(_) => self.script.build(step, stdio).await,
         }
     }
 }

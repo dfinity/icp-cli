@@ -2,21 +2,23 @@ use std::{collections::HashMap, env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::Context;
-use commands::Subcmd;
+use commands::{Context, Subcmd};
 use console::Term;
-use icp::agent;
-use icp::network;
 use icp::{
-    Directories,
+    Directories, agent,
     canister::{
         self,
+        assets::Assets,
+        build::Builder,
+        prebuilt::Prebuilt,
         recipe::{
             self,
             handlebars::{Handlebars, TEMPLATES},
         },
+        script::Script,
+        sync::Syncer,
     },
-    identity, manifest,
+    identity, manifest, network,
     prelude::*,
     project,
 };
@@ -151,11 +153,22 @@ async fn main() -> Result<(), Error> {
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
 
+    // Builders/Syncers
+    let cprebuilt = Arc::new(Prebuilt);
+    let cassets = Arc::new(Assets);
+    let cscript = Arc::new(Script);
+
     // Canister builder
-    let cbuild = Arc::new(canister::Builder);
+    let cbuild = Arc::new(Builder {
+        prebuilt: cprebuilt.to_owned(),
+        script: cscript.to_owned(),
+    });
 
     // Canister syncer
-    let csync = Arc::new(canister::Syncer);
+    let csync = Arc::new(Syncer {
+        assets: cassets.to_owned(),
+        script: cscript.to_owned(),
+    });
 
     // Project Loaders
     let ploaders = icp::ProjectLoaders {

@@ -123,6 +123,10 @@ impl CreateCanisterError {
     }
 }
 
+/// Returns a block index
+pub type WithdrawOk = Nat;
+pub type WithdrawResponse = Result<WithdrawOk, WithdrawError>;
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum RejectionCode {
     NoError,
@@ -173,7 +177,7 @@ pub enum WithdrawError {
 }
 
 impl WithdrawError {
-    pub fn format_error(self, requested_amount: u128) -> String {
+    pub fn format_error(&self, requested_amount: u128) -> String {
         match self {
             WithdrawError::GenericError {
                 message,

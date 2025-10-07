@@ -1,11 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp::{agent, identity, network};
-use snafu::Snafu;
 use tracing::debug;
 
 use crate::{
@@ -76,7 +75,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
 
     // Load target environment
     let env =
@@ -101,7 +100,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         true => env.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names,
+        false => cmd.names.clone(),
     };
 
     for name in &cnames {

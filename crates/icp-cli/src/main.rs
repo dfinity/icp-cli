@@ -191,6 +191,7 @@ async fn main() -> Result<(), Error> {
 
     // Setup environment
     let ctx = Context {
+        workspace: mloc,
         term,
         dirs,
         ids,

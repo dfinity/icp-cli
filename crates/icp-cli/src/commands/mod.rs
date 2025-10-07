@@ -7,7 +7,7 @@ use crate::{
 };
 use clap::{Parser, Subcommand};
 use console::Term;
-use icp::Directories;
+use icp::{Directories, manifest::Locate};
 use identity::IdentityCommandError;
 use snafu::Snafu;
 
@@ -22,6 +22,9 @@ mod sync;
 mod token;
 
 pub struct Context {
+    /// Workspace locator
+    pub workspace: Arc<dyn Locate>,
+
     /// Terminal for printing messages for the user to see
     pub term: Term,
 

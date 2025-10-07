@@ -164,6 +164,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .filter(|(k, _)| cnames.contains(k))
         .collect::<HashMap<_, _>>();
 
+    if cs.is_empty() {
+        return Err(CommandError::NoCanisters);
+    }
+
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 

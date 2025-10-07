@@ -29,7 +29,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 name: cmd.environment.name().to_owned(),
             })?;
 
-    for (_, (_, c)) in &env.canisters {
+    for (_, c) in env.canisters.values() {
         let _ = ctx.term.write_line(&format!("{c:?}"));
     }
 

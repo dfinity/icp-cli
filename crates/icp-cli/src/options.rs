@@ -12,7 +12,7 @@ impl From<IdentityOpt> for IdentitySelection {
     fn from(v: IdentityOpt) -> Self {
         match v.identity {
             // Anonymous
-            Some(id) if id.to_string() == "anonymous" => IdentitySelection::Anonymous,
+            Some(id) if id == "anonymous" => IdentitySelection::Anonymous,
 
             // Named
             Some(id) => IdentitySelection::Named(id),

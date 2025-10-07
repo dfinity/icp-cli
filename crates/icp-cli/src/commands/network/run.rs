@@ -80,7 +80,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     eprintln!("Network root: {}", ndir);
 
     run_network(
-        &cfg,          // config
+        cfg,           // config
         nd,            // nd
         &pdir,         // project_root
         seed_accounts, // seed_accounts

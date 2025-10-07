@@ -61,7 +61,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let network = p.networks.get(&cmd.network).ok_or(CommandError::Network)?;
 
     // NetworkAccess
-    let access = ctx.network.access(&network).await?;
+    let access = ctx.network.access(network).await?;
 
     // Agent
     let agent = ctx.agent.create(id, &access.url).await?;

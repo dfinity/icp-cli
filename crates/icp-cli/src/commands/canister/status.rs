@@ -38,9 +38,6 @@ pub enum CommandError {
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
 
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
     #[error("environment '{environment}' does not include canister '{canister}'")]
     EnvironmentCanister {
         environment: String,

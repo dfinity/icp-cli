@@ -104,12 +104,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .map_err(|source| CommandError::Agent { source })?;
     let response =
         Decode!(&response_bytes, WithdrawResponse).expect("Failed to decode WithdrawResponse");
-    if let Err(err) = response {
-        return Err(CommandError::Withdraw {
-            err,
-            amount: cmd.amount,
-        });
-    }
+    response.map_err(|err| CommandError::Withdraw {
+        err,
+        amount: cmd.amount,
+    })?;
 
     let _ = ctx.term.write_line(&format!(
         "Topped up canister {} with {}T cycles",

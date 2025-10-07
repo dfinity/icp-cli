@@ -35,14 +35,7 @@ async fn canister_top_up() {
     let _g = ctx.start_network_in(&project_dir);
     ctx.ping_until_healthy(&project_dir);
 
-    // Use fresh identity with no seed balances
-    let identity = clients::icp(&ctx, &project_dir).use_new_random_identity();
-    clients::ledger(&ctx)
-        .mint_icp(identity, None, 100 * TRILLION)
-        .await;
-
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args(["canister", "create"])
@@ -59,11 +52,11 @@ async fn canister_top_up() {
             "top-up",
             "my-canister",
             "--amount",
-            &format!("{}", 100 * TRILLION),
+            &format!("{}", 123_456 * TRILLION),
         ])
         .assert()
         .stderr(contains(
-            "Failed to top up: Insufficient cycles. Requested: 100.000000000000T cycles",
+            "Failed to top up: Insufficient cycles. Requested: 123456.000000000000T cycles",
         ))
         .failure();
 

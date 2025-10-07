@@ -101,7 +101,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let access = ctx.network.access(&env.network).await?;
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
+    let agent = ctx.agent.create(id.clone(), &access.url).await?;
 
     if let Some(k) = access.root_key {
         agent.set_root_key(k);

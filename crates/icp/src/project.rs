@@ -13,8 +13,8 @@ use crate::{
     fs::read,
     is_glob,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, Item, Locate, PROJECT_MANIFEST,
-        canister::Instructions, environment::CanisterSelection, project::ProjectManifest,
+        CANISTER_MANIFEST, CanisterManifest, Item, Locate, canister::Instructions,
+        environment::CanisterSelection, project::ProjectManifest,
     },
     prelude::*,
 };
@@ -37,7 +37,7 @@ pub struct PathLoader;
 impl LoadPath<ProjectManifest, LoadPathError> for PathLoader {
     async fn load(&self, path: &Path) -> Result<ProjectManifest, LoadPathError> {
         // Read file
-        let mbs = read(&path.join(PROJECT_MANIFEST)).context(LoadPathError::Read)?;
+        let mbs = read(path).context(LoadPathError::Read)?;
 
         // Load YAML
         let m =

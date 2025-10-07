@@ -40,30 +40,11 @@ pub struct Context {
     /// Identity loader
     pub identity: Arc<dyn icp::identity::Load>,
 
+    /// NetworkAccess loader
+    pub network: Arc<dyn icp::network::Access>,
+
     /// Agent creator
     pub agent: Arc<dyn icp::agent::Create>,
-}
-
-impl Context {
-    pub fn new(
-        term: Term,
-        dirs: Directories,
-        id_store: IdStore,
-        artifact_store: ArtifactStore,
-        project: Arc<dyn icp::Load>,
-        identity: Arc<dyn icp::identity::Load>,
-        agent: Arc<dyn icp::agent::Create>,
-    ) -> Self {
-        Self {
-            term,
-            dirs,
-            id_store,
-            artifact_store,
-            project,
-            identity,
-            agent,
-        }
-    }
 }
 
 #[derive(Parser, Debug)]

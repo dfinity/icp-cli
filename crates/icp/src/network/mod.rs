@@ -1,14 +1,26 @@
+use std::sync::Arc;
+
+use anyhow::Context as _;
+use async_trait::async_trait;
+use schemars::JsonSchema;
+use serde::{Deserialize, Deserializer};
+
+pub use directory::NetworkDirectory;
+pub use managed::run::{RunNetworkError, run_network};
+
+use crate::{
+    Network,
+    manifest::{Locate, LocateError},
+    network::access::{NetworkAccess, get_network_access},
+    prelude::*,
+};
+
 pub mod access;
 pub mod config;
 mod directory;
 mod lock;
 mod managed;
 pub mod structure;
-
-pub use directory::NetworkDirectory;
-pub use managed::run::{RunNetworkError, run_network};
-use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer};
 
 pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
 
@@ -84,5 +96,47 @@ pub enum Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Configuration::Managed(Managed::default())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AccessError {
+    #[error("failed to find project root")]
+    Project(#[from] LocateError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Access: Sync + Send {
+    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError>;
+}
+
+pub struct Accessor {
+    // Project root locator
+    pub project: Arc<dyn Locate>,
+
+    // Port descriptors dir
+    pub descriptors: PathBuf,
+}
+
+#[async_trait]
+impl Access for Accessor {
+    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
+        // Locate networks directory
+        let dir = self.project.locate()?;
+
+        // NetworkDirectory
+        let nd = NetworkDirectory::new(
+            &network.name,                                          // name
+            &dir.join(".icp").join("networks").join(&network.name), // network_root
+            &self.descriptors,                                      // port_descriptor_dir
+        );
+
+        // NetworkAccess
+        let acceess = get_network_access(nd, network).context("failed to load network access")?;
+
+        Ok(acceess)
     }
 }

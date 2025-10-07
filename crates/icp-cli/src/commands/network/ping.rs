@@ -1,12 +1,11 @@
 use std::time::Duration;
 
-use anyhow::Context as _;
 use clap::Parser;
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
     agent,
     identity::{self, IdentitySelection},
-    network::access::get_network_access,
+    network::{self},
 };
 use tokio::time::sleep;
 
@@ -29,11 +28,14 @@ pub enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
     #[error("network not found")]
     Network,
 
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
+    #[error("failed to obtain network access")]
+    NetworkAccess(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
@@ -43,6 +45,9 @@ pub enum CommandError {
 
     #[error("timed-out waiting for replica to become healthy")]
     Timeout,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -56,12 +61,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let network = p.networks.get(&cmd.network).ok_or(CommandError::Network)?;
 
     // NetworkAccess
-    let acceess = get_network_access(nd, network).context("failed to load network access")?;
+    let access = ctx.network.access(&network).await?;
 
     // Agent
-    let mut agent = ctx.agent.create(id, &acceess.url).await?;
+    let agent = ctx.agent.create(id, &access.url).await?;
 
-    if let Some(k) = acceess.root_key {
+    if let Some(k) = access.root_key {
         agent.set_root_key(k);
     }
 

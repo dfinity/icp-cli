@@ -99,19 +99,21 @@ async fn run_pocketic(
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
 ) -> Result<(), RunPocketIcError> {
-    let nds = nd.structure();
     eprintln!("PocketIC path: {pocketic_path}");
 
-    create_dir_all(&nds.pocketic_dir()).context(CreateDirAllSnafu)?;
-    let port_file = nds.pocketic_port_file();
+    create_dir_all(&nd.structure.pocketic_dir()).context(CreateDirAllSnafu)?;
+
+    let port_file = nd.structure.pocketic_port_file();
     if port_file.exists() {
         remove_file(&port_file).context(RemoveDirAllSnafu)?;
     }
     eprintln!("Port file: {port_file}");
-    if nds.state_dir().exists() {
-        remove_dir_all(&nds.state_dir()).context(RemoveDirAllSnafu)?;
+
+    if nd.structure.state_dir().exists() {
+        remove_dir_all(&nd.structure.state_dir()).context(RemoveDirAllSnafu)?;
     }
-    create_dir_all(&nds.state_dir()).context(CreateDirAllSnafu)?;
+    create_dir_all(&nd.structure.state_dir()).context(CreateDirAllSnafu)?;
+
     let mut child = spawn_pocketic(pocketic_path, &port_file);
 
     let result = async {
@@ -120,7 +122,7 @@ async fn run_pocketic(
         let instance = initialize_pocketic(
             pocketic_port,
             &config.gateway.port,
-            &nds.state_dir(),
+            &nd.structure.state_dir(),
             seed_accounts,
         )
         .await?;
@@ -134,7 +136,7 @@ async fn run_pocketic(
             id: Uuid::new_v4(),
             project_dir: project_root.to_path_buf(),
             network: nd.network_name.to_owned(),
-            network_dir: nd.structure().network_root.to_path_buf(),
+            network_dir: nd.structure.network_root.to_path_buf(),
             gateway,
             default_effective_canister_id,
             pocketic_url: instance.admin.base_url.to_string(),

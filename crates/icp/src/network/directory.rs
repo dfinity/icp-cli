@@ -23,24 +23,22 @@ pub struct NetworkDirectory {
 
 impl NetworkDirectory {
     pub fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
-        let network_name = network_name.to_string();
-        let structure = NetworkDirectoryStructure::new(network_root, port_descriptor_dir);
-
         Self {
-            network_name,
-            structure,
+            network_name: network_name.to_owned(),
+            structure: NetworkDirectoryStructure::new(network_root, port_descriptor_dir),
         }
     }
 }
 
 impl NetworkDirectory {
-    pub fn structure(&self) -> &NetworkDirectoryStructure {
-        &self.structure
-    }
-
     pub fn ensure_exists(&self) -> Result<(), crate::fs::Error> {
+        // Network root
         create_dir_all(&self.structure.network_root)?;
-        create_dir_all(&self.structure.port_descriptor_dir)
+
+        // Port descriptor
+        create_dir_all(&self.structure.port_descriptor_dir)?;
+
+        Ok(())
     }
 
     pub fn load_network_descriptor(&self) -> Result<Option<NetworkDescriptorModel>, json::Error> {

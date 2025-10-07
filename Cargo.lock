@@ -2480,29 +2480,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "icp-adapter"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "camino-tempfile",
- "dunce",
- "hex",
- "ic-agent",
- "ic-asset",
- "ic-utils",
- "icp",
- "reqwest",
- "schemars",
- "serde",
- "sha2 0.10.9",
- "shellwords",
- "slog",
- "snafu",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "icp-canister-interfaces"
 version = "0.1.0"
 dependencies = [
@@ -2535,7 +2512,6 @@ dependencies = [
  "ic-management-canister-types 0.4.1",
  "ic-utils",
  "icp",
- "icp-adapter",
  "icp-canister-interfaces",
  "icrc-ledger-types",
  "indicatif",

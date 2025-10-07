@@ -30,9 +30,6 @@ pub enum ScriptError {
 
     #[error("command '{command}' failed with status code {code}")]
     Status { command: String, code: String },
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
 }
 
 #[async_trait]
@@ -301,134 +298,161 @@ impl Synchronize for Script {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::build::Adapter as _;
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
 
-//     use super::*;
-//     use camino_tempfile::NamedUtf8TempFile;
-//     use std::io::Read;
+    use camino_tempfile::NamedUtf8TempFile;
 
-//     #[tokio::test]
-//     async fn single_command() {
-//         // Create temporary file
-//         let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+    use crate::{
+        canister::{
+            build::{self, Build, BuildError},
+            script::{Script, ScriptError},
+        },
+        manifest::adapter::script::{Adapter, CommandField},
+    };
 
-//         // Define adapter
-//         let v = ScriptAdapter {
-//             command: CommandField::Command(format!(
-//                 "sh -c 'echo test > {} && echo {}'",
-//                 f.path(),
-//                 f.path()
-//             )),
-//             stdio_sender: None,
-//         };
+    #[tokio::test]
+    async fn single_command() {
+        // Create temporary file
+        let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
 
-//         // Invoke adapter
-//         v.compile("/".into(), "/".into())
-//             .await
-//             .expect("unexpected failure");
+        // Define adapter
+        let v = Adapter {
+            command: CommandField::Command(format!(
+                "sh -c 'echo test > {} && echo {}'",
+                f.path(),
+                f.path()
+            )),
+        };
 
-//         // Verify command ran
-//         let mut out = String::new();
+        Script
+            .build(
+                &build::Step::Script(v),
+                &build::Params {
+                    path: "/".into(),
+                    output: "/".into(),
+                },
+                None,
+            )
+            .await
+            .expect("failed to build script step");
 
-//         f.read_to_string(&mut out)
-//             .expect("failed to read temporary file");
+        // Verify command ran
+        let mut out = String::new();
 
-//         assert_eq!(out, "test\n".to_string());
-//     }
+        f.read_to_string(&mut out)
+            .expect("failed to read temporary file");
 
-//     #[tokio::test]
-//     async fn multiple_commands() {
-//         // Create temporary file
-//         let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+        assert_eq!(out, "test\n".to_string());
+    }
 
-//         // Define adapter
-//         let v = ScriptAdapter {
-//             command: CommandField::Commands(vec![
-//                 format!("sh -c 'echo cmd-1 >> {}'", f.path()),
-//                 format!("sh -c 'echo cmd-2 >> {}'", f.path()),
-//                 format!("sh -c 'echo cmd-3 >> {}'", f.path()),
-//                 format!("echo {}", f.path()),
-//             ]),
-//             stdio_sender: None,
-//         };
+    #[tokio::test]
+    async fn multiple_commands() {
+        // Create temporary file
+        let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
 
-//         // Invoke adapter
-//         v.compile("/".into(), "/".into())
-//             .await
-//             .expect("unexpected failure");
+        // Define adapter
+        let v = Adapter {
+            command: CommandField::Commands(vec![
+                format!("sh -c 'echo cmd-1 >> {}'", f.path()),
+                format!("sh -c 'echo cmd-2 >> {}'", f.path()),
+                format!("sh -c 'echo cmd-3 >> {}'", f.path()),
+                format!("echo {}", f.path()),
+            ]),
+        };
 
-//         // Verify command ran
-//         let mut out = String::new();
+        Script
+            .build(
+                &build::Step::Script(v),
+                &build::Params {
+                    path: "/".into(),
+                    output: "/".into(),
+                },
+                None,
+            )
+            .await
+            .expect("failed to build script step");
 
-//         f.read_to_string(&mut out)
-//             .expect("failed to read temporary file");
+        // Verify command ran
+        let mut out = String::new();
 
-//         assert_eq!(out, "cmd-1\ncmd-2\ncmd-3\n".to_string());
-//     }
+        f.read_to_string(&mut out)
+            .expect("failed to read temporary file");
 
-//     #[tokio::test]
-//     async fn invalid_command() {
-//         // Define adapter
-//         let v = ScriptAdapter {
-//             command: CommandField::Command("".into()),
-//             stdio_sender: None,
-//         };
+        assert_eq!(out, "cmd-1\ncmd-2\ncmd-3\n".to_string());
+    }
 
-//         // Invoke adapter
-//         let out = v.compile("/".into(), "/".into()).await;
+    #[tokio::test]
+    async fn invalid_command() {
+        // Define adapter
+        let v = Adapter {
+            command: CommandField::Command("".into()),
+        };
 
-//         // Assert failure
-//         assert!(matches!(
-//             out,
-//             Err(AdapterCompileError::Script {
-//                 source: ScriptAdapterCompileError::InvalidCommand { .. }
-//             })
-//         ));
-//     }
+        let out = Script
+            .build(
+                &build::Step::Script(v),
+                &build::Params {
+                    path: "/".into(),
+                    output: "/".into(),
+                },
+                None,
+            )
+            .await;
 
-//     #[tokio::test]
-//     async fn failed_command_not_found() {
-//         // Define adapter
-//         let v = ScriptAdapter {
-//             command: CommandField::Command("invalid-command".into()),
-//             stdio_sender: None,
-//         };
+        // Assert failure
+        if out.is_ok() {
+            panic!("expected invalid command to fail");
+        }
+    }
 
-//         // Invoke adapter
-//         let out = v.compile("/".into(), "/".into()).await;
+    #[tokio::test]
+    async fn failed_unknown_command() {
+        // Define adapter
+        let v = Adapter {
+            command: CommandField::Command("unknown-command".into()),
+        };
 
-//         println!("{out:?}");
+        let out = Script
+            .build(
+                &build::Step::Script(v),
+                &build::Params {
+                    path: "/".into(),
+                    output: "/".into(),
+                },
+                None,
+            )
+            .await;
 
-//         // Assert failure
-//         assert!(matches!(
-//             out,
-//             Err(AdapterCompileError::Script {
-//                 source: ScriptAdapterCompileError::CommandInvoke { .. }
-//             })
-//         ));
-//     }
+        // Assert failure
+        if out.is_ok() {
+            panic!("expected unknown command to fail");
+        }
+    }
 
-//     #[tokio::test]
-//     async fn failed_command_error_status() {
-//         // Define adapter
-//         let v = ScriptAdapter {
-//             command: CommandField::Command("sh -c 'exit 1'".into()),
-//             stdio_sender: None,
-//         };
+    #[tokio::test]
+    async fn failed_command_error_status() {
+        // Define adapter
+        let v = Adapter {
+            command: CommandField::Command("sh -c 'exit 1'".into()),
+        };
 
-//         // Invoke adapter
-//         let out = v.compile("/".into(), "/".into()).await;
+        let out = Script
+            .build(
+                &build::Step::Script(v),
+                &build::Params {
+                    path: "/".into(),
+                    output: "/".into(),
+                },
+                None,
+            )
+            .await;
 
-//         println!("{out:?}");
-
-//         // Assert failure
-//         assert!(matches!(
-//             out,
-//             Err(AdapterCompileError::Script {
-//                 source: ScriptAdapterCompileError::CommandStatus { .. }
-//             })
-//         ));
-//     }
-// }
+        // Assert failure
+        assert!(matches!(
+            out,
+            Err(BuildError::Script(ScriptError::Status { .. })),
+        ));
+    }
+}

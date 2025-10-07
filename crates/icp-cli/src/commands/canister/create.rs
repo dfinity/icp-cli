@@ -135,6 +135,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Agent
     let agent = ctx.agent.create(id, &access.url).await?;
 
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
+
     let cnames = match cmd.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),

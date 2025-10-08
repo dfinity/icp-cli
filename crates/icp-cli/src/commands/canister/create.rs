@@ -17,7 +17,7 @@ use icp_canister_interfaces::{
 use rand::seq::IndexedRandom;
 
 use crate::{
-    commands::Context,
+    commands::{Context, ContextError},
     options::{EnvironmentOpt, IdentityOpt},
     progress::ProgressManager,
     store_id::{Key, LookupError, RegisterError},
@@ -84,17 +84,14 @@ pub enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
+    #[error(transparent)]
+    EnvironmentNotFound(#[from] ContextError),
 
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
 
     #[error("environment '{environment}' does not include canister '{canister}'")]
     EnvironmentCanister {
@@ -131,43 +128,33 @@ pub enum CommandError {
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
 
-    // Load identity
-    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
+    // Load the environment
+    let env = ctx.get_environment(cmd.environment.name()).await?;
 
-    // Load target environment
-    let env =
-        p.environments
-            .get(cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
-            })?;
+    // Agent
+    let agent = ctx.get_agent(&env, cmd.identity.clone().into()).await?;
 
-    // Collect environment canisters
+    // The list of canisters we want to sync
     let cnames = match cmd.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
-        // Individual canisters specified
-        false => cmd.names.clone(),
+        // Inividual canisters specified
+        false => {
+            // Check that the args are valid
+            for name in &cmd.names {
+                if !env.canisters.contains_key(name) {
+                    return Err(CommandError::EnvironmentCanister {
+                        environment: env.name.to_owned(),
+                        canister: name.to_owned(),
+                    });
+                }
+            }
+
+            cmd.names.clone()
+        }
     };
-
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
 
     let cs = env
         .canisters
@@ -194,16 +181,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 .ok()
         })
         .collect();
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
-    // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
 
     // Select which subnet to deploy the canisters to
     //
@@ -249,6 +226,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             let cmd = cmd.clone();
             let agent = agent.clone();
             let pb = pb.clone();
+            let env = env.clone();
 
             async move {
                 // Indicate to user that the canister is created

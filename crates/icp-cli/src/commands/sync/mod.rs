@@ -15,6 +15,8 @@ use crate::{
     store_id::{Key, LookupError},
 };
 
+use super::ContextError;
+
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Canister names
@@ -35,17 +37,14 @@ pub enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
+    #[error(transparent)]
+    EnvironmentNotFound(#[from] ContextError),
 
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
 
     #[error("environment '{environment}' does not include canister '{canister}'")]
     EnvironmentCanister {
@@ -64,52 +63,32 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project
-    let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+    // Load the environment
+    let env = ctx.get_environment(cmd.environment.name()).await?;
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
+    let agent = ctx.get_agent(&env, cmd.identity.into()).await?;
 
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
-
+    // The list of canisters we want to sync
     let cnames = match cmd.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
-        // Individual canisters specified
-        false => cmd.names,
+        // Inividual canisters specified
+        false => {
+            // Check that the args are valid
+            for name in &cmd.names {
+                if !env.canisters.contains_key(name) {
+                    return Err(CommandError::EnvironmentCanister {
+                        environment: env.name.to_owned(),
+                        canister: name.to_owned(),
+                    });
+                }
+            }
+
+            cmd.names
+        }
     };
-
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
 
     let cs = env
         .canisters

@@ -7,9 +7,11 @@ use crate::{
 };
 use clap::{Parser, Subcommand};
 use console::Term;
+use ic_agent::Agent;
 use icp::{
-    Directories,
+    Directories, Environment,
     canister::{build::Build, sync::Synchronize},
+    identity::IdentitySelection,
     manifest::Locate,
 };
 use identity::IdentityCommandError;
@@ -58,6 +60,60 @@ pub struct Context {
 
     /// Canister synchronizer
     pub syncer: Arc<dyn Synchronize>,
+}
+
+impl Context {
+    pub async fn get_environment(&self, name: &str) -> Result<Environment, ContextError> {
+        let p = self.project.load().await?;
+
+        let env = p
+            .environments
+            .get(name)
+            .ok_or(ContextError::EnvironmentNotFound {
+                name: name.to_string(),
+            })?;
+
+        Ok(env.clone())
+    }
+
+    pub async fn get_agent(
+        &self,
+        env: &Environment,
+        identity: IdentitySelection,
+    ) -> Result<Agent, ContextError> {
+        // Load identity
+        let id = self.identity.load(identity).await?;
+
+        // Access network
+        let access = self.network.access(&env.network).await?;
+
+        // Agent
+        let agent = self.agent.create(id, &access.url).await?;
+
+        if let Some(k) = access.root_key {
+            agent.set_root_key(k);
+        }
+
+        Ok(agent)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ContextError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Identity(#[from] icp::identity::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error(transparent)]
+    Access(#[from] icp::network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] icp::agent::CreateError),
 }
 
 #[derive(Parser, Debug)]

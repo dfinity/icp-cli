@@ -5,7 +5,7 @@ use icp::{agent, identity, network};
 use itertools::Itertools;
 
 use crate::{
-    commands::Context,
+    commands::{Context, ContextError},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -30,8 +30,8 @@ pub enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
+    #[error(transparent)]
+    EnvironmentNotFound(#[from] ContextError),
 
     #[error(transparent)]
     Access(#[from] network::AccessError),
@@ -53,29 +53,12 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
 
-    // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+    // Load the environment
+    let env = ctx.get_environment(cmd.environment.name()).await?;
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx.get_agent(&env, cmd.identity.into()).await?;
 
     // Ensure canister is included in the environment
     if !env.canisters.contains_key(&cmd.name) {

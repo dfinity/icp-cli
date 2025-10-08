@@ -15,6 +15,8 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
+use super::ContextError;
+
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Canister names
@@ -48,11 +50,8 @@ pub enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
+    #[error(transparent)]
+    EnvironmentNotFound(#[from] ContextError),
 
     #[error("environment '{environment}' does not include canister '{canister}'")]
     EnvironmentCanister {
@@ -77,39 +76,29 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest, which defines the canisters to be built.
-    let p = ctx.project.load().await?;
+    // Load the environment
+    let env = ctx.get_environment(cmd.environment.name()).await?;
 
-    // Load target environment
-    let env =
-        p.environments
-            .get(cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
-            })?;
-
+    // The list of canisters we want to deploy
     let cnames = match cmd.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
-        // Individual canisters specified
-        false => cmd.names,
+        // Inividual canisters specified
+        false => {
+            // Check that the args are valid
+            for name in &cmd.names {
+                if !env.canisters.contains_key(name) {
+                    return Err(CommandError::EnvironmentCanister {
+                        environment: env.name.to_owned(),
+                        canister: name.to_owned(),
+                    });
+                }
+            }
+
+            cmd.names
+        }
     };
-
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
 
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {

@@ -93,8 +93,9 @@ fn deploy() {
     let _g = ctx.start_network_in(&project_dir);
     ctx.ping_until_healthy(&project_dir);
 
-    // Deploy project
     clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+
+    // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])
@@ -144,8 +145,9 @@ fn deploy_twice_should_succeed() {
     let _g = ctx.start_network_in(&project_dir);
     ctx.ping_until_healthy(&project_dir);
 
-    // Deploy project (first time)
     clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+
+    // Deploy project (first time)
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])

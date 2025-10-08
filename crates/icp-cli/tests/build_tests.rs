@@ -123,15 +123,15 @@ fn build_adapter_display_failing_build_output() {
         .args(["build"])
         .assert()
         .failure()
-        .stderr(contains("Build for canister 'my-canister' failed. Build output:"))
-        .stderr(contains("Step 1/3: script (command: echo \"success 1\")"))
-        .stderr(contains("success 1"))
-        .stderr(contains("Step 2/3: script (command: echo \"success 2\")"))
-        .stderr(contains("success 2"))
-        .stderr(contains("Step 3/3: script (command: sh -c 'for i in $(seq 1 20); do echo \"failing build step $i\"; done; exit 1')"))
-        .stderr(contains("failing build step 1"))
-        .stderr(contains("failing build step 20"))
-        .stderr(contains("hide this").not());
+        .stdout(contains("Build for canister 'my-canister' failed. Build output:"))
+        .stdout(contains("Step 1/3: script (command: echo \"success 1\")"))
+        .stdout(contains("success 1"))
+        .stdout(contains("Step 2/3: script (command: echo \"success 2\")"))
+        .stdout(contains("success 2"))
+        .stdout(contains("Step 3/3: script (command: sh -c 'for i in $(seq 1 20); do echo \"failing build step $i\"; done; exit 1')"))
+        .stdout(contains("failing build step 1"))
+        .stdout(contains("failing build step 20"))
+        .stdout(contains("hide this").not());
 }
 
 #[test]
@@ -166,15 +166,15 @@ fn build_adapter_display_failing_prebuilt_output() {
         .args(["build"])
         .assert()
         .failure()
-        .stderr(contains(
+        .stdout(contains(
             "Build for canister 'my-canister' failed. Build output:",
         ))
-        .stderr(contains(
+        .stdout(contains(
             "Step 1/2: script (command: echo \"initial step succeeded\")",
         ))
-        .stderr(contains("initial step succeeded"))
-        .stderr(contains(
+        .stdout(contains("initial step succeeded"))
+        .stdout(contains(
             "Step 2/2: pre-built (path: /nonexistent/path/to/wasm.wasm, sha: 0000000000000000000000000000000000000000000000000000000000000000",
         ))
-        .stderr(contains("Failed: failed to read file"));
+        .stdout(contains("Failed: failed to read file"));
 }

@@ -3,6 +3,7 @@ use std::io;
 
 use camino_tempfile::tempdir;
 use clap::Parser;
+use console::Term;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::fs::read;
 use icp_adapter::build::{Adapter as _, AdapterCompileError};
@@ -22,22 +23,24 @@ struct StepOutput {
     lines: Vec<String>,
 }
 
-/// Dumps the accumulated build output with proper formatting
-fn dump_build_output(canister_name: &str, steps: Vec<StepOutput>) {
-    eprintln!(
-        "\nBuild for canister '{}' failed. Build output:\n",
+fn dump_build_output(term: &Term, canister_name: &str, steps: Vec<StepOutput>) {
+    let _ = term.write_line("");
+    let _ = term.write_line(&format!(
+        "Build for canister '{}' failed. Build output:",
         canister_name
-    );
+    ));
+    let _ = term.write_line("");
 
     for step in steps {
-        eprintln!("{}", step.step_description);
+        let _ = term.write_line(&step.step_description);
         if step.lines.is_empty() {
-            eprintln!("  (no output)\n");
+            let _ = term.write_line("  (no output)");
+            let _ = term.write_line("");
         } else {
             for line in step.lines {
-                eprintln!("  {}", line);
+                let _ = term.write_line(&format!("  {}", line));
             }
-            eprintln!();
+            let _ = term.write_line("");
         }
     }
 }
@@ -97,6 +100,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         let build_fn = {
             let c = c.clone();
             let pb = pb.clone();
+            let term = ctx.term.clone();
 
             async move {
                 // Create a temporary directory for build artifacts
@@ -127,8 +131,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                                 .with_stdio_sender(tx)
                                 .compile(&canister_path, &wasm_output_path)
                                 .await;
-
-                            // Get all captured output from this step
                             let step_lines = rx.await.context(JoinOutputSnafu)?;
 
                             // Store step output with description
@@ -140,10 +142,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                                 lines: step_lines,
                             });
 
-                            // Check if this step failed
                             if let Err(e) = result {
                                 // Dump all accumulated output before returning error
-                                dump_build_output(&c.name, canister_output);
+                                dump_build_output(&term, &c.name, canister_output);
                                 return Err(e.into());
                             }
                         }
@@ -153,8 +154,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             pb.set_message(pb_hdr.clone());
 
                             let result = adapter.compile(&canister_path, &wasm_output_path).await;
-
-                            // Track prebuilt step with appropriate message
                             let step_message = if result.is_ok() {
                                 "Completed successfully".to_string()
                             } else {
@@ -170,7 +169,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             });
 
                             if let Err(e) = result {
-                                dump_build_output(&c.name, canister_output);
+                                dump_build_output(&term, &c.name, canister_output);
                                 return Err(e.into());
                             }
                         }
@@ -179,7 +178,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Verify a file exists in the wasm output path
                 if !wasm_output_path.exists() {
-                    dump_build_output(&c.name, canister_output);
+                    dump_build_output(&term, &c.name, canister_output);
                     return Err(CommandError::NoOutput);
                 }
 

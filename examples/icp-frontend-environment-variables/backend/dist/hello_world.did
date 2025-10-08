@@ -1,3 +1,7 @@
+// The backend canister is a simple canister that greets the user by name.
 service : {
+  // Greet the user by name.
+  // ## Example
+  // greet("Alice") -> "Hello, Alice!"
   greet : (name : text) -> (text) query
 }

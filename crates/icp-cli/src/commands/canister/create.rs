@@ -181,7 +181,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Do we have any already existing canisters?
-    let cexist: Vec<_> = cs
+    let cexist: Vec<_> = env
+        .canisters
         .values()
         .filter_map(|(_, c)| {
             ctx.ids

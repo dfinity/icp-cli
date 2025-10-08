@@ -39,9 +39,11 @@ icrc-ledger-types.workspace = true
 indicatif.workspace = true
 itertools.workspace = true
 k256.workspace = true
+lazy_static.workspace = true
 pem.workspace = true
 phf = { workspace = true }
 pkcs8.workspace = true
+rand.workspace = true
 reqwest = { workspace = true }
 sec1.workspace = true
 serde_json.workspace = true
@@ -63,6 +65,7 @@ rand.workspace = true
 serde_yaml.workspace = true
 serial_test = { version = "3.2.0", features = ["file_locks"] }
 url.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true

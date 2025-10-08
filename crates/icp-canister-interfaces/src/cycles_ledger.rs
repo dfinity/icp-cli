@@ -1,8 +1,10 @@
+use bigdecimal::BigDecimal;
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
 
 /// 100m cycles
 pub const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
+pub const CYCLES_LEDGER_DECIMALS: i64 = 12;
 
 pub const CYCLES_LEDGER_CID: &str = "um5iw-rqaaa-aaaaq-qaaba-cai";
 pub const CYCLES_LEDGER_PRINCIPAL: Principal =
@@ -117,6 +119,105 @@ impl CreateCanisterError {
                 format!(
                     "Insufficient cycles. Requested: {requested_cycles} cycles, available balance: {balance} cycles. 
                     use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount."
+                )
+            }
+        }
+    }
+}
+
+/// Returns a block index
+pub type WithdrawOk = Nat;
+pub type WithdrawResponse = Result<WithdrawOk, WithdrawError>;
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RejectionCode {
+    NoError,
+    CanisterError,
+    SysTransient,
+    DestinationInvalid,
+    Unknown,
+    SysFatal,
+    CanisterReject,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct WithdrawArgs {
+    pub amount: Nat,
+    pub from_subaccount: Option<Vec<u8>>,
+    pub to: Principal,
+    pub created_at_time: Option<u64>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum WithdrawError {
+    GenericError {
+        message: String,
+        error_code: Nat,
+    },
+    TemporarilyUnavailable,
+    FailedToWithdraw {
+        fee_block: Option<Nat>,
+        rejection_code: RejectionCode,
+        rejection_reason: String,
+    },
+    Duplicate {
+        duplicate_of: Nat,
+    },
+    BadFee {
+        expected_fee: Nat,
+    },
+    InvalidReceiver {
+        receiver: Principal,
+    },
+    CreatedInFuture {
+        ledger_time: u64,
+    },
+    TooOld,
+    InsufficientFunds {
+        balance: Nat,
+    },
+}
+
+impl WithdrawError {
+    pub fn format_error(&self, requested_amount: u128) -> String {
+        match self {
+            WithdrawError::GenericError {
+                message,
+                error_code,
+            } => {
+                format!("Cycles ledger error (code {}): {}", error_code, message)
+            }
+            WithdrawError::TemporarilyUnavailable => {
+                "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
+            }
+            WithdrawError::FailedToWithdraw {
+                rejection_code,
+                rejection_reason,
+                fee_block: _,
+            } => {
+                format!(
+                    "Failed to withdraw cycles: {} (rejection code: {:?})",
+                    rejection_reason, rejection_code
+                )
+            }
+            WithdrawError::Duplicate { duplicate_of } => {
+                format!("Duplicate request of block {duplicate_of}.")
+            }
+            WithdrawError::BadFee { expected_fee } => {
+                format!("Bad fee. Expected fee: {expected_fee} cycles.")
+            }
+            WithdrawError::InvalidReceiver { receiver } => {
+                format!("Invalid receiver: {receiver}")
+            }
+            WithdrawError::CreatedInFuture { .. } => {
+                "created_at_time is too far in the future.".to_string()
+            }
+            WithdrawError::TooOld => "created_at_time is too old.".to_string(),
+            WithdrawError::InsufficientFunds { balance } => {
+                format!(
+                    "Insufficient cycles. Requested: {}T cycles, balance: {}T cycles.",
+                    BigDecimal::new(requested_amount.into(), CYCLES_LEDGER_DECIMALS),
+                    BigDecimal::from_biguint(balance.0.clone(), CYCLES_LEDGER_DECIMALS)
                 )
             }
         }

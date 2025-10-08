@@ -44,6 +44,7 @@ icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
 itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
+lazy_static = "1.5.0"
 mockall = "0.13.1"
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }

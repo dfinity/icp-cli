@@ -20,6 +20,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
+* [`icp-cli canister top-up`↴](#icp-cli-canister-top-up)
 * [`icp-cli cycles`↴](#icp-cli-cycles)
 * [`icp-cli cycles balance`↴](#icp-cli-cycles-balance)
 * [`icp-cli cycles mint`↴](#icp-cli-cycles-mint)
@@ -99,6 +100,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `start` — 
 * `status` — 
 * `stop` — 
+* `top-up` — 
 
 
 
@@ -142,6 +144,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--cycles <CYCLES>` — Cycles to fund canister creation (in raw cycles)
 
   Default value: `2000000000000`
+* `--subnet <SUBNET>` — The subnet to create canisters on
 
 
 
@@ -325,6 +328,23 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ###### **Options:**
 
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli canister top-up`
+
+**Usage:** `icp-cli canister top-up [OPTIONS] --amount <AMOUNT> <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The name of the canister within the current project
+
+###### **Options:**
+
+* `--amount <AMOUNT>` — Amount of cycles to top up
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic

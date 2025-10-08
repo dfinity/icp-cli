@@ -1,5 +1,9 @@
 /target
 .DS_Store
+.cursor/
 
 # Local (directories)
 .icp
+
+# pocket-ic binary
+pocket-ic

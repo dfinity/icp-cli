@@ -29,7 +29,10 @@ use tracing_subscriber::{
     layer::SubscriberExt,
 };
 
-use crate::{store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer};
+use crate::{
+    store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer,
+    version::icp_cli_version_str,
+};
 
 mod commands;
 mod options;
@@ -37,8 +40,10 @@ mod progress;
 mod store_artifact;
 mod store_id;
 mod telemetry;
+mod version;
 
 #[derive(Parser)]
+#[command(version = icp_cli_version_str())]
 struct Cli {
     #[arg(
         long,

@@ -1,5 +1,3 @@
-use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
-
 use candid::Principal;
 use futures::future::{join, join_all};
 use ic_agent::{Agent, AgentError, agent::status::Status};
@@ -14,11 +12,12 @@ use icp_canister_interfaces::{
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
 use pocket_ic::{
-    common::rest::{HttpGatewayBackend, RawEffectivePrincipal},
+    common::rest::{HttpGatewayBackend, InstanceConfig, RawEffectivePrincipal},
     nonblocking::{PocketIc, call_candid, call_candid_as},
 };
 use reqwest::Url;
 use snafu::prelude::*;
+use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
@@ -34,9 +33,8 @@ use crate::{
             descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
             pocketic::{
                 CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
-                PocketIcInstance, spawn_pocketic,
+                PocketIcInstance, default_instance_config, spawn_pocketic,
             },
-            run::InitializePocketicError::NoRootKey,
         },
     },
     prelude::*,
@@ -234,7 +232,7 @@ pub struct ChildExitError {
     pub status: ExitStatus,
 }
 
-/// Waits for the child to populate a port number.
+/// Waits for a child process to populate a port number in a file.
 /// Exits early if the child exits or the user interrupts.
 pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
     tokio::select! {
@@ -260,27 +258,40 @@ async fn initialize_pocketic(
     state_dir: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
+    let instance_config = default_instance_config(state_dir);
+    let gateway_port = match gateway_bind_port {
+        Port::Fixed(port) => Some(*port),
+        Port::Random => None,
+    };
+
+    initialize_instance(pocketic_port, instance_config, gateway_port, seed_accounts).await
+}
+
+pub async fn initialize_instance(
+    pocketic_port: u16,
+    instance_config: InstanceConfig,
+    gateway_port: Option<u16>,
+    seed_accounts: impl Iterator<Item = Principal> + Clone,
+) -> Result<PocketIcInstance, InitializePocketicError> {
     let pic_url = format!("http://localhost:{pocketic_port}")
         .parse::<Url>()
         .unwrap();
     let pic = PocketIcAdminInterface::new(pic_url.clone());
 
     eprintln!("Initializing PocketIC instance");
-
-    eprintln!("Creating instance");
-    let (instance_id, topology) = pic.create_instance(state_dir.as_ref()).await?;
+    let (instance_id, topology) = pic.create_instance_with_config(instance_config).await?;
     let default_effective_canister_id = topology.default_effective_canister_id;
     eprintln!("Created instance with id {}", instance_id);
 
     eprintln!("Setting time");
     pic.set_time(instance_id).await?;
 
-    eprintln!("Set auto-progress");
+    eprintln!("Setting auto-progress");
     let artificial_delay = 600;
     pic.auto_progress(instance_id, artificial_delay).await?;
 
     eprintln!("Seeding ICP and TCYCLES account balances");
-    let pocket_ic_client = PocketIc::new_from_existing_instance(pic_url, instance_id, None);
+    let pocket_ic_client = PocketIc::new_from_existing_instance(pic_url.clone(), instance_id, None);
     let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&pocket_ic_client).await?;
     let seed_icp = join_all(
         seed_accounts
@@ -292,7 +303,7 @@ async fn initialize_pocketic(
         mint_cycles_to_account(
             &pocket_ic_client,
             account,
-            1_000_000_000_000_000u128, // 1k Trillion cycles
+            1_000_000_000_000_000u128, // 1k TCYCLES
             icp_xdr_conversion_rate,
         )
     }));
@@ -304,10 +315,6 @@ async fn initialize_pocketic(
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    let gateway_port = match gateway_bind_port {
-        Port::Fixed(port) => Some(*port),
-        Port::Random => None,
-    };
     let gateway_info = pic
         .create_http_gateway(
             HttpGatewayBackend::PocketIcInstance(instance_id),
@@ -320,11 +327,10 @@ async fn initialize_pocketic(
     );
 
     let agent_url = format!("http://localhost:{}", gateway_info.port);
-
     eprintln!("Agent url is {}", agent_url);
     let status = ping_and_wait(&agent_url).await?;
 
-    let root_key = status.root_key.ok_or(NoRootKey)?;
+    let root_key = status.root_key.ok_or(InitializePocketicError::NoRootKey)?;
     let root_key = hex::encode(root_key);
     eprintln!("Root key: {root_key}");
 

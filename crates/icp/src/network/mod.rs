@@ -19,7 +19,7 @@ pub mod access;
 pub mod config;
 mod directory;
 mod lock;
-mod managed;
+pub mod managed;
 pub mod structure;
 
 pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";

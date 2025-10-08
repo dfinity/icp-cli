@@ -11,6 +11,50 @@ use time::OffsetDateTime;
 use crate::prelude::*;
 
 #[allow(dead_code)]
+pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
+    InstanceConfig {
+        // State directory
+        state_dir: Some(state_dir.to_path_buf().into()),
+
+        // Replica logging level
+        log_level: Some("ERROR".to_string()),
+
+        // Special features
+        icp_features: Some(IcpFeatures {
+            // Enable with default feature configuration
+            icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+
+            // Same as above
+            cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+
+            // Same as above
+            cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+
+            // Same as above
+            registry: Some(IcpFeaturesConfig::DefaultConfig),
+
+            // The rest of the features are disabled by default
+            ..Default::default()
+        }),
+
+        subnet_config_set: (SubnetConfigSet {
+            application: 1,
+
+            // The rest of the subnets are disabled by default
+            ..Default::default()
+        })
+        .into(),
+
+        icp_config: Some(IcpConfig {
+            // Required to enable environment variables
+            beta_features: Some(IcpConfigFlag::Enabled),
+            ..Default::default()
+        }),
+
+        ..Default::default()
+    }
+}
+
 pub struct PocketIcInstance {
     pub admin: PocketIcAdminInterface,
     pub gateway_port: u16,
@@ -29,7 +73,6 @@ pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process:
     cmd.stderr(std::process::Stdio::inherit());
     #[cfg(unix)]
     {
-        //use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
 
@@ -52,51 +95,10 @@ impl PocketIcAdminInterface {
         self.client.post(self.base_url.join(path).unwrap())
     }
 
-    pub async fn create_instance(
+    pub async fn create_instance_with_config(
         &self,
-        state_dir: &Path,
+        inst_cfg: InstanceConfig,
     ) -> Result<(InstanceId, Topology), CreateInstanceError> {
-        // Specify configuration for network
-        let inst_cfg = InstanceConfig {
-            // State directory
-            state_dir: Some(state_dir.to_path_buf().into()),
-
-            // Replica logging level
-            log_level: Some("ERROR".to_string()),
-
-            // Special features
-            icp_features: Some(IcpFeatures {
-                // Enable with default feature configuration
-                icp_token: Some(IcpFeaturesConfig::DefaultConfig),
-
-                // Same as above
-                cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
-
-                // Same as above
-                cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
-
-                // The rest of the features are disabled by default
-                ..Default::default()
-            }),
-
-            subnet_config_set: (SubnetConfigSet {
-                // Configure a single application subnet
-                application: 1,
-
-                // The rest of the subnets are disabled by default
-                ..Default::default()
-            })
-            .into(),
-
-            icp_config: Some(IcpConfig {
-                // Required to enable environment variables
-                beta_features: Some(IcpConfigFlag::Enabled),
-                ..Default::default()
-            }),
-
-            ..Default::default()
-        };
-
         // Perform request
         let resp = self.post("/instances").json(&inst_cfg).send().await?;
 

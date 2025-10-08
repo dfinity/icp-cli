@@ -2484,6 +2484,7 @@ dependencies = [
 name = "icp-canister-interfaces"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "candid",
  "serde",
 ]
@@ -2518,6 +2519,7 @@ dependencies = [
  "indicatif",
  "itertools 0.14.0",
  "k256 0.13.4",
+ "lazy_static",
  "nix",
  "pem 3.0.5",
  "phf",
@@ -2538,6 +2540,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "uuid",
 ]
 
 [[package]]

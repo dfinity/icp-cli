@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bigdecimal = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }
 

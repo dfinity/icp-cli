@@ -165,7 +165,7 @@ impl ScriptProgressHandler {
 
     /// Create a channel and start handling script output for progress updates
     /// Returns the sender and a join handle for the background receiver task.
-    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<()>) {
+    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<Vec<String>>) {
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
         // Shared progress-bar messaging utility
@@ -180,23 +180,28 @@ impl ScriptProgressHandler {
 
         // Handle logging from script commands
         let handle = tokio::spawn(async move {
-            // Create a rolling buffer to contain last N lines of terminal output
-            let mut lines = RollingLines::new(4);
+            // Create a rolling buffer to contain last N lines of terminal output (for immediate display)
+            let mut rolling = RollingLines::new(4);
+            // Create a complete buffer to store all output (for dumping on failure)
+            let mut complete = Vec::new();
 
             while let Some(line) = rx.recv().await {
                 debug!(line);
 
-                // Update output buffer
-                lines.push(line);
+                complete.push(line.clone());
+                rolling.push(line);
 
                 // Update progress-bar with rolling terminal output
-                let msg = lines
+                let msg = rolling
                     .iter()
                     .filter(|s| !s.is_empty())
                     .map(|s| format!("> {}", s))
                     .join("\n");
                 set_message(msg);
             }
+
+            // Return all captured output
+            complete
         });
 
         (tx, handle)

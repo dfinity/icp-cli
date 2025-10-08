@@ -79,6 +79,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // Prepare a path for our output wasm
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
+                // Buffer to accumulate output from build steps in case the build fails
+                let mut canister_output = Vec::new();
+
                 let step_count = c.build.steps.len();
                 for (i, step) in c.build.steps.iter().enumerate() {
                     // Indicate to user the current step being executed
@@ -94,27 +97,48 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             let (tx, rx) = script_handler.setup_output_handler();
 
                             // Run compile which will feed lines into the channel
-                            adapter
+                            let result = adapter
                                 .with_stdio_sender(tx)
                                 .compile(&canister_path, &wasm_output_path)
-                                .await?;
+                                .await;
 
-                            // Ensure background receiver drains all messages
-                            let _ = rx.await;
+                            // Get all captured output from this step
+                            let step_output = rx.await.context(JoinOutputSnafu)?;
 
-                            Ok::<_, CommandError>(())?
+                            // Append to canister buffer
+                            canister_output.extend(step_output);
+
+                            // Check if this step failed
+                            if let Err(e) = result {
+                                // Dump all accumulated output before returning error
+                                for line in canister_output {
+                                    println!("{}", line);
+                                }
+                                return Err(e.into());
+                            }
                         }
 
                         // Compile using the Pre-built adapter.
                         BuildStep::Prebuilt(adapter) => {
                             pb.set_message(pb_hdr);
-                            adapter.compile(&canister_path, &wasm_output_path).await?
+
+                            let result = adapter.compile(&canister_path, &wasm_output_path).await;
+
+                            if let Err(e) = result {
+                                for line in canister_output {
+                                    println!("{}", line);
+                                }
+                                return Err(e.into());
+                            }
                         }
                     };
                 }
 
                 // Verify a file exists in the wasm output path
                 if !wasm_output_path.exists() {
+                    for line in canister_output {
+                        println!("{}", line);
+                    }
                     return Err(CommandError::NoOutput);
                 }
 
@@ -173,4 +197,7 @@ pub enum CommandError {
 
     #[snafu(transparent)]
     ArtifactStore { source: SaveError },
+
+    #[snafu(display("Failed to join output handler thread"))]
+    JoinOutput { source: tokio::task::JoinError },
 }

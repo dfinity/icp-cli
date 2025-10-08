@@ -92,21 +92,23 @@ fn build_adapter_display_failing_build_output() {
 
     // Project manifest
     let pm = r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo "success 1"
-              - type: script
-                command: echo "success 2"
-              - type: script
-                command: for i in $(seq 1 20); do echo "failing build step $i"; done; exit 1
-          name: unimportant-canister
-          build:
-            steps:
-              - type: script
-                command: echo "hide this"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "success 1"
+                - type: script
+                  command: echo "success 2"
+                - type: script
+                  command: sh -c 'for i in $(seq 1 20); do echo "failing build step $i"; done; exit 1'
+          - name: unimportant-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "hide this" 
+                - type: script
+                  command: sh -c 'touch "$ICP_WASM_OUTPUT_PATH"'
         "#;
 
     write_string(

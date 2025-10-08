@@ -113,7 +113,7 @@ fn build_adapter_display_failing_build_output() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &pm,                           // contents
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 
@@ -123,9 +123,58 @@ fn build_adapter_display_failing_build_output() {
         .args(["build"])
         .assert()
         .failure()
-        .stdout(contains("success 1"))
-        .stdout(contains("success 2"))
-        .stdout(contains("failing build step 1"))
-        .stdout(contains("failing build step 20"))
-        .stdout(contains("hide this").not());
+        .stderr(contains("Build for canister 'my-canister' failed. Build output:"))
+        .stderr(contains("Step 1/3: script (command: echo \"success 1\")"))
+        .stderr(contains("success 1"))
+        .stderr(contains("Step 2/3: script (command: echo \"success 2\")"))
+        .stderr(contains("success 2"))
+        .stderr(contains("Step 3/3: script (command: sh -c 'for i in $(seq 1 20); do echo \"failing build step $i\"; done; exit 1')"))
+        .stderr(contains("failing build step 1"))
+        .stderr(contains("failing build step 20"))
+        .stderr(contains("hide this").not());
+}
+
+#[test]
+fn build_adapter_display_failing_prebuilt_output() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest with a prebuilt step that will fail (non-existent file)
+    let pm = r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "initial step succeeded"
+                - type: pre-built
+                  path: /nonexistent/path/to/wasm.wasm
+                  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+        "#;
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "Build for canister 'my-canister' failed. Build output:",
+        ))
+        .stderr(contains(
+            "Step 1/2: script (command: echo \"initial step succeeded\")",
+        ))
+        .stderr(contains("initial step succeeded"))
+        .stderr(contains(
+            "Step 2/2: pre-built (path: /nonexistent/path/to/wasm.wasm, sha: 0000000000000000000000000000000000000000000000000000000000000000",
+        ))
+        .stderr(contains("Failed: failed to read file"));
 }

@@ -16,6 +16,32 @@ use crate::{
     store_artifact::SaveError,
 };
 
+#[derive(Debug)]
+struct StepOutput {
+    step_description: String,
+    lines: Vec<String>,
+}
+
+/// Dumps the accumulated build output with proper formatting
+fn dump_build_output(canister_name: &str, steps: Vec<StepOutput>) {
+    eprintln!(
+        "\nBuild for canister '{}' failed. Build output:\n",
+        canister_name
+    );
+
+    for step in steps {
+        eprintln!("{}", step.step_description);
+        if step.lines.is_empty() {
+            eprintln!("  (no output)\n");
+        } else {
+            for line in step.lines {
+                eprintln!("  {}", line);
+            }
+            eprintln!();
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// The names of the canisters within the current project
@@ -80,7 +106,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
                 // Buffer to accumulate output from build steps in case the build fails
-                let mut canister_output = Vec::new();
+                let mut canister_output: Vec<StepOutput> = Vec::new();
 
                 let step_count = c.build.steps.len();
                 for (i, step) in c.build.steps.iter().enumerate() {
@@ -103,31 +129,48 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                                 .await;
 
                             // Get all captured output from this step
-                            let step_output = rx.await.context(JoinOutputSnafu)?;
+                            let step_lines = rx.await.context(JoinOutputSnafu)?;
 
-                            // Append to canister buffer
-                            canister_output.extend(step_output);
+                            // Store step output with description
+                            canister_output.push(StepOutput {
+                                step_description: format!(
+                                    "Step {}/{}: {}",
+                                    current_step, step_count, step
+                                ),
+                                lines: step_lines,
+                            });
 
                             // Check if this step failed
                             if let Err(e) = result {
                                 // Dump all accumulated output before returning error
-                                for line in canister_output {
-                                    println!("{}", line);
-                                }
+                                dump_build_output(&c.name, canister_output);
                                 return Err(e.into());
                             }
                         }
 
                         // Compile using the Pre-built adapter.
                         BuildStep::Prebuilt(adapter) => {
-                            pb.set_message(pb_hdr);
+                            pb.set_message(pb_hdr.clone());
 
                             let result = adapter.compile(&canister_path, &wasm_output_path).await;
 
+                            // Track prebuilt step with appropriate message
+                            let step_message = if result.is_ok() {
+                                "Completed successfully".to_string()
+                            } else {
+                                format!("Failed: {}", result.as_ref().unwrap_err())
+                            };
+
+                            canister_output.push(StepOutput {
+                                step_description: format!(
+                                    "Step {}/{}: {}",
+                                    current_step, step_count, step
+                                ),
+                                lines: vec![step_message],
+                            });
+
                             if let Err(e) = result {
-                                for line in canister_output {
-                                    println!("{}", line);
-                                }
+                                dump_build_output(&c.name, canister_output);
                                 return Err(e.into());
                             }
                         }
@@ -136,9 +179,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // Verify a file exists in the wasm output path
                 if !wasm_output_path.exists() {
-                    for line in canister_output {
-                        println!("{}", line);
-                    }
+                    dump_build_output(&c.name, canister_output);
                     return Err(CommandError::NoOutput);
                 }
 

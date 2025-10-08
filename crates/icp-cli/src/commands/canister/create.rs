@@ -145,16 +145,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 name: cmd.environment.name().to_owned(),
             })?;
 
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
-    // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
-
     // Collect environment canisters
     let cnames = match cmd.names.is_empty() {
         // No canisters specified
@@ -203,6 +193,16 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 .ok()
         })
         .collect();
+
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
+
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
+
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
 
     // Select which subnet to deploy the canisters to
     //

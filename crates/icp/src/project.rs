@@ -268,7 +268,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
                                 // Named
                                 CanisterSelection::Named(names) => {
-                                    let mut canisters: HashMap<String, (PathBuf, Canister)> =
+                                    let mut cs: HashMap<String, (PathBuf, Canister)> =
                                         HashMap::new();
 
                                     for name in names {
@@ -279,10 +279,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                                             },
                                         )?;
 
-                                        canisters.insert(name.to_owned(), v.to_owned());
+                                        cs.insert(name.to_owned(), v.to_owned());
                                     }
 
-                                    canisters
+                                    cs
                                 }
                             }
                         },

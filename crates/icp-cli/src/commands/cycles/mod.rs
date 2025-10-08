@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
-use crate::{commands::token, commands::Context};
+use crate::{commands::Context, commands::token};
 
 mod balance;
 mod mint;

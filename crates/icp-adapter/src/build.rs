@@ -10,7 +10,7 @@ pub trait Adapter {
         &self,
         canister_path: &Path,
         wasm_output_path: &Path,
-    ) -> Result<(), AdapterCompileError>;
+    ) -> Result<String, AdapterCompileError>;
 }
 
 #[derive(Debug, Snafu)]

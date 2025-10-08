@@ -35,13 +35,12 @@ fn dump_build_output(term: &Term, canister_name: &str, steps: Vec<StepOutput>) {
         let _ = term.write_line(&step.step_description);
         if step.lines.is_empty() {
             let _ = term.write_line("  (no output)");
-            let _ = term.write_line("");
         } else {
             for line in step.lines {
                 let _ = term.write_line(&format!("  {}", line));
             }
-            let _ = term.write_line("");
         }
+        let _ = term.write_line("");
     }
 }
 
@@ -132,8 +131,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                                 .compile(&canister_path, &wasm_output_path)
                                 .await;
                             let step_lines = rx.await.context(JoinOutputSnafu)?;
-
-                            // Store step output with description
                             canister_output.push(StepOutput {
                                 step_description: format!(
                                     "Step {}/{}: {}",
@@ -143,7 +140,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             });
 
                             if let Err(e) = result {
-                                // Dump all accumulated output before returning error
                                 dump_build_output(&term, &c.name, canister_output);
                                 return Err(e.into());
                             }
@@ -154,10 +150,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                             pb.set_message(pb_hdr.clone());
 
                             let result = adapter.compile(&canister_path, &wasm_output_path).await;
-                            let step_message = if result.is_ok() {
-                                "Completed successfully".to_string()
-                            } else {
-                                format!("Failed: {}", result.as_ref().unwrap_err())
+                            let step_message = match &result {
+                                Ok(msg) => msg.clone(),
+                                Err(e) => format!("Failed: {}", e),
                             };
 
                             canister_output.push(StepOutput {

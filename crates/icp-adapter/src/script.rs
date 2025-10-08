@@ -78,9 +78,10 @@ impl build::Adapter for ScriptAdapter {
         &self,
         canister_path: &Path,
         wasm_output_path: &Path,
-    ) -> Result<(), AdapterCompileError> {
+    ) -> Result<String, AdapterCompileError> {
         // Normalize `command` field based on whether it's a single command or multiple.
         let cmds = self.command.as_vec();
+        let cmd_count = cmds.len();
 
         // Iterate over configured commands
         for input_cmd in cmds {
@@ -193,7 +194,7 @@ impl build::Adapter for ScriptAdapter {
             }
         }
 
-        Ok(())
+        Ok(format!("{} command(s) executed successfully", cmd_count))
     }
 }
 
@@ -394,9 +395,12 @@ mod tests {
         };
 
         // Invoke adapter
-        v.compile("/".into(), "/".into())
+        let result = v
+            .compile("/".into(), "/".into())
             .await
             .expect("unexpected failure");
+
+        assert_eq!(result, "1 command(s) executed successfully");
 
         // Verify command ran
         let mut out = String::new();
@@ -424,9 +428,12 @@ mod tests {
         };
 
         // Invoke adapter
-        v.compile("/".into(), "/".into())
+        let result = v
+            .compile("/".into(), "/".into())
             .await
             .expect("unexpected failure");
+
+        assert_eq!(result, "4 command(s) executed successfully");
 
         // Verify command ran
         let mut out = String::new();

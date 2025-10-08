@@ -67,11 +67,16 @@ impl Adapter for PrebuiltAdapter {
         &self,
         canister_path: &Path,
         wasm_output_path: &Path,
-    ) -> Result<(), AdapterCompileError> {
-        let wasm = match &self.source {
+    ) -> Result<String, AdapterCompileError> {
+        let (wasm, source_description) = match &self.source {
             // Local path
-            SourceField::Local(s) => read(&canister_path.join(&s.path))
-                .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?,
+            SourceField::Local(s) => {
+                let path = canister_path.join(&s.path);
+                let wasm = read(&path)
+                    .map_err(|err| PrebuiltAdapterCompileError::ReadFile { source: err })?;
+                let description = format!("Copied from local path: {}", s.path);
+                (wasm, description)
+            }
 
             // Remote url
             SourceField::Remote(s) => {
@@ -106,15 +111,19 @@ impl Adapter for PrebuiltAdapter {
                 }
 
                 // Read response body
-                resp.bytes()
+                let wasm = resp
+                    .bytes()
                     .await
                     .map_err(|err| PrebuiltAdapterCompileError::Request { source: err })?
-                    .to_vec()
+                    .to_vec();
+
+                let description = format!("Downloaded from: {}", s.url);
+                (wasm, description)
             }
         };
 
         // Verify the checksum if it's provided
-        if let Some(expected) = &self.sha256 {
+        let checksum_message = if let Some(expected) = &self.sha256 {
             // Calculate checksum
             let actual = hex::encode({
                 let mut h = Sha256::new();
@@ -130,7 +139,10 @@ impl Adapter for PrebuiltAdapter {
                 }
                 .into());
             }
-        }
+            " (checksum verified)".to_string()
+        } else {
+            "".to_string()
+        };
 
         // Set WASM file
         write(
@@ -139,7 +151,12 @@ impl Adapter for PrebuiltAdapter {
         )
         .map_err(|err| PrebuiltAdapterCompileError::WriteFile { source: err })?;
 
-        Ok(())
+        Ok(format!(
+            "{}. Size: {} bytes{}",
+            source_description,
+            wasm.len(),
+            checksum_message
+        ))
     }
 }
 

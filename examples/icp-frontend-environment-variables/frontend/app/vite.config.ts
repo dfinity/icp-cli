@@ -9,11 +9,6 @@ export default defineConfig({
     icpBindgen({
       didFile: "../../backend/dist/hello_world.did",
       outDir: "./src/backend/api",
-      additionalFeatures: {
-        canisterEnv: {
-          variableNames: ["ICP_CANISTER_ID:backend"],
-        },
-      },
     }),
   ],
 });

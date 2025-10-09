@@ -1,6 +1,8 @@
+use indoc::{formatdoc, indoc};
+use predicates::{ord::eq, str::PredicateStrExt};
+
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
-use predicates::{ord::eq, str::PredicateStrExt};
 
 mod common;
 
@@ -12,10 +14,10 @@ fn deploy_empty() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
-    canisters:
-        - canisters/*
-    "#;
+    let pm = indoc! {r#"
+        canisters:
+            - canisters/*
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -39,10 +41,10 @@ fn deploy_canister_not_found() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
-    canisters:
-        - canisters/*
-    "#;
+    let pm = indoc! {r#"
+        canisters:
+            - canisters/*
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -70,20 +72,17 @@ async fn deploy() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-        wasm,
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -138,20 +137,17 @@ async fn deploy_twice_should_succeed() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-        wasm,
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

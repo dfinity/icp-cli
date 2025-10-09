@@ -1,14 +1,16 @@
-use icp::{fs::write_string, prelude::*};
+use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
 };
 use serial_test::file_serial;
 
-mod common;
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
 };
+use icp::{fs::write_string, prelude::*};
+
+mod common;
 
 #[test]
 #[file_serial(default_local_network)]
@@ -18,30 +20,27 @@ fn network_same_port() {
     let project_dir_a = ctx.create_project_dir("a");
 
     // Project manifest
-    write_string(
-        &project_dir_a.join("icp.yaml"), // path
-        r#"
+    let pm = indoc! {r#"
         network:
           name: my-network
           mode: managed
           gateway:
             port: 8080
-        "#, // contents
+    "#};
+
+    // write manifest to project a
+    write_string(
+        &project_dir_a.join("icp.yaml"), // path
+        pm,
     )
     .expect("failed to write project manifest");
 
     let project_dir_b = ctx.create_project_dir("b");
 
-    // Project manifest
+    // write manifest to project b
     write_string(
         &project_dir_b.join("icp.yaml"), // path
-        r#"
-        network:
-          name: my-network
-          mode: managed
-          gateway:
-            port: 8080
-        "#, // contents
+        pm,
     )
     .expect("failed to write project manifest");
 
@@ -71,13 +70,13 @@ fn two_projects_different_fixed_ports() {
     // Project manifest
     write_string(
         &project_dir_a.join("icp.yaml"), // path
-        r#"
-        network:
-          name: my-network
-          mode: managed
-          gateway:
-            port: 8001
-        "#, // contents
+        indoc! {r#"
+            network:
+              name: my-network
+              mode: managed
+              gateway:
+                port: 8001
+        "#}, // contents
     )
     .expect("failed to write project manifest");
 
@@ -86,13 +85,13 @@ fn two_projects_different_fixed_ports() {
     // Project manifest
     write_string(
         &project_dir_b.join("icp.yaml"), // path
-        r#"
-        network:
-          name: my-network
-          mode: managed
-          gateway:
-            port: 8002
-        "#, // contents
+        indoc! {r#"
+            network:
+              name: my-network
+              mode: managed
+              gateway:
+                port: 8002
+        "#}, // contents
     )
     .expect("failed to write project manifest");
 
@@ -140,8 +139,7 @@ fn deploy_to_other_projects_network() {
     let projb = ctx.create_project_dir("project-b");
 
     // Connect to Project A's network
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -158,8 +156,7 @@ fn deploy_to_other_projects_network() {
         environments:
           - name: environment-1
             network: network-a
-        "#,
-    );
+    "#};
 
     write_string(
         &projb.join("icp.yaml"), // path
@@ -222,12 +219,10 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &format!(
-            r#"
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-            "#
-        ), // contents
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#}, // contents
     )
     .expect("failed to write project manifest");
 

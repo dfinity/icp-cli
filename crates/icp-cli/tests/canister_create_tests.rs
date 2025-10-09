@@ -1,11 +1,13 @@
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
+use indoc::{formatdoc, indoc};
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
+
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
 
 mod common;
 
@@ -17,19 +19,17 @@ fn canister_create() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: echo hi
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: echo hi
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -63,27 +63,25 @@ fn canister_create_with_settings() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-  settings:
-    compute_allocation: 1
-    memory_allocation: 4294967296
-    freezing_threshold: 2592000
-    reserved_cycles_limit: 1000000000000
+    let pm = formatdoc! {r#"
+            canister:
+              name: my-canister
+              build:
+                steps:
+                  - type: script
+                    command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+              settings:
+                compute_allocation: 1
+                memory_allocation: 4294967296
+                freezing_threshold: 2592000
+                reserved_cycles_limit: 1000000000000
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-        f.path()
-    );
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -145,24 +143,22 @@ fn canister_create_with_settings_cmdline_override() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-  settings:
-    compute_allocation: 1
+    let pm = formatdoc! {r#"
+            canister:
+              name: my-canister
+              build:
+                steps:
+                  - type: script
+                    command: sh -c 'cp {path} \"$ICP_WASM_OUTPUT_PATH\"'
+              settings:
+                compute_allocation: 1
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-        f.path()
-    );
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -220,14 +216,14 @@ fn canister_create_nonexistent_canister() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest with canister named "a"
-    let pm = r#"
-    canister:
-      name: a
-      build:
-        steps:
-          - type: script
-            command: echo hi
-    "#;
+    let pm = indoc! {r#"
+        canister:
+          name: a
+          build:
+            steps:
+              - type: script
+                command: echo hi
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -248,24 +244,24 @@ fn canister_create_canister_not_in_environment() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
-    let pm = r#"
-    canisters:
-      - name: a
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: b
-        build:
-          steps:
-            - type: script
-              command: echo hi
+    let pm = indoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
 
-    environments:
-      - name: test-env
-        network: local
-        canisters: [a]
-    "#;
+        environments:
+          - name: test-env
+            network: local
+            canisters: [a]
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -288,39 +284,40 @@ async fn canister_create_colocates_canisters() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
-    let pm = r#"
-    canisters:
-      - name: canister-a
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-b
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-c
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-d
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-e
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-f
-        build:
-          steps:
-            - type: script
-              command: echo hi
-    "#;
+    let pm = indoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: canister-d
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: canister-e
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: canister-f
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+    "#};
+
     write_string(
         &project_dir.join("icp.yaml"), // path
         pm,                            // contents
@@ -360,12 +357,15 @@ async fn canister_create_colocates_canisters() {
         .success();
 
     let registry = clients::registry(&ctx);
+
     let subnet_a = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-a"))
         .await;
+
     let subnet_b = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-b"))
         .await;
+
     let subnet_c = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-c"))
         .await;
@@ -395,9 +395,11 @@ async fn canister_create_colocates_canisters() {
     let subnet_d = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-d"))
         .await;
+
     let subnet_e = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-e"))
         .await;
+
     let subnet_f = registry
         .get_subnet_for_canister(icp_client.get_canister_id("canister-f"))
         .await;

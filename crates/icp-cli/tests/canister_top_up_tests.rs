@@ -1,9 +1,11 @@
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+use indoc::formatdoc;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
 };
+
+use icp::{fs::write_string, prelude::*};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 
 mod common;
 
@@ -16,19 +18,17 @@ async fn canister_top_up() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: echo hi
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: echo hi
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

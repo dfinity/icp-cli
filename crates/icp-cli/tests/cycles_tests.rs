@@ -1,6 +1,8 @@
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::fs::write_string;
+use indoc::formatdoc;
 use predicates::str::contains;
+
+use icp::fs::write_string;
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 
 mod common;
 
@@ -12,14 +14,14 @@ async fn cycles_balance() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
+    let pm = formatdoc! {r#"
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &format!(
-            r#"
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-            "#
-        ), // contents
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 

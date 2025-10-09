@@ -1,6 +1,8 @@
-use crate::common::TestContext;
+use indoc::{indoc, formatdoc};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
+
 use icp::fs::{create_dir_all, write_string};
+use crate::common::TestContext;
 
 mod common;
 
@@ -13,19 +15,17 @@ fn single_canister_project() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
             steps:
               - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-        "#,
-        f.path()
-    );
+                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -62,18 +62,16 @@ fn multi_canister_project() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Canister manifest
-    let cm = format!(
-        r#"
+    let cm = formatdoc!{r#"
         name: my-canister
         build:
           steps:
             - type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-        "#,
-        f.path()
-    );
+              command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+    "#};
 
     create_dir_all(&project_dir.join("my-canister")).expect("failed to create canister directory");
 
@@ -99,10 +97,10 @@ fn glob_path() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
-    canisters:
-      - canisters/*
-    "#;
+    let pm = indoc! {r#"
+        canisters:
+          - canisters/*
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -112,18 +110,16 @@ fn glob_path() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Canister manifest
-    let cm = format!(
-        r#"
+    let cm = formatdoc!{r#"
         name: my-canister
         build:
           steps:
             - type: script
-              command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-        "#,
-        f.path()
-    );
+              command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+    "#};
 
     create_dir_all(&project_dir.join("canisters/my-canister"))
         .expect("failed to create canister directory");

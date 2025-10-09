@@ -1,8 +1,5 @@
 use icp::fs::write_string;
-use predicates::{
-    ord::eq,
-    str::{PredicateStrExt, contains},
-};
+use predicates::str::{PredicateStrExt, contains};
 use serde_json::Value;
 
 mod common;

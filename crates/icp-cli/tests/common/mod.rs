@@ -20,6 +20,7 @@ pub const PATH_SEPARATOR: &str = ";";
 pub const NETWORK_RANDOM_PORT: &str = r#"
 network:
   name: my-network
+  mode: managed
   gateway:
     port: 0
 "#;

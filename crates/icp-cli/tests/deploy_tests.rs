@@ -59,8 +59,8 @@ fn deploy_canister_not_found() {
         .stderr(eq("Error: project does not contain a canister named 'my-canister'").trim());
 }
 
-#[test]
-fn deploy() {
+#[tokio::test]
+async fn deploy() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -127,8 +127,8 @@ canister:
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
-#[test]
-fn deploy_twice_should_succeed() {
+#[tokio::test]
+async fn deploy_twice_should_succeed() {
     let ctx = TestContext::new();
 
     // Setup project

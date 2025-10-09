@@ -8,8 +8,12 @@ pub mod icp_cli;
 pub mod ledger;
 pub mod registry;
 
-pub fn icp(ctx: &TestContext, current_dir: impl Into<PathBuf>) -> icp_cli::Client<'_> {
-    icp_cli::Client::new(ctx, current_dir.into())
+pub fn icp(
+    ctx: &TestContext,
+    current_dir: impl Into<PathBuf>,
+    environment: Option<String>,
+) -> icp_cli::Client<'_> {
+    icp_cli::Client::new(ctx, current_dir.into(), environment)
 }
 
 pub fn ledger(ctx: &TestContext) -> ledger::Client<'_> {

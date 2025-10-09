@@ -149,8 +149,8 @@ fn identity_create() {
         .assert()
         .success();
 
-    let alice_principal = clients::icp(&ctx, &project_dir).get_principal("alice");
-    let anonymous_principal = clients::icp(&ctx, &project_dir).get_principal("anonymous");
+    let alice_principal = clients::icp(&ctx, &project_dir, None).get_principal("alice");
+    let anonymous_principal = clients::icp(&ctx, &project_dir, None).get_principal("anonymous");
 
     let seed = str::from_utf8(&new_out.get_output().stdout)
         .unwrap()

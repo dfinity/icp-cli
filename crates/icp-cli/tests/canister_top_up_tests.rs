@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
 use predicates::{
     ord::eq,
@@ -16,25 +16,29 @@ async fn canister_top_up() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
-    canister:
-      name: my-canister
-      build:
-        steps:
-          - type: script
-            command: echo hi
-    "#;
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+        "#
+    );
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
     ctx.icp()
@@ -42,7 +46,10 @@ async fn canister_top_up() {
         .args(["canister", "create"])
         .assert()
         .success();
-    let canister_id = clients::icp(&ctx, &project_dir).get_canister_id("my-canister");
+
+    let canister_id = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .get_canister_id("my-canister");
+
     let canister_balance = ctx.pocketic().cycle_balance(canister_id).await;
 
     // top up with more cycles than available

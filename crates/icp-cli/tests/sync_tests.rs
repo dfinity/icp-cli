@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
@@ -33,6 +33,9 @@ fn sync_adapter_script_single() {
             steps:
               - type: script
                 command: echo "syncing"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
     );
 
@@ -43,14 +46,14 @@ fn sync_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project (it should sync as well)
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args(["--debug", "deploy", "--subnet-id", common::SUBNET_ID])
@@ -92,6 +95,9 @@ fn sync_adapter_script_multiple() {
                 command: echo "second"
               - type: script
                 command: echo "first"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
     );
 
@@ -102,14 +108,14 @@ fn sync_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project (it should sync as well)
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args(["--debug", "deploy", "--subnet-id", common::SUBNET_ID])
@@ -156,6 +162,9 @@ async fn sync_adapter_static_assets() {
               - type: assets
                 dirs:
                   - {assets_dir}
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
     );
 
@@ -166,11 +175,10 @@ async fn sync_adapter_static_assets() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
     let network_port = ctx
         .wait_for_network_descriptor(&project_dir, "local")
         .gateway_port;
@@ -179,7 +187,8 @@ async fn sync_adapter_static_assets() {
     let cid = "tqzl2-p7777-77776-aaaaa-cai";
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--subnet-id", common::SUBNET_ID])

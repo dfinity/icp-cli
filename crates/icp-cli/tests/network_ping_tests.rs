@@ -1,3 +1,4 @@
+use icp::fs::write_string;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -6,16 +7,22 @@ use serde_json::Value;
 use serial_test::file_serial;
 
 mod common;
-use crate::common::TestContext;
+use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 
 #[test]
 fn ping_local() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("icp");
-    ctx.configure_icp_local_network_random_port(&project_dir);
 
-    let _child_guard = ctx.start_network_in(&project_dir);
+    // Project manifest
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        NETWORK_RANDOM_PORT,           // contents
+    )
+    .expect("failed to write project manifest");
+
+    let _child_guard = ctx.start_network_in(&project_dir, "my-network");
 
     let network_descriptor = ctx.wait_for_local_network_descriptor(&project_dir);
     let expected_root_key = hex::decode(&network_descriptor.root_key)
@@ -66,7 +73,7 @@ fn attempt_ping_other_project() {
     // Start project a's local network, then stop it, but write the
     // network descriptor as if the network were killed
     let network_descriptor = {
-        let _g = ctx.start_network_in(&project_dir_a);
+        let _g = ctx.start_network_in(&project_dir_a, "local");
 
         // load network descriptor
         let network_descriptor = ctx.read_network_descriptor(&project_dir_a, "local");
@@ -82,7 +89,7 @@ fn attempt_ping_other_project() {
 
     let project_dir_b = ctx.create_project_dir("b");
 
-    let _child_guard_b = ctx.start_network_in(&project_dir_b);
+    let _child_guard_b = ctx.start_network_in(&project_dir_b, "local");
 
     let network_descriptor = ctx.wait_for_local_network_descriptor(&project_dir_b);
     let expected_root_key = hex::decode(&network_descriptor.root_key)

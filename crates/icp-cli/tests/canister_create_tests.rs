@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
@@ -17,33 +17,39 @@ fn canister_create() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
-    canister:
-      name: my-canister
-      build:
-        steps:
-          - type: script
-            command: echo hi
-    "#;
+    let pm = format!(
+        r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+        "#
+    );
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create"])
+        .args(["canister", "create", "--environment", "my-environment"])
         .assert()
         .success();
 }
@@ -72,6 +78,9 @@ fn canister_create_with_settings() {
             memory_allocation: 4294967296
             freezing_threshold: 2592000
             reserved_cycles_limit: 1000000000000
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
         f.path()
     );
@@ -83,14 +92,15 @@ fn canister_create_with_settings() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -139,6 +149,9 @@ fn canister_create_with_settings_cmdline_override() {
                 command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
           settings:
             compute_allocation: 1
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
         f.path()
     );
@@ -150,14 +163,15 @@ fn canister_create_with_settings_cmdline_override() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -311,10 +325,11 @@ async fn canister_create_colocates_canisters() {
             },
         )
         .await;
-    ctx.ping_until_healthy(&project_dir);
+
+    ctx.ping_until_healthy(&project_dir, "local");
 
     // Create first three canisters
-    let icp_client = clients::icp(&ctx, &project_dir);
+    let icp_client = clients::icp(&ctx, &project_dir, None);
     icp_client.mint_cycles(20 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)

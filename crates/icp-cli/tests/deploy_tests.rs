@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
 use predicates::{ord::eq, str::PredicateStrExt};
 
@@ -78,6 +78,9 @@ fn deploy() {
             steps:
               - type: script
                 command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -89,11 +92,10 @@ fn deploy() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
 
     // Deploy project
     ctx.icp()
@@ -130,6 +132,9 @@ fn deploy_twice_should_succeed() {
             steps:
               - type: script
                 command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -141,11 +146,10 @@ fn deploy_twice_should_succeed() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
 
     // Deploy project (first time)
     ctx.icp()

@@ -6,7 +6,9 @@ use predicates::{
 use serial_test::file_serial;
 
 mod common;
-use crate::common::{TestContext, TestNetwork, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
+};
 
 #[test]
 #[file_serial(default_local_network)]
@@ -16,10 +18,10 @@ fn network_same_port() {
     let project_dir_a = ctx.create_project_dir("a");
     let project_dir_b = ctx.create_project_dir("b");
 
-    let _child_guard = ctx.start_network_in(&project_dir_a);
+    let _child_guard = ctx.start_network_in(&project_dir_a, "local");
 
     eprintln!("wait for network healthy");
-    ctx.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&project_dir_a, "local");
 
     eprintln!("second network run attempt");
     ctx.icp()
@@ -48,38 +50,67 @@ fn two_projects_different_fixed_ports() {
     let ctx = TestContext::new();
 
     let project_dir_a = ctx.create_project_dir("a");
+
+    // Project manifest
+    write_string(
+        &project_dir_a.join("icp.yaml"), // path
+        r#"
+        network:
+          name: my-network
+          gateway:
+            port: 8001
+        "#, // contents
+    )
+    .expect("failed to write project manifest");
+
     let project_dir_b = ctx.create_project_dir("b");
 
-    ctx.configure_icp_local_network_port(&project_dir_a, 8001);
-    ctx.configure_icp_local_network_port(&project_dir_b, 8002);
+    // Project manifest
+    write_string(
+        &project_dir_b.join("icp.yaml"), // path
+        r#"
+        network:
+          name: my-network
+          gateway:
+            port: 8002
+        "#, // contents
+    )
+    .expect("failed to write project manifest");
 
-    let _a_guard = ctx.start_network_in(&project_dir_a);
+    let _a_guard = ctx.start_network_in(&project_dir_a, "my-network");
 
     eprintln!("wait for network A healthy");
-    ctx.ping_until_healthy(&project_dir_a);
+    ctx.ping_until_healthy(&project_dir_a, "my-network");
 
-    let _b_guard = ctx.start_network_in(&project_dir_b);
+    let _b_guard = ctx.start_network_in(&project_dir_b, "my-network");
 
     eprintln!("wait for network B healthy");
-    ctx.ping_until_healthy(&project_dir_b);
+    ctx.ping_until_healthy(&project_dir_b, "my-network");
 }
 
+// TODO(or.ricon) This is broken
 #[test]
 fn deploy_to_other_projects_network() {
     let ctx = TestContext::new();
 
     // Project A
     let proja = ctx.create_project_dir("project-a");
-    ctx.configure_icp_local_network_random_port(&proja);
+
+    // Project manifest
+    write_string(
+        &proja.join("icp.yaml"), // path
+        NETWORK_RANDOM_PORT,     // contents
+    )
+    .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&proja);
+    let _g = ctx.start_network_in(&proja, "my-network");
 
     let TestNetwork {
         gateway_port,
         root_key,
         ..
-    } = ctx.wait_for_local_network_descriptor(&proja);
+    } = ctx.wait_for_network_descriptor(&proja, "my-network");
 
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");
@@ -115,10 +146,10 @@ fn deploy_to_other_projects_network() {
     )
     .expect("failed to write project manifest");
 
-    ctx.ping_until_healthy(&proja);
+    ctx.ping_until_healthy(&proja, "network-a");
 
     // Deploy project (first time)
-    clients::icp(&ctx, &proja).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &proja, Some("environment-1".to_string())).mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&projb)
@@ -151,16 +182,28 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
-    let icp_client = clients::icp(&ctx, &project_dir);
+
+    // Project manifest
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &format!(
+            r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+            "#
+        ), // contents
+    )
+    .expect("failed to write project manifest");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()));
 
     // Create identities BEFORE starting the network
     icp_client.create_identity("before");
 
     // Time how long it takes to configure and start the network
     let start = std::time::Instant::now();
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _guard = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _guard = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
     let duration = start.elapsed();
     println!(
         "========== Configuring and starting network took {:?}",

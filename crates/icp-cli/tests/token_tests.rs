@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::fs::write_string;
 use predicates::str::contains;
 
@@ -14,18 +14,24 @@ async fn token_balance() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                            // contents
+        &format!(
+            r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+            "#
+        ), // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
-    let identity = clients::icp(&ctx, &project_dir).use_new_random_identity();
+    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .use_new_random_identity();
+
     ctx.icp()
         .current_dir(&project_dir)
         .args(["token", "balance"])
@@ -60,15 +66,20 @@ async fn token_transfer() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                            // contents
+        &format!(
+            r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+            "#
+        ), // contents
     )
     .expect("failed to write project manifest");
 
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
-    let icp_client = clients::icp(&ctx, &project_dir);
+    let icp_client = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()));
+
     icp_client.create_identity("alice");
     icp_client.use_identity("alice");
     let alice_principal = icp_client.active_principal();

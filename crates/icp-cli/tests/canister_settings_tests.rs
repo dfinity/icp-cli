@@ -836,7 +836,7 @@ canister:
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains("Environment Variables:"))
-                .and(contains("Name: ICP_CANISTER_ID:my-canister")),
+                .and(contains("Name: PUBLIC_CANISTER_ID:my-canister")),
         );
 
     // Add multiple environment variables

@@ -144,7 +144,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let progress_manager = ProgressManager::new();
 
     // Get the list of name to canister id for this environment
-    // We need this to inject the `ICP_CANISTER_ID:` environment variables
+    // We need this to inject the `PUBLIC_CANISTER_ID:` environment variables
     // as we're installing the canisters
     let canister_list = ctx.ids.lookup_by_environment(&env.name)?;
     debug!("Canister list: {:?}", canister_list);
@@ -175,7 +175,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     debug!("Found canisters: {:?}", canister_list);
     let binding_vars = canister_list
         .iter()
-        .map(|(n, p)| (format!("ICP_CANISTER_ID:{}", n), p.to_text()))
+        .map(|(n, p)| (format!("PUBLIC_CANISTER_ID:{}", n), p.to_text()))
         .collect::<Vec<(_, _)>>();
 
     for (_, (_, c)) in cs {

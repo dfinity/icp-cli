@@ -3,8 +3,8 @@ name: frontend
 build:
   steps:
     - type: pre-built
-      path: canister/assetstorage.wasm.gz
-      sha256: 2c9cfd9c111393ce3ff335307cda6fe38c6a474c926750d235e2a5ad96942795
+      path: https://github.com/dfinity/sdk/raw/89243f2268b6d0ec77d589b7b1b27af931f70edd/src/distributed/assetstorage.wasm.gz
+      sha256: b312a16c3179cf8384afa852e468c1333b7439d4c5a39f26df69b12320f629f8
 
     - type: script
       command: npm ci

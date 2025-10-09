@@ -144,7 +144,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                             //
                             // Canister manifest
                             self.canister
-                                .load(&p)
+                                .load(&p.join(CANISTER_MANIFEST))
                                 .await
                                 .context(LoadManifestError::Canister)?,
                         ));

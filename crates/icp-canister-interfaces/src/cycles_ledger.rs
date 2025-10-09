@@ -195,7 +195,9 @@ impl WithdrawError {
                 rejection_reason,
                 fee_block: _,
             } => {
-                format!("Failed to withdraw cycles: {rejection_reason} (rejection code: {rejection_code:?})")
+                format!(
+                    "Failed to withdraw cycles: {rejection_reason} (rejection code: {rejection_code:?})"
+                )
             }
             WithdrawError::Duplicate { duplicate_of } => {
                 format!("Duplicate request of block {duplicate_of}.")

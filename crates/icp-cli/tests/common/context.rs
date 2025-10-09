@@ -210,9 +210,7 @@ impl TestContext {
 
         // Connect PocketIc client
         let pocketic = PocketIc::new_from_existing_instance(
-            format!("http://localhost:{pocketic_port}")
-                .parse()
-                .unwrap(),
+            format!("http://localhost:{pocketic_port}").parse().unwrap(),
             instance.instance_id,
             None,
         );
@@ -263,9 +261,7 @@ impl TestContext {
                 }
             }
             if start_time.elapsed().as_secs() > 30 {
-                panic!(
-                    "Timed out waiting for network descriptor at {descriptor_path}"
-                );
+                panic!("Timed out waiting for network descriptor at {descriptor_path}");
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         };

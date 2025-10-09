@@ -1,9 +1,11 @@
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+use indoc::formatdoc;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
+
+use icp::{fs::write_string, prelude::*};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 
 mod common;
 
@@ -18,20 +20,17 @@ fn canister_start() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-        wasm,
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

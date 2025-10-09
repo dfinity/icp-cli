@@ -1,6 +1,8 @@
-use crate::common::TestContext;
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
+use indoc::formatdoc;
+
 use icp::fs::write_string;
+use crate::common::TestContext;
 
 mod common;
 
@@ -13,19 +15,17 @@ fn build_adapter_script_single() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
             steps:
               - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-        "#,
-        f.path()
-    );
+                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -50,10 +50,10 @@ fn build_adapter_script_multiple() {
 
     // Create temporary file
     let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -61,12 +61,10 @@ fn build_adapter_script_multiple() {
               - type: script
                 command: echo "before"
               - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
               - type: script
                 command: echo "after"
-        "#,
-        f.path()
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

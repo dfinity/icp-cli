@@ -1,7 +1,9 @@
-use crate::common::{TestContext, spawn_test_server};
-use icp::fs::{read, write_string};
+use indoc::formatdoc;
 use k256::sha2::{Digest, Sha256};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
+
+use icp::fs::{read, write_string};
+use crate::common::{TestContext, spawn_test_server};
 
 mod common;
 
@@ -16,16 +18,14 @@ fn build_adapter_pre_built_path() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
             steps:
               - type: pre-built
                 path: {wasm}
-        "#,
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -60,8 +60,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
     });
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -69,8 +68,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
               - type: pre-built
                 path: {wasm}
                 sha256: invalid
-        "#,
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -110,8 +108,7 @@ fn build_adapter_pre_built_path_valid_checksum() {
     });
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -119,8 +116,7 @@ fn build_adapter_pre_built_path_valid_checksum() {
               - type: pre-built
                 path: {wasm}
                 sha256: {actual}
-        "#,
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -152,16 +148,14 @@ fn build_adapter_pre_built_url() {
     let addr = server.addr();
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
             steps:
               - type: pre-built
                 url: http://{addr}/canister.wasm
-        "#,
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -200,8 +194,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
     let addr = server.addr();
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -209,8 +202,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
               - type: pre-built
                 url: http://{addr}/canister.wasm
                 sha256: invalid
-        "#,
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -254,8 +246,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
     let addr = server.addr();
 
     // Project manifest
-    let pm = format!(
-        r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -263,8 +254,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
               - type: pre-built
                 url: http://{addr}/canister.wasm
                 sha256: {actual}
-        "#,
-    );
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

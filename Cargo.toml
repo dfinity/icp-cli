@@ -45,6 +45,7 @@ icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
 icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
+indoc = "2.0.6"
 itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 lazy_static = "1.5.0"

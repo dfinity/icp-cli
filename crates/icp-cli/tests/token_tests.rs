@@ -1,6 +1,8 @@
+use indoc::formatdoc;
+use predicates::str::contains;
+
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::fs::write_string;
-use predicates::str::contains;
 
 mod common;
 
@@ -14,12 +16,10 @@ async fn token_balance() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &format!(
-            r#"
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-            "#
-        ), // contents
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#}, // contents
     )
     .expect("failed to write project manifest");
 
@@ -72,12 +72,10 @@ async fn token_transfer() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &format!(
-            r#"
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-            "#
-        ), // contents
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#}, // contents
     )
     .expect("failed to write project manifest");
 

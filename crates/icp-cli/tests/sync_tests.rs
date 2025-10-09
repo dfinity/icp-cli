@@ -1,12 +1,14 @@
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
 };
+use indoc::formatdoc;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
 };
+
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 
 mod common;
 
@@ -21,23 +23,21 @@ fn sync_adapter_script_single() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
-  sync:
-    steps:
-      - type: script
-        command: echo "syncing"
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+          sync:
+            steps:
+              - type: script
+                command: echo "syncing"
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -88,25 +88,23 @@ fn sync_adapter_script_multiple() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
-  sync:
-    steps:
-      - type: script
-        command: echo "second"
-      - type: script
-        command: echo "first"
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+          sync:
+            steps:
+              - type: script
+                command: echo "second"
+              - type: script
+                command: echo "first"
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -161,26 +159,24 @@ async fn sync_adapter_static_assets() {
     write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
 
     // Project manifest
-    let pm = format!(
-        r#"
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: pre-built
-        url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
-        sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: pre-built
+                url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
 
-  sync:
-    steps:
-      - type: assets
-        dirs:
-          - {assets_dir}
+          sync:
+            steps:
+              - type: assets
+                dirs:
+                  - {assets_dir}
 
-{NETWORK_RANDOM_PORT}
-{ENVIRONMENT_RANDOM_PORT}
-        "#,
-    );
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

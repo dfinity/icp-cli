@@ -23,7 +23,7 @@ impl<'a> Client<'a> {
             self.ctx
                 .icp()
                 .current_dir(&self.current_dir)
-                .args(["identity", "principal", "--environment", &self.environment])
+                .args(["identity", "principal"])
                 .assert()
                 .get_output()
                 .stdout

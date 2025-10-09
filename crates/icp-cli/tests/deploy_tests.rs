@@ -72,15 +72,15 @@ fn deploy() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -100,14 +100,28 @@ fn deploy() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "my-environment",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+        ])
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
@@ -126,15 +140,15 @@ fn deploy_twice_should_succeed() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -154,21 +168,41 @@ fn deploy_twice_should_succeed() {
     // Deploy project (first time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());

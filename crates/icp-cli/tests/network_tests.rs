@@ -188,8 +188,8 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         &project_dir.join("icp.yaml"), // path
         &format!(
             r#"
-            {NETWORK_RANDOM_PORT}
-            {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
             "#
         ), // contents
     )
@@ -217,7 +217,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("anonymous");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance"])
+        .args(["token", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 1000000000.00000000 ICP"))
         .success();
@@ -226,7 +226,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("before");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance"])
+        .args(["token", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 1000000.00000000 ICP"))
         .success();
@@ -235,7 +235,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("after");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance"])
+        .args(["token", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 0 ICP"))
         .success();
@@ -244,7 +244,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("before");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance"])
+        .args(["cycles", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 1000.000000000000 TCYCLES"))
         .success();
@@ -253,7 +253,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("after");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance"])
+        .args(["cycles", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();

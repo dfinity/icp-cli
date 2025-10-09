@@ -19,15 +19,15 @@ fn canister_create() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo hi
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: echo hi
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#
     );
 
@@ -67,20 +67,20 @@ fn canister_create_with_settings() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-          settings:
-            compute_allocation: 1
-            memory_allocation: 4294967296
-            freezing_threshold: 2592000
-            reserved_cycles_limit: 1000000000000
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+  settings:
+    compute_allocation: 1
+    memory_allocation: 4294967296
+    freezing_threshold: 2592000
+    reserved_cycles_limit: 1000000000000
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         f.path()
     );
@@ -106,6 +106,8 @@ fn canister_create_with_settings() {
         .args([
             "canister",
             "create",
+            "--environment",
+            "my-environment",
             "--cycles",
             &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
@@ -115,7 +117,13 @@ fn canister_create_with_settings() {
     // Verify creation settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -141,17 +149,17 @@ fn canister_create_with_settings_cmdline_override() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-          settings:
-            compute_allocation: 1
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+  settings:
+    compute_allocation: 1
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         f.path()
     );
@@ -179,6 +187,8 @@ fn canister_create_with_settings_cmdline_override() {
             "create",
             "--compute-allocation",
             "2",
+            "--environment",
+            "my-environment",
             "--cycles",
             &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
@@ -188,7 +198,13 @@ fn canister_create_with_settings_cmdline_override() {
     // Verify creation settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(

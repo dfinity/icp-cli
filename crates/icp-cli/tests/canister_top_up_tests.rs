@@ -18,15 +18,15 @@ async fn canister_top_up() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo hi
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: echo hi
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#
     );
 
@@ -43,7 +43,7 @@ async fn canister_top_up() {
     // Create canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create"])
+        .args(["canister", "create", "--environment", "my-environment"])
         .assert()
         .success();
 
@@ -59,6 +59,8 @@ async fn canister_top_up() {
             "canister",
             "top-up",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--amount",
             &format!("{}", 123_456 * TRILLION),
         ])
@@ -75,6 +77,8 @@ async fn canister_top_up() {
             "canister",
             "top-up",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--amount",
             &format!("{}", 10 * TRILLION),
         ])

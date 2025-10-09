@@ -16,15 +16,15 @@ fn canister_delete() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
 
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -44,28 +44,52 @@ fn canister_delete() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Stop canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "stop", "my-canister"])
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Delete canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "delete", "my-canister"])
+        .args([
+            "canister",
+            "delete",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query status
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .failure();
 }

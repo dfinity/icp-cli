@@ -16,8 +16,8 @@ async fn token_balance() {
         &project_dir.join("icp.yaml"), // path
         &format!(
             r#"
-            {NETWORK_RANDOM_PORT}
-            {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
             "#
         ), // contents
     )
@@ -34,14 +34,20 @@ async fn token_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance"])
+        .args(["token", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 0 ICP"))
         .success();
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "cycles", "balance"])
+        .args([
+            "token",
+            "cycles",
+            "balance",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
@@ -53,7 +59,7 @@ async fn token_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "icp", "balance"])
+        .args(["token", "icp", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 1.23456780 ICP"))
         .success();
@@ -68,8 +74,8 @@ async fn token_transfer() {
         &project_dir.join("icp.yaml"), // path
         &format!(
             r#"
-            {NETWORK_RANDOM_PORT}
-            {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
             "#
         ), // contents
     )
@@ -102,7 +108,14 @@ async fn token_transfer() {
     icp_client.use_identity("alice");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "transfer", "1.1", &bob_principal.to_string()])
+        .args([
+            "token",
+            "transfer",
+            "1.1",
+            &bob_principal.to_string(),
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(format!(
             "Transferred 1.10000000 ICP to {}",
@@ -121,7 +134,14 @@ async fn token_transfer() {
     // Simple cycles transfer
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "5"])
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "5",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
     ctx.icp()
@@ -132,6 +152,8 @@ async fn token_transfer() {
             "transfer",
             "2",
             &bob_principal.to_string(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .stdout(contains(format!(
@@ -142,7 +164,7 @@ async fn token_transfer() {
     icp_client.use_identity("bob");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance"])
+        .args(["cycles", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 2.000000000000 TCYCLES"))
         .success();

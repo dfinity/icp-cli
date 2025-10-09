@@ -16,8 +16,8 @@ async fn cycles_balance() {
         &project_dir.join("icp.yaml"), // path
         &format!(
             r#"
-            {NETWORK_RANDOM_PORT}
-            {ENVIRONMENT_RANDOM_PORT}
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
             "#
         ), // contents
     )
@@ -35,7 +35,7 @@ async fn cycles_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance"])
+        .args(["cycles", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
@@ -46,7 +46,14 @@ async fn cycles_balance() {
         .await;
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "1"])
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "1",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(
             "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",
@@ -62,7 +69,14 @@ async fn cycles_balance() {
         .await;
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--cycles", "1000000000"])
+        .args([
+            "cycles",
+            "mint",
+            "--cycles",
+            "1000000000",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(
             "Minted 0.001000000000 TCYCLES to your account, new balance: 0.001000000000 TCYCLES.",
@@ -70,7 +84,14 @@ async fn cycles_balance() {
         .success();
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--cycles", "1500000000"])
+        .args([
+            "cycles",
+            "mint",
+            "--cycles",
+            "1500000000",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(
             "Minted 0.001500016000 TCYCLES to your account, new balance: 0.002500016000 TCYCLES.",

@@ -3,11 +3,18 @@ import { createActor } from "./backend/api/hello_world";
 import { getCanisterEnv } from "@icp-sdk/canister-env";
 import "./App.css";
 
-const canisterEnv = getCanisterEnv();
+interface CanisterEnv {
+  readonly "ICP_CANISTER_ID:backend": string;
+}
+
+const canisterEnv = getCanisterEnv<CanisterEnv>();
 const canisterId = canisterEnv["ICP_CANISTER_ID:backend"];
 
 const helloWorldActor = createActor(canisterId, {
-  agentOptions: { rootKey: canisterEnv.IC_ROOT_KEY },
+  agentOptions: {
+    rootKey: !import.meta.env.DEV ? canisterEnv.IC_ROOT_KEY : undefined,
+    shouldFetchRootKey: import.meta.env.DEV,
+  },
 });
 
 function App() {

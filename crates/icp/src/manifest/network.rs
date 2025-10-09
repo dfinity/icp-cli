@@ -85,7 +85,7 @@ mod tests {
                 configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
                         host: "localhost".to_string(),
-                        port: Port::Fixed(8080),
+                        port: Port::Fixed(8000),
                     }
                 })
             },
@@ -195,7 +195,7 @@ mod tests {
                 configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
                         host: "localhost".to_string(),
-                        port: Port::Fixed(8080),
+                        port: Port::Fixed(8000),
                     }
                 })
             },

@@ -24,12 +24,16 @@ pub mod structure;
 
 pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
 
-#[derive(Clone, Debug, Default, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub enum Port {
     Fixed(u16),
-
-    #[default]
     Random,
+}
+
+impl Default for Port {
+    fn default() -> Self {
+        Port::Fixed(8000)
+    }
 }
 
 impl<'de> Deserialize<'de> for Port {

@@ -3,7 +3,7 @@ name: frontend
 build:
   steps:
     - type: pre-built
-      path: https://github.com/dfinity/sdk/raw/89243f2268b6d0ec77d589b7b1b27af931f70edd/src/distributed/assetstorage.wasm.gz
+      url: https://github.com/dfinity/sdk/raw/89243f2268b6d0ec77d589b7b1b27af931f70edd/src/distributed/assetstorage.wasm.gz
       sha256: b312a16c3179cf8384afa852e468c1333b7439d4c5a39f26df69b12320f629f8
 
     - type: script

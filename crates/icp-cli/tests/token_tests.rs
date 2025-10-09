@@ -1,8 +1,8 @@
 use indoc::formatdoc;
 use predicates::str::contains;
 
-use icp::fs::write_string;
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use icp::fs::write_string;
 
 mod common;
 
@@ -72,7 +72,7 @@ async fn token_transfer() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &formatdoc!{r#"
+        &formatdoc! {r#"
             {NETWORK_RANDOM_PORT}
             {ENVIRONMENT_RANDOM_PORT}
         "#}, // contents

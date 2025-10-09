@@ -1,8 +1,8 @@
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use indoc::formatdoc;
 
-use icp::fs::write_string;
 use crate::common::TestContext;
+use icp::fs::write_string;
 
 mod common;
 

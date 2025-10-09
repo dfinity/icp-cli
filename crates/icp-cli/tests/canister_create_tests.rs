@@ -6,8 +6,8 @@ use predicates::{
     str::{contains, starts_with},
 };
 
-use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
 
 mod common;
 

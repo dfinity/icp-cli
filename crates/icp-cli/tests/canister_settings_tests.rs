@@ -4,11 +4,11 @@ use predicates::{
     str::{contains, starts_with},
 };
 
-use icp::{fs::write_string, prelude::*};
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext,
     clients::{self, icp_cli},
 };
+use icp::{fs::write_string, prelude::*};
 
 mod common;
 

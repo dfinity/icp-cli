@@ -1,8 +1,8 @@
-use indoc::{indoc, formatdoc};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
+use indoc::{formatdoc, indoc};
 
-use icp::fs::{create_dir_all, write_string};
 use crate::common::TestContext;
+use icp::fs::{create_dir_all, write_string};
 
 mod common;
 
@@ -65,7 +65,7 @@ fn multi_canister_project() {
     let path = f.path();
 
     // Canister manifest
-    let cm = formatdoc!{r#"
+    let cm = formatdoc! {r#"
         name: my-canister
         build:
           steps:
@@ -113,7 +113,7 @@ fn glob_path() {
     let path = f.path();
 
     // Canister manifest
-    let cm = formatdoc!{r#"
+    let cm = formatdoc! {r#"
         name: my-canister
         build:
           steps:

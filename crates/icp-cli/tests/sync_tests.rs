@@ -1,8 +1,8 @@
-use indoc::formatdoc;
 use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
 };
+use indoc::formatdoc;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
@@ -23,7 +23,7 @@ fn sync_adapter_script_single() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = formatdoc!{r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
@@ -88,7 +88,7 @@ fn sync_adapter_script_multiple() {
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
     // Project manifest
-    let pm = formatdoc!{r#"
+    let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:

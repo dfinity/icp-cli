@@ -1,14 +1,14 @@
-use indoc::{indoc, formatdoc};
+use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
 };
 use serial_test::file_serial;
 
-use icp::{fs::write_string, prelude::*};
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
 };
+use icp::{fs::write_string, prelude::*};
 
 mod common;
 
@@ -31,7 +31,7 @@ fn network_same_port() {
     // write manifest to project a
     write_string(
         &project_dir_a.join("icp.yaml"), // path
-        pm
+        pm,
     )
     .expect("failed to write project manifest");
 
@@ -40,7 +40,7 @@ fn network_same_port() {
     // write manifest to project b
     write_string(
         &project_dir_b.join("icp.yaml"), // path
-        pm
+        pm,
     )
     .expect("failed to write project manifest");
 

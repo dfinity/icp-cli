@@ -4,8 +4,8 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 
-use icp::{fs::write_string, prelude::*};
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use icp::{fs::write_string, prelude::*};
 
 mod common;
 

@@ -5,12 +5,7 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{
-    LoadPath,
-    fs::read,
-    manifest::{CANISTER_MANIFEST, CanisterManifest},
-    prelude::*,
-};
+use crate::{LoadPath, fs::read, manifest::CanisterManifest, prelude::*};
 
 pub mod assets;
 pub mod build;
@@ -64,7 +59,7 @@ pub struct PathLoader;
 impl LoadPath<CanisterManifest, LoadPathError> for PathLoader {
     async fn load(&self, path: &Path) -> Result<CanisterManifest, LoadPathError> {
         // Read file
-        let mbs = read(&path.join(CANISTER_MANIFEST)).context(LoadPathError::Read)?;
+        let mbs = read(path).context(LoadPathError::Read)?;
 
         // Load YAML
         let m =

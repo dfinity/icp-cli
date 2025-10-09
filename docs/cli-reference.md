@@ -390,11 +390,11 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli deploy`
 
-**Usage:** `icp-cli deploy [OPTIONS] [NAME]`
+**Usage:** `icp-cli deploy [OPTIONS] [NAMES]...`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<NAMES>` — Canister names
 
 ###### **Options:**
 
@@ -404,14 +404,14 @@ This document contains the help content for the `icp-cli` command-line program.
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
-* `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 * `--subnet-id <SUBNET_ID>` — The subnet id to use for the canisters being deployed
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation (in cycles)
 
   Default value: `2000000000000`
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 
 
 
@@ -470,9 +470,6 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--from-seed-file <FILE>`
 * `--decryption-password-from-file <FILE>`
 * `--assert-key-type <ASSERT_KEY_TYPE>`
-
-  Possible values: `secp256k1`
-
 
 
 
@@ -536,10 +533,10 @@ Try to connect to a network, and print out its status
 
 * `<NETWORK>` — The compute network to connect to. By default, ping the local network
 
+  Default value: `local`
+
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 * `--wait-healthy` — Repeatedly ping until the replica is healthy or 1 minute has passed
 
 
@@ -564,7 +561,7 @@ Run a given network
 
 ###### **Arguments:**
 
-* `<NAMES>` — The names of the canisters within the current project
+* `<NAMES>` — Canister names
 
 ###### **Options:**
 

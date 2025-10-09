@@ -1,16 +1,19 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
-use crate::manifest::{Item, canister::Canister, environment::Environment, network::Network};
+use crate::manifest::{
+    Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
+};
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)]
 pub enum Canisters {
-    Canister(Canister),
-    Canisters(Vec<Item<Canister>>),
+    Canister(CanisterManifest),
+    Canisters(Vec<Item<CanisterManifest>>),
 }
 
-impl From<Canisters> for Vec<Item<Canister>> {
+impl From<Canisters> for Vec<Item<CanisterManifest>> {
     fn from(value: Canisters) -> Self {
         match value {
             Canisters::Canister(v) => vec![Item::Manifest(v)],
@@ -19,54 +22,54 @@ impl From<Canisters> for Vec<Item<Canister>> {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Networks {
-    Network(Network),
-    Networks(Vec<Item<Network>>),
+    Network(NetworkManifest),
+    Networks(Vec<NetworkManifest>),
 }
 
 impl Networks {
     pub fn with_defaults(self) -> Self {
         Self::Networks(
             [
-                Into::<Vec<Item<Network>>>::into(Self::default()),
-                Into::<Vec<Item<Network>>>::into(self),
+                Into::<Vec<NetworkManifest>>::into(Self::default()),
+                Into::<Vec<NetworkManifest>>::into(self),
             ]
             .concat(),
         )
     }
 }
 
-impl From<Networks> for Vec<Item<Network>> {
+impl From<Networks> for Vec<NetworkManifest> {
     fn from(value: Networks) -> Self {
         match value {
-            Networks::Network(v) => vec![Item::Manifest(v)],
+            Networks::Network(v) => vec![v],
             Networks::Networks(items) => items,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Environments {
-    Environment(Environment),
-    Environments(Vec<Environment>),
+    Environment(EnvironmentManifest),
+    Environments(Vec<EnvironmentManifest>),
 }
 
 impl Environments {
     pub fn with_defaults(self) -> Self {
         Self::Environments(
             [
-                Into::<Vec<Environment>>::into(Self::default()),
-                Into::<Vec<Environment>>::into(self),
+                Into::<Vec<EnvironmentManifest>>::into(Self::default()),
+                Into::<Vec<EnvironmentManifest>>::into(self),
             ]
             .concat(),
         )
     }
 }
 
-impl From<Environments> for Vec<Environment> {
+impl From<Environments> for Vec<EnvironmentManifest> {
     fn from(value: Environments) -> Self {
         match value {
             Environments::Environment(v) => vec![v],
@@ -75,7 +78,7 @@ impl From<Environments> for Vec<Environment> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProjectInner {
     #[serde(flatten)]
     pub canisters: Option<Canisters>,
@@ -88,13 +91,13 @@ pub struct ProjectInner {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Project {
-    pub canisters: Vec<Item<Canister>>,
-    pub networks: Vec<Item<Network>>,
-    pub environments: Vec<Environment>,
+pub struct ProjectManifest {
+    pub canisters: Vec<Item<CanisterManifest>>,
+    pub networks: Vec<NetworkManifest>,
+    pub environments: Vec<EnvironmentManifest>,
 }
 
-impl From<ProjectInner> for Project {
+impl From<ProjectInner> for ProjectManifest {
     fn from(v: ProjectInner) -> Self {
         let ProjectInner {
             canisters,
@@ -112,8 +115,8 @@ impl From<ProjectInner> for Project {
 
             // Network(s) specified, append to default
             Some(vs) => [
-                Into::<Vec<Item<Network>>>::into(Networks::default()),
-                Into::<Vec<Item<Network>>>::into(vs),
+                Into::<Vec<NetworkManifest>>::into(Networks::default()),
+                Into::<Vec<NetworkManifest>>::into(vs),
             ]
             .concat(),
         };
@@ -125,8 +128,8 @@ impl From<ProjectInner> for Project {
 
             // Environment(s) specified, append to default
             Some(vs) => [
-                Into::<Vec<Environment>>::into(Environments::default()),
-                Into::<Vec<Environment>>::into(vs),
+                Into::<Vec<EnvironmentManifest>>::into(Environments::default()),
+                Into::<Vec<EnvironmentManifest>>::into(vs),
             ]
             .concat(),
         };
@@ -139,7 +142,7 @@ impl From<ProjectInner> for Project {
     }
 }
 
-impl<'de> Deserialize<'de> for Project {
+impl<'de> Deserialize<'de> for ProjectManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: ProjectInner = Deserialize::deserialize(d)?;
         Ok(inner.into())
@@ -150,13 +153,12 @@ impl<'de> Deserialize<'de> for Project {
 mod tests {
     use std::collections::HashMap;
 
-    use anyhow::Error;
+    use anyhow::{Error, anyhow};
 
     use crate::{
         canister::{Settings, build, sync},
-        manifest::{
-            canister::Instructions, environment::CanisterSelection, network::Configuration,
-        },
+        manifest::{canister::Instructions, environment::CanisterSelection},
+        network::Configuration,
     };
 
     use super::*;
@@ -164,8 +166,8 @@ mod tests {
     #[test]
     fn empty() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(r#""#)?,
-            Project {
+            serde_yaml::from_str::<ProjectManifest>(r#""#)?,
+            ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
                 environments: Environments::default().into(),
@@ -178,7 +180,7 @@ mod tests {
     #[test]
     fn canister() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 canister:
                   name: my-canister
@@ -186,8 +188,8 @@ mod tests {
                     steps: []
                 "#
             )?,
-            Project {
-                canisters: vec![Item::Manifest(Canister {
+            ProjectManifest {
+                canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
@@ -206,7 +208,7 @@ mod tests {
     #[test]
     fn canisters_in_list() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 canisters:
                   - name: my-canister
@@ -214,8 +216,8 @@ mod tests {
                       steps: []
                 "#
             )?,
-            Project {
-                canisters: vec![Item::Manifest(Canister {
+            ProjectManifest {
+                canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
@@ -234,7 +236,7 @@ mod tests {
     #[test]
     fn canisters_mixed() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 canisters:
                   - name: my-canister
@@ -243,9 +245,9 @@ mod tests {
                   - canisters/*
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: vec![
-                    Item::Manifest(Canister {
+                    Item::Manifest(CanisterManifest {
                         name: "my-canister".to_string(),
                         settings: Settings::default(),
                         instructions: crate::manifest::canister::Instructions::BuildSync {
@@ -266,18 +268,18 @@ mod tests {
     #[test]
     fn network() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 network:
                   name: my-network
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![Item::Manifest(Network {
+                networks: Networks::Networks(vec![NetworkManifest {
                     name: "my-network".to_string(),
                     configuration: Configuration::default(),
-                }),])
+                }])
                 .with_defaults()
                 .into(),
                 environments: Environments::default().into(),
@@ -290,46 +292,18 @@ mod tests {
     #[test]
     fn networks_in_list() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 networks:
                   - name: my-network
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![Item::Manifest(Network {
+                networks: Networks::Networks(vec![NetworkManifest {
                     name: "my-network".to_string(),
                     configuration: Configuration::default(),
-                }),])
-                .with_defaults()
-                .into(),
-                environments: Environments::default().into(),
-            },
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn networks_mixed() -> Result<(), Error> {
-        assert_eq!(
-            serde_yaml::from_str::<Project>(
-                r#"
-                networks:
-                  - networks/*
-                  - name: my-network
-                "#
-            )?,
-            Project {
-                canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![
-                    Item::Path("networks/*".to_string()),
-                    Item::Manifest(Network {
-                        name: "my-network".to_string(),
-                        configuration: Configuration::default(),
-                    }),
-                ])
+                }])
                 .with_defaults()
                 .into(),
                 environments: Environments::default().into(),
@@ -342,7 +316,7 @@ mod tests {
     #[test]
     fn environment() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 environment:
                   name: my-environment
@@ -350,10 +324,10 @@ mod tests {
                   canisters: [my-canister]
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![Environment {
+                environments: Environments::Environments(vec![EnvironmentManifest {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
@@ -370,7 +344,7 @@ mod tests {
     #[test]
     fn environment_in_list() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 environments:
                   - name: my-environment
@@ -378,10 +352,10 @@ mod tests {
                     canisters: [my-canister]
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![Environment {
+                environments: Environments::Environments(vec![EnvironmentManifest {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
@@ -398,7 +372,7 @@ mod tests {
     #[test]
     fn environment_canister_selection() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 environments:
                   - name: environment-1
@@ -408,23 +382,23 @@ mod tests {
                   - name: environment-3
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
                 environments: Environments::Environments(vec![
-                    Environment {
+                    EnvironmentManifest {
                         name: "environment-1".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::None,
                         settings: None,
                     },
-                    Environment {
+                    EnvironmentManifest {
                         name: "environment-2".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                         settings: None,
                     },
-                    Environment {
+                    EnvironmentManifest {
                         name: "environment-3".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Everything,
@@ -442,7 +416,7 @@ mod tests {
     #[test]
     fn environment_settings() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Project>(
+            serde_yaml::from_str::<ProjectManifest>(
                 r#"
                 environment:
                   name: my-environment
@@ -453,10 +427,10 @@ mod tests {
                       compute_allocation: 2
                 "#
             )?,
-            Project {
+            ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![Environment {
+                environments: Environments::Environments(vec![EnvironmentManifest {
                     name: "my-environment".to_string(),
                     network: "local".to_string(),
                     canisters: CanisterSelection::Everything,
@@ -481,6 +455,17 @@ mod tests {
                 .into(),
             },
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid() -> Result<(), Error> {
+        if serde_yaml::from_str::<ProjectManifest>(r#"invalid-content"#).is_ok() {
+            return Err(anyhow!(
+                "expected invalid manifest to fail deserializeation"
+            ));
+        }
 
         Ok(())
     }

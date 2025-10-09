@@ -1,80 +1,91 @@
 use clap::Parser;
-use icp_identity::manifest::load_identity_list;
-use icp_network::{NETWORK_LOCAL, NetworkConfig, RunNetworkError, run_network};
-use icp_project::NoSuchNetworkError;
-use snafu::Snafu;
+use icp::{
+    identity::manifest::{LoadIdentityManifestError, load_identity_list},
+    manifest,
+    network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
+};
 
-use crate::context::{Context, ContextProjectError};
+use crate::commands::Context;
 
 /// Run a given network
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to run
-    #[arg(default_value = NETWORK_LOCAL)]
+    #[arg(default_value = "local")]
     name: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Locate(#[from] manifest::LocateError),
+
+    #[error("project does not contain a network named '{name}'")]
+    Network { name: String },
+
+    #[error("network '{name}' must be a managed network")]
+    Unmanaged { name: String },
+
+    #[error(transparent)]
+    Identities(#[from] LoadIdentityManifestError),
+
+    #[error(transparent)]
+    RunNetwork(#[from] RunNetworkError),
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
-    let project = ctx.project()?;
-    let dirs = ctx.dirs();
-    let identities = load_identity_list(dirs)?;
+    let p = ctx.project.load().await?;
 
     // Obtain network configuration
-    let cfg = match project.get_network_config(&cmd.name)? {
+    let network = p.networks.get(&cmd.name).ok_or(CommandError::Network {
+        name: cmd.name.to_owned(),
+    })?;
+
+    let cfg = match &network.configuration {
         // Locally-managed network
-        NetworkConfig::Managed(cfg) => cfg,
+        Configuration::Managed(cfg) => cfg,
 
         // Non-managed networks cannot be started
-        NetworkConfig::Connected(_) => {
-            return Err(CommandError::NetworkConfigMustBeManaged {
-                network_name: cmd.name,
+        Configuration::Connected(_) => {
+            return Err(CommandError::Unmanaged {
+                name: cmd.name.to_owned(),
             });
         }
     };
 
-    // Project directory
-    let pd = &project.directory;
+    // Project root
+    let pdir = ctx.workspace.locate()?;
+
+    // Network root
+    let ndir = pdir.join(".icp").join("networks").join(&network.name);
 
     // Network directory
-    let nd = pd.network(
-        &cmd.name,                    // network_name
-        ctx.dirs().port_descriptor(), // port_descriptor
+    let nd = NetworkDirectory::new(
+        &network.name,               // name
+        &ndir,                       // network_root
+        &ctx.dirs.port_descriptor(), // port_descriptor_dir
     );
 
-    // Determine ICP accounts to seed
-    let seed_accounts = identities.identities.values().map(|id| id.principal());
+    // Identities
+    let ids = load_identity_list(&ctx.dirs.identity())?;
 
-    eprintln!("Project root: {}", pd.structure().root());
-    eprintln!("Network root: {}", nd.structure().network_root);
+    // Determine ICP accounts to seed
+    let seed_accounts = ids.identities.values().map(|id| id.principal());
+
+    eprintln!("Project root: {}", pdir);
+    eprintln!("Network root: {}", ndir);
 
     run_network(
-        cfg,                   // config
-        nd,                    // nd
-        pd.structure().root(), // project_root
-        seed_accounts,         // seed_accounts
+        cfg,           // config
+        nd,            // nd
+        &pdir,         // project_root
+        seed_accounts, // seed_accounts
     )
     .await?;
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(transparent)]
-    LoadIdentity {
-        source: icp_identity::manifest::LoadIdentityManifestError,
-    },
-
-    #[snafu(transparent)]
-    NoSuchNetwork { source: NoSuchNetworkError },
-
-    #[snafu(transparent)]
-    RunNetwork { source: RunNetworkError },
-
-    #[snafu(display("network configuration '{network_name}' must be a managed network"))]
-    NetworkConfigMustBeManaged { network_name: String },
 }

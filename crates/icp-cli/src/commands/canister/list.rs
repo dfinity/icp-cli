@@ -1,10 +1,6 @@
 use clap::Parser;
-use snafu::Snafu;
 
-use crate::{
-    context::{Context, ContextProjectError},
-    options::EnvironmentOpt,
-};
+use crate::{commands::Context, options::EnvironmentOpt};
 
 #[derive(Debug, Parser)]
 pub struct Cmd {
@@ -12,46 +8,30 @@ pub struct Cmd {
     pub environment: EnvironmentOpt,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+}
+
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load project
-    let pm = ctx.project()?;
+    let p = ctx.project.load().await?;
 
     // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
-
-    // Filter for environment canisters
-    let cs = pm
-        .canisters
-        .iter()
-        .filter(|(_, c)| ecs.contains(&c.name))
-        .collect::<Vec<_>>();
-
-    for (_, c) in cs {
+    for (_, c) in env.canisters.values() {
         let _ = ctx.term.write_line(&format!("{c:?}"));
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
 }

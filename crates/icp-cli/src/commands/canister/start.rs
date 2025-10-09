@@ -1,9 +1,9 @@
 use clap::Parser;
 use ic_agent::AgentError;
-use snafu::Snafu;
+use icp::{agent, identity, network};
 
 use crate::{
-    context::{Context, ContextAgentError, ContextProjectError},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -20,97 +20,81 @@ pub struct Cmd {
     environment: EnvironmentOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest, which defines the canisters to be built.
-    let pm = ctx.project()?;
-
-    // Select canister to query
-    let (_, c) = pm
-        .canisters
-        .iter()
-        .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CommandError::CanisterNotFound { name: cmd.name })?;
-
-    // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
-
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
-
-    // Ensure canister is included in the environment
-    if !ecs.contains(&c.name) {
-        return Err(CommandError::EnvironmentCanister {
-            environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
-        });
-    }
-
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    let network = env
-        .network
-        .as_ref()
-        .expect("no network specified in environment");
-
-    // Lookup the canister id
-    let cid = ctx.id_store.lookup(&Key {
-        network: network.to_owned(),
-        environment: env.name.to_owned(),
-        canister: c.name.to_owned(),
-    })?;
-
-    // Load identity
-    ctx.require_identity(cmd.identity.name());
-
-    // Setup network
-    ctx.require_network(network);
-
-    // Prepare agent
-    let agent = ctx.agent()?;
-
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
-
-    // Instruct management canister to start canister
-    mgmt.start_canister(&cid).await?;
-
-    Ok(())
-}
-
-#[derive(Debug, Snafu)]
+#[derive(Debug, thiserror::Error)]
 pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
 
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
 
-    #[snafu(display("project does not contain an environment named '{name}'"))]
+    #[error("project does not contain an environment named '{name}'")]
     EnvironmentNotFound { name: String },
 
-    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
+    #[error(transparent)]
+    Access(#[from] network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] agent::CreateError),
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
     EnvironmentCanister {
         environment: String,
         canister: String,
     },
 
-    #[snafu(transparent)]
-    LookupCanisterId { source: LookupIdError },
+    #[error(transparent)]
+    LookupCanisterId(#[from] LookupIdError),
 
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
+    #[error(transparent)]
+    Start(#[from] AgentError),
+}
 
-    #[snafu(transparent)]
-    Agent { source: AgentError },
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    // Load project
+    let p = ctx.project.load().await?;
+
+    // Load identity
+    let id = ctx.identity.load(cmd.identity.into()).await?;
+
+    // Load target environment
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
+
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
+
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
+
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
+
+    // Ensure canister is included in the environment
+    if !env.canisters.contains_key(&cmd.name) {
+        return Err(CommandError::EnvironmentCanister {
+            environment: env.name.to_owned(),
+            canister: cmd.name.to_owned(),
+        });
+    }
+
+    // Lookup the canister id
+    let cid = ctx.ids.lookup(&Key {
+        network: env.network.name.to_owned(),
+        environment: env.name.to_owned(),
+        canister: cmd.name.to_owned(),
+    })?;
+
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+
+    // Instruct management canister to start canister
+    mgmt.start_canister(&cid).await?;
+
+    Ok(())
 }

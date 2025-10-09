@@ -2,13 +2,11 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Parser;
 use ic_agent::AgentError;
-use icp_identity::key::LoadIdentityInContextError;
+use icp::{agent, identity, network};
 use icrc_ledger_types::icrc1::account::Account;
-use snafu::Snafu;
 
 use crate::{
-    commands::token::TOKEN_LEDGER_CIDS,
-    context::{Context, ContextAgentError, ContextProjectError},
+    commands::{Context, token::TOKEN_LEDGER_CIDS},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -21,39 +19,62 @@ pub struct Cmd {
     pub environment: EnvironmentOpt,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error(transparent)]
+    Access(#[from] network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] agent::CreateError),
+
+    #[error("failed to get identity principal: {err}")]
+    Principal { err: String },
+
+    #[error(transparent)]
+    Query(#[from] AgentError),
+
+    #[error(transparent)]
+    Candid(#[from] candid::Error),
+}
+
 /// Check the token balance of a given identity
 ///
 /// The balance is checked against a ledger canister. Support two user flows:
 /// (1) Specifying token name, and checking against known or stored mappings
 /// (2) Specifying compatible ledger canister id
 pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest
-    let pm = ctx.project()?;
+    // Load project
+    let p = ctx.project.load().await?;
 
     // Load identity
-    ctx.require_identity(cmd.identity.name());
+    let id = ctx.identity.load(cmd.identity.into()).await?;
 
     // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    let network = env
-        .network
-        .as_ref()
-        .expect("no network specified in environment");
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
 
-    // Setup network
-    ctx.require_network(network);
+    // Agent
+    let agent = ctx.agent.create(id.clone(), &access.url).await?;
 
-    // Prepare agent
-    let agent = ctx.agent()?;
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
 
     // Obtain ledger address
     let cid = match TOKEN_LEDGER_CIDS.get(token) {
@@ -66,7 +87,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     };
 
     // Parse the canister id
-    let cid = Principal::from_text(cid).map_err(|err| CommandError::GetPrincipal {
+    let cid = Principal::from_text(cid).map_err(|err| CommandError::Principal {
         err: err.to_string(),
     })?;
 
@@ -75,13 +96,8 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
         //
         // Obtain token balance
         async {
-            // Load identity
-            let id = ctx.identity()?;
-
             // Convert identity to sender principal
-            let owner = id
-                .sender()
-                .map_err(|err| CommandError::GetPrincipal { err })?;
+            let owner = id.sender().map_err(|err| CommandError::Principal { err })?;
 
             // Specify sub-account
             let subaccount = None;
@@ -135,28 +151,4 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     let _ = ctx.term.write_line(&format!("Balance: {amount} {symbol}"));
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
-
-    #[snafu(display("failed to get identity principal: {err}"))]
-    GetPrincipal { err: String },
-
-    #[snafu(transparent)]
-    Agent { source: AgentError },
-
-    #[snafu(transparent)]
-    Candid { source: candid::Error },
 }

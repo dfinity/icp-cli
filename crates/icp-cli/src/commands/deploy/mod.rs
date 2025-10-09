@@ -1,9 +1,8 @@
 use clap::Parser;
-use ic_agent::{AgentError, export::Principal};
-use icp_identity::key::LoadIdentityInContextError;
-use snafu::Snafu;
+use ic_agent::export::Principal;
 
 use crate::{
+    commands::Context,
     commands::{
         build,
         canister::{
@@ -13,25 +12,17 @@ use crate::{
         },
         sync,
     },
-    context::{Context, ContextAgentError, ContextProjectError},
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::LookupError,
 };
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
-    /// The name of the canister within the current project
-    name: Option<String>,
+    /// Canister names
+    pub names: Vec<String>,
 
     /// Specifies the mode of canister installation.
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub mode: String,
-
-    #[command(flatten)]
-    pub identity: IdentityOpt,
-
-    #[command(flatten)]
-    pub environment: EnvironmentOpt,
 
     /// The subnet id to use for the canisters being deployed.
     #[clap(long)]
@@ -44,36 +35,81 @@ pub struct Cmd {
     /// Cycles to fund canister creation (in cycles).
     #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES)]
     pub cycles: u128,
+
+    #[command(flatten)]
+    pub identity: IdentityOpt,
+
+    #[command(flatten)]
+    pub environment: EnvironmentOpt,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error("project does not contain a canister named '{name}'")]
+    CanisterNotFound { name: String },
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
+
+    #[error(transparent)]
+    Build(#[from] build::CommandError),
+
+    #[error(transparent)]
+    Create(#[from] create::CommandError),
+
+    #[error(transparent)]
+    Install(#[from] install::CommandError),
+
+    #[error(transparent)]
+    SetEnvironmentVariables(#[from] binding_env_vars::CommandError),
+
+    #[error(transparent)]
+    Sync(#[from] sync::CommandError),
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
-    let pm = ctx.project()?;
+    let p = ctx.project.load().await?;
 
-    // Choose canisters to create
-    let canisters = pm
-        .canisters
-        .iter()
-        .filter(|(_, c)| match &cmd.name {
-            Some(name) => name == &c.name,
-            None => true,
-        })
-        .collect::<Vec<_>>();
+    // Load target environment
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
-    // Check if a canister name was specified and is present in the project
-    if let Some(name) = &cmd.name {
-        if canisters.is_empty() {
+    let cnames = match cmd.names.is_empty() {
+        // No canisters specified
+        true => env.canisters.keys().cloned().collect(),
+
+        // Individual canisters specified
+        false => cmd.names,
+    };
+
+    for name in &cnames {
+        if !p.canisters.contains_key(name) {
             return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
             });
         }
-    }
 
-    // Prepare canister names for subsequent commands
-    let cnames = canisters
-        .iter()
-        .map(|(_, c)| c.name.to_owned())
-        .collect::<Vec<_>>();
+        if !env.canisters.contains_key(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
 
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
@@ -116,7 +152,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     if let Err(err) = out {
         if !matches!(err, create::CommandError::NoCanisters) {
-            return Err(CommandError::Create { source: err });
+            return Err(err.into());
         }
     }
 
@@ -133,7 +169,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     if let Err(err) = out {
         if !matches!(err, binding_env_vars::CommandError::NoCanisters) {
-            return Err(CommandError::SetEnvironmentVariables { source: err });
+            return Err(err.into());
         }
     }
 
@@ -152,7 +188,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     if let Err(err) = out {
         if !matches!(err, install::CommandError::NoCanisters) {
-            return Err(CommandError::Install { source: err });
+            return Err(err.into());
         }
     }
 
@@ -170,50 +206,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     if let Err(err) = out {
         if !matches!(err, sync::CommandError::NoCanisters) {
-            return Err(CommandError::Sync { source: err });
+            return Err(err.into());
         }
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
-
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(transparent)]
-    Build { source: build::CommandError },
-
-    #[snafu(transparent)]
-    Create { source: create::CommandError },
-
-    #[snafu(transparent)]
-    Install { source: install::CommandError },
-
-    #[snafu(transparent)]
-    SetEnvironmentVariables {
-        source: binding_env_vars::CommandError,
-    },
-
-    #[snafu(transparent)]
-    Sync { source: sync::CommandError },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(transparent)]
-    Agent { source: AgentError },
-
-    #[snafu(transparent)]
-    LookupCanisterId { source: LookupError },
 }

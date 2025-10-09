@@ -1,9 +1,7 @@
 use clap::Parser;
-use icp_project::{NoCanister, NoEnvironment};
-use snafu::Snafu;
 
 use crate::{
-    context::{Context, ContextProjectError},
+    commands::Context,
     options::EnvironmentOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -17,47 +15,52 @@ pub struct Cmd {
     environment: EnvironmentOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest
-    let pm = ctx.project()?;
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
 
-    // Select canister to show
-    let c = pm.canister(&cmd.name)?;
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
+
+    #[error(transparent)]
+    LookupCanisterId(#[from] LookupIdError),
+}
+
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    // Load project
+    let p = ctx.project.load().await?;
 
     // Load target environment
-    let env = pm.environment(cmd.environment.name())?;
-
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
     // Ensure canister is included in the environment
-    if !ecs.contains(&c.name) {
+    if !env.canisters.contains_key(&cmd.name) {
         return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
+            canister: cmd.name.to_owned(),
         });
     }
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    let network = env
-        .network
-        .as_ref()
-        .expect("no network specified in environment");
-
     // Lookup the canister id
-    let cid = ctx.id_store.lookup(&Key {
-        network: network.to_owned(),
+    let cid = ctx.ids.lookup(&Key {
+        network: env.network.name.to_owned(),
         environment: env.name.to_owned(),
-        canister: c.name.to_owned(),
+        canister: cmd.name.to_owned(),
     })?;
 
-    println!("{cid} => {c:?}");
+    println!("{cid} => {}", cmd.name);
 
     // TODO(or.ricon): Show canister details
     //  Things we might want to show (do we need to sub-command this?)
@@ -65,25 +68,4 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     //  - canister deployment details (this canister is deployed to network X as part of environment Y)
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(transparent)]
-    CanisterNotFound { source: NoCanister },
-
-    #[snafu(transparent)]
-    EnvironmentNotFound { source: NoEnvironment },
-
-    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[snafu(transparent)]
-    LookupCanisterId { source: LookupIdError },
 }

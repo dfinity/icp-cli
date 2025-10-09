@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::fs::write_string;
 use predicates::str::contains;
 
@@ -14,22 +14,28 @@ async fn cycles_balance() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                            // contents
+        &format!(
+            r#"
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
+            "#
+        ), // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Empty account has empty balance
-    let identity = clients::icp(&ctx, &project_dir).use_new_random_identity();
+    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .use_new_random_identity();
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance"])
+        .args(["cycles", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
@@ -40,7 +46,14 @@ async fn cycles_balance() {
         .await;
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "1"])
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "1",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(
             "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",
@@ -48,13 +61,22 @@ async fn cycles_balance() {
         .success();
 
     // Mint ICP to cycles, specify cycles amount
-    let identity = clients::icp(&ctx, &project_dir).use_new_random_identity();
+    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .use_new_random_identity();
+
     clients::ledger(&ctx)
         .mint_icp(identity, None, 123456789_u64)
         .await;
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--cycles", "1000000000"])
+        .args([
+            "cycles",
+            "mint",
+            "--cycles",
+            "1000000000",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(
             "Minted 0.001000000000 TCYCLES to your account, new balance: 0.001000000000 TCYCLES.",
@@ -62,7 +84,14 @@ async fn cycles_balance() {
         .success();
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--cycles", "1500000000"])
+        .args([
+            "cycles",
+            "mint",
+            "--cycles",
+            "1500000000",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(
             "Minted 0.001500016000 TCYCLES to your account, new balance: 0.002500016000 TCYCLES.",

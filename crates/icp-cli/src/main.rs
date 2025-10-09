@@ -1,12 +1,27 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::Subcmd;
+use commands::{Context, Subcmd};
 use console::Term;
-use context::Context;
-use icp::{Directories, prelude::*};
-use icp_canister::{handlebars::Handlebars, recipe};
+use icp::{
+    Directories, agent,
+    canister::{
+        self,
+        assets::Assets,
+        build::Builder,
+        prebuilt::Prebuilt,
+        recipe::{
+            self,
+            handlebars::{Handlebars, TEMPLATES},
+        },
+        script::Script,
+        sync::Syncer,
+    },
+    identity, manifest, network,
+    prelude::*,
+    project,
+};
 use tracing::{Level, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
@@ -20,7 +35,6 @@ use crate::{
 };
 
 mod commands;
-mod context;
 mod options;
 mod progress;
 mod store_artifact;
@@ -122,27 +136,91 @@ async fn main() -> Result<(), Error> {
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
     // Handlebar Templates (for recipes)
-    let tmpls = recipe::TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
+    let tmpls = TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
 
     // Prepare http client
     let http_client = reqwest::Client::new();
 
     // Recipes
-    let recipe_resolver = Arc::new(recipe::Resolver {
-        handlebars_resolver: Arc::new(Handlebars {
+    let recipe = Arc::new(recipe::Resolver {
+        handlebars: Arc::new(Handlebars {
             recipes: HashMap::from_iter(tmpls),
             http_client,
         }),
     });
 
+    // Project Manifest Locator
+    let mloc = Arc::new(manifest::Locator::new(
+        current_dir()?.try_into()?, // cwd
+        cli.project_dir,            // dir
+    ));
+
+    // Canister loader
+    let cload = Arc::new(canister::PathLoader);
+
+    // Builders/Syncers
+    let cprebuilt = Arc::new(Prebuilt);
+    let cassets = Arc::new(Assets);
+    let cscript = Arc::new(Script);
+
+    // Canister builder
+    let builder = Arc::new(Builder {
+        prebuilt: cprebuilt.to_owned(),
+        script: cscript.to_owned(),
+    });
+
+    // Canister syncer
+    let syncer = Arc::new(Syncer {
+        assets: cassets.to_owned(),
+        script: cscript.to_owned(),
+    });
+
+    // Project Loaders
+    let ploaders = icp::ProjectLoaders {
+        path: Arc::new(project::PathLoader),
+        manifest: Arc::new(project::ManifestLoader {
+            locate: mloc.clone(),
+            recipe,
+            canister: cload,
+        }),
+    };
+
+    let pload = icp::Loader {
+        locate: mloc.clone(),
+        project: ploaders,
+    };
+
+    let pload = icp::Lazy::new(pload);
+    let pload = Arc::new(pload);
+
+    // Identity loader
+    let idload = Arc::new(identity::Loader {
+        dir: dirs.identity(),
+    });
+
+    // Network accessor
+    let netaccess = Arc::new(network::Accessor {
+        project: mloc.clone(),
+        descriptors: dirs.port_descriptor(),
+    });
+
+    // Agent creator
+    let agent_creator = Arc::new(agent::Creator);
+
     // Setup environment
-    let ctx = Context::new(
-        term,      // term
-        dirs,      // dirs
-        ids,       // id_store
-        artifacts, // artifact_store
-        recipe_resolver,
-    );
+    let ctx = Context {
+        workspace: mloc,
+        term,
+        dirs,
+        ids,
+        artifacts,
+        project: pload,
+        identity: idload,
+        network: netaccess,
+        agent: agent_creator,
+        builder,
+        syncer,
+    };
 
     commands::dispatch(&ctx, command).await?;
 

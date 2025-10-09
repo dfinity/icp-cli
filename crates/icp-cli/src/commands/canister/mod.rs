@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use snafu::Snafu;
 
-use crate::context::Context;
+use crate::commands::Context;
 
 pub mod binding_env_vars;
 pub mod call;

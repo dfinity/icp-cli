@@ -1,25 +1,28 @@
-use std::sync::Arc;
-
-use crate::{fs::read, prelude::*};
-use anyhow::Context as _;
+use crate::{
+    network::{Configuration, Connected, Gateway, Managed, Port},
+    prelude::*,
+};
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::manifest::{
-    environment::{CanisterSelection, Environment},
-    network::{Configuration, Gateway, Network},
-    project::{Canisters, Environments, Networks, Project},
+    environment::CanisterSelection,
+    project::{Canisters, Environments, Networks},
 };
 
 pub mod adapter;
-mod canister;
-mod environment;
-mod network;
-mod project;
-mod recipe;
+pub mod canister;
+pub mod environment;
+pub mod network;
+pub mod project;
+pub mod recipe;
 
-const PROJECT_MANIFEST: &str = "icp.yaml";
+pub use {canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest};
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub const PROJECT_MANIFEST: &str = "icp.yaml";
+pub const CANISTER_MANIFEST: &str = "icp.yaml";
+
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {
     /// Path to a manifest
@@ -38,29 +41,29 @@ impl Default for Canisters {
 impl Default for Networks {
     fn default() -> Self {
         Networks::Networks(vec![
-            Item::Manifest(Network {
+            NetworkManifest {
                 name: "local".to_string(),
-                configuration: Configuration::Managed(network::Managed {
+                configuration: Configuration::Managed(Managed {
                     gateway: Gateway {
                         host: "localhost".to_string(),
-                        port: network::Port::Fixed(8080),
+                        port: Port::Random,
                     },
                 }),
-            }),
-            Item::Manifest(Network {
+            },
+            NetworkManifest {
                 name: "mainnet".to_string(),
-                configuration: Configuration::Connected(network::Connected {
+                configuration: Configuration::Connected(Connected {
                     url: "https://ic0.app".to_string(),
                     root_key: None,
                 }),
-            }),
+            },
         ])
     }
 }
 
 impl Default for Environments {
     fn default() -> Self {
-        Environments::Environments(vec![Environment {
+        Environments::Environments(vec![EnvironmentManifest {
             name: "local".to_string(),
             network: "local".to_string(),
             canisters: CanisterSelection::Everything,
@@ -122,49 +125,5 @@ impl Locate for Locator {
 
             return Ok(dir);
         }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum LoadError {
-    #[error("failed to locate project directory")]
-    Locate,
-
-    #[error("failed to read project manifest")]
-    Read,
-
-    #[error("failed to deserialize project manifest")]
-    Deserialize,
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-pub trait Load: Sync + Send {
-    fn load(&self) -> Result<Project, LoadError>;
-}
-
-pub struct Loader {
-    locator: Arc<dyn Locate>,
-}
-
-impl Loader {
-    pub fn new(locator: Arc<dyn Locate>) -> Self {
-        Self { locator }
-    }
-}
-
-impl Load for Loader {
-    fn load(&self) -> Result<Project, LoadError> {
-        // Locate project-directory
-        let mdir = self.locator.locate().context(LoadError::Locate)?;
-
-        // Read file
-        let mbs = read(&mdir.join(PROJECT_MANIFEST)).context(LoadError::Read)?;
-
-        // Load YAML
-        let pm = serde_yaml::from_slice::<Project>(&mbs).context(LoadError::Deserialize)?;
-
-        Ok(pm)
     }
 }

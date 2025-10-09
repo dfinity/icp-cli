@@ -8,9 +8,10 @@ use std::{
 use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
-use icp::prelude::*;
-use icp_network::managed::run::initialize_instance;
-use icp_network::{NETWORK_LOCAL, managed::run::wait_for_port_file};
+use icp::{
+    network::managed::run::{initialize_instance, wait_for_port_file},
+    prelude::*,
+};
 use pocket_ic::{common::rest::InstanceConfig, nonblocking::PocketIc};
 use url::Url;
 
@@ -56,15 +57,14 @@ impl TestContext {
 
     pub fn icp(&self) -> Command {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
-        self.isolate(&mut cmd);
-        cmd
-    }
 
-    fn isolate(&self, cmd: &mut Command) {
+        // Isolate the command
         cmd.current_dir(self.home_path());
         cmd.env("HOME", self.home_path());
         cmd.env("PATH", self.os_path.clone());
         cmd.env_remove("ICP_HOME");
+
+        cmd
     }
 
     fn build_os_path(bin_dir: &Path) -> OsString {
@@ -92,14 +92,15 @@ impl TestContext {
         project_dir
     }
 
-    pub fn start_network_in(&self, project_dir: &Path) -> ChildGuard {
+    pub fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir)
             .env("HOME", self.home_path())
             .env_remove("ICP_HOME")
             .arg("network")
-            .arg("run");
+            .arg("run")
+            .arg(name);
 
         eprintln!("Running network in {}", project_dir);
 
@@ -107,7 +108,7 @@ impl TestContext {
 
         // "icp network start" will wait for the local network to be healthy,
         // but for now we need to wait for the descriptor to be created.
-        let network_descriptor = self.wait_for_local_network_descriptor(project_dir);
+        let network_descriptor = self.wait_for_network_descriptor(project_dir, name);
         let pocketic = PocketIc::new_from_existing_instance(
             network_descriptor.pocketic_url,
             network_descriptor.pocketic_instance_id,
@@ -122,7 +123,7 @@ impl TestContext {
         project_dir
             .join(".icp")
             .join("networks")
-            .join(NETWORK_LOCAL)
+            .join("local")
             .join("pocketic")
             .join("state")
     }
@@ -138,10 +139,7 @@ impl TestContext {
             PathBuf::from(env::var("ICP_POCKET_IC_PATH").expect("ICP_POCKET_IC_PATH must be set"));
 
         // Create network directory structure
-        let network_dir = project_dir
-            .join(".icp")
-            .join("networks")
-            .join(NETWORK_LOCAL);
+        let network_dir = project_dir.join(".icp").join("networks").join("local");
         create_dir_all(&network_dir).expect("Failed to create network directory");
 
         let pocketic_dir = network_dir.join("pocketic");
@@ -192,7 +190,7 @@ impl TestContext {
         let network_descriptor = serde_json::json!({
             "id": ::uuid::Uuid::new_v4().to_string(),
             "project-dir": project_dir.as_str(),
-            "network": NETWORK_LOCAL,
+            "network": "local",
             "network-dir": network_dir.as_str(),
             "gateway": {
                 "port": instance.gateway_port,
@@ -224,18 +222,18 @@ impl TestContext {
         ChildGuard { child }
     }
 
-    pub fn ping_until_healthy(&self, project_dir: &Path) {
-        self.wait_for_local_network_descriptor(project_dir);
+    pub fn ping_until_healthy(&self, project_dir: &Path, name: &str) {
+        self.wait_for_network_descriptor(project_dir, name);
         self.icp()
             .current_dir(project_dir)
-            .args(["network", "ping", "--wait-healthy"])
+            .args(["network", "ping", "--wait-healthy", name])
             .assert()
             .success();
     }
 
     // wait up to 30 seconds for descriptor path to contain valid json
     pub fn wait_for_local_network_descriptor(&self, project_dir: &Path) -> TestNetwork {
-        self.wait_for_network_descriptor(project_dir, NETWORK_LOCAL)
+        self.wait_for_network_descriptor(project_dir, "local")
     }
 
     pub fn wait_for_network_descriptor(
@@ -306,26 +304,6 @@ impl TestContext {
             pocketic_url,
             pocketic_instance_id,
         }
-    }
-
-    pub fn configure_icp_local_network_random_port(&self, project_dir: &Path) {
-        self.configure_icp_local_network_port(project_dir, 0);
-    }
-
-    pub fn configure_icp_local_network_port(&self, project_dir: &Path, gateway_port: u16) {
-        let networks_dir = project_dir.join("networks");
-        create_dir_all(&networks_dir).expect("Failed to create networks directory");
-        fs::write(
-            networks_dir.join("local.yaml"),
-            format!(
-                r#"
-        mode: managed
-        gateway:
-          port: {gateway_port}
-        "#
-            ),
-        )
-        .unwrap();
     }
 
     fn network_descriptor_path(&self, project_dir: &Path, network: &str) -> PathBuf {

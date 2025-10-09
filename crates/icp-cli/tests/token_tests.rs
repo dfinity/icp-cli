@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::fs::write_string;
 use predicates::str::contains;
 
@@ -14,28 +14,40 @@ async fn token_balance() {
     // Project manifest
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                            // contents
+        &format!(
+            r#"
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
+            "#
+        ), // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
-    let identity = clients::icp(&ctx, &project_dir).use_new_random_identity();
+    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .use_new_random_identity();
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance"])
+        .args(["token", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 0 ICP"))
         .success();
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "cycles", "balance"])
+        .args([
+            "token",
+            "cycles",
+            "balance",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
@@ -47,7 +59,7 @@ async fn token_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "icp", "balance"])
+        .args(["token", "icp", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 1.23456780 ICP"))
         .success();
@@ -60,15 +72,20 @@ async fn token_transfer() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        "",                            // contents
+        &format!(
+            r#"
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
+            "#
+        ), // contents
     )
     .expect("failed to write project manifest");
 
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
-    let icp_client = clients::icp(&ctx, &project_dir);
+    let icp_client = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()));
+
     icp_client.create_identity("alice");
     icp_client.use_identity("alice");
     let alice_principal = icp_client.active_principal();
@@ -91,7 +108,14 @@ async fn token_transfer() {
     icp_client.use_identity("alice");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "transfer", "1.1", &bob_principal.to_string()])
+        .args([
+            "token",
+            "transfer",
+            "1.1",
+            &bob_principal.to_string(),
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .stdout(contains(format!(
             "Transferred 1.10000000 ICP to {}",
@@ -110,7 +134,14 @@ async fn token_transfer() {
     // Simple cycles transfer
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "5"])
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "5",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
     ctx.icp()
@@ -121,6 +152,8 @@ async fn token_transfer() {
             "transfer",
             "2",
             &bob_principal.to_string(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .stdout(contains(format!(
@@ -131,7 +164,7 @@ async fn token_transfer() {
     icp_client.use_identity("bob");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance"])
+        .args(["cycles", "balance", "--environment", "my-environment"])
         .assert()
         .stdout(contains("Balance: 2.000000000000 TCYCLES"))
         .success();

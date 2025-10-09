@@ -14,7 +14,7 @@ pub enum CommandField {
 }
 
 impl CommandField {
-    fn _as_vec(&self) -> Vec<String> {
+    pub fn as_vec(&self) -> Vec<String> {
         match self {
             Self::Command(cmd) => vec![cmd.clone()],
             Self::Commands(cmds) => cmds.clone(),

@@ -5,6 +5,7 @@ use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
+use icp::{agent, identity, network};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
@@ -13,11 +14,9 @@ use icp_canister_interfaces::{
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
-use icp_identity::key::LoadIdentityInContextError;
-use snafu::Snafu;
 
 use crate::{
-    context::{Context, ContextAgentError, ContextProjectError},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -38,38 +37,80 @@ pub struct Cmd {
     pub identity: IdentityOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load identity
-    ctx.require_identity(cmd.identity.name());
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
 
-    // Load the project manifest
-    let pm = ctx.project()?;
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error(transparent)]
+    Access(#[from] network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] agent::CreateError),
+
+    #[error("Failed to get identity principal: {message}")]
+    Principal { message: String },
+
+    #[error("Failed to talk to {canister} canister: {source}")]
+    CanisterError {
+        canister: String,
+        source: AgentError,
+    },
+
+    #[error("ICP amount overflow. Specify less tokens.")]
+    IcpAmountOverflow,
+
+    #[error("Failed ICP ledger transfer: {src:?}")]
+    TransferError { src: TransferError },
+
+    #[error("Insufficient funds: {required} ICP required, {available} ICP available.")]
+    InsufficientFunds {
+        required: BigDecimal,
+        available: BigDecimal,
+    },
+
+    #[error("No amount specified. Use --icp-amount or --cycles-amount.")]
+    NoAmountSpecified,
+
+    #[error("Failed to notify mint cycles: {src:?}")]
+    NotifyMintError { src: NotifyMintErr },
+}
+
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    // Load project
+    let p = ctx.project.load().await?;
+
+    // Load identity
+    let id = ctx.identity.load(cmd.identity.into()).await?;
 
     // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    let network = env
-        .network
-        .as_ref()
-        .expect("no network specified in environment");
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
 
-    // Setup network
-    ctx.require_network(network);
+    // Agent
+    let agent = ctx.agent.create(id.clone(), &access.url).await?;
 
-    // Prepare agent
-    let agent = ctx.agent()?;
-    let user_principal = ctx
-        .identity()?
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
+
+    // Prepare deposit
+    let user_principal = id
         .sender()
-        .map_err(|e| CommandError::GetPrincipalError { message: e })?;
+        .map_err(|e| CommandError::Principal { message: e })?;
 
     let icp_e8s_to_deposit = if let Some(icp_amount) = cmd.icp {
         (icp_amount * 100_000_000_u64)
@@ -179,46 +220,4 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     ));
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(display("Failed to talk to {canister} canister: {source}"))]
-    CanisterError {
-        canister: String,
-        source: AgentError,
-    },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(display("Failed to get identity principal: {message}"))]
-    GetPrincipalError { message: String },
-
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(display("ICP amount overflow. Specify less tokens."))]
-    IcpAmountOverflow,
-
-    #[snafu(display("Failed ICP ledger transfer: {src:?}"))]
-    TransferError { src: TransferError },
-
-    #[snafu(display("Insufficient funds: {required} ICP required, {available} ICP available."))]
-    InsufficientFunds {
-        required: BigDecimal,
-        available: BigDecimal,
-    },
-
-    #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityInContextError },
-
-    #[snafu(display("No amount specified. Use --icp-amount or --cycles-amount."))]
-    NoAmountSpecified,
-
-    #[snafu(display("Failed to notify mint cycles: {src:?}"))]
-    NotifyMintError { src: NotifyMintErr },
 }

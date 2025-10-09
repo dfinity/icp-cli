@@ -1314,12 +1314,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
-name = "downcast"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
-
-[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1628,12 +1622,6 @@ checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
 ]
-
-[[package]]
-name = "fragile"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 
 [[package]]
 name = "fslock"
@@ -2443,55 +2431,53 @@ name = "icp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "camino",
- "directories",
- "schemars",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
-]
-
-[[package]]
-name = "icp-adapter"
-version = "0.1.0"
-dependencies = [
  "async-trait",
+ "bip32 0.5.3",
+ "camino",
  "camino-tempfile",
+ "candid",
+ "clap",
+ "directories",
  "dunce",
+ "ed25519-consensus",
+ "elliptic-curve 0.13.8",
+ "fd-lock",
+ "futures",
+ "glob",
+ "handlebars 6.3.2",
  "hex",
  "ic-agent",
  "ic-asset",
+ "ic-ledger-types",
  "ic-utils",
- "icp",
+ "icp-canister-interfaces",
+ "icrc-ledger-types",
+ "itertools 0.14.0",
+ "k256 0.13.4",
+ "p256",
+ "pem 3.0.5",
+ "pkcs8 0.10.2",
+ "pocket-ic",
+ "rand 0.9.2",
  "reqwest",
  "schemars",
+ "scrypt",
+ "sec1 0.7.3",
  "serde",
+ "serde_json",
+ "serde_yaml",
  "sha2 0.10.9",
  "shellwords",
  "slog",
  "snafu",
+ "strum 0.27.2",
+ "thiserror 2.0.17",
+ "time",
+ "tiny-bip39 2.0.0",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "icp-canister"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "handlebars 6.3.2",
- "icp",
- "icp-adapter",
- "mockall",
- "reqwest",
- "schemars",
- "serde",
- "serde_json",
- "serde_yaml",
- "snafu",
- "url",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -2528,12 +2514,7 @@ dependencies = [
  "ic-management-canister-types 0.4.1",
  "ic-utils",
  "icp",
- "icp-adapter",
- "icp-canister",
  "icp-canister-interfaces",
- "icp-identity",
- "icp-network",
- "icp-project",
  "icrc-ledger-types",
  "indicatif",
  "itertools 0.14.0",
@@ -2560,77 +2541,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
-]
-
-[[package]]
-name = "icp-identity"
-version = "0.1.0"
-dependencies = [
- "bip32 0.5.3",
- "clap",
- "directories",
- "ed25519-consensus",
- "elliptic-curve 0.13.8",
- "ic-agent",
- "icp",
- "itertools 0.14.0",
- "k256 0.13.4",
- "p256",
- "pem 3.0.5",
- "pkcs8 0.10.2",
- "rand 0.9.2",
- "scrypt",
- "sec1 0.7.3",
- "serde",
- "serde_json",
- "snafu",
- "strum 0.27.2",
- "tiny-bip39 2.0.0",
- "zeroize",
-]
-
-[[package]]
-name = "icp-network"
-version = "0.1.0"
-dependencies = [
- "candid",
- "fd-lock",
- "futures",
- "hex",
- "ic-agent",
- "ic-ledger-types",
- "icp",
- "icp-canister-interfaces",
- "icrc-ledger-types",
- "pocket-ic",
- "reqwest",
- "schemars",
- "serde",
- "serde_json",
- "snafu",
- "time",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "icp-project"
-version = "0.1.0"
-dependencies = [
- "camino-tempfile",
- "futures",
- "glob",
- "icp",
- "icp-adapter",
- "icp-canister",
- "icp-network",
- "pathdiff",
- "schemars",
- "serde",
- "serde_json",
- "serde_yaml",
- "snafu",
- "tokio",
 ]
 
 [[package]]
@@ -3219,32 +3129,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockall"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39a6bfcc6c8c7eed5ee98b9c3e33adc726054389233e201c95dab2d41a3839d2"
-dependencies = [
- "cfg-if",
- "downcast",
- "fragile",
- "mockall_derive",
- "predicates",
- "predicates-tree",
-]
-
-[[package]]
-name = "mockall_derive"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ca3004c2efe9011bd4e461bd8256445052b9615405b4f7ea43fc8ca5c20898"
-dependencies = [
- "cfg-if",
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3528,15 +3412,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pathdiff"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
-dependencies = [
- "camino",
-]
 
 [[package]]
 name = "pbkdf2"
@@ -4453,9 +4328,7 @@ dependencies = [
 name = "schema-gen"
 version = "0.1.0"
 dependencies = [
- "icp-canister",
- "icp-network",
- "icp-project",
+ "icp",
  "schemars",
  "serde",
  "serde_json",

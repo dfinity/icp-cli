@@ -1,26 +1,28 @@
 use clap::Parser;
-use snafu::Snafu;
 
-use crate::context::{Context, ContextProjectError};
+use crate::commands::Context;
 
 /// List networks in the project
 #[derive(Parser, Debug)]
 pub struct Cmd;
 
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
 pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
     // Load project
-    let pm = ctx.project()?;
+    let p = ctx.project.load().await?;
 
     // List networks
-    for (name, cfg) in &pm.networks {
+    for (name, cfg) in &p.networks {
         eprintln!("{name} => {cfg:?}");
     }
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
 }

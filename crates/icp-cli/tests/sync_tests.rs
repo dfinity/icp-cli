@@ -1,9 +1,8 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
 };
-use icp_network::NETWORK_LOCAL;
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
@@ -24,16 +23,19 @@ fn sync_adapter_script_single() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
-          sync:
-            steps:
-              - type: script
-                command: echo "syncing"
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+  sync:
+    steps:
+      - type: script
+        command: echo "syncing"
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
     );
 
@@ -44,17 +46,24 @@ fn sync_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project (it should sync as well)
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["--debug", "deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "--debug",
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -62,7 +71,7 @@ fn sync_adapter_script_single() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["--debug", "sync"])
+        .args(["--debug", "sync", "--environment", "my-environment"])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -81,18 +90,21 @@ fn sync_adapter_script_multiple() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
-          sync:
-            steps:
-              - type: script
-                command: echo "second"
-              - type: script
-                command: echo "first"
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+  sync:
+    steps:
+      - type: script
+        command: echo "second"
+      - type: script
+        command: echo "first"
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
     );
 
@@ -103,17 +115,24 @@ fn sync_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project (it should sync as well)
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["--debug", "deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "--debug",
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stdout(contains("first").and(contains("second")));
@@ -121,7 +140,7 @@ fn sync_adapter_script_multiple() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["--debug", "sync"])
+        .args(["--debug", "sync", "--environment", "my-environment"])
         .assert()
         .success()
         .stdout(contains("first").and(contains("second")));
@@ -144,19 +163,22 @@ async fn sync_adapter_static_assets() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
-                sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: pre-built
+        url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+        sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
 
-          sync:
-            steps:
-              - type: assets
-                dirs:
-                  - {assets_dir}
+  sync:
+    steps:
+      - type: assets
+        dirs:
+          - {assets_dir}
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
     );
 
@@ -167,30 +189,37 @@ async fn sync_adapter_static_assets() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
     let network_port = ctx
-        .wait_for_network_descriptor(&project_dir, NETWORK_LOCAL)
+        .wait_for_network_descriptor(&project_dir, "my-network")
         .gateway_port;
 
     // Canister ID
     let cid = "tqzl2-p7777-77776-aaaaa-cai";
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync"])
+        .args(["sync", "--environment", "my-environment"])
         .assert()
         .success();
 

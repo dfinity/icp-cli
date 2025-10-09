@@ -1,5 +1,5 @@
 use crate::common::{
-    TestContext,
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext,
     clients::{self, icp_cli},
 };
 use icp::{fs::write_string, prelude::*};
@@ -18,7 +18,7 @@ fn canister_settings_update_controllers() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Prepare principals.
-    let client = clients::icp(&ctx, &project_dir);
+    let client = clients::icp(&ctx, &project_dir, None);
     let principal_alice = get_principal(&client, "alice");
     let principal_bob = get_principal(&client, "bob");
 
@@ -28,12 +28,15 @@ fn canister_settings_update_controllers() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -45,24 +48,37 @@ fn canister_settings_update_controllers() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -79,6 +95,8 @@ fn canister_settings_update_controllers() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--add-controller",
             principal_alice.as_str(),
         ])
@@ -88,7 +106,14 @@ fn canister_settings_update_controllers() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -105,6 +130,8 @@ fn canister_settings_update_controllers() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--add-controller",
             principal_bob.as_str(),
             "--remove-controller",
@@ -116,7 +143,14 @@ fn canister_settings_update_controllers() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -134,6 +168,8 @@ fn canister_settings_update_controllers() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--remove-controller",
             principal_bob.as_str(),
         ])
@@ -143,7 +179,14 @@ fn canister_settings_update_controllers() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -160,6 +203,8 @@ fn canister_settings_update_controllers() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--add-controller",
             principal_alice.as_str(),
             "--add-controller",
@@ -171,7 +216,14 @@ fn canister_settings_update_controllers() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -189,6 +241,8 @@ fn canister_settings_update_controllers() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--remove-controller",
             principal_alice.as_str(),
             "--remove-controller",
@@ -200,7 +254,14 @@ fn canister_settings_update_controllers() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -218,6 +279,8 @@ fn canister_settings_update_controllers() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--set-controller",
             principal_alice.as_str(),
             "--set-controller",
@@ -236,6 +299,8 @@ fn canister_settings_update_controllers() {
             "my-canister",
             "--identity",
             "alice",
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success()
@@ -260,7 +325,7 @@ fn canister_settings_update_log_visibility() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Prepare principals.
-    let client = clients::icp(&ctx, &project_dir);
+    let client = clients::icp(&ctx, &project_dir, None);
     let principal_alice = get_principal(&client, "alice");
     let principal_bob = get_principal(&client, "bob");
 
@@ -270,12 +335,15 @@ fn canister_settings_update_log_visibility() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -287,24 +355,37 @@ fn canister_settings_update_log_visibility() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Controllers")));
@@ -319,6 +400,8 @@ fn canister_settings_update_log_visibility() {
             "my-canister",
             "--log-visibility",
             "public",
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -326,7 +409,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Public")));
@@ -341,6 +431,8 @@ fn canister_settings_update_log_visibility() {
             "my-canister",
             "--add-log-viewer",
             principal_alice.as_str(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -348,7 +440,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -369,6 +468,8 @@ fn canister_settings_update_log_visibility() {
             principal_bob.as_str(),
             "--remove-log-viewer",
             principal_alice.as_str(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -376,7 +477,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -396,6 +504,8 @@ fn canister_settings_update_log_visibility() {
             "my-canister",
             "--remove-log-viewer",
             principal_bob.as_str(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -403,7 +513,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -423,6 +540,8 @@ fn canister_settings_update_log_visibility() {
             principal_alice.as_str(),
             "--add-log-viewer",
             principal_bob.as_str(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -430,7 +549,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -452,6 +578,8 @@ fn canister_settings_update_log_visibility() {
             principal_alice.as_str(),
             "--remove-log-viewer",
             principal_bob.as_str(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -459,7 +587,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -479,6 +614,8 @@ fn canister_settings_update_log_visibility() {
             principal_alice.as_str(),
             "--set-log-viewer",
             principal_bob.as_str(),
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -486,7 +623,14 @@ fn canister_settings_update_log_visibility() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -510,12 +654,15 @@ fn canister_settings_update_miscellaneous() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -527,12 +674,13 @@ fn canister_settings_update_miscellaneous() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(200 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -541,6 +689,8 @@ fn canister_settings_update_miscellaneous() {
             common::SUBNET_ID,
             "--cycles",
             &format!("{}", 120 * TRILLION), // 120 TCYCLES because compute allocation is expensive
+            "--environment",
+            "my-environment",
         ])
         .assert()
         .success();
@@ -548,7 +698,14 @@ fn canister_settings_update_miscellaneous() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -568,6 +725,8 @@ fn canister_settings_update_miscellaneous() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--compute-allocation",
             "1",
             "--memory-allocation",
@@ -587,7 +746,14 @@ fn canister_settings_update_miscellaneous() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -614,12 +780,15 @@ fn canister_settings_update_environment_variables() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -631,22 +800,36 @@ fn canister_settings_update_environment_variables() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(200 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -664,6 +847,8 @@ fn canister_settings_update_environment_variables() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--add-environment-variable",
             "var1=value1",
             "--add-environment-variable",
@@ -675,7 +860,14 @@ fn canister_settings_update_environment_variables() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -693,6 +885,8 @@ fn canister_settings_update_environment_variables() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--add-environment-variable",
             "var3=value3",
             "--remove-environment-variable",
@@ -704,7 +898,14 @@ fn canister_settings_update_environment_variables() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -723,6 +924,8 @@ fn canister_settings_update_environment_variables() {
             "settings",
             "update",
             "my-canister",
+            "--environment",
+            "my-environment",
             "--remove-environment-variable",
             "var2",
             "--remove-environment-variable",
@@ -734,7 +937,14 @@ fn canister_settings_update_environment_variables() {
     // Query settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "settings", "show", "my-canister"])
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(

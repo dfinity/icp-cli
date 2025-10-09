@@ -14,7 +14,7 @@ pub enum DirField {
 }
 
 impl DirField {
-    pub fn _as_vec(&self) -> Vec<String> {
+    pub fn as_vec(&self) -> Vec<String> {
         match self {
             Self::Dir(dir) => vec![dir.clone()],
             Self::Dirs(dirs) => dirs.clone(),

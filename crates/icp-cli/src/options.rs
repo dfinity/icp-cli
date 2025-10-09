@@ -1,5 +1,5 @@
 use clap::{ArgGroup, Args};
-use icp_project::{ENVIRONMENT_IC, ENVIRONMENT_LOCAL};
+use icp::identity::IdentitySelection;
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct IdentityOpt {
@@ -8,9 +8,18 @@ pub struct IdentityOpt {
     identity: Option<String>,
 }
 
-impl IdentityOpt {
-    pub fn name(&self) -> Option<&str> {
-        self.identity.as_deref()
+impl From<IdentityOpt> for IdentitySelection {
+    fn from(v: IdentityOpt) -> Self {
+        match v.identity {
+            // Anonymous
+            Some(id) if id == "anonymous" => IdentitySelection::Anonymous,
+
+            // Named
+            Some(id) => IdentitySelection::Named(id),
+
+            // Default
+            None => IdentitySelection::Default,
+        }
     }
 }
 
@@ -35,10 +44,10 @@ impl EnvironmentOpt {
     pub fn name(&self) -> &str {
         // Support --ic
         if self.ic {
-            return ENVIRONMENT_IC;
+            return "ic";
         }
 
         // Otherwise, default to `local`
-        self.environment.as_deref().unwrap_or(ENVIRONMENT_LOCAL)
+        self.environment.as_deref().unwrap_or("local")
     }
 }

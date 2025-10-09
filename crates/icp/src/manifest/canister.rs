@@ -45,7 +45,7 @@ pub struct CanisterInner {
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
-pub struct Canister {
+pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
@@ -67,7 +67,7 @@ pub enum ParseError {
     Unexpected(#[from] anyhow::Error),
 }
 
-impl TryFrom<CanisterInner> for Canister {
+impl TryFrom<CanisterInner> for CanisterManifest {
     type Error = ParseError;
 
     fn try_from(v: CanisterInner) -> Result<Self, Self::Error> {
@@ -80,7 +80,7 @@ impl TryFrom<CanisterInner> for Canister {
         // Instructions
         let instructions = instructions.ok_or(ParseError::MissingInstructions)?;
 
-        Ok(Canister {
+        Ok(CanisterManifest {
             name,
             settings,
             instructions,
@@ -88,7 +88,7 @@ impl TryFrom<CanisterInner> for Canister {
     }
 }
 
-impl<'de> Deserialize<'de> for Canister {
+impl<'de> Deserialize<'de> for CanisterManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: CanisterInner = Deserialize::deserialize(d)?;
         inner.try_into().map_err(serde::de::Error::custom)
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn empty() -> Result<(), Error> {
-        match serde_yaml::from_str::<Canister>(r#"name: my-canister"#) {
+        match serde_yaml::from_str::<CanisterManifest>(r#"name: my-canister"#) {
             // No Error
             Ok(_) => {
                 return Err(anyhow!(
@@ -137,14 +137,14 @@ mod tests {
     #[test]
     fn recipe() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Canister>(
+            serde_yaml::from_str::<CanisterManifest>(
                 r#"
                 name: my-canister
                 recipe:
                   type: my-recipe
                 "#
             )?,
-            Canister {
+            CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::Recipe {
@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn recipe_with_configuration() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Canister>(
+            serde_yaml::from_str::<CanisterManifest>(
                 r#"
                 name: my-canister
                 recipe:
@@ -172,7 +172,7 @@ mod tests {
                     key-2: value-2
                 "#
             )?,
-            Canister {
+            CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::Recipe {
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn build_steps() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Canister>(
+            serde_yaml::from_str::<CanisterManifest>(
                 r#"
                 name: my-canister
                 build:
@@ -203,7 +203,7 @@ mod tests {
                       sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
                 "#
             )?,
-            Canister {
+            CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn sync_steps() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<Canister>(
+            serde_yaml::from_str::<CanisterManifest>(
                 r#"
                 name: my-canister
                 build:
@@ -240,7 +240,7 @@ mod tests {
                       dir: dist
                 "#
             )?,
-            Canister {
+            CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {

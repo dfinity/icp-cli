@@ -85,7 +85,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
         .assert()
         .failure()
         .stderr(
-            contains("unexpected checksum")
+            contains("checksum mismatch")
                 .and(contains("expected: invalid"))
                 .and(contains(format!("actual: {actual}"))),
         );
@@ -225,7 +225,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
         .assert()
         .failure()
         .stderr(
-            contains("unexpected checksum")
+            contains("checksum mismatch")
                 .and(contains("expected: invalid"))
                 .and(contains(format!("actual: {actual}"))),
         );

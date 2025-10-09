@@ -2,15 +2,15 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
 use clap::Parser;
 use ic_agent::AgentError;
+use icp::{agent, identity, network};
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_DECIMALS, CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawError, WithdrawResponse,
 };
-use snafu::Snafu;
 
 use crate::{
-    context::{Context, ContextAgentError, ContextProjectError},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
+    store_id::{Key, LookupError},
 };
 
 #[derive(Debug, Parser)]
@@ -29,121 +29,105 @@ pub struct Cmd {
     environment: EnvironmentOpt,
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest
-    let pm = ctx.project()?;
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
 
-    // Select canister to top up
-    let (_, c) = pm
-        .canisters
-        .iter()
-        .find(|(_, c)| cmd.name == c.name)
-        .ok_or(CommandError::CanisterNotFound { name: cmd.name })?;
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error(transparent)]
+    Access(#[from] network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] agent::CreateError),
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
+
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
+
+    #[error(transparent)]
+    Update(#[from] AgentError),
+
+    #[error(transparent)]
+    Candid(#[from] candid::Error),
+
+    #[error("Failed to top up: {}", err.format_error(*amount))]
+    Withdraw { err: WithdrawError, amount: u128 },
+}
+
+pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+    // Load project
+    let p = ctx.project.load().await?;
+
+    // Load identity
+    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
 
     // Load target environment
-    let env = pm
-        .environments
-        .iter()
-        .find(|&v| v.name == cmd.environment.name())
-        .ok_or(CommandError::EnvironmentNotFound {
-            name: cmd.environment.name().to_owned(),
-        })?;
+    let env =
+        p.environments
+            .get(cmd.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: cmd.environment.name().to_owned(),
+            })?;
 
-    // Collect environment canisters
-    let ecs = env.canisters.clone().unwrap_or(
-        pm.canisters
-            .iter()
-            .map(|(_, c)| c.name.to_owned())
-            .collect(),
-    );
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
+
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
+
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
 
     // Ensure canister is included in the environment
-    if !ecs.contains(&c.name) {
+    if !env.canisters.contains_key(&cmd.name) {
         return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
+            canister: cmd.name.to_owned(),
         });
     }
 
-    // TODO(or.ricon): Support default networks (`local` and `ic`)
-    //
-    let network = env
-        .network
-        .as_ref()
-        .expect("no network specified in environment");
-
     // Lookup the canister id
-    let cid = ctx.id_store.lookup(&Key {
-        network: network.to_owned(),
+    let cid = ctx.ids.lookup(&Key {
+        network: env.network.name.to_owned(),
         environment: env.name.to_owned(),
-        canister: c.name.to_owned(),
+        canister: cmd.name.to_owned(),
     })?;
 
-    // Load identity
-    ctx.require_identity(cmd.identity.name());
+    let args = WithdrawArgs {
+        amount: Nat::from(cmd.amount),
+        from_subaccount: None,
+        to: cid,
+        created_at_time: None,
+    };
 
-    // Setup network
-    ctx.require_network(network);
-
-    // Prepare agent
-    let agent = ctx.agent()?;
-
-    let response_bytes = agent
+    let bs = agent
         .update(&CYCLES_LEDGER_PRINCIPAL, "withdraw")
-        .with_arg(
-            Encode!(&WithdrawArgs {
-                amount: Nat::from(cmd.amount),
-                from_subaccount: None,
-                to: cid,
-                created_at_time: None,
-            })
-            .expect("Failed to encode WithdrawArgs"),
-        )
+        .with_arg(Encode!(&args)?)
         .call_and_wait()
-        .await
-        .map_err(|source| CommandError::Agent { source })?;
-    let response =
-        Decode!(&response_bytes, WithdrawResponse).expect("Failed to decode WithdrawResponse");
-    response.map_err(|err| CommandError::Withdraw {
+        .await?;
+
+    Decode!(&bs, WithdrawResponse)?.map_err(|err| CommandError::Withdraw {
         err,
         amount: cmd.amount,
     })?;
 
     let _ = ctx.term.write_line(&format!(
         "Topped up canister {} with {}T cycles",
-        c.name,
+        cmd.name,
         BigDecimal::new(cmd.amount.into(), CYCLES_LEDGER_DECIMALS)
     ));
 
     Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    GetProject { source: ContextProjectError },
-
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
-    #[snafu(display("project does not contain an environment named '{name}'"))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(display("environment '{environment}' does not include canister '{canister}'"))]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[snafu(transparent)]
-    LookupCanisterId { source: LookupIdError },
-
-    #[snafu(transparent)]
-    GetAgent { source: ContextAgentError },
-
-    #[snafu(transparent)]
-    Agent { source: AgentError },
-
-    #[snafu(display("Failed to top up: {}", err.format_error(*amount)))]
-    Withdraw { err: WithdrawError, amount: u128 },
 }

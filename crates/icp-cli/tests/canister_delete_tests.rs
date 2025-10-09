@@ -1,4 +1,4 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
 
 mod common;
@@ -16,12 +16,15 @@ fn canister_delete() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         wasm,
     );
@@ -33,36 +36,60 @@ fn canister_delete() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
-    ctx.ping_until_healthy(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Stop canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "stop", "my-canister"])
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Delete canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "delete", "my-canister"])
+        .args([
+            "canister",
+            "delete",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
     // Query status
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .failure();
 }

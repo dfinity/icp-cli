@@ -6,11 +6,16 @@ use crate::common::TestContext;
 pub struct Client<'a> {
     ctx: &'a TestContext,
     current_dir: PathBuf,
+    environment: String,
 }
 
 impl<'a> Client<'a> {
-    pub fn new(ctx: &'a TestContext, current_dir: PathBuf) -> Self {
-        Self { ctx, current_dir }
+    pub fn new(ctx: &'a TestContext, current_dir: PathBuf, environment: Option<String>) -> Self {
+        Self {
+            ctx,
+            current_dir,
+            environment: environment.unwrap_or("local".to_string()),
+        }
     }
 
     pub fn active_principal(&self) -> Principal {
@@ -72,7 +77,14 @@ impl<'a> Client<'a> {
         self.ctx
             .icp()
             .current_dir(&self.current_dir)
-            .args(["cycles", "mint", "--cycles", &amount.to_string()])
+            .args([
+                "cycles",
+                "mint",
+                "--cycles",
+                &amount.to_string(),
+                "--environment",
+                &self.environment,
+            ])
             .assert()
             .success();
     }
@@ -82,7 +94,13 @@ impl<'a> Client<'a> {
             .ctx
             .icp()
             .current_dir(&self.current_dir)
-            .args(["canister", "show", canister_name])
+            .args([
+                "canister",
+                "show",
+                canister_name,
+                "--environment",
+                &self.environment,
+            ])
             .assert()
             .success()
             .get_output()

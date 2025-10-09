@@ -1,7 +1,6 @@
-use crate::common::{TestContext, clients};
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use icp::{fs::write_string, prelude::*};
-use icp_network::managed::pocketic::default_instance_config;
+use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
 use predicates::{
     prelude::PredicateBooleanExt,
@@ -18,33 +17,39 @@ fn canister_create() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
-    canister:
-      name: my-canister
-      build:
-        steps:
-          - type: script
-            command: echo hi
-    "#;
+    let pm = format!(
+        r#"
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: echo hi
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
+        "#
+    );
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create"])
+        .args(["canister", "create", "--environment", "my-environment"])
         .assert()
         .success();
 }
@@ -62,17 +67,20 @@ fn canister_create_with_settings() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-          settings:
-            compute_allocation: 1
-            memory_allocation: 4294967296
-            freezing_threshold: 2592000
-            reserved_cycles_limit: 1000000000000
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+  settings:
+    compute_allocation: 1
+    memory_allocation: 4294967296
+    freezing_threshold: 2592000
+    reserved_cycles_limit: 1000000000000
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         f.path()
     );
@@ -84,19 +92,22 @@ fn canister_create_with_settings() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
             "create",
+            "--environment",
+            "my-environment",
             "--cycles",
             &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
@@ -106,7 +117,13 @@ fn canister_create_with_settings() {
     // Verify creation settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -132,14 +149,17 @@ fn canister_create_with_settings_cmdline_override() {
     // Project manifest
     let pm = format!(
         r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
-          settings:
-            compute_allocation: 1
+canister:
+  name: my-canister
+  build:
+    steps:
+      - type: script
+        command: sh -c 'cp {} "$ICP_WASM_OUTPUT_PATH"'
+  settings:
+    compute_allocation: 1
+
+{NETWORK_RANDOM_PORT}
+{ENVIRONMENT_RANDOM_PORT}
         "#,
         f.path()
     );
@@ -151,14 +171,15 @@ fn canister_create_with_settings_cmdline_override() {
     .expect("failed to write project manifest");
 
     // Start network
-    ctx.configure_icp_local_network_random_port(&project_dir);
-    let _g = ctx.start_network_in(&project_dir);
+    let _g = ctx.start_network_in(&project_dir, "my-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir);
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir).mint_cycles(100 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -166,6 +187,8 @@ fn canister_create_with_settings_cmdline_override() {
             "create",
             "--compute-allocation",
             "2",
+            "--environment",
+            "my-environment",
             "--cycles",
             &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
@@ -175,7 +198,13 @@ fn canister_create_with_settings_cmdline_override() {
     // Verify creation settings
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "status", "my-canister"])
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stderr(
@@ -312,10 +341,11 @@ async fn canister_create_colocates_canisters() {
             },
         )
         .await;
-    ctx.ping_until_healthy(&project_dir);
+
+    ctx.ping_until_healthy(&project_dir, "local");
 
     // Create first three canisters
-    let icp_client = clients::icp(&ctx, &project_dir);
+    let icp_client = clients::icp(&ctx, &project_dir, None);
     icp_client.mint_cycles(20 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
@@ -384,101 +414,4 @@ async fn canister_create_colocates_canisters() {
         subnet_a, subnet_f,
         "Canister F should be on the same subnet as canister A"
     );
-}
-
-#[tokio::test]
-async fn canister_create_fails_when_canisters_on_different_subnets() {
-    let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("icp");
-
-    let pm = r#"
-    canisters:
-      - name: canister-a
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-b
-        build:
-          steps:
-            - type: script
-              command: echo hi
-      - name: canister-c
-        build:
-          steps:
-            - type: script
-              command: echo hi
-    "#;
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Start network
-    let _g = ctx
-        .start_network_with_config(
-            &project_dir,
-            InstanceConfig {
-                subnet_config_set: (SubnetConfigSet {
-                    application: 3,
-                    ..Default::default()
-                })
-                .into(),
-                ..default_instance_config(&ctx.state_dir(&project_dir))
-            },
-        )
-        .await;
-    ctx.ping_until_healthy(&project_dir);
-
-    let icp_client = clients::icp(&ctx, &project_dir);
-    icp_client.mint_cycles(20 * TRILLION);
-
-    // Get subnets from CMC
-    let cmc = clients::cmc(&ctx);
-    let default_subnets = cmc.get_default_subnets().await;
-    let subnet_1 = default_subnets[0];
-    let subnet_2 = default_subnets[1];
-
-    // Create canisters on different subnets
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "create",
-            "canister-a",
-            "--subnet",
-            &subnet_1.to_string(),
-        ])
-        .assert()
-        .success();
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "create",
-            "canister-b",
-            "--subnet",
-            &subnet_2.to_string(),
-        ])
-        .assert()
-        .success();
-
-    let registry = clients::registry(&ctx);
-    let subnet_a_id = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-a"))
-        .await;
-    let subnet_b_id = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-b"))
-        .await;
-
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["canister", "create", "canister-c"])
-        .assert()
-        .failure()
-        .stderr(contains("No obvious subnet choice"))
-        .stderr(contains("Use --subnet to manually pick a subnet"))
-        .stderr(contains(format!("canister-a: {}", subnet_a_id)))
-        .stderr(contains(format!("canister-b: {}", subnet_b_id)));
 }

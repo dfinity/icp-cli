@@ -1,9 +1,22 @@
 use std::collections::HashMap;
 
+use anyhow::Context;
+use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+use crate::{
+    LoadPath,
+    fs::read,
+    manifest::{CANISTER_MANIFEST, CanisterManifest},
+    prelude::*,
+};
+
+pub mod assets;
 pub mod build;
+pub mod prebuilt;
+pub mod recipe;
+pub mod script;
 pub mod sync;
 
 /// Canister settings, such as compute and memory allocation.
@@ -31,4 +44,32 @@ pub struct Settings {
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
     pub environment_variables: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoadPathError {
+    #[error("failed to read canister manifest")]
+    Read,
+
+    #[error("failed to deserialize canister manifest")]
+    Deserialize,
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+pub struct PathLoader;
+
+#[async_trait]
+impl LoadPath<CanisterManifest, LoadPathError> for PathLoader {
+    async fn load(&self, path: &Path) -> Result<CanisterManifest, LoadPathError> {
+        // Read file
+        let mbs = read(&path.join(CANISTER_MANIFEST)).context(LoadPathError::Read)?;
+
+        // Load YAML
+        let m =
+            serde_yaml::from_slice::<CanisterManifest>(&mbs).context(LoadPathError::Deserialize)?;
+
+        Ok(m)
+    }
 }

@@ -16,6 +16,22 @@ pub const PATH_SEPARATOR: &str = ":";
 #[cfg(windows)]
 pub const PATH_SEPARATOR: &str = ";";
 
+/// A network manifest for a network using a random port
+pub const NETWORK_RANDOM_PORT: &str = r#"
+network:
+  name: my-network
+  mode: managed
+  gateway:
+    port: 0
+"#;
+
+/// An environment manifest utilizing the above network
+pub const ENVIRONMENT_RANDOM_PORT: &str = r#"
+environment:
+  name: my-environment
+  network: my-network
+"#;
+
 /// This ID is dependent on the toplogy being served by pocket-ic
 /// NOTE: If the topology is changed (another subnet is added, etc) the ID may change.
 /// References:

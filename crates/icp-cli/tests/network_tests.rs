@@ -16,31 +16,48 @@ fn network_same_port() {
     let ctx = TestContext::new();
 
     let project_dir_a = ctx.create_project_dir("a");
+
+    // Project manifest
+    write_string(
+        &project_dir_a.join("icp.yaml"), // path
+        r#"
+        network:
+          name: my-network
+          mode: managed
+          gateway:
+            port: 8080
+        "#, // contents
+    )
+    .expect("failed to write project manifest");
+
     let project_dir_b = ctx.create_project_dir("b");
 
-    let _child_guard = ctx.start_network_in(&project_dir_a, "local");
+    // Project manifest
+    write_string(
+        &project_dir_b.join("icp.yaml"), // path
+        r#"
+        network:
+          name: my-network
+          mode: managed
+          gateway:
+            port: 8080
+        "#, // contents
+    )
+    .expect("failed to write project manifest");
 
-    eprintln!("wait for network healthy");
-    ctx.ping_until_healthy(&project_dir_a, "local");
+    let _a_guard = ctx.start_network_in(&project_dir_a, "my-network");
 
-    eprintln!("second network run attempt");
-    ctx.icp()
-        .current_dir(&project_dir_a)
-        .args(["network", "run"])
-        .assert()
-        .failure()
-        .stderr(contains(
-            "the local network for this project is already running",
-        ));
+    eprintln!("wait for network A healthy");
+    ctx.ping_until_healthy(&project_dir_a, "my-network");
 
     eprintln!("second network run attempt in another project");
     ctx.icp()
         .current_dir(&project_dir_b)
-        .args(["network", "run"])
+        .args(["network", "run", "my-network"])
         .assert()
         .failure()
         .stderr(contains(
-            "port 8000 is in use by the local network of the project at",
+            "Error: port 8080 is in use by the my-network network of the project at",
         ));
 }
 
@@ -57,6 +74,7 @@ fn two_projects_different_fixed_ports() {
         r#"
         network:
           name: my-network
+          mode: managed
           gateway:
             port: 8001
         "#, // contents
@@ -71,6 +89,7 @@ fn two_projects_different_fixed_ports() {
         r#"
         network:
           name: my-network
+          mode: managed
           gateway:
             port: 8002
         "#, // contents
@@ -112,6 +131,8 @@ fn deploy_to_other_projects_network() {
         ..
     } = ctx.wait_for_network_descriptor(&proja, "my-network");
 
+    ctx.ping_until_healthy(&proja, "my-network");
+
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
@@ -132,7 +153,7 @@ fn deploy_to_other_projects_network() {
           - name: network-a
             mode: connected
             url: http://localhost:{gateway_port}
-            root-key: "{root_key}"
+            root-key: {root_key}
 
         environments:
           - name: environment-1
@@ -146,31 +167,46 @@ fn deploy_to_other_projects_network() {
     )
     .expect("failed to write project manifest");
 
-    ctx.ping_until_healthy(&proja, "network-a");
-
     // Deploy project (first time)
-    clients::icp(&ctx, &proja, Some("environment-1".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &projb, Some("environment-1".to_string())).mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&projb)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
-        .args(["--environment", "environment-1"])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "environment-1",
+        ])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&projb)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
-        .args(["--environment", "environment-1"])
+        .args([
+            "deploy",
+            "--subnet-id",
+            common::SUBNET_ID,
+            "--environment",
+            "environment-1",
+        ])
         .assert()
         .success();
 
     // Query canister
     ctx.icp()
         .current_dir(&projb)
-        .args(["canister", "call", "my-canister", "greet", "(\"test\")"])
-        .args(["--environment", "environment-1"])
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "environment-1",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+        ])
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());

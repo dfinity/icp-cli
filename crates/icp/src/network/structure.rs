@@ -24,11 +24,11 @@ impl NetworkDirectoryStructure {
     }
 
     pub fn port_lock_path(&self, port: u16) -> PathBuf {
-        self.port_descriptor_dir.join(format!("{}.lock", port))
+        self.port_descriptor_dir.join(format!("{port}.lock"))
     }
 
     pub fn port_descriptor_path(&self, port: u16) -> PathBuf {
-        self.port_descriptor_dir.join(format!("{}.json", port))
+        self.port_descriptor_dir.join(format!("{port}.json"))
     }
 
     pub fn state_dir(&self) -> PathBuf {

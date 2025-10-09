@@ -103,14 +103,14 @@ impl Drop for ChildGuard {
             Ok(None) => {
                 self.send_sigint_to_process_group();
                 if let Err(e) = self.child.kill() {
-                    eprintln!("Failed to kill child process: {}", e);
+                    eprintln!("Failed to kill child process: {e}");
                 }
                 if let Err(e) = self.child.wait() {
-                    eprintln!("Failed to wait on child process: {}", e);
+                    eprintln!("Failed to wait on child process: {e}");
                 }
             }
             Err(e) => {
-                eprintln!("Failed to check child process status: {}", e);
+                eprintln!("Failed to check child process status: {e}");
             }
         }
     }

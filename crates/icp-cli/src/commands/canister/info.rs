@@ -117,8 +117,8 @@ pub fn print_info(result: &CanisterStatusResult) {
 
     match &result.module_hash {
         Some(hash) => {
-            let hex_string: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
-            eprintln!("Module hash: 0x{}", hex_string);
+            let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+            eprintln!("Module hash: 0x{hex_string}");
         }
         None => eprintln!("Module hash: <none>"),
     }

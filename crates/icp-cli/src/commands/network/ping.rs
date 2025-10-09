@@ -79,7 +79,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         false => agent.status().await?,
     };
 
-    println!("{}", status);
+    println!("{status}");
 
     Ok(())
 }
@@ -104,7 +104,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
                 return Ok(status);
             }
 
-            eprintln!("{}", status);
+            eprintln!("{status}");
         }
 
         if retries >= 60 {

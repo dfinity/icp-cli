@@ -116,8 +116,7 @@ async fn token_transfer() {
         ])
         .assert()
         .stdout(contains(format!(
-            "Transferred 1.10000000 ICP to {}",
-            bob_principal
+            "Transferred 1.10000000 ICP to {bob_principal}"
         )))
         .success();
     assert_eq!(
@@ -155,8 +154,7 @@ async fn token_transfer() {
         ])
         .assert()
         .stdout(contains(format!(
-            "Transferred 2.000000000000 TCYCLES to {}",
-            bob_principal
+            "Transferred 2.000000000000 TCYCLES to {bob_principal}"
         )))
         .success();
     icp_client.use_identity("bob");

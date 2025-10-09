@@ -102,7 +102,7 @@ impl TestContext {
             .arg("run")
             .arg(name);
 
-        eprintln!("Running network in {}", project_dir);
+        eprintln!("Running network in {project_dir}");
 
         let child_guard = ChildGuard::spawn(&mut cmd).expect("failed to spawn icp network ");
 
@@ -173,7 +173,7 @@ impl TestContext {
         let pocketic_port = wait_for_port_file(&port_file)
             .await
             .expect("Timeout waiting for port file");
-        eprintln!("PocketIC started on port {}", pocketic_port);
+        eprintln!("PocketIC started on port {pocketic_port}");
 
         // Initialize PocketIC instance with custom config
         let instance = initialize_instance(
@@ -210,7 +210,7 @@ impl TestContext {
 
         // Connect PocketIc client
         let pocketic = PocketIc::new_from_existing_instance(
-            format!("http://localhost:{}", pocketic_port)
+            format!("http://localhost:{pocketic_port}")
                 .parse()
                 .unwrap(),
             instance.instance_id,
@@ -248,25 +248,23 @@ impl TestContext {
             .join("descriptor.json");
         let start_time = std::time::Instant::now();
         let network_descriptor = loop {
-            eprintln!("Checking for network descriptor at {}", descriptor_path);
+            eprintln!("Checking for network descriptor at {descriptor_path}");
             if descriptor_path.exists() && descriptor_path.is_file() {
                 let contents = fs::read_to_string(&descriptor_path)
                     .expect("Failed to read network descriptor");
                 let parsed = serde_json::from_str::<serde_json::Value>(&contents);
                 if let Ok(value) = parsed {
-                    eprintln!("Network descriptor found at {}", descriptor_path);
+                    eprintln!("Network descriptor found at {descriptor_path}");
                     break value;
                 } else {
                     eprintln!(
-                        "Network descriptor at {} is not valid JSON: {}",
-                        descriptor_path, contents
+                        "Network descriptor at {descriptor_path} is not valid JSON: {contents}"
                     );
                 }
             }
             if start_time.elapsed().as_secs() > 30 {
                 panic!(
-                    "Timed out waiting for network descriptor at {}",
-                    descriptor_path
+                    "Timed out waiting for network descriptor at {descriptor_path}"
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));

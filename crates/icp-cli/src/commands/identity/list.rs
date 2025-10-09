@@ -38,7 +38,7 @@ pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
 
     for (name, id) in sorted_identities.iter() {
         let principal = id.principal();
-        let padded_name = format!("{: <1$}", name, longest_identity_name_length);
+        let padded_name = format!("{name: <longest_identity_name_length$}");
         if **name == defaults.default {
             println!("* {padded_name} {principal}");
         } else {

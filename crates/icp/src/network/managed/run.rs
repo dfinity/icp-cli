@@ -281,7 +281,7 @@ pub async fn initialize_instance(
     eprintln!("Initializing PocketIC instance");
     let (instance_id, topology) = pic.create_instance_with_config(instance_config).await?;
     let default_effective_canister_id = topology.default_effective_canister_id;
-    eprintln!("Created instance with id {}", instance_id);
+    eprintln!("Created instance with id {instance_id}");
 
     eprintln!("Setting time");
     pic.set_time(instance_id).await?;
@@ -327,7 +327,7 @@ pub async fn initialize_instance(
     );
 
     let agent_url = format!("http://localhost:{}", gateway_info.port);
-    eprintln!("Agent url is {}", agent_url);
+    eprintln!("Agent url is {agent_url}");
     let status = ping_and_wait(&agent_url).await?;
 
     let root_key = status.root_key.ok_or(InitializePocketicError::NoRootKey)?;
@@ -461,7 +461,7 @@ async fn mint_icp_to_account(
         .map_err(|err| InitializePocketicError::SeedTokens {
             error: format!("Failed to mint ICP: {err}"),
         })?;
-    eprintln!("Minted {} ICP to account {}", amount, account);
+    eprintln!("Minted {amount} ICP to account {account}");
     Ok(())
 }
 

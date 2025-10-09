@@ -137,7 +137,7 @@ pub fn print_status(result: &CanisterStatusResult) {
             }
         }
     };
-    eprintln!("  Log visibility: {}", log_visibility);
+    eprintln!("  Log visibility: {log_visibility}");
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
@@ -152,8 +152,8 @@ pub fn print_status(result: &CanisterStatusResult) {
 
     match &result.module_hash {
         Some(hash) => {
-            let hex_string: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
-            eprintln!("  Module hash: 0x{}", hex_string);
+            let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+            eprintln!("  Module hash: 0x{hex_string}");
         }
         None => eprintln!("  Module hash: <none>"),
     }

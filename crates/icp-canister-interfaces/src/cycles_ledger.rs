@@ -80,7 +80,7 @@ impl CreateCanisterError {
                 message,
                 error_code,
             } => {
-                format!("Cycles ledger error (code {}): {}", error_code, message)
+                format!("Cycles ledger error (code {error_code}): {message}")
             }
             CreateCanisterError::TemporarilyUnavailable => {
                 "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
@@ -105,12 +105,12 @@ impl CreateCanisterError {
                 refund_block,
                 fee_block,
             } => {
-                let mut msg = format!("Failed to create canister: {}", error);
+                let mut msg = format!("Failed to create canister: {error}");
                 if let Some(b) = refund_block {
-                    msg.push_str(&format!(". Refund block: {}", b));
+                    msg.push_str(&format!(". Refund block: {b}"));
                 }
                 if let Some(b) = fee_block {
-                    msg.push_str(&format!(". Fee block: {}", b));
+                    msg.push_str(&format!(". Fee block: {b}"));
                 }
                 msg
             }
@@ -185,7 +185,7 @@ impl WithdrawError {
                 message,
                 error_code,
             } => {
-                format!("Cycles ledger error (code {}): {}", error_code, message)
+                format!("Cycles ledger error (code {error_code}): {message}")
             }
             WithdrawError::TemporarilyUnavailable => {
                 "Cycles ledger temporarily unavailable. Please retry in a moment.".to_string()
@@ -195,10 +195,7 @@ impl WithdrawError {
                 rejection_reason,
                 fee_block: _,
             } => {
-                format!(
-                    "Failed to withdraw cycles: {} (rejection code: {:?})",
-                    rejection_reason, rejection_code
-                )
+                format!("Failed to withdraw cycles: {rejection_reason} (rejection code: {rejection_code:?})")
             }
             WithdrawError::Duplicate { duplicate_of } => {
                 format!("Duplicate request of block {duplicate_of}.")

@@ -4,11 +4,11 @@ import { getCanisterEnv } from "@icp-sdk/canister-env";
 import "./App.css";
 
 interface CanisterEnv {
-  readonly "ICP_CANISTER_ID:backend": string;
+  readonly "PUBLIC_CANISTER_ID:backend": string;
 }
 
 const canisterEnv = getCanisterEnv<CanisterEnv>();
-const canisterId = canisterEnv["ICP_CANISTER_ID:backend"];
+const canisterId = canisterEnv["PUBLIC_CANISTER_ID:backend"];
 
 const helloWorldActor = createActor(canisterId, {
   agentOptions: {

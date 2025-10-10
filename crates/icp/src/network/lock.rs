@@ -90,6 +90,7 @@ pub struct AcquireWriteLockError {
     path: PathBuf,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Snafu)]
 pub enum ReadWithLockError {
     #[snafu(transparent)]

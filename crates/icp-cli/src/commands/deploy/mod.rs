@@ -150,11 +150,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     )
     .await;
 
-    if let Err(err) = out {
-        if !matches!(err, create::CommandError::NoCanisters) {
+    if let Err(err) = out
+        && !matches!(err, create::CommandError::NoCanisters) {
             return Err(err.into());
         }
-    }
 
     let _ = ctx.term.write_line("\n\nSetting environment variables:");
     let out = binding_env_vars::exec(
@@ -167,11 +166,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     )
     .await;
 
-    if let Err(err) = out {
-        if !matches!(err, binding_env_vars::CommandError::NoCanisters) {
+    if let Err(err) = out
+        && !matches!(err, binding_env_vars::CommandError::NoCanisters) {
             return Err(err.into());
         }
-    }
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
@@ -186,11 +184,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     )
     .await;
 
-    if let Err(err) = out {
-        if !matches!(err, install::CommandError::NoCanisters) {
+    if let Err(err) = out
+        && !matches!(err, install::CommandError::NoCanisters) {
             return Err(err.into());
         }
-    }
 
     // Sync the selected canisters
     let _ = ctx.term.write_line("\n\nSyncing canisters:");
@@ -204,11 +201,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     )
     .await;
 
-    if let Err(err) = out {
-        if !matches!(err, sync::CommandError::NoCanisters) {
+    if let Err(err) = out
+        && !matches!(err, sync::CommandError::NoCanisters) {
             return Err(err.into());
         }
-    }
 
     Ok(())
 }

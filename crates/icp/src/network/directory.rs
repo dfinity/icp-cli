@@ -92,9 +92,9 @@ impl NetworkDirectory {
     }
 
     pub fn save_network_descriptors(
-        &self,
+        &'_ self,
         descriptor: &NetworkDescriptorModel,
-    ) -> Result<NetworkDescriptorCleaner, SaveNetworkDescriptorError> {
+    ) -> Result<NetworkDescriptorCleaner<'_>, SaveNetworkDescriptorError> {
         let mut network_lock = self.open_network_descriptor_for_writelock()?;
         let mut network_writer = NetworkDescriptorWriter::acquire(&mut network_lock)?;
 

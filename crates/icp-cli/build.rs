@@ -13,7 +13,6 @@ fn get_git_version() -> Result<String, std::io::Error> {
         .stdout;
 
     for tag in String::from_utf8_lossy(&tags).split_whitespace() {
-
         let output = Command::new("git")
             .arg("rev-list")
             .arg("--count")
@@ -28,10 +27,11 @@ fn get_git_version() -> Result<String, std::io::Error> {
             .split_whitespace()
             .next()
             .and_then(|v| v.parse::<u128>().ok())
-            && count < latest_distance {
-                latest_tag = String::from(tag);
-                latest_distance = count;
-            }
+            && count < latest_distance
+        {
+            latest_tag = String::from(tag);
+            latest_distance = count;
+        }
     }
 
     let head_commit_sha = Command::new("git")

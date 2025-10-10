@@ -200,8 +200,9 @@ pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutEr
     while retries < 3000 {
         if let Ok(contents) = read_to_string(path)
             && contents.ends_with('\n')
-                && let Ok(port) = contents.trim().parse::<u16>() {
-                    return Ok(port);
+            && let Ok(port) = contents.trim().parse::<u16>()
+        {
+            return Ok(port);
         }
 
         sleep(Duration::from_millis(100)).await;

@@ -43,14 +43,9 @@ pub struct RollingLines {
 }
 
 impl RollingLines {
-    /// Create a new buffer with a fixed capacity, pre-filled with empty strings.
+    /// Create a new buffer with a fixed capacity.
     pub fn new(capacity: usize) -> Self {
-        let mut buf = VecDeque::with_capacity(capacity);
-
-        for _ in 0..capacity {
-            buf.push_back(String::new());
-        }
-
+        let buf = VecDeque::with_capacity(capacity);
         Self { buf, capacity }
     }
 
@@ -196,11 +191,7 @@ impl ScriptProgressHandler {
                 complete.push(line);
 
                 // Update progress-bar with rolling terminal output
-                let msg = rolling
-                    .iter()
-                    .filter(|s| !s.is_empty())
-                    .map(|s| format!("> {s}"))
-                    .join("\n");
+                let msg = rolling.iter().map(|s| format!("> {s}")).join("\n");
                 set_message(msg);
             }
 

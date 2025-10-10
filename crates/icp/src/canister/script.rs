@@ -50,7 +50,7 @@ impl Build for Script {
         // Iterate over configured commands
         for input_cmd in cmds {
             stdio
-                .send(format!("\nRunning command: {}", input_cmd))
+                .send(format!("Running command: {}", input_cmd))
                 .await?;
 
             // Parse command input

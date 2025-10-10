@@ -103,6 +103,62 @@ build:
 }
 
 #[test]
+fn recipe_remote_url_wrong_checksum() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create a simple recipe template
+    let recipe_template = r#"
+build:
+  steps:
+    - type: script
+      command: sh -c 'echo "test" > "$ICP_WASM_OUTPUT_PATH"'
+"#;
+
+    let actual = hex::encode({
+        let mut h = Sha256::new();
+        h.update(recipe_template.as_bytes());
+        h.finalize()
+    });
+
+    // A random wrong but valid checksum
+    let expected = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
+    // Spawn HTTP server with the recipe template
+    let server = spawn_test_server("GET", "/recipe.hbs", recipe_template.as_bytes());
+    let addr = server.addr();
+
+    // Project manifest with wrong checksum
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          recipe:
+            type: http://{addr}/recipe.hbs
+            sha256: {expected}
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("checksum mismatch")
+                .and(contains(format!("expected {expected}")))
+                .and(contains(format!("actual {actual}"))),
+        );
+}
+
+#[test]
 fn recipe_remote_url_valid_checksum() {
     let ctx = TestContext::new();
 

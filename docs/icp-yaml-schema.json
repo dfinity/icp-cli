@@ -265,6 +265,13 @@
           "default": {},
           "type": "object"
         },
+        "sha256": {
+          "description": "Optional sha256 checksum for the recipe template, useful for verifying the integrity of remote recipe templates",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "type": {
           "$ref": "#/definitions/RecipeType"
         }

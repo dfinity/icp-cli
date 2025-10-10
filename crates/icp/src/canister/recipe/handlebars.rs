@@ -16,6 +16,7 @@ use crate::{
 use async_trait::async_trait;
 use handlebars::{Context, Helper, HelperDef, HelperResult, Output};
 use reqwest::{Method, Request, Url};
+use sha2::{Digest, Sha256};
 use url::ParseError;
 
 pub struct Handlebars {
@@ -68,6 +69,11 @@ pub enum HandlebarsError {
         recipe: String,
         template: String,
     },
+
+    #[error(
+        "sha256 checksum mismatch for remote recipe template: expected {expected}, actual {actual}"
+    )]
+    ChecksumMismatch { expected: String, actual: String },
 }
 
 #[async_trait]
@@ -190,8 +196,32 @@ impl Resolve for Handlebars {
                     });
                 }
 
-                resp.text().await.map_err(|err| ResolveError::Handlebars {
+                let bytes = resp.bytes().await.map_err(|err| ResolveError::Handlebars {
                     source: HandlebarsError::HttpRequest { source: err },
+                })?;
+
+                // Verify the checksum if it's provided
+                if let Some(expected) = &recipe.sha256 {
+                    // Calculate checksum
+                    let actual = hex::encode({
+                        let mut h = Sha256::new();
+                        h.update(&bytes);
+                        h.finalize()
+                    });
+
+                    // Verify checksum
+                    if &actual != expected {
+                        return Err(ResolveError::Handlebars {
+                            source: HandlebarsError::ChecksumMismatch {
+                                expected: expected.clone(),
+                                actual,
+                            },
+                        });
+                    }
+                }
+
+                String::from_utf8(bytes.into()).map_err(|err| ResolveError::Handlebars {
+                    source: HandlebarsError::DecodeUtf8 { source: err },
                 })?
             }
         };

@@ -33,6 +33,7 @@ pub struct Recipe {
     pub configuration: HashMap<String, serde_yaml::Value>,
 
     /// Optional sha256 checksum for the recipe template,
-    /// useful for verifying the integrity of remote recipe templates
+    /// only used to verify the integrity of remote recipe templates.
+    /// This is ignored if the recipe is not a remote URL.
     pub sha256: Option<String>,
 }

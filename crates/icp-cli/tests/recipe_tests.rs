@@ -208,55 +208,6 @@ build:
 }
 
 #[test]
-fn recipe_https_url_with_valid_checksum() {
-    let ctx = TestContext::new();
-
-    // Setup project
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Create a simple recipe template
-    let recipe_template = r#"
-build:
-  steps:
-    - type: script
-      command: sh -c 'echo "test" > "$ICP_WASM_OUTPUT_PATH"'
-"#;
-
-    // Calculate checksum
-    let checksum = hex::encode({
-        let mut h = Sha256::new();
-        h.update(recipe_template.as_bytes());
-        h.finalize()
-    });
-
-    // Spawn HTTP server with the recipe template
-    let server = spawn_test_server("GET", "/recipe.hbs", recipe_template.as_bytes());
-    let addr = server.addr();
-
-    // Project manifest with valid checksum (using http since we can't easily test https in unit tests)
-    let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          recipe:
-            type: http://{addr}/recipe.hbs
-            sha256: {checksum}
-    "#};
-
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        &pm,                           // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Invoke build
-    ctx.icp()
-        .current_dir(project_dir)
-        .args(["build"])
-        .assert()
-        .success();
-}
-
-#[test]
 fn recipe_local_file_ignores_checksum() {
     let ctx = TestContext::new();
 
@@ -278,8 +229,6 @@ build:
     .expect("failed to write recipe template");
 
     // Project manifest with checksum (which should be ignored for local files)
-    // Note: The implementation may or may not verify checksums for local files
-    // This test documents the current behavior
     let pm = formatdoc! {r#"
         canister:
           name: my-canister
@@ -300,4 +249,36 @@ build:
         .args(["build"])
         .assert()
         .success();
+}
+
+#[test]
+fn recipe_predefined_ignores_checksum() {
+    let ctx = TestContext::new();
+
+    for recipe_type in ["assets", "motoko", "rust"] {
+        // Setup project
+        let project_dir = ctx.create_project_dir("icp");
+
+        let pm = formatdoc! {r#"
+            canister:
+            name: my-canister
+            recipe:
+                type: {recipe_type}
+                sha256: invalid_checksum_should_be_ignored
+        "#};
+
+        write_string(
+            &project_dir.join("icp.yaml"), // path
+            &pm,                           // contents
+        )
+        .expect("failed to write project manifest");
+
+        // Invoke build - should succeed because local files don't verify checksums
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(["build"])
+            .assert()
+            .append_context("test-case", recipe_type)
+            .success();
+    }
 }

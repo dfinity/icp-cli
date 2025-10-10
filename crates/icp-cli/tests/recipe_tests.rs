@@ -124,7 +124,7 @@ build:
     });
 
     // A random wrong but valid checksum
-    let expected = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+    let expected = "508f107eba1885bd165f4ef75c1b8cf914cf9eda6365f93214bb0cc39bd07ddd";
 
     // Spawn HTTP server with the recipe template
     let server = spawn_test_server("GET", "/recipe.hbs", recipe_template.as_bytes());
@@ -173,12 +173,8 @@ build:
       command: sh -c 'echo "test" > "$ICP_WASM_OUTPUT_PATH"'
 "#;
 
-    // Calculate checksum
-    let checksum = hex::encode({
-        let mut h = Sha256::new();
-        h.update(recipe_template.as_bytes());
-        h.finalize()
-    });
+    // Hash of the recipe template above
+    let expected_checksum = "f8bd13664a0fd826aea3000b90fc7b4a878854b4f90216924ecfbec4581173cd";
 
     // Spawn HTTP server with the recipe template
     let server = spawn_test_server("GET", "/recipe.hbs", recipe_template.as_bytes());
@@ -190,7 +186,7 @@ build:
           name: my-canister
           recipe:
             type: http://{addr}/recipe.hbs
-            sha256: {checksum}
+            sha256: {expected_checksum}
     "#};
 
     write_string(
@@ -208,7 +204,7 @@ build:
 }
 
 #[test]
-fn recipe_local_file_ignores_checksum() {
+fn recipe_local_file_without_checksum() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -228,13 +224,12 @@ build:
     )
     .expect("failed to write recipe template");
 
-    // Project manifest with checksum (which should be ignored for local files)
+    // Project manifest without checksum
     let pm = formatdoc! {r#"
         canister:
           name: my-canister
           recipe:
             type: file://./recipe.hbs
-            sha256: invalid_checksum_should_be_ignored
     "#};
 
     write_string(
@@ -243,7 +238,7 @@ build:
     )
     .expect("failed to write project manifest");
 
-    // Invoke build - should succeed because local files don't verify checksums
+    // Invoke build
     ctx.icp()
         .current_dir(project_dir)
         .args(["build"])
@@ -252,7 +247,165 @@ build:
 }
 
 #[test]
-fn recipe_predefined_ignores_checksum() {
+fn recipe_local_file_invalid_checksum() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create a local recipe template file
+    let recipe_template = r#"
+build:
+  steps:
+    - type: script
+      command: sh -c 'echo "test" > "$ICP_WASM_OUTPUT_PATH"'
+"#;
+
+    write_string(
+        &project_dir.join("recipe.hbs"), // path
+        recipe_template,                 // contents
+    )
+    .expect("failed to write recipe template");
+
+    // Calculate actual checksum
+    let actual = hex::encode({
+        let mut h = Sha256::new();
+        h.update(recipe_template.as_bytes());
+        h.finalize()
+    });
+
+    // Project manifest with invalid checksum
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          recipe:
+            type: file://./recipe.hbs
+            sha256: invalid
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build - should fail due to invalid checksum
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("checksum mismatch")
+                .and(contains("expected invalid"))
+                .and(contains(format!("actual {actual}"))),
+        );
+}
+
+#[test]
+fn recipe_local_file_wrong_checksum() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create a local recipe template file
+    let recipe_template = r#"
+build:
+  steps:
+    - type: script
+      command: sh -c 'echo "test" > "$ICP_WASM_OUTPUT_PATH"'
+"#;
+
+    write_string(
+        &project_dir.join("recipe.hbs"), // path
+        recipe_template,                 // contents
+    )
+    .expect("failed to write recipe template");
+
+    // Hash of the recipe template above
+    let actual = "f8bd13664a0fd826aea3000b90fc7b4a878854b4f90216924ecfbec4581173cd";
+
+    // A random wrong but valid checksum
+    let expected = "508f107eba1885bd165f4ef75c1b8cf914cf9eda6365f93214bb0cc39bd07ddd";
+
+    // Project manifest with wrong checksum
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          recipe:
+            type: file://./recipe.hbs
+            sha256: {expected}
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build - should fail due to wrong checksum
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("checksum mismatch")
+                .and(contains(format!("expected {expected}")))
+                .and(contains(format!("actual {actual}"))),
+        );
+}
+
+#[test]
+fn recipe_local_file_valid_checksum() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create a local recipe template file
+    let recipe_template = r#"
+build:
+  steps:
+    - type: script
+      command: sh -c 'echo "test" > "$ICP_WASM_OUTPUT_PATH"'
+"#;
+
+    write_string(
+        &project_dir.join("recipe.hbs"), // path
+        recipe_template,                 // contents
+    )
+    .expect("failed to write recipe template");
+
+    // Hash of the recipe template above
+    let expected_checksum = "f8bd13664a0fd826aea3000b90fc7b4a878854b4f90216924ecfbec4581173cd";
+
+    // Project manifest with valid checksum
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          recipe:
+            type: file://./recipe.hbs
+            sha256: {expected_checksum}
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build - should succeed with valid checksum
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn recipe_builtin_ignores_checksum() {
     let ctx = TestContext::new();
 
     for recipe_type in ["assets", "motoko", "rust"] {

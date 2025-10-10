@@ -170,11 +170,11 @@ impl Resolve for Handlebars {
                 // Verify the checksum if it's provided
                 if let Some(expected) = &recipe.sha256 {
                     verify_checksum(&bytes, expected)
-                        .map_err(|source| ResolveError::Handlebars { source })?;
+                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
                 }
 
                 parse_bytes_to_string(bytes)
-                    .map_err(|source| ResolveError::Handlebars { source })?
+                    .map_err(|source| ResolveError::Handlebars { source: *source })?
             }
 
             // Attempt to fetch template from remote resource url
@@ -206,11 +206,11 @@ impl Resolve for Handlebars {
                 // Verify the checksum if it's provided
                 if let Some(expected) = &recipe.sha256 {
                     verify_checksum(&bytes, expected)
-                        .map_err(|source| ResolveError::Handlebars { source })?;
+                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
                 }
 
                 parse_bytes_to_string(bytes.into())
-                    .map_err(|source| ResolveError::Handlebars { source })?
+                    .map_err(|source| ResolveError::Handlebars { source: *source })?
             }
         };
 
@@ -463,7 +463,7 @@ pub const TEMPLATES: [(&str, &str); 4] = [
 ];
 
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> {
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), Box<HandlebarsError>> {
     let actual = hex::encode({
         let mut h = Sha256::new();
         h.update(bytes);
@@ -471,16 +471,16 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> 
     });
 
     if actual != expected {
-        return Err(HandlebarsError::ChecksumMismatch {
+        return Err(Box::new(HandlebarsError::ChecksumMismatch {
             expected: expected.to_string(),
             actual,
-        });
+        }));
     }
 
     Ok(())
 }
 
 /// Helper function to parse bytes into a UTF-8 string
-fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, HandlebarsError> {
-    String::from_utf8(bytes).map_err(|err| HandlebarsError::DecodeUtf8 { source: err })
+fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, Box<HandlebarsError>> {
+    String::from_utf8(bytes).map_err(|err| Box::new(HandlebarsError::DecodeUtf8 { source: err }))
 }

@@ -252,20 +252,20 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 }
 
 fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
-    if let Ok(num) = compute_allocation.parse::<u8>() {
-        if num <= 100 {
-            return Ok(num);
-        }
+    if let Ok(num) = compute_allocation.parse::<u8>()
+        && num <= 100
+    {
+        return Ok(num);
     }
     Err("Must be a percent between 0 and 100".to_string())
 }
 
 fn memory_parser(memory_allocation: &str) -> Result<Byte, String> {
     let limit = Byte::from_u64_with_unit(256, Unit::TiB).expect("256 TiB is a valid byte unit");
-    if let Ok(byte) = memory_allocation.parse::<Byte>() {
-        if byte <= limit {
-            return Ok(byte);
-        }
+    if let Ok(byte) = memory_allocation.parse::<Byte>()
+        && byte <= limit
+    {
+        return Ok(byte);
     }
     Err("Must be a value between 0..256 TiB inclusive, (e.g. '2GiB')".to_string())
 }
@@ -306,22 +306,22 @@ fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, Com
 }
 
 fn require_current_settings(cmd: &Cmd) -> bool {
-    if let Some(controllers) = &cmd.controllers {
-        if controllers.require_current_settings() {
-            return true;
-        }
+    if let Some(controllers) = &cmd.controllers
+        && controllers.require_current_settings()
+    {
+        return true;
     }
 
-    if let Some(log_visibility) = &cmd.log_visibility {
-        if log_visibility.require_current_settings() {
-            return true;
-        }
+    if let Some(log_visibility) = &cmd.log_visibility
+        && log_visibility.require_current_settings()
+    {
+        return true;
     }
 
-    if let Some(environment_variables) = &cmd.environment_variables {
-        if environment_variables.require_current_settings() {
-            return true;
-        }
+    if let Some(environment_variables) = &cmd.environment_variables
+        && environment_variables.require_current_settings()
+    {
+        return true;
     }
 
     false

@@ -236,10 +236,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     let _guard = ctx.start_network_in(&project_dir, "my-network");
     ctx.ping_until_healthy(&project_dir, "my-network");
     let duration = start.elapsed();
-    println!(
-        "========== Configuring and starting network took {:?}",
-        duration
-    );
+    println!("========== Configuring and starting network took {duration:?}");
 
     // Create identities AFTER starting the network
     icp_client.create_identity("after");

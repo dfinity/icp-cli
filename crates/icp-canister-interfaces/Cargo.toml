@@ -1,7 +1,9 @@
 [package]
 name = "icp-canister-interfaces"
 version = "0.1.0"
-edition = "2024"
+edition = { workspace = true }
+license = { workspace = true }
+
 
 [dependencies]
 bigdecimal = { workspace = true }

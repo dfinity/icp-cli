@@ -175,7 +175,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     debug!("Found canisters: {:?}", canister_list);
     let binding_vars = canister_list
         .iter()
-        .map(|(n, p)| (format!("PUBLIC_CANISTER_ID:{}", n), p.to_text()))
+        .map(|(n, p)| (format!("PUBLIC_CANISTER_ID:{n}"), p.to_text()))
         .collect::<Vec<(_, _)>>();
 
     for (_, (_, c)) in cs {

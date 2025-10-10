@@ -91,7 +91,7 @@ impl ProgressManager {
         pb.enable_steady_tick(Duration::from_millis(120));
 
         // Set the progress bar prefix to display the canister name in brackets
-        pb.set_prefix(format!("[{}]", canister_name));
+        pb.set_prefix(format!("[{canister_name}]"));
 
         pb
     }
@@ -193,7 +193,7 @@ impl ScriptProgressHandler {
                 let msg = lines
                     .iter()
                     .filter(|s| !s.is_empty())
-                    .map(|s| format!("> {}", s))
+                    .map(|s| format!("> {s}"))
                     .join("\n");
                 set_message(msg);
             }

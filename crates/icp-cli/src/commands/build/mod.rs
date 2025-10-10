@@ -11,7 +11,7 @@ use icp::{
 
 use crate::{
     commands::Context,
-    progress::{ProgressManager, ScriptProgressHandler},
+    progress::{MAX_LINES_PER_STEP, ProgressManager, RollingLines, ScriptProgressHandler},
 };
 
 #[derive(Parser, Debug)]
@@ -39,6 +39,9 @@ pub enum CommandError {
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+
+    #[error("failed to join build output")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.
@@ -93,6 +96,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 let wasm_output_path = build_dir.path().join("out.wasm");
 
                 let step_count = c.build.steps.len();
+                let mut step_outputs = vec![];
                 for (i, step) in c.build.steps.iter().enumerate() {
                     // Indicate to user the current step being executed
                     let current_step = i + 1;
@@ -104,23 +108,34 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     let (tx, rx) = script_handler.setup_output_handler();
 
                     // Perform build step
-                    ctx.builder
+                    let build_result = ctx
+                        .builder
                         .build(
                             step, // step
                             &Params {
                                 path: canister_path.to_owned(),
                                 output: wasm_output_path.to_owned(),
                             },
-                            Some(tx),
+                            tx,
                         )
-                        .await?;
+                        .await;
 
                     // Ensure background receiver drains all messages
-                    let _ = rx.await;
+                    let step_output = rx.await?;
+                    step_outputs.push(StepOutput {
+                        title: pb_hdr,
+                        output: step_output,
+                    });
+
+                    if let Err(e) = build_result {
+                        dump_build_output(&c.name, step_outputs);
+                        return Err(CommandError::Build(e));
+                    }
                 }
 
                 // Verify a file exists in the wasm output path
                 if !wasm_output_path.exists() {
+                    dump_build_output(&c.name, step_outputs);
                     return Err(CommandError::MissingOutput);
                 }
 
@@ -157,4 +172,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     Ok(())
+}
+
+#[derive(Debug)]
+struct StepOutput {
+    title: String,
+    output: RollingLines,
+}
+
+fn dump_build_output(canister_name: &str, step_outputs: Vec<StepOutput>) {
+    let crop_message = if step_outputs.len() == MAX_LINES_PER_STEP {
+        format!(" (last {MAX_LINES_PER_STEP} lines)")
+    } else {
+        String::new()
+    };
+    println!("Build output for canister {canister_name}{crop_message}:");
+    for step_output in step_outputs {
+        println!("{}", step_output.title);
+        for line in step_output.output.iter() {
+            println!("{}", line);
+        }
+    }
 }

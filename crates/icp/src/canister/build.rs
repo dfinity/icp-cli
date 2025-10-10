@@ -3,7 +3,7 @@ use std::{fmt, sync::Arc};
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, error::SendError};
 
 use crate::{
     canister::{build, script::ScriptError},
@@ -66,6 +66,12 @@ pub enum BuildError {
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+
+    #[error("failed to send build output")]
+    SendOutput(#[from] SendError<String>),
+
+    #[error("failed to join futures")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 #[async_trait]
@@ -74,7 +80,7 @@ pub trait Build: Sync + Send {
         &self,
         step: &build::Step,
         params: &Params,
-        stdio: Option<Sender<String>>,
+        stdio: Sender<String>,
     ) -> Result<(), BuildError>;
 }
 
@@ -89,7 +95,7 @@ impl Build for Builder {
         &self,
         step: &build::Step,
         params: &Params,
-        stdio: Option<Sender<String>>,
+        stdio: Sender<String>,
     ) -> Result<(), BuildError> {
         match step {
             build::Step::Prebuilt(_) => self.prebuilt.build(step, params, stdio).await,

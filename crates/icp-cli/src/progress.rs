@@ -6,6 +6,9 @@ use itertools::Itertools;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
 
+/// The maximum number of lines to display for a step output
+pub const MAX_LINES_PER_STEP: usize = 10_000;
+
 // Animation frames for the spinner - creates a rotating star effect
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
 
@@ -165,7 +168,7 @@ impl ScriptProgressHandler {
 
     /// Create a channel and start handling script output for progress updates
     /// Returns the sender and a join handle for the background receiver task.
-    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<()>) {
+    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<RollingLines>) {
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
         // Shared progress-bar messaging utility
@@ -180,23 +183,28 @@ impl ScriptProgressHandler {
 
         // Handle logging from script commands
         let handle = tokio::spawn(async move {
-            // Create a rolling buffer to contain last N lines of terminal output
-            let mut lines = RollingLines::new(4);
+            // Small rolling buffer to display current output while build is ongoing
+            let mut rolling = RollingLines::new(4);
+            // Total output buffer to display full build output later
+            let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
 
             while let Some(line) = rx.recv().await {
                 debug!(line);
 
                 // Update output buffer
-                lines.push(line);
+                rolling.push(line.clone());
+                complete.push(line);
 
                 // Update progress-bar with rolling terminal output
-                let msg = lines
+                let msg = rolling
                     .iter()
                     .filter(|s| !s.is_empty())
                     .map(|s| format!("> {s}"))
                     .join("\n");
                 set_message(msg);
             }
+
+            complete
         });
 
         (tx, handle)

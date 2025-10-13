@@ -66,9 +66,7 @@ pub enum HandlebarsError {
         template: String,
     },
 
-    #[error(
-        "sha256 checksum mismatch for remote recipe template: expected {expected}, actual {actual}"
-    )]
+    #[error("sha256 checksum mismatch for recipe template: expected {expected}, actual {actual}")]
     ChecksumMismatch { expected: String, actual: String },
 }
 
@@ -143,13 +141,18 @@ impl Resolve for Handlebars {
 
             // Attempt to load template from local file-system
             TemplateSource::LocalPath(path) => {
-                let bs = read(&path).map_err(|err| ResolveError::Handlebars {
+                let bytes = read(&path).map_err(|err| ResolveError::Handlebars {
                     source: HandlebarsError::ReadFile { source: err },
                 })?;
 
-                String::from_utf8(bs).map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::DecodeUtf8 { source: err },
-                })?
+                // Verify the checksum if it's provided
+                if let Some(expected) = &recipe.sha256 {
+                    verify_checksum(&bytes, expected)
+                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
+                }
+
+                parse_bytes_to_string(bytes)
+                    .map_err(|source| ResolveError::Handlebars { source: *source })?
             }
 
             // Attempt to fetch template from remote resource url
@@ -180,27 +183,12 @@ impl Resolve for Handlebars {
 
                 // Verify the checksum if it's provided
                 if let Some(expected) = &recipe.sha256 {
-                    // Calculate checksum
-                    let actual = hex::encode({
-                        let mut h = Sha256::new();
-                        h.update(&bytes);
-                        h.finalize()
-                    });
-
-                    // Verify checksum
-                    if &actual != expected {
-                        return Err(ResolveError::Handlebars {
-                            source: HandlebarsError::ChecksumMismatch {
-                                expected: expected.clone(),
-                                actual,
-                            },
-                        });
-                    }
+                    verify_checksum(&bytes, expected)
+                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
                 }
 
-                String::from_utf8(bytes.into()).map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::DecodeUtf8 { source: err },
-                })?
+                parse_bytes_to_string(bytes.into())
+                    .map_err(|source| ResolveError::Handlebars { source: *source })?
             }
         };
 
@@ -420,3 +408,26 @@ build:
     {{> wasm-compress }}
     {{/if}}
 "#;
+
+/// Helper function to verify sha256 checksum of recipe template bytes
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), Box<HandlebarsError>> {
+    let actual = hex::encode({
+        let mut h = Sha256::new();
+        h.update(bytes);
+        h.finalize()
+    });
+
+    if actual != expected {
+        return Err(Box::new(HandlebarsError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        }));
+    }
+
+    Ok(())
+}
+
+/// Helper function to parse bytes into a UTF-8 string
+fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, Box<HandlebarsError>> {
+    String::from_utf8(bytes).map_err(|err| Box::new(HandlebarsError::DecodeUtf8 { source: err }))
+}

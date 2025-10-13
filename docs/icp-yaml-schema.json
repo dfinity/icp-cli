@@ -147,7 +147,14 @@
           "type": "string"
         },
         "port": {
-          "$ref": "#/definitions/Port"
+          "allOf": [
+            {
+              "$ref": "#/definitions/Port"
+            }
+          ],
+          "default": {
+            "Fixed": 8000
+          }
         }
       },
       "type": "object"
@@ -181,6 +188,9 @@
                   "$ref": "#/definitions/Steps2"
                 }
               ],
+              "default": {
+                "steps": []
+              },
               "description": "The configuration specifying how to sync the canister"
             }
           },
@@ -283,14 +293,6 @@
     },
     "RecipeType": {
       "oneOf": [
-        {
-          "enum": [
-            "assets",
-            "motoko",
-            "rust"
-          ],
-          "type": "string"
-        },
         {
           "additionalProperties": false,
           "properties": {

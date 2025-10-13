@@ -48,7 +48,7 @@ impl Default for Networks {
             NetworkManifest {
                 name: "mainnet".to_string(),
                 configuration: Configuration::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
+                    url: IC_MAINNET_NETWORK_URL.to_string(),
                     root_key: None,
                 }),
             },
@@ -158,7 +158,7 @@ mod tests {
                 NetworkManifest {
                     name: "mainnet".to_string(),
                     configuration: Configuration::Connected(Connected {
-                        url: "https://ic0.app".to_string(),
+                        url: "https://icp-api.io".to_string(),
                         root_key: None,
                     }),
                 },

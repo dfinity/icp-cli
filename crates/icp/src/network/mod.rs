@@ -22,8 +22,6 @@ mod lock;
 pub mod managed;
 pub mod structure;
 
-pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
-
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub enum Port {
     Fixed(u16),

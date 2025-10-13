@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Context as _;
 use async_trait::async_trait;
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub use directory::NetworkDirectory;
 pub use managed::run::{RunNetworkError, run_network};
@@ -24,7 +24,7 @@ pub mod structure;
 
 pub const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
 
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {
     Fixed(u16),
     Random,
@@ -49,7 +49,7 @@ fn default_host() -> String {
     "localhost".to_string()
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Gateway {
     #[serde(default = "default_host")]
     pub host: String,
@@ -67,12 +67,12 @@ impl Default for Gateway {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Managed {
     pub gateway: Gateway,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
     /// The URL this network can be reached at.
@@ -82,7 +82,7 @@ pub struct Connected {
     pub root_key: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
 pub enum Configuration {
     /// A managed network is one which can be controlled and manipulated.

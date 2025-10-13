@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
 /// type: rust
 /// package: my_canister
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Step {
     /// Represents a canister built using a custom script or command.
@@ -49,7 +49,7 @@ impl fmt::Display for Step {
 
 /// Describes how the canister should be built into WebAssembly,
 /// including the adapters and build steps responsible for the build.
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Steps {
     pub steps: Vec<Step>,
 }

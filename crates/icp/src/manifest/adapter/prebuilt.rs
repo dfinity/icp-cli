@@ -2,22 +2,22 @@ use std::fmt;
 
 use crate::prelude::*;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct LocalSource {
     /// Local path on-disk to read a WASM file from
     #[schemars(with = "String")]
     pub path: PathBuf,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct RemoteSource {
     /// Url to fetch the remote WASM file from
     pub url: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(untagged, rename_all = "lowercase")]
 pub enum SourceField {
     /// Local path on-disk to read a WASM file from
@@ -28,7 +28,7 @@ pub enum SourceField {
 }
 
 /// Configuration for a Pre-built canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Adapter {
     #[serde(flatten)]
     pub source: SourceField,

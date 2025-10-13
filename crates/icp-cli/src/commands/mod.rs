@@ -22,6 +22,7 @@ mod deploy;
 mod environment;
 mod identity;
 mod network;
+mod project;
 mod sync;
 mod token;
 
@@ -68,14 +69,35 @@ pub struct Cmd {
 
 #[derive(Subcommand, Debug)]
 pub enum Subcmd {
+    /// Build a project
     Build(build::Cmd),
+
+    /// Perform canister operations against a network
     Canister(canister::Cmd),
+
+    /// Mint and manage cycles
     Cycles(cycles::Cmd),
+
+    /// Deploy a project to an environment
     Deploy(deploy::Cmd),
+
+    /// Show information about the current project environments
     Environment(environment::Cmd),
+
+    /// Manage your identities
     Identity(identity::IdentityCmd),
+
+    /// Launch and manage local test networks
     Network(network::NetworkCmd),
+
+    /// Display information about the current project
+    #[clap(hide = true)] // TODO: figure out how to structure the commands later
+    Project(project::Cmd),
+
+    /// Synchronize canisters in the current environment
     Sync(sync::Cmd),
+
+    /// Perform token transactions
     Token(token::Cmd),
 }
 
@@ -103,6 +125,9 @@ pub enum DispatchError {
     Network { source: NetworkCommandError },
 
     #[snafu(transparent)]
+    Project { source: project::CommandError },
+
+    #[snafu(transparent)]
     Sync { source: sync::CommandError },
 
     #[snafu(transparent)]
@@ -118,6 +143,7 @@ pub async fn dispatch(ctx: &Context, subcmd: Subcmd) -> Result<(), DispatchError
         Subcmd::Environment(opts) => environment::exec(ctx, opts).await?,
         Subcmd::Identity(opts) => identity::dispatch(ctx, opts).await?,
         Subcmd::Network(opts) => network::dispatch(ctx, opts).await?,
+        Subcmd::Project(opts) => project::dispatch(ctx, opts).await?,
         Subcmd::Sync(opts) => sync::exec(ctx, opts).await?,
         Subcmd::Token(opts) => token::exec(ctx, opts).await?,
     }

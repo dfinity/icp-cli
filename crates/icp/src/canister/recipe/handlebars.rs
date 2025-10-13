@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, string::FromUtf8Error};
+use std::{str::FromStr, string::FromUtf8Error};
 
 use crate::{
     canister::{
@@ -20,15 +20,11 @@ use sha2::{Digest, Sha256};
 use url::ParseError;
 
 pub struct Handlebars {
-    /// Built-in recipe templates
-    pub recipes: HashMap<String, String>,
-
     /// Http client for fetching remote recipe templates
     pub http_client: reqwest::Client,
 }
 
 pub enum TemplateSource {
-    BuiltIn(String),
     LocalPath(PathBuf),
     RemoteUrl(String),
 
@@ -82,7 +78,6 @@ impl Resolve for Handlebars {
         // Sanity check recipe type
         let recipe_type = match &recipe.recipe_type {
             RecipeType::Unknown(typ) => typ.to_owned(),
-            _ => panic!("expected unknown recipe"),
         };
 
         // Infer source for recipe template (local, remote, built-in, etc)
@@ -122,7 +117,7 @@ impl Resolve for Handlebars {
                 );
             }
 
-            TemplateSource::BuiltIn(recipe_type)
+            panic!("Invalid recipe type: {recipe_type}");
         })(recipe_type.clone());
 
         // TMP(or.ricon): Temporarily hardcode a dfinity registry
@@ -133,7 +128,7 @@ impl Resolve for Handlebars {
                 }
 
                 TemplateSource::RemoteUrl(format!(
-                    "https://github.com/rikonor/icp-recipes/releases/download/{recipe}-{version}/recipe.hbs"
+                    "https://github.com/dfinity/icp-cli-recipes/releases/download/{recipe}-{version}/recipe.hbs"
                 ))
             }
             _ => tmpl,
@@ -141,23 +136,6 @@ impl Resolve for Handlebars {
 
         // Retrieve the template for the recipe from its respective source
         let tmpl = match tmpl {
-            // Search for built-in recipe template
-            TemplateSource::BuiltIn(typ) => self
-                .recipes
-                .iter()
-                .find_map(|(name, tmpl)| {
-                    if name == &typ {
-                        Some(tmpl.to_owned())
-                    } else {
-                        None
-                    }
-                })
-                .ok_or(ResolveError::Handlebars {
-                    source: HandlebarsError::Unknown {
-                        recipe: typ.to_owned(),
-                    },
-                })?,
-
             // TMP(or.ricon): Support multiple registries
             TemplateSource::Registry(_, _, _) => panic!(
                 "registry source should have been converted to a dfinity-specific remote url"
@@ -231,19 +209,6 @@ impl Resolve for Handlebars {
 
         // Register helpers
         reg.register_helper("replace", Box::new(ReplaceHelper));
-
-        // Register partials for reusable template components
-        // These partials provide common functionality like WASM optimization and metadata injection
-        for (name, partial) in PARTIALS {
-            reg.register_partial(name, partial)
-                .map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::PartialInvalid {
-                        source: err,
-                        partial: name.to_owned(),
-                        template: partial.to_owned(),
-                    },
-                })?;
-        }
 
         // Reject unset template variables
         reg.set_strict_mode(true);
@@ -336,15 +301,6 @@ pub const WASM_INJECT_METADATA_PARTIAL: &str = r#"
     - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
     - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section'
 "#;
-
-/// Collection of reusable Handlebars partials for WASM processing
-/// These partials can be included in templates using {{> partial-name}} syntax
-pub const PARTIALS: [(&str, &str); 4] = [
-    ("wasm-shrink", WASM_SHRINK_PARTIAL),
-    ("wasm-compress", WASM_COMPRESS_PARTIAL),
-    ("wasm-optimize", WASM_OPTIMIZE_PARTIAL),
-    ("wasm-inject-metadata", WASM_INJECT_METADATA_PARTIAL),
-];
 
 /// Template for pre-built canister recipes
 /// Supports optional shrink, compress, and metadata configuration
@@ -464,12 +420,3 @@ build:
     {{> wasm-compress }}
     {{/if}}
 "#;
-
-/// Collection of available Handlebars templates for different canister types
-/// Maps recipe type names to their corresponding template definitions
-pub const TEMPLATES: [(&str, &str); 4] = [
-    ("prebuilt", PREBUILT_CANISTER_TEMPLATE),
-    ("handlebars-assets", ASSETS_CANISTER_TEMPLATE),
-    ("handlebars-motoko", MOTOKO_CANISTER_TEMPLATE),
-    ("handlebars-rust", RUST_CANISTER_TEMPLATE),
-];

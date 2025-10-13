@@ -6,20 +6,13 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase", from = "String")]
 pub enum RecipeType {
-    Assets,
-    Motoko,
-    Rust,
     Unknown(String),
 }
 
 impl From<String> for RecipeType {
     fn from(value: String) -> Self {
-        match value.as_str() {
-            "assets" => Self::Assets,
-            "motoko" => Self::Rust,
-            "rust" => Self::Rust,
-            other => Self::Unknown(other.to_owned()),
-        }
+        let other = value.as_str();
+        Self::Unknown(other.to_owned())
     }
 }
 

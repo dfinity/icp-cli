@@ -1,5 +1,5 @@
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::TestContext;
@@ -89,7 +89,7 @@ fn build_adapter_display_failing_build_output() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest
-    let pm = r#"
+    let pm = indoc! {r#"
         canisters:
           - name: my-canister
             build:
@@ -107,7 +107,7 @@ fn build_adapter_display_failing_build_output() {
                   command: echo "hide this" 
                 - type: script
                   command: sh -c 'touch "$ICP_WASM_OUTPUT_PATH"'
-        "#;
+        "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
@@ -140,7 +140,7 @@ fn build_adapter_display_failing_prebuilt_output() {
     let project_dir = ctx.create_project_dir("icp");
 
     // Project manifest with a prebuilt step that will fail (non-existent file)
-    let pm = r#"
+    let pm = indoc! {r#"
         canisters:
           - name: my-canister
             build:
@@ -150,7 +150,7 @@ fn build_adapter_display_failing_prebuilt_output() {
                 - type: pre-built
                   path: /nonexistent/path/to/wasm.wasm
                   sha256: 0000000000000000000000000000000000000000000000000000000000000000
-        "#;
+        "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path

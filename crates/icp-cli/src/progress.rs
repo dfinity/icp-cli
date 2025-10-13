@@ -6,6 +6,8 @@ use itertools::Itertools;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
 
+use crate::commands::Context;
+
 /// The maximum number of lines to display for a step output
 pub const MAX_LINES_PER_STEP: usize = 10_000;
 
@@ -99,9 +101,19 @@ impl ProgressManager {
         pb
     }
 
+    /// Create a new progress bar for a multi-step operation.
+    pub fn create_multi_step_progress_bar(&self, canister_name: &str) -> MultiStepProgressBar {
+        MultiStepProgressBar {
+            progress_bar: self.create_progress_bar(canister_name),
+            canister_name: canister_name.to_string(),
+            finished_steps: Vec::new(),
+            in_progress: None,
+        }
+    }
+
     /// Execute a task with progress tracking and automatic style updates
     pub async fn execute_with_progress<F, R, E>(
-        progress_bar: ProgressBar,
+        progress_bar: impl Into<SomeProgressBar>,
         task: F,
         success_message: impl Fn() -> String,
         error_message: impl Fn(&E) -> String,
@@ -122,7 +134,7 @@ impl ProgressManager {
 
     /// Execute a task with custom progress handling for errors that should display as success
     pub async fn execute_with_custom_progress<F, R, E>(
-        progress_bar: ProgressBar,
+        progress_bar: impl Into<SomeProgressBar>,
         task: F,
         success_message: impl Fn() -> String,
         error_message: impl Fn(&E) -> String,
@@ -135,6 +147,7 @@ impl ProgressManager {
         let result = task.await;
 
         // Update the progress bar style and message based on result
+        let progress_bar = progress_bar.into();
         let (style, message) = match &result {
             Ok(_) => (make_style(TICK_SUCCESS, COLOR_SUCCESS), success_message()),
             Err(err) if is_success_error(err) => {
@@ -148,6 +161,135 @@ impl ProgressManager {
         progress_bar.finish();
 
         result
+    }
+}
+
+struct StepOutput {
+    title: String,
+    output: Vec<String>,
+}
+
+struct StepInProgress {
+    title: String,
+    receiver: JoinHandle<Vec<String>>,
+}
+
+pub struct MultiStepProgressBar {
+    progress_bar: ProgressBar,
+    canister_name: String,
+    finished_steps: Vec<StepOutput>,
+    in_progress: Option<StepInProgress>,
+}
+
+impl MultiStepProgressBar {
+    pub fn begin_step(&mut self, title: String) -> mpsc::Sender<String> {
+        if self.in_progress.is_some() {
+            panic!("step already in progress");
+        }
+
+        let (tx, mut rx) = mpsc::channel::<String>(100);
+
+        let set_message = {
+            let pb = self.progress_bar.clone();
+            let title = title.clone();
+
+            move |msg: String| {
+                pb.set_message(format!("{title}\n{msg}\n"));
+            }
+        };
+
+        // Handle logging from script commands
+        let handle = tokio::spawn(async move {
+            // Small rolling buffer to display current output while build is ongoing
+            let mut rolling = RollingLines::new(4);
+            // Total output buffer to display full build output later
+            let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
+
+            while let Some(line) = rx.recv().await {
+                debug!(line);
+
+                // Update output buffer
+                rolling.push(line.clone());
+                complete.push(line);
+
+                // Update progress-bar with rolling terminal output
+                let msg = rolling.iter().map(|s| format!("> {s}")).join("\n");
+                set_message(msg);
+            }
+
+            complete.into_iter().collect()
+        });
+
+        self.in_progress = Some(StepInProgress {
+            title,
+            receiver: handle,
+        });
+
+        tx
+    }
+
+    pub async fn end_step(&mut self) {
+        let StepInProgress { title, receiver } =
+            self.in_progress.take().expect("no step in progress");
+        let output = receiver.await.unwrap();
+
+        self.finished_steps.push(StepOutput { title, output });
+    }
+
+    pub fn dump_output(&self, ctx: &Context) {
+        let _ = ctx.term.write_line(&format!(
+            "Build output for canister {}:",
+            self.canister_name
+        ));
+        for step_output in self.finished_steps.iter() {
+            let _ = ctx.term.write_line(&format!("{}", step_output.title));
+            for line in step_output.output.iter() {
+                let _ = ctx.term.write_line(&format!("{}", line));
+            }
+            if step_output.output.len() == 0 {
+                let _ = ctx.term.write_line("<no output>");
+            }
+        }
+    }
+}
+
+pub enum SomeProgressBar {
+    MultiStep(MultiStepProgressBar),
+    Basic(ProgressBar),
+}
+
+impl From<MultiStepProgressBar> for SomeProgressBar {
+    fn from(value: MultiStepProgressBar) -> Self {
+        Self::MultiStep(value)
+    }
+}
+
+impl From<ProgressBar> for SomeProgressBar {
+    fn from(value: ProgressBar) -> Self {
+        Self::Basic(value)
+    }
+}
+
+impl SomeProgressBar {
+    fn set_style(&self, style: ProgressStyle) {
+        match self {
+            Self::MultiStep(pb) => pb.progress_bar.set_style(style),
+            Self::Basic(pb) => pb.set_style(style),
+        }
+    }
+
+    fn set_message(&self, message: String) {
+        match self {
+            Self::MultiStep(pb) => pb.progress_bar.set_message(message),
+            Self::Basic(pb) => pb.set_message(message),
+        }
+    }
+
+    fn finish(&self) {
+        match self {
+            Self::MultiStep(pb) => pb.progress_bar.finish(),
+            Self::Basic(pb) => pb.finish(),
+        }
     }
 }
 

@@ -4,10 +4,7 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use crate::{
     Network,
     fs::json,
-    network::{
-        Configuration, DEFAULT_IC_GATEWAY, NetworkDirectory,
-        access::GetNetworkAccessError::DecodeRootKey,
-    },
+    network::{Configuration, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey},
     prelude::*,
 };
 
@@ -34,7 +31,7 @@ impl NetworkAccess {
 
 impl NetworkAccess {
     pub fn mainnet() -> Self {
-        Self::new(DEFAULT_IC_GATEWAY)
+        Self::new(IC_MAINNET_NETWORK_URL)
     }
 }
 

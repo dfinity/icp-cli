@@ -4,3 +4,5 @@ pub const TRILLION: u128 = 1_000_000_000_000;
 
 pub const SECOND: u64 = 1;
 pub const MINUTE: u64 = 60 * SECOND;
+
+pub const IC_MAINNET_NETWORK_URL: &str = "https://icp-api.io";

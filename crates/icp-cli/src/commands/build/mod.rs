@@ -128,14 +128,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     });
 
                     if let Err(e) = build_result {
-                        dump_build_output(&c.name, step_outputs);
+                        dump_build_output(ctx, &c.name, step_outputs);
                         return Err(CommandError::Build(e));
                     }
                 }
 
                 // Verify a file exists in the wasm output path
                 if !wasm_output_path.exists() {
-                    dump_build_output(&c.name, step_outputs);
+                    dump_build_output(ctx, &c.name, step_outputs);
                     return Err(CommandError::MissingOutput);
                 }
 
@@ -180,17 +180,19 @@ struct StepOutput {
     output: RollingLines,
 }
 
-fn dump_build_output(canister_name: &str, step_outputs: Vec<StepOutput>) {
+fn dump_build_output(ctx: &Context, canister_name: &str, step_outputs: Vec<StepOutput>) {
     let crop_message = if step_outputs.len() == MAX_LINES_PER_STEP {
         format!(" (last {MAX_LINES_PER_STEP} lines)")
     } else {
         String::new()
     };
-    println!("Build output for canister {canister_name}{crop_message}:");
+    let _ = ctx.term.write_line(&format!(
+        "Build output for canister {canister_name}{crop_message}:"
+    ));
     for step_output in step_outputs {
-        println!("{}", step_output.title);
+        let _ = ctx.term.write_line(&step_output.title);
         for line in step_output.output.iter() {
-            println!("{}", line);
+            let _ = ctx.term.write_line(line);
         }
     }
 }

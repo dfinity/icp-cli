@@ -80,7 +80,7 @@ pub trait Build: Sync + Send {
         &self,
         step: &build::Step,
         params: &Params,
-        stdio: Sender<String>,
+        stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError>;
 }
 
@@ -95,7 +95,7 @@ impl Build for Builder {
         &self,
         step: &build::Step,
         params: &Params,
-        stdio: Sender<String>,
+        stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
         match step {
             build::Step::Prebuilt(_) => self.prebuilt.build(step, params, stdio).await,

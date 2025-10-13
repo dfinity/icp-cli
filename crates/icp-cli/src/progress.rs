@@ -102,10 +102,15 @@ impl ProgressManager {
     }
 
     /// Create a new progress bar for a multi-step operation.
-    pub fn create_multi_step_progress_bar(&self, canister_name: &str) -> MultiStepProgressBar {
+    pub fn create_multi_step_progress_bar(
+        &self,
+        canister_name: &str,
+        output_label: &str,
+    ) -> MultiStepProgressBar {
         MultiStepProgressBar {
             progress_bar: self.create_progress_bar(canister_name),
             canister_name: canister_name.to_string(),
+            output_label: output_label.to_string(),
             finished_steps: Vec::new(),
             in_progress: None,
         }
@@ -178,42 +183,9 @@ struct StepInProgress {
 pub struct MultiStepProgressBar {
     progress_bar: ProgressBar,
     canister_name: String,
+    output_label: String,
     finished_steps: Vec<StepOutput>,
     in_progress: Option<StepInProgress>,
-}
-
-pub trait ProgressBarTrait {
-    fn set_style(&self, style: ProgressStyle);
-    fn set_message(&self, message: String);
-    fn finish(&self);
-}
-
-impl ProgressBarTrait for MultiStepProgressBar {
-    fn set_style(&self, style: ProgressStyle) {
-        self.progress_bar.set_style(style);
-    }
-
-    fn set_message(&self, message: String) {
-        self.progress_bar.set_message(message);
-    }
-
-    fn finish(&self) {
-        self.progress_bar.finish();
-    }
-}
-
-impl ProgressBarTrait for ProgressBar {
-    fn set_style(&self, style: ProgressStyle) {
-        ProgressBar::set_style(self, style);
-    }
-
-    fn set_message(&self, message: String) {
-        ProgressBar::set_message(self, message);
-    }
-
-    fn finish(&self) {
-        ProgressBar::finish(self);
-    }
 }
 
 impl MultiStepProgressBar {
@@ -273,8 +245,8 @@ impl MultiStepProgressBar {
 
     pub fn dump_output(&self, ctx: &Context) {
         let _ = ctx.term.write_line(&format!(
-            "Build output for canister {}:",
-            self.canister_name
+            "{} output for canister {}:",
+            self.output_label, self.canister_name
         ));
         for step_output in self.finished_steps.iter() {
             let _ = ctx.term.write_line(&step_output.title);
@@ -288,58 +260,36 @@ impl MultiStepProgressBar {
     }
 }
 
-/// Utility for handling script adapter progress with rolling terminal output
-pub struct ScriptProgressHandler {
-    progress_bar: ProgressBar,
-    header: String,
+pub trait ProgressBarTrait {
+    fn set_style(&self, style: ProgressStyle);
+    fn set_message(&self, message: String);
+    fn finish(&self);
 }
 
-impl ScriptProgressHandler {
-    pub fn new(progress_bar: ProgressBar, header: String) -> Self {
-        progress_bar.set_message(header.clone());
-        Self {
-            progress_bar,
-            header,
-        }
+impl ProgressBarTrait for MultiStepProgressBar {
+    fn set_style(&self, style: ProgressStyle) {
+        self.progress_bar.set_style(style);
     }
 
-    /// Create a channel and start handling script output for progress updates
-    /// Returns the sender and a join handle for the background receiver task.
-    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<Vec<String>>) {
-        let (tx, mut rx) = mpsc::channel::<String>(100);
+    fn set_message(&self, message: String) {
+        self.progress_bar.set_message(message);
+    }
 
-        // Shared progress-bar messaging utility
-        let set_message = {
-            let pb = self.progress_bar.clone();
-            let pb_hdr = self.header.clone();
+    fn finish(&self) {
+        self.progress_bar.finish();
+    }
+}
 
-            move |msg: String| {
-                pb.set_message(format!("{pb_hdr}\n{msg}\n"));
-            }
-        };
+impl ProgressBarTrait for ProgressBar {
+    fn set_style(&self, style: ProgressStyle) {
+        ProgressBar::set_style(self, style);
+    }
 
-        // Handle logging from script commands
-        let handle = tokio::spawn(async move {
-            // Small rolling buffer to display current output while build is ongoing
-            let mut rolling = RollingLines::new(4);
-            // Total output buffer to display full build output later
-            let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
+    fn set_message(&self, message: String) {
+        ProgressBar::set_message(self, message);
+    }
 
-            while let Some(line) = rx.recv().await {
-                debug!(line);
-
-                // Update output buffer
-                rolling.push(line.clone());
-                complete.push(line);
-
-                // Update progress-bar with rolling terminal output
-                let msg = rolling.iter().map(|s| format!("> {s}")).join("\n");
-                set_message(msg);
-            }
-
-            complete.into_iter().collect()
-        });
-
-        (tx, handle)
+    fn finish(&self) {
+        ProgressBar::finish(self);
     }
 }

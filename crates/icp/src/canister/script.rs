@@ -38,7 +38,7 @@ impl Build for Script {
         &self,
         step: &build::Step,
         params: &build::Params,
-        stdio: Sender<String>,
+        stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
         let build::Step::Script(adapter) = step else {
             panic!("expected script adapter");
@@ -115,7 +115,9 @@ impl Build for Script {
 
                     async move {
                         while let Ok(Some(line)) = stdout.next_line().await {
-                            stdio.send(line).await?;
+                            if let Some(sender) = &stdio {
+                                let _ = sender.send(line).await;
+                            }
                         }
                         Ok::<(), BuildError>(())
                     }
@@ -128,7 +130,9 @@ impl Build for Script {
 
                     async move {
                         while let Ok(Some(line)) = stderr.next_line().await {
-                            stdio.send(line).await?;
+                            if let Some(sender) = &stdio {
+                                let _ = sender.send(line).await;
+                            }
                         }
                         Ok::<(), BuildError>(())
                     }
@@ -301,7 +305,6 @@ mod tests {
     use std::io::Read;
 
     use camino_tempfile::NamedUtf8TempFile;
-    use tokio::sync::mpsc;
 
     use crate::{
         canister::{
@@ -325,7 +328,6 @@ mod tests {
             )),
         };
 
-        let (tx, _rx) = mpsc::channel::<String>(100);
         Script
             .build(
                 &build::Step::Script(v),
@@ -333,7 +335,7 @@ mod tests {
                     path: "/".into(),
                     output: "/".into(),
                 },
-                tx,
+                None,
             )
             .await
             .expect("failed to build script step");
@@ -362,7 +364,6 @@ mod tests {
             ]),
         };
 
-        let (tx, _rx) = mpsc::channel::<String>(100);
         Script
             .build(
                 &build::Step::Script(v),
@@ -370,7 +371,7 @@ mod tests {
                     path: "/".into(),
                     output: "/".into(),
                 },
-                tx,
+                None,
             )
             .await
             .expect("failed to build script step");
@@ -391,7 +392,6 @@ mod tests {
             command: CommandField::Command("".into()),
         };
 
-        let (tx, _rx) = mpsc::channel::<String>(100);
         let out = Script
             .build(
                 &build::Step::Script(v),
@@ -399,7 +399,7 @@ mod tests {
                     path: "/".into(),
                     output: "/".into(),
                 },
-                tx,
+                None,
             )
             .await;
 
@@ -416,7 +416,6 @@ mod tests {
             command: CommandField::Command("unknown-command".into()),
         };
 
-        let (tx, _rx) = mpsc::channel::<String>(100);
         let out = Script
             .build(
                 &build::Step::Script(v),
@@ -424,7 +423,7 @@ mod tests {
                     path: "/".into(),
                     output: "/".into(),
                 },
-                tx,
+                None,
             )
             .await;
 
@@ -441,7 +440,6 @@ mod tests {
             command: CommandField::Command("sh -c 'exit 1'".into()),
         };
 
-        let (tx, _rx) = mpsc::channel::<String>(100);
         let out = Script
             .build(
                 &build::Step::Script(v),
@@ -449,7 +447,7 @@ mod tests {
                     path: "/".into(),
                     output: "/".into(),
                 },
-                tx,
+                None,
             )
             .await;
 

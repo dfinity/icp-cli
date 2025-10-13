@@ -77,7 +77,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Iterate through each resolved canister and trigger its build process.
     for (_, (canister_path, c)) in cs {
         // Create progress bar with standard configuration
-        let mut pb = progress_manager.create_multi_step_progress_bar(&c.name);
+        let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Build");
 
         // Create an async closure that handles the build process for this specific canister
         let fut = {
@@ -98,7 +98,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                         // Indicate to user the current step being executed
                         let current_step = i + 1;
                         let pb_hdr = format!("\nBuilding: {step} {current_step} of {step_count}");
-
                         let tx = pb.begin_step(pb_hdr);
 
                         // Perform build step
@@ -110,7 +109,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                                     path: canister_path.to_owned(),
                                     output: wasm_output_path.to_owned(),
                                 },
-                                tx,
+                                Some(tx),
                             )
                             .await;
 

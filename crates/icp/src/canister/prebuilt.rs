@@ -22,7 +22,7 @@ impl Build for Prebuilt {
         &self,
         step: &Step,
         params: &Params,
-        stdio: Sender<String>,
+        stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
         let Step::Prebuilt(adapter) = step else {
             panic!("expected prebuilt adapter");
@@ -31,9 +31,11 @@ impl Build for Prebuilt {
         let wasm = match &adapter.source {
             // Local path
             SourceField::Local(s) => {
-                stdio
-                    .send(format!("Reading local file: {}", s.path))
-                    .await?;
+                if let Some(stdio) = &stdio {
+                    stdio
+                        .send(format!("Reading local file: {}", s.path))
+                        .await?;
+                }
                 read(&params.path.join(&s.path)).context("failed to read prebuilt canister file")?
             }
 
@@ -44,7 +46,9 @@ impl Build for Prebuilt {
 
                 // Parse Url
                 let u = Url::from_str(&s.url).context("failed to parse prebuilt canister url")?;
-                stdio.send(format!("Fetching remote file: {}", u)).await?;
+                if let Some(stdio) = &stdio {
+                    stdio.send(format!("Fetching remote file: {}", u)).await?;
+                }
 
                 // Construct request
                 let req = Request::new(
@@ -75,7 +79,9 @@ impl Build for Prebuilt {
 
         // Verify the checksum if it's provided
         if let Some(expected) = &adapter.sha256 {
-            stdio.send("Verifying checksum".to_string()).await?;
+            if let Some(stdio) = &stdio {
+                stdio.send("Verifying checksum".to_string()).await?;
+            }
             // Calculate checksum
             let actual = hex::encode({
                 let mut h = Sha256::new();
@@ -92,9 +98,11 @@ impl Build for Prebuilt {
         }
 
         // Set WASM file
-        stdio
-            .send(format!("Writing WASM file: {}", params.output))
-            .await?;
+        if let Some(stdio) = stdio {
+            stdio
+                .send(format!("Writing WASM file: {}", params.output))
+                .await?;
+        }
         write(
             &params.output, // path
             &wasm,          // contents

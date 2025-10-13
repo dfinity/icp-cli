@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use clap::Parser;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
@@ -11,7 +12,7 @@ use icp::{
 use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
-    progress::{ProgressManager, ScriptProgressHandler},
+    progress::ProgressManager,
     store_id::{Key, LookupError},
 };
 
@@ -130,7 +131,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Iterate through each resolved canister and trigger its sync process.
     for (_, (canister_path, c)) in cs {
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Sync");
 
         // Get canister principal ID
         let cid = ctx.ids.lookup(&Key {
@@ -140,57 +141,83 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         })?;
 
         // Create an async closure that handles the sync process for this specific canister
-        let sync_fn = {
-            let pb = pb.clone();
+        let fut = {
             let agent = agent.clone();
+            let c = c.clone();
 
             async move {
-                for step in &c.sync.steps {
-                    // Indicate to user the current step being executed
-                    let pb_hdr = format!("Syncing: {step}");
+                // Define the sync logic
+                let sync_result = async {
+                    let step_count = c.sync.steps.len();
+                    for (i, step) in c.sync.steps.iter().enumerate() {
+                        // Indicate to user the current step being executed
+                        let current_step = i + 1;
+                        let pb_hdr = format!("\nSyncing: {step} {current_step} of {step_count}");
 
-                    let script_handler = ScriptProgressHandler::new(pb.clone(), pb_hdr.clone());
+                        let tx = pb.begin_step(pb_hdr);
 
-                    // Setup script progress handling and receiver join handle
-                    let (tx, rx) = script_handler.setup_output_handler();
+                        // Execute step
+                        let sync_result = ctx
+                            .syncer
+                            .sync(
+                                step, // step
+                                &Params {
+                                    path: canister_path.to_owned(),
+                                    cid: cid.to_owned(),
+                                },
+                                &agent,
+                                Some(tx),
+                            )
+                            .await;
 
-                    // Execute step
-                    ctx.syncer
-                        .sync(
-                            step, // step
-                            &Params {
-                                path: canister_path.to_owned(),
-                                cid: cid.to_owned(),
-                            },
-                            &agent,
-                            Some(tx),
-                        )
-                        .await?;
+                        // Ensure background receiver drains all messages
+                        pb.end_step().await;
 
-                    // Ensure background receiver drains all messages
-                    let _ = rx.await;
+                        if let Err(e) = sync_result {
+                            return Err(CommandError::Synchronize(e));
+                        }
+                    }
+
+                    Ok::<_, CommandError>(())
+                }
+                .await;
+
+                // Execute with progress tracking for final state
+                let result = ProgressManager::execute_with_progress(
+                    &pb,
+                    async { sync_result },
+                    || format!("Synced successfully: {cid}"),
+                    |err| format!("Failed to sync canister: {err}"),
+                )
+                .await;
+
+                // After progress bar is finished, dump the output if sync failed
+                if let Err(e) = &result {
+                    pb.dump_output(ctx);
+                    let _ = ctx
+                        .term
+                        .write_line(&format!("Failed to sync canister: {e}"));
                 }
 
-                Ok::<_, CommandError>(())
+                result
             }
         };
 
-        futs.push_back(async move {
-            // Execute the sync function with progress tracking
-            ProgressManager::execute_with_progress(
-                &pb,
-                sync_fn,
-                || format!("Synced successfully: {cid}"),
-                |err| format!("Failed to sync canister: {err}"),
-            )
-            .await
-        });
+        futs.push_back(fut);
     }
 
-    // Consume the set of futures and abort if an error occurs
+    // Consume the set of futures and collect errors
+    let mut found_error = false;
     while let Some(res) = futs.next().await {
-        // TODO(or.ricon): Handle canister sync failures
-        res?;
+        if res.is_err() {
+            found_error = true;
+        }
+    }
+
+    if found_error {
+        return Err(CommandError::Synchronize(SynchronizeError::Unexpected(
+            anyhow!("One or more canisters failed to sync"),
+        )));
     }
 
     Ok(())

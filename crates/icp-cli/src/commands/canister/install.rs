@@ -200,7 +200,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         futs.push_back(async move {
             // Execute the install function with progress tracking
             ProgressManager::execute_with_progress(
-                pb,
+                &pb,
                 install_fn,
                 || "Installed successfully".to_string(),
                 |err| format!("Failed to install canister: {err}"),

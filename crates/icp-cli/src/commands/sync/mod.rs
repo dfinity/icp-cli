@@ -178,7 +178,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         futs.push_back(async move {
             // Execute the sync function with progress tracking
             ProgressManager::execute_with_progress(
-                pb,
+                &pb,
                 sync_fn,
                 || format!("Synced successfully: {cid}"),
                 |err| format!("Failed to sync canister: {err}"),

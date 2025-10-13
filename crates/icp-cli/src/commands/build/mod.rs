@@ -141,22 +141,24 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 }
                 .await;
 
-                // If build failed, dump the output to terminal
-                if let Err(e) = &build_result {
+                // Execute with progress tracking for final state
+                let result = ProgressManager::execute_with_progress(
+                    &pb,
+                    async { build_result },
+                    || "Built successfully".to_string(),
+                    |err| format!("Failed to build canister: {err}"),
+                )
+                .await;
+
+                // After progress bar is finished, dump the output if build failed
+                if let Err(e) = &result {
                     pb.dump_output(ctx);
                     let _ = ctx
                         .term
                         .write_line(&format!("Failed to build canister: {e}"));
                 }
 
-                // Execute with progress tracking for final state
-                ProgressManager::execute_with_progress(
-                    pb,
-                    async { build_result },
-                    || "Built successfully".to_string(),
-                    |err| format!("Failed to build canister: {err}"),
-                )
-                .await
+                result
             }
         };
 
@@ -166,7 +168,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Consume the set of futures and abort if an error occurs
     let mut found_error = false;
     while let Some(res) = futs.next().await {
-        if let Err(_) = res {
+        if res.is_err() {
             found_error = true;
         }
     }

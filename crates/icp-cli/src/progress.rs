@@ -112,14 +112,15 @@ impl ProgressManager {
     }
 
     /// Execute a task with progress tracking and automatic style updates
-    pub async fn execute_with_progress<F, R, E>(
-        progress_bar: impl Into<SomeProgressBar>,
+    pub async fn execute_with_progress<F, R, E, P>(
+        progress_bar: &P,
         task: F,
         success_message: impl Fn() -> String,
         error_message: impl Fn(&E) -> String,
     ) -> Result<R, E>
     where
         F: Future<Output = Result<R, E>>,
+        P: ProgressBarTrait,
     {
         // Delegate to execute_with_custom_progress with no special error handling
         Self::execute_with_custom_progress(
@@ -133,8 +134,8 @@ impl ProgressManager {
     }
 
     /// Execute a task with custom progress handling for errors that should display as success
-    pub async fn execute_with_custom_progress<F, R, E>(
-        progress_bar: impl Into<SomeProgressBar>,
+    pub async fn execute_with_custom_progress<F, R, E, P>(
+        progress_bar: &P,
         task: F,
         success_message: impl Fn() -> String,
         error_message: impl Fn(&E) -> String,
@@ -142,12 +143,12 @@ impl ProgressManager {
     ) -> Result<R, E>
     where
         F: Future<Output = Result<R, E>>,
+        P: ProgressBarTrait,
     {
         // Execute the task and capture the result
         let result = task.await;
 
         // Update the progress bar style and message based on result
-        let progress_bar = progress_bar.into();
         let (style, message) = match &result {
             Ok(_) => (make_style(TICK_SUCCESS, COLOR_SUCCESS), success_message()),
             Err(err) if is_success_error(err) => {
@@ -179,6 +180,40 @@ pub struct MultiStepProgressBar {
     canister_name: String,
     finished_steps: Vec<StepOutput>,
     in_progress: Option<StepInProgress>,
+}
+
+pub trait ProgressBarTrait {
+    fn set_style(&self, style: ProgressStyle);
+    fn set_message(&self, message: String);
+    fn finish(&self);
+}
+
+impl ProgressBarTrait for MultiStepProgressBar {
+    fn set_style(&self, style: ProgressStyle) {
+        self.progress_bar.set_style(style);
+    }
+
+    fn set_message(&self, message: String) {
+        self.progress_bar.set_message(message);
+    }
+
+    fn finish(&self) {
+        self.progress_bar.finish();
+    }
+}
+
+impl ProgressBarTrait for ProgressBar {
+    fn set_style(&self, style: ProgressStyle) {
+        ProgressBar::set_style(self, style);
+    }
+
+    fn set_message(&self, message: String) {
+        ProgressBar::set_message(self, message);
+    }
+
+    fn finish(&self) {
+        ProgressBar::finish(self);
+    }
 }
 
 impl MultiStepProgressBar {
@@ -242,53 +277,13 @@ impl MultiStepProgressBar {
             self.canister_name
         ));
         for step_output in self.finished_steps.iter() {
-            let _ = ctx.term.write_line(&format!("{}", step_output.title));
+            let _ = ctx.term.write_line(&step_output.title);
             for line in step_output.output.iter() {
-                let _ = ctx.term.write_line(&format!("{}", line));
+                let _ = ctx.term.write_line(line);
             }
-            if step_output.output.len() == 0 {
+            if step_output.output.is_empty() {
                 let _ = ctx.term.write_line("<no output>");
             }
-        }
-    }
-}
-
-pub enum SomeProgressBar {
-    MultiStep(MultiStepProgressBar),
-    Basic(ProgressBar),
-}
-
-impl From<MultiStepProgressBar> for SomeProgressBar {
-    fn from(value: MultiStepProgressBar) -> Self {
-        Self::MultiStep(value)
-    }
-}
-
-impl From<ProgressBar> for SomeProgressBar {
-    fn from(value: ProgressBar) -> Self {
-        Self::Basic(value)
-    }
-}
-
-impl SomeProgressBar {
-    fn set_style(&self, style: ProgressStyle) {
-        match self {
-            Self::MultiStep(pb) => pb.progress_bar.set_style(style),
-            Self::Basic(pb) => pb.set_style(style),
-        }
-    }
-
-    fn set_message(&self, message: String) {
-        match self {
-            Self::MultiStep(pb) => pb.progress_bar.set_message(message),
-            Self::Basic(pb) => pb.set_message(message),
-        }
-    }
-
-    fn finish(&self) {
-        match self {
-            Self::MultiStep(pb) => pb.progress_bar.finish(),
-            Self::Basic(pb) => pb.finish(),
         }
     }
 }

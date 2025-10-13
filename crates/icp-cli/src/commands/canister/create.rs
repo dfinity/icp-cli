@@ -347,7 +347,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         futs.push_back(async move {
             // Execute the create function with custom progress tracking
             let mut result = ProgressManager::execute_with_custom_progress(
-                pb,
+                &pb,
                 create_fn,
                 || "Created successfully".to_string(),
                 |err| match err {

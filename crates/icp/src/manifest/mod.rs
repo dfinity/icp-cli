@@ -158,7 +158,7 @@ mod tests {
                 NetworkManifest {
                     name: "mainnet".to_string(),
                     configuration: Configuration::Connected(Connected {
-                        url: "https://ic0.app".to_string(),
+                        url: "https://icp-api.io".to_string(),
                         root_key: None,
                     }),
                 },

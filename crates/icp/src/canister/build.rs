@@ -64,14 +64,14 @@ pub enum BuildError {
     #[error(transparent)]
     Script(#[from] ScriptError),
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-
     #[error("failed to send build output")]
     SendOutput(#[from] SendError<String>),
 
     #[error("failed to join futures")]
     JoinError(#[from] tokio::task::JoinError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
 }
 
 #[async_trait]

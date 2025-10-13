@@ -37,11 +37,11 @@ pub enum CommandError {
     #[error("failed to store build artifact")]
     ArtifactStore,
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-
     #[error("failed to join build output")]
     JoinError(#[from] tokio::task::JoinError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.

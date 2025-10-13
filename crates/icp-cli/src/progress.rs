@@ -63,6 +63,7 @@ impl RollingLines {
         self.buf.iter().map(|s| s.as_str())
     }
 
+    /// Convert the buffer into an iterator (in order).
     pub fn into_iter(self) -> impl Iterator<Item = String> {
         self.buf.into_iter()
     }

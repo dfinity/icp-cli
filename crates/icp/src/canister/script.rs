@@ -49,10 +49,6 @@ impl Build for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            stdio
-                .send(format!("Running command: {}", input_cmd))
-                .await?;
-
             // Parse command input
             let input = shellwords::split(&input_cmd).context(ScriptError::Parse {
                 command: input_cmd.to_owned(),
@@ -110,7 +106,7 @@ impl Build for Script {
             // Spawn command and handle stdio
             // We need to join! as opposed to try_join! even if we only care about the result of the task
             // because we want to make sure we finish  reading all of the output
-            let (stdout_result, stderr_result, status) = join!(
+            let (stdout, stderr, status) = join!(
                 //
                 // Stdout
                 tokio::spawn({
@@ -144,8 +140,8 @@ impl Build for Script {
                     child.wait().await
                 }),
             );
-            stdout_result??;
-            stderr_result??;
+            stdout??;
+            stderr??;
 
             // Status
             let status =

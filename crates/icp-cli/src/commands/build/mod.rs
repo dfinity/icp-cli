@@ -11,7 +11,7 @@ use icp::{
 
 use crate::{
     commands::Context,
-    progress::{MAX_LINES_PER_STEP, ProgressManager, RollingLines, ScriptProgressHandler},
+    progress::{MAX_LINES_PER_STEP, ProgressManager, ScriptProgressHandler},
 };
 
 #[derive(Parser, Debug)]
@@ -177,7 +177,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 #[derive(Debug)]
 struct StepOutput {
     title: String,
-    output: RollingLines,
+    output: Vec<String>,
 }
 
 fn dump_build_output(ctx: &Context, canister_name: &str, step_outputs: Vec<StepOutput>) {

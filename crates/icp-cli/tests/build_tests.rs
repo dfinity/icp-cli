@@ -149,7 +149,7 @@ fn build_adapter_display_failing_prebuilt_output() {
                   command: echo "initial step succeeded"
                 - type: pre-built
                   path: /nonexistent/path/to/wasm.wasm
-                  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+                  sha256: invalid
         "#};
 
     write_string(
@@ -170,7 +170,9 @@ fn build_adapter_display_failing_prebuilt_output() {
         ))
         .stdout(contains("initial step succeeded"))
         .stdout(contains(
-            "Building: pre-built (path: /nonexistent/path/to/wasm.wasm, sha: 0000000000000000000000000000000000000000000000000000000000000000) 2 of 2",
+            "Building: pre-built (path: /nonexistent/path/to/wasm.wasm, sha: invalid) 2 of 2",
         ))
-        .stdout(contains("Reading local file: /nonexistent/path/to/wasm.wasm"));
+        .stdout(contains(
+            "Reading local file: /nonexistent/path/to/wasm.wasm",
+        ));
 }

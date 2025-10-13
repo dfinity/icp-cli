@@ -62,6 +62,10 @@ impl RollingLines {
     pub fn iter(&self) -> impl Iterator<Item = &str> {
         self.buf.iter().map(|s| s.as_str())
     }
+
+    pub fn into_iter(self) -> impl Iterator<Item = String> {
+        self.buf.into_iter()
+    }
 }
 
 /// Shared progress bar utilities for build and sync commands
@@ -163,7 +167,7 @@ impl ScriptProgressHandler {
 
     /// Create a channel and start handling script output for progress updates
     /// Returns the sender and a join handle for the background receiver task.
-    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<RollingLines>) {
+    pub fn setup_output_handler(&self) -> (mpsc::Sender<String>, JoinHandle<Vec<String>>) {
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
         // Shared progress-bar messaging utility
@@ -195,7 +199,7 @@ impl ScriptProgressHandler {
                 set_message(msg);
             }
 
-            complete
+            complete.into_iter().collect()
         });
 
         (tx, handle)

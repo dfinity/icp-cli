@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, time::Duration};
 
 use futures::Future;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar as SimpleProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
@@ -84,10 +84,10 @@ impl ProgressManager {
     }
 
     /// Create a new progress bar with standard configuration
-    pub fn create_progress_bar(&self, canister_name: &str) -> ProgressBar {
+    pub fn create_progress_bar(&self, canister_name: &str) -> SimpleProgressBar {
         let pb = self
             .multi_progress
-            .add(ProgressBar::new_spinner().with_style(make_style(
+            .add(SimpleProgressBar::new_spinner().with_style(make_style(
                 TICK_EMPTY,    // end_tick
                 COLOR_REGULAR, // color
             )));
@@ -125,7 +125,7 @@ impl ProgressManager {
     ) -> Result<R, E>
     where
         F: Future<Output = Result<R, E>>,
-        P: ProgressBarTrait,
+        P: ProgressBar,
     {
         // Delegate to execute_with_custom_progress with no special error handling
         Self::execute_with_custom_progress(
@@ -148,7 +148,7 @@ impl ProgressManager {
     ) -> Result<R, E>
     where
         F: Future<Output = Result<R, E>>,
-        P: ProgressBarTrait,
+        P: ProgressBar,
     {
         // Execute the task and capture the result
         let result = task.await;
@@ -181,7 +181,7 @@ struct StepInProgress {
 }
 
 pub struct MultiStepProgressBar {
-    progress_bar: ProgressBar,
+    progress_bar: SimpleProgressBar,
     canister_name: String,
     output_label: String,
     finished_steps: Vec<StepOutput>,
@@ -260,13 +260,13 @@ impl MultiStepProgressBar {
     }
 }
 
-pub trait ProgressBarTrait {
+pub trait ProgressBar {
     fn set_style(&self, style: ProgressStyle);
     fn set_message(&self, message: String);
     fn finish(&self);
 }
 
-impl ProgressBarTrait for MultiStepProgressBar {
+impl ProgressBar for MultiStepProgressBar {
     fn set_style(&self, style: ProgressStyle) {
         self.progress_bar.set_style(style);
     }
@@ -280,16 +280,16 @@ impl ProgressBarTrait for MultiStepProgressBar {
     }
 }
 
-impl ProgressBarTrait for ProgressBar {
+impl ProgressBar for SimpleProgressBar {
     fn set_style(&self, style: ProgressStyle) {
-        ProgressBar::set_style(self, style);
+        SimpleProgressBar::set_style(self, style);
     }
 
     fn set_message(&self, message: String) {
-        ProgressBar::set_message(self, message);
+        SimpleProgressBar::set_message(self, message);
     }
 
     fn finish(&self) {
-        ProgressBar::finish(self);
+        SimpleProgressBar::finish(self);
     }
 }

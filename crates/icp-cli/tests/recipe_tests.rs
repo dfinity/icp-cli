@@ -11,10 +11,10 @@ const RECIPE_TEMPLATE: &str = indoc! {r#"
     build:
       steps:
         - type: script
-          command:echo "test" > "$ICP_WASM_OUTPUT_PATH"
+          command: echo "test" > "$ICP_WASM_OUTPUT_PATH"
 "#};
 const RECIPE_TEMPLATE_CHECKSUM: &str =
-    "475752eb684a14dcddcb0884c275285b03b53d5519a51925d3e05eb01a494d68";
+    "afbfa6fcddd97ace283e91925cf0f606b5ea45c1944cb09ae7ea13d127aaab96";
 
 #[test]
 fn recipe_remote_url_without_checksum() {

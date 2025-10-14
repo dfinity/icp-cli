@@ -40,8 +40,8 @@ impl fmt::Display for Step {
             f,
             "{}",
             match self {
-                Step::Script(v) => format!("script {v}"),
-                Step::Prebuilt(v) => format!("pre-built {v}"),
+                Step::Script(v) => format!("(script)\n{v}"),
+                Step::Prebuilt(v) => format!("(pre-built)\n{v}"),
             }
         )
     }

@@ -33,11 +33,11 @@ pub struct Adapter {
 impl fmt::Display for Adapter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let cmd = match &self.command {
-            CommandField::Command(c) => format!("command: {c}"),
-            CommandField::Commands(cs) => format!("{} commands", cs.len()),
+            CommandField::Command(c) => c,
+            CommandField::Commands(cs) => &cs.join("\n"),
         };
 
-        write!(f, "({cmd})")
+        write!(f, "{cmd}")
     }
 }
 

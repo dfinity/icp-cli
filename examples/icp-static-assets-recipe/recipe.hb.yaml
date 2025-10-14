@@ -8,7 +8,7 @@ build:
   steps:
 
     - type: pre-built
-      {{! There is no convenient way to }}
+      {{! There is no convenient way to define defaults }}
       {{#if version}}
       url: https://github.com/dfinity/sdk/raw/refs/tags/{{ version }}/src/distributed/assetstorage.wasm.gz
       {{else}}

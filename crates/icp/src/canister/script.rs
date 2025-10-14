@@ -26,7 +26,6 @@ pub struct Script;
 fn direct_or_shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
     let words = shellwords::split(s).with_context(|| format!("Cannot parse command '{s}'."))?;
 
-    // Check if command is empty
     if words.is_empty() {
         anyhow::bail!("Command must include at least one element");
     }

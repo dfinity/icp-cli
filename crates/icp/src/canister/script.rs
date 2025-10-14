@@ -79,7 +79,6 @@ impl Build for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            // Create command using direct_or_shell_command
             let mut cmd = direct_or_shell_command(&input_cmd, params.path.as_ref()).context(
                 ScriptError::Parse {
                     command: input_cmd.to_owned(),
@@ -196,7 +195,6 @@ impl Synchronize for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            // Create command using direct_or_shell_command
             let mut cmd = direct_or_shell_command(&input_cmd, params.path.as_ref()).context(
                 ScriptError::Parse {
                     command: input_cmd.to_owned(),
@@ -305,7 +303,7 @@ mod tests {
         // Create temporary file
         let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
 
-        // Define adapter - note: no sh -c needed, pipes work automatically
+        // Define adapter
         let v = Adapter {
             command: CommandField::Command(format!(
                 "echo test > {} && echo {}",
@@ -340,7 +338,7 @@ mod tests {
         // Create temporary file
         let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
 
-        // Define adapter - note: no sh -c needed, redirections work automatically
+        // Define adapter
         let v = Adapter {
             command: CommandField::Commands(vec![
                 format!("echo cmd-1 >> {}", f.path()),
@@ -421,7 +419,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_command_error_status() {
-        // Define adapter - note: no sh -c needed
+        // Define adapter
         let v = Adapter {
             command: CommandField::Command("exit 1".into()),
         };

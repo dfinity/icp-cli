@@ -20,6 +20,7 @@ fn build_adapter_script_single() {
     let f = NamedTempFile::new().expect("failed to create temporary file");
     let path = f.path();
 
+    // Project manifest
     let pm = formatdoc! {r#"
         canister:
           name: my-canister
@@ -54,6 +55,7 @@ fn build_adapter_script_multiple() {
     let f = NamedTempFile::new().expect("failed to create temporary file");
     let path = f.path();
 
+    // Project manifest
     let pm = formatdoc! {r#"
         canister:
           name: my-canister

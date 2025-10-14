@@ -11,7 +11,7 @@ use icp::{
         assets::Assets,
         build::Builder,
         prebuilt::Prebuilt,
-        recipe::{self, handlebars::Handlebars},
+        recipe::handlebars::Handlebars,
         script::Script,
         sync::Syncer,
     },
@@ -136,9 +136,7 @@ async fn main() -> Result<(), Error> {
     let http_client = reqwest::Client::new();
 
     // Recipes
-    let recipe = Arc::new(recipe::Resolver {
-        handlebars: Arc::new(Handlebars { http_client }),
-    });
+    let recipe = Arc::new(Handlebars { http_client });
 
     // Project Manifest Locator
     let mloc = Arc::new(manifest::Locator::new(

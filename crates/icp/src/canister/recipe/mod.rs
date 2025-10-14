@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     canister::{build, recipe::handlebars::HandlebarsError, sync},
-    manifest::recipe::{Recipe, RecipeType},
+    manifest::recipe::Recipe,
 };
 
 pub mod handlebars;
@@ -36,11 +36,6 @@ pub struct Resolver {
 #[async_trait]
 impl Resolve for Resolver {
     async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
-        match recipe.recipe_type {
-            // For unknown recipe types, delegate to the Handlebars resolver
-            // This allows for extensible recipe types defined via templates
-            RecipeType::Unknown(_) => self.handlebars.resolve(recipe),
-        }
-        .await
+        self.handlebars.resolve(recipe).await
     }
 }

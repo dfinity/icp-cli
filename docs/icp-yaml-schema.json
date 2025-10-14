@@ -276,7 +276,7 @@
           "type": "object"
         },
         "sha256": {
-          "description": "Optional sha256 checksum for the recipe template, only used to verify the integrity of local or remote recipe templates. This is ignored if the recipe is not a local file or remote URL.",
+          "description": "Optional sha256 checksum for the recipe template. If provided, the integrity of the recipe will be verified against this hash",
           "type": [
             "string",
             "null"

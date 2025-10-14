@@ -7,13 +7,8 @@ use console::Term;
 use icp::{
     Directories, agent,
     canister::{
-        self,
-        assets::Assets,
-        build::Builder,
-        prebuilt::Prebuilt,
-        recipe::handlebars::Handlebars,
-        script::Script,
-        sync::Syncer,
+        self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
+        script::Script, sync::Syncer,
     },
     identity, manifest, network,
     prelude::*,

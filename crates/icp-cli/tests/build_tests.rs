@@ -331,7 +331,7 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        &pm,                           // contents
+        pm,                            // contents
     )
     .expect("failed to write project manifest");
 

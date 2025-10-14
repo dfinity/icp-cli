@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 
 use crate::{
@@ -27,15 +25,4 @@ pub enum ResolveError {
 
     #[error("failed to resolve handlebars template")]
     Handlebars { source: HandlebarsError },
-}
-
-pub struct Resolver {
-    pub handlebars: Arc<dyn Resolve>,
-}
-
-#[async_trait]
-impl Resolve for Resolver {
-    async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
-        self.handlebars.resolve(recipe).await
-    }
 }

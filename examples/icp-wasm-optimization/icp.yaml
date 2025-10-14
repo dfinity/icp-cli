@@ -9,12 +9,12 @@ canister:
 
       - type: script
         commands:
-          - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
-          - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}-opt" shrink --keep-name-section'
-          - sh -c 'mv "${ICP_WASM_OUTPUT_PATH}-opt" "$ICP_WASM_OUTPUT_PATH"'
+          - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
+          - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}-opt" shrink --keep-name-section
+          - mv "${ICP_WASM_OUTPUT_PATH}-opt" "$ICP_WASM_OUTPUT_PATH"
 
       - type: script
         commands:
-          - sh -c 'command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }'
-          - sh -c 'gzip --no-name "$ICP_WASM_OUTPUT_PATH"'
-          - sh -c 'mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"'
+          - command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }
+          - gzip --no-name "$ICP_WASM_OUTPUT_PATH"
+          - mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"

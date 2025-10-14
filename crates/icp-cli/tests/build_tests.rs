@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use indoc::{formatdoc, indoc};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
@@ -25,7 +27,7 @@ fn build_adapter_script_single() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -62,7 +64,7 @@ fn build_adapter_script_multiple() {
               - type: script
                 command: echo "before"
               - type: script
-                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
               - type: script
                 command: echo "after"
     "#};
@@ -99,14 +101,14 @@ fn build_adapter_display_failing_build_output() {
                 - type: script
                   command: echo "success 2"
                 - type: script
-                  command: sh -c 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1'
+                  command: for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1
           - name: unimportant-canister
             build:
               steps:
                 - type: script
                   command: echo "hide this" 
                 - type: script
-                  command: sh -c 'touch "$ICP_WASM_OUTPUT_PATH"'
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
         "#};
 
     write_string(
@@ -128,13 +130,13 @@ fn build_adapter_display_failing_build_output() {
         success 2
 
         Building: step 3 of 3 (script)
-        sh -c 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1'
+        for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1
         failing build step 1
         failing build step 2
         failing build step 3
         failing build step 4
         failing build step 5
-        Failed to build canister: command 'sh -c 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1'' failed with status code 1
+        Failed to build canister: command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1
     "#};
 
     ctx.icp()
@@ -210,7 +212,7 @@ fn build_adapter_display_failing_build_output_no_output() {
                 - type: script
                   command: echo "step 1 succeeded"
                 - type: script
-                  command: sh -c 'exit 1'
+                  command: exit 1
         "#};
 
     write_string(
@@ -228,9 +230,9 @@ fn build_adapter_display_failing_build_output_no_output() {
         step 1 succeeded
 
         Building: step 2 of 2 (script)
-        sh -c 'exit 1'
+        exit 1
         <no output>
-        Failed to build canister: command 'sh -c 'exit 1'' failed with status code 1
+        Failed to build canister: command 'exit 1' failed with status code 1
     "#};
 
     ctx.icp()
@@ -257,14 +259,14 @@ fn build_adapter_display_multiple_failing_canisters() {
                 - type: script
                   command: echo "canister-one step 1"
                 - type: script
-                  command: sh -c 'echo "canister-one error"; exit 1'
+                  command: echo "canister-one error"; exit 1
           - name: canister-two
             build:
               steps:
                 - type: script
                   command: echo "canister-two step 1"
                 - type: script
-                  command: sh -c 'echo "canister-two error"; exit 1'
+                  command: echo "canister-two error"; exit 1
         "#};
 
     write_string(
@@ -282,9 +284,9 @@ fn build_adapter_display_multiple_failing_canisters() {
         canister-one step 1
 
         Building: step 2 of 2 (script)
-        sh -c 'echo "canister-one error"; exit 1'
+        echo "canister-one error"; exit 1
         canister-one error
-        Failed to build canister: command 'sh -c 'echo "canister-one error"; exit 1'' failed with status code 1
+        Failed to build canister: command 'echo "canister-one error"; exit 1' failed with status code 1
     "#};
 
     let expected_output_two = indoc! {r#"
@@ -295,9 +297,9 @@ fn build_adapter_display_multiple_failing_canisters() {
         canister-two step 1
 
         Building: step 2 of 2 (script)
-        sh -c 'echo "canister-two error"; exit 1'
+        echo "canister-two error"; exit 1
         canister-two error
-        Failed to build canister: command 'sh -c 'echo "canister-two error"; exit 1'' failed with status code 1
+        Failed to build canister: command 'echo "canister-two error"; exit 1' failed with status code 1
     "#};
 
     ctx.icp()
@@ -307,6 +309,47 @@ fn build_adapter_display_multiple_failing_canisters() {
         .failure()
         .stdout(contains(expected_output_one))
         .stdout(contains(expected_output_two));
+}
+
+#[test]
+fn build_adapter_script_with_explicit_sh_c() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create temporary file
+    let mut f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // Project manifest with explicit sh -c
+    let pm = formatdoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .success();
+
+    // Verify the file contains the expected output
+    let mut contents = String::new();
+    f.read_to_string(&mut contents)
+        .expect("failed to read temporary file");
+    assert_eq!(contents, "nested shell\n");
 }
 
 #[test]

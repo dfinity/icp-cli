@@ -5,9 +5,9 @@ canister:
     steps:
       - type: script
         commands:
-          - sh -c 'command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }'
-          - sh -c 'moc src/main.mo'
-          - sh -c 'mv main.wasm "$ICP_WASM_OUTPUT_PATH"'
+          - command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }
+          - moc src/main.mo
+          - mv main.wasm "$ICP_WASM_OUTPUT_PATH"
 
   sync:
     steps:

@@ -29,7 +29,7 @@ fn sync_adapter_script_single() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
           sync:
             steps:
               - type: script
@@ -94,7 +94,7 @@ fn sync_adapter_script_multiple() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
           sync:
             steps:
               - type: script

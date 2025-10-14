@@ -145,7 +145,7 @@ fn deploy_to_other_projects_network() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         networks:
           - name: network-a

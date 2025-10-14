@@ -1,0 +1,32 @@
+{{! A recipe for building static assets and deploying them to an asset canister }}
+{{! `version: string` Optional, The version of the asset canister to use. Defaults to the master branch}}
+{{! `dir: string` Required, the directory of assets to synchronize }}
+{{! `metadata: [name: string, value: string]`: An array of name/value pairs that get injected into the wasm metadata section }}
+
+build:
+
+  steps:
+
+    - type: pre-built
+      {{! There is no convenient way to }}
+      {{#if version}}
+      url: https://github.com/dfinity/sdk/raw/refs/tags/{{ version }}/src/distributed/assetstorage.wasm.gz
+      {{else}}
+      {{! TODO We needed a latest tag on the sdk repo }}
+      url: https://github.com/dfinity/sdk/raw/refs/heads/master/src/distributed/assetstorage.wasm.gz
+      {{/if}}
+
+    {{#if metadata}}
+    - type: script
+      commands:
+        {{#each metadata}}
+        - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
+        - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section'
+        {{/each}}
+    {{/if}}
+
+{{! Synchronize assets }}
+sync:
+  steps:
+    - type: assets
+      dir: {{ dir }}

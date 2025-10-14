@@ -1,3 +1,4 @@
+use indoc::formatdoc;
 use std::{str::FromStr, string::FromUtf8Error};
 
 use crate::{
@@ -213,7 +214,20 @@ impl Resolve for Handlebars {
             })?;
 
         // Read the rendered YAML canister manifest
-        let insts = serde_yaml::from_str::<Instructions>(&out).unwrap();
+        let insts = serde_yaml::from_str::<Instructions>(&out);
+        let insts = match insts {
+            Ok(insts) => insts,
+            Err(e) => panic!(
+                "{}",
+                formatdoc! {r#"
+                Unable to render template into valid yaml: {e}
+                Rendered content:
+                ------
+                {out}
+                ------
+            "#}
+            ),
+        };
 
         let (build, sync) = match insts {
             // Supported

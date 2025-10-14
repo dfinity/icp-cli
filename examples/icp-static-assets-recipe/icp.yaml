@@ -1,8 +1,7 @@
 canister:
   name: my-canister
   recipe:
-    type: "@dfinity/assets"
+    type: file://recipe.hb.yaml
     configuration:
-      version: 0.27.0
-      # assets directory (default is www)
+      version: 0.29.2
       dir: www

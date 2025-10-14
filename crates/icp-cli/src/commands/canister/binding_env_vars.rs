@@ -233,7 +233,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         futs.push_back(async move {
             // Execute the install function with progress tracking
             ProgressManager::execute_with_progress(
-                pb,
+                &pb,
                 settings_fn,
                 || "Environment variables updated successfully".to_string(),
                 |err| format!("Failed to update environment variables: {err}"),

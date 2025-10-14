@@ -40,10 +40,8 @@ impl Build for Script {
         params: &build::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
-        // Adapter
-        let adapter = match step {
-            build::Step::Script(v) => v,
-            _ => panic!("expected script adapter"),
+        let build::Step::Script(adapter) = step else {
+            panic!("expected script adapter");
         };
 
         // Normalize `command` field based on whether it's a single command or multiple.
@@ -108,7 +106,7 @@ impl Build for Script {
             // Spawn command and handle stdio
             // We need to join! as opposed to try_join! even if we only care about the result of the task
             // because we want to make sure we finish  reading all of the output
-            let (_, _, status) = join!(
+            let (stdout, stderr, status) = join!(
                 //
                 // Stdout
                 tokio::spawn({
@@ -121,6 +119,7 @@ impl Build for Script {
                                 let _ = sender.send(line).await;
                             }
                         }
+                        Ok::<(), BuildError>(())
                     }
                 }),
                 //
@@ -135,6 +134,7 @@ impl Build for Script {
                                 let _ = sender.send(line).await;
                             }
                         }
+                        Ok::<(), BuildError>(())
                     }
                 }),
                 //
@@ -144,6 +144,8 @@ impl Build for Script {
                     child.wait().await
                 }),
             );
+            stdout??;
+            stderr??;
 
             // Status
             let status =

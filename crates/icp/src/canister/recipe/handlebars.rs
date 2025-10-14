@@ -295,8 +295,8 @@ impl HelperDef for ReplaceHelper {
 pub const WASM_SHRINK_PARTIAL: &str = r#"
 - type: script
   commands:
-    - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
-    - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" shrink --keep-name-section'
+    - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
+    - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" shrink --keep-name-section
 "#;
 
 /// Handlebars partial for compressing WASM modules using gzip
@@ -304,9 +304,9 @@ pub const WASM_SHRINK_PARTIAL: &str = r#"
 pub const WASM_COMPRESS_PARTIAL: &str = r#"
 - type: script
   commands:
-    - sh -c 'command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }'
-    - sh -c 'gzip --no-name "$ICP_WASM_OUTPUT_PATH"'
-    - sh -c 'mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"'
+    - command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }
+    - gzip --no-name "$ICP_WASM_OUTPUT_PATH"
+    - mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"
 "#;
 
 /// Handlebars partial that combines shrinking and compression optimizations
@@ -321,8 +321,8 @@ pub const WASM_OPTIMIZE_PARTIAL: &str = r#"
 pub const WASM_INJECT_METADATA_PARTIAL: &str = r#"
 - type: script
   commands:
-    - sh -c 'command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }'
-    - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section'
+    - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
+    - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section
 "#;
 
 /// Collection of reusable Handlebars partials for WASM processing
@@ -397,13 +397,13 @@ build:
   steps:
     - type: script
       commands:
-        - sh -c 'command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }'
-        - sh -c 'moc {{ entry }}'
-        - sh -c 'mv main.wasm "$ICP_WASM_OUTPUT_PATH"'
+        - command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }
+        - moc {{ entry }}
+        - mv main.wasm "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
-        - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "moc:version" -d "$(moc --version)" --keep-name-section'
+        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "moc:version" -d "$(moc --version)" --keep-name-section
 
     {{> wasm-inject-metadata name="template:type" value="motoko" }}
 
@@ -430,11 +430,11 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - sh -c 'mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"'
+        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
-        - sh -c 'ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "cargo:version" -d "$(cargo --version)" --keep-name-section'
+        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "cargo:version" -d "$(cargo --version)" --keep-name-section
 
     {{> wasm-inject-metadata name="template:type" value="rust" }}
 

@@ -1,5 +1,6 @@
 use std::process::Stdio;
 
+use crate::prelude::*;
 use anyhow::Context;
 use async_trait::async_trait;
 use ic_agent::Agent;
@@ -16,6 +17,19 @@ use crate::canister::{
 };
 
 pub struct Script;
+
+fn shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
+    let words = shellwords::split(s).with_context(|| format!("Cannot parse command '{s}'."))?;
+
+    if words.is_empty() {
+        anyhow::bail!("Command must include at least one element");
+    }
+
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", s]);
+    cmd.current_dir(cwd);
+    Ok(cmd)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ScriptError {
@@ -49,34 +63,10 @@ impl Build for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            // Parse command input
-            let input = shellwords::split(&input_cmd).context(ScriptError::Parse {
-                command: input_cmd.to_owned(),
-            })?;
-
-            // Separate command and args
-            let (cmd, args) = input.split_first().context(ScriptError::InvalidCommand {
-                command: input_cmd.to_owned(),
-                reason: "command must include at least one element".to_string(),
-            })?;
-
-            // Try resolving the command as a local path (e.g., ./mytool)
-            let cmd = match dunce::canonicalize(params.path.join(cmd)) {
-                // Use the canonicalized local path if it exists
-                Ok(p) => p,
-
-                // Fall back to assuming it's a command in the system PATH
-                Err(_) => cmd.into(),
-            };
-
-            // Command
-            let mut cmd = Command::new(cmd);
-
-            // Args
-            cmd.args(args);
-
-            // Set directory
-            cmd.current_dir(&params.path);
+            let mut cmd =
+                shell_command(&input_cmd, params.path.as_ref()).context(ScriptError::Parse {
+                    command: input_cmd.to_owned(),
+                })?;
 
             // Environment Variables
             cmd.env("ICP_WASM_OUTPUT_PATH", &params.output);
@@ -188,34 +178,10 @@ impl Synchronize for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            // Parse command input
-            let input = shellwords::split(&input_cmd).context(ScriptError::Parse {
-                command: input_cmd.to_owned(),
-            })?;
-
-            // Separate command and args
-            let (cmd, args) = input.split_first().context(ScriptError::InvalidCommand {
-                command: input_cmd.to_owned(),
-                reason: "command must include at least one element".to_string(),
-            })?;
-
-            // Try resolving the command as a local path (e.g., ./mytool)
-            let cmd = match dunce::canonicalize(params.path.join(cmd)) {
-                // Use the canonicalized local path if it exists
-                Ok(p) => p,
-
-                // Fall back to assuming it's a command in the system PATH
-                Err(_) => cmd.into(),
-            };
-
-            // Command
-            let mut cmd = Command::new(cmd);
-
-            // Args
-            cmd.args(args);
-
-            // Set directory
-            cmd.current_dir(&params.path);
+            let mut cmd =
+                shell_command(&input_cmd, params.path.as_ref()).context(ScriptError::Parse {
+                    command: input_cmd.to_owned(),
+                })?;
 
             // Output
             cmd.stdin(Stdio::inherit());
@@ -322,7 +288,7 @@ mod tests {
         // Define adapter
         let v = Adapter {
             command: CommandField::Command(format!(
-                "sh -c 'echo test > {} && echo {}'",
+                "echo test > {} && echo {}",
                 f.path(),
                 f.path()
             )),
@@ -357,9 +323,9 @@ mod tests {
         // Define adapter
         let v = Adapter {
             command: CommandField::Commands(vec![
-                format!("sh -c 'echo cmd-1 >> {}'", f.path()),
-                format!("sh -c 'echo cmd-2 >> {}'", f.path()),
-                format!("sh -c 'echo cmd-3 >> {}'", f.path()),
+                format!("echo cmd-1 >> {}", f.path()),
+                format!("echo cmd-2 >> {}", f.path()),
+                format!("echo cmd-3 >> {}", f.path()),
                 format!("echo {}", f.path()),
             ]),
         };
@@ -437,7 +403,7 @@ mod tests {
     async fn failed_command_error_status() {
         // Define adapter
         let v = Adapter {
-            command: CommandField::Command("sh -c 'exit 1'".into()),
+            command: CommandField::Command("exit 1".into()),
         };
 
         let out = Script

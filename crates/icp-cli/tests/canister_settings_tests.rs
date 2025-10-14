@@ -34,7 +34,7 @@ fn canister_settings_update_controllers() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -338,7 +338,7 @@ fn canister_settings_update_log_visibility() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -654,7 +654,7 @@ fn canister_settings_update_miscellaneous() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -777,7 +777,7 @@ fn canister_settings_update_environment_variables() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

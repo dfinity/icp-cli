@@ -121,13 +121,16 @@ fn build_adapter_display_failing_build_output() {
     let expected_output = indoc! {r#"
         Build output for canister my-canister:
 
-        Building: script (command: echo "success 1") 1 of 3
+        Building: step 1 of 3 (script)
+        echo "success 1"
         success 1
 
-        Building: script (command: echo "success 2") 2 of 3
+        Building: step 2 of 3 (script)
+        echo "success 2"
         success 2
 
-        Building: script (command: for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1) 3 of 3
+        Building: step 3 of 3 (script)
+        for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1
         failing build step 1
         failing build step 2
         failing build step 3
@@ -175,10 +178,12 @@ fn build_adapter_display_failing_prebuilt_output() {
     let expected_output = indoc! {r#"
         Build output for canister my-canister:
 
-        Building: script (command: echo "initial step succeeded") 1 of 2
+        Building: step 1 of 2 (script)
+        echo "initial step succeeded"
         initial step succeeded
 
-        Building: pre-built (path: /nonexistent/path/to/wasm.wasm, sha: invalid) 2 of 2
+        Building: step 2 of 2 (pre-built)
+        path: /nonexistent/path/to/wasm.wasm, sha: invalid
         Reading local file: /nonexistent/path/to/wasm.wasm
     "#};
 
@@ -220,10 +225,12 @@ fn build_adapter_display_failing_build_output_no_output() {
     let expected_output = indoc! {r#"
         Build output for canister my-canister:
 
-        Building: script (command: echo "step 1 succeeded") 1 of 2
+        Building: step 1 of 2 (script)
+        echo "step 1 succeeded"
         step 1 succeeded
 
-        Building: script (command: exit 1) 2 of 2
+        Building: step 2 of 2 (script)
+        exit 1
         <no output>
         Failed to build canister: command 'exit 1' failed with status code 1
     "#};
@@ -272,10 +279,12 @@ fn build_adapter_display_multiple_failing_canisters() {
     let expected_output_one = indoc! {r#"
         Build output for canister canister-one:
 
-        Building: script (command: echo "canister-one step 1") 1 of 2
+        Building: step 1 of 2 (script)
+        echo "canister-one step 1"
         canister-one step 1
 
-        Building: script (command: echo "canister-one error"; exit 1) 2 of 2
+        Building: step 2 of 2 (script)
+        echo "canister-one error"; exit 1
         canister-one error
         Failed to build canister: command 'echo "canister-one error"; exit 1' failed with status code 1
     "#};
@@ -283,10 +292,12 @@ fn build_adapter_display_multiple_failing_canisters() {
     let expected_output_two = indoc! {r#"
         Build output for canister canister-two:
 
-        Building: script (command: echo "canister-two step 1") 1 of 2
+        Building: step 1 of 2 (script)
+        echo "canister-two step 1"
         canister-two step 1
 
-        Building: script (command: echo "canister-two error"; exit 1) 2 of 2
+        Building: step 2 of 2 (script)
+        echo "canister-two error"; exit 1
         canister-two error
         Failed to build canister: command 'echo "canister-two error"; exit 1' failed with status code 1
     "#};
@@ -339,4 +350,50 @@ fn build_adapter_script_with_explicit_sh_c() {
     f.read_to_string(&mut contents)
         .expect("failed to read temporary file");
     assert_eq!(contents, "nested shell\n");
+}
+
+#[test]
+fn build_adapter_display_script_multiple_commands_output() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest with multiple commands
+    let pm = indoc! {r#"
+        canister:
+          name: my-canister
+          build:
+            steps:
+              - type: script
+                commands:
+                  - echo "command 1"
+                  - echo "command 2"
+                  - echo "command 3"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Invoke build
+    let expected_output = indoc! {r#"
+        Building: step 1 of 1 (script)
+        echo "command 1"
+        echo "command 2"
+        echo "command 3"
+        command 1
+        command 2
+        command 3
+        Failed to build canister: build did not result in output
+    "#};
+
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stdout(contains(expected_output));
 }

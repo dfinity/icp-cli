@@ -97,7 +97,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                     for (i, step) in c.build.steps.iter().enumerate() {
                         // Indicate to user the current step being executed
                         let current_step = i + 1;
-                        let pb_hdr = format!("\nBuilding: {step} {current_step} of {step_count}");
+                        let pb_hdr =
+                            format!("\nBuilding: step {current_step} of {step_count} {step}");
                         let tx = pb.begin_step(pb_hdr);
 
                         // Perform build step

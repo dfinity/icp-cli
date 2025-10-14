@@ -31,4 +31,9 @@ pub struct Recipe {
     #[serde(default)]
     #[schemars(with = "HashMap<String, serde_json::Value>")]
     pub configuration: HashMap<String, serde_yaml::Value>,
+
+    /// Optional sha256 checksum for the recipe template,
+    /// only used to verify the integrity of local or remote recipe templates.
+    /// This is ignored if the recipe is not a local file or remote URL.
+    pub sha256: Option<String>,
 }

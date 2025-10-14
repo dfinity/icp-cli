@@ -16,6 +16,7 @@ use crate::{
 use async_trait::async_trait;
 use handlebars::{Context, Helper, HelperDef, HelperResult, Output};
 use reqwest::{Method, Request, Url};
+use sha2::{Digest, Sha256};
 use url::ParseError;
 
 pub struct Handlebars {
@@ -68,6 +69,9 @@ pub enum HandlebarsError {
         recipe: String,
         template: String,
     },
+
+    #[error("sha256 checksum mismatch for recipe template: expected {expected}, actual {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
 }
 
 #[async_trait]
@@ -159,13 +163,18 @@ impl Resolve for Handlebars {
 
             // Attempt to load template from local file-system
             TemplateSource::LocalPath(path) => {
-                let bs = read(&path).map_err(|err| ResolveError::Handlebars {
+                let bytes = read(&path).map_err(|err| ResolveError::Handlebars {
                     source: HandlebarsError::ReadFile { source: err },
                 })?;
 
-                String::from_utf8(bs).map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::DecodeUtf8 { source: err },
-                })?
+                // Verify the checksum if it's provided
+                if let Some(expected) = &recipe.sha256 {
+                    verify_checksum(&bytes, expected)
+                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
+                }
+
+                parse_bytes_to_string(bytes)
+                    .map_err(|source| ResolveError::Handlebars { source: *source })?
             }
 
             // Attempt to fetch template from remote resource url
@@ -190,9 +199,18 @@ impl Resolve for Handlebars {
                     });
                 }
 
-                resp.text().await.map_err(|err| ResolveError::Handlebars {
+                let bytes = resp.bytes().await.map_err(|err| ResolveError::Handlebars {
                     source: HandlebarsError::HttpRequest { source: err },
-                })?
+                })?;
+
+                // Verify the checksum if it's provided
+                if let Some(expected) = &recipe.sha256 {
+                    verify_checksum(&bytes, expected)
+                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
+                }
+
+                parse_bytes_to_string(bytes.into())
+                    .map_err(|source| ResolveError::Handlebars { source: *source })?
             }
         };
 
@@ -443,3 +461,26 @@ pub const TEMPLATES: [(&str, &str); 4] = [
     ("handlebars-motoko", MOTOKO_CANISTER_TEMPLATE),
     ("handlebars-rust", RUST_CANISTER_TEMPLATE),
 ];
+
+/// Helper function to verify sha256 checksum of recipe template bytes
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), Box<HandlebarsError>> {
+    let actual = hex::encode({
+        let mut h = Sha256::new();
+        h.update(bytes);
+        h.finalize()
+    });
+
+    if actual != expected {
+        return Err(Box::new(HandlebarsError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        }));
+    }
+
+    Ok(())
+}
+
+/// Helper function to parse bytes into a UTF-8 string
+fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, Box<HandlebarsError>> {
+    String::from_utf8(bytes).map_err(|err| Box::new(HandlebarsError::DecodeUtf8 { source: err }))
+}

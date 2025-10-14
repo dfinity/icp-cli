@@ -16,7 +16,7 @@ impl From<String> for RecipeType {
     fn from(value: String) -> Self {
         match value.as_str() {
             "assets" => Self::Assets,
-            "motoko" => Self::Rust,
+            "motoko" => Self::Motoko,
             "rust" => Self::Rust,
             other => Self::Unknown(other.to_owned()),
         }

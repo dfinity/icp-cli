@@ -3,5 +3,7 @@ canister:
   recipe:
     type: motoko
     configuration:
-      # main motoko entry point (defaults to main.mo)
-      entry: src/main.mo
+      # entry point file (defaults to main.mo)
+      main: src/main.mo
+      # additional Motoko compiler flags
+      flags: --ai-errors

@@ -112,24 +112,31 @@ pub struct Motoko;
 #[async_trait]
 impl Resolve for Motoko {
     async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
-        // main entry point for the motoko program
-        let entry = match recipe.configuration.get("entry") {
+        // main entry point for the Motoko program
+        let main = match recipe.configuration.get("main") {
             // parse provided value
             Some(v) => Value::as_str(v).ok_or(ResolveError::InvalidField {
-                field: "entry".to_string(),
+                field: "main".to_string(),
             })?,
 
             // fallback to default
             None => "main.mo",
         };
 
+        // additional Motoko compiler flags
+        let flags = match recipe.configuration.get("flags") {
+            Some(v) => Value::as_str(v).ok_or(ResolveError::InvalidField {
+                field: "flags".to_string(),
+            })?,
+            None => "",
+        };
+
         // Build
         let build = build::Steps {
             steps: vec![build::Step::Script(script::Adapter {
                 command: CommandField::Commands(vec![
-                    r#"command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }"#.to_string(),
-                    format!(r#"moc {entry}"#),
-                    r#"mv main.wasm "$ICP_WASM_OUTPUT_PATH""#.to_string(),
+                    r#"sh -c 'command -v mops >/dev/null 2>&1 || { echo >&2 "'mops' not found on path. To install Mops, see https://mops.one/docs/install.\n"; exit 1; }'"#.to_string(),
+                    format!(r#"sh -c '$(mops toolchain bin moc) "{main}" {flags} $(mops sources) -o "$ICP_WASM_OUTPUT_PATH"'"#),
                 ]),
             })],
         };

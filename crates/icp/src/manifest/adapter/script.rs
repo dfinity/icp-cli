@@ -1,9 +1,9 @@
 use std::fmt;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CommandField {
     /// Command used to build a canister
@@ -23,7 +23,7 @@ impl CommandField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Adapter {
     /// Command used to build a canister
     #[serde(flatten)]

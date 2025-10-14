@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env::current_dir, sync::Arc};
+use std::{env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
@@ -7,16 +7,8 @@ use console::Term;
 use icp::{
     Directories, agent,
     canister::{
-        self,
-        assets::Assets,
-        build::Builder,
-        prebuilt::Prebuilt,
-        recipe::{
-            self,
-            handlebars::{Handlebars, TEMPLATES},
-        },
-        script::Script,
-        sync::Syncer,
+        self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
+        script::Script, sync::Syncer,
     },
     identity, manifest, network,
     prelude::*,
@@ -135,19 +127,11 @@ async fn main() -> Result<(), Error> {
     // Canister Artifact Store (wasm)
     let artifacts = ArtifactStore::new(&cli.artifact_store);
 
-    // Handlebar Templates (for recipes)
-    let tmpls = TEMPLATES.map(|(name, tmpl)| (name.to_string(), tmpl.to_string()));
-
     // Prepare http client
     let http_client = reqwest::Client::new();
 
     // Recipes
-    let recipe = Arc::new(recipe::Resolver {
-        handlebars: Arc::new(Handlebars {
-            recipes: HashMap::from_iter(tmpls),
-            http_client,
-        }),
-    });
+    let recipe = Arc::new(Handlebars { http_client });
 
     // Project Manifest Locator
     let mloc = Arc::new(manifest::Locator::new(

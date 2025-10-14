@@ -3,7 +3,7 @@ use std::{fmt, sync::Arc};
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, error::SendError};
 
 use crate::{
     canister::{build, script::ScriptError},
@@ -40,8 +40,8 @@ impl fmt::Display for Step {
             f,
             "{}",
             match self {
-                Step::Script(v) => format!("script {v}"),
-                Step::Prebuilt(v) => format!("pre-built {v}"),
+                Step::Script(v) => format!("(script)\n{v}"),
+                Step::Prebuilt(v) => format!("(pre-built)\n{v}"),
             }
         )
     }
@@ -63,6 +63,12 @@ pub struct Params {
 pub enum BuildError {
     #[error(transparent)]
     Script(#[from] ScriptError),
+
+    #[error("failed to send build output")]
+    SendOutput(#[from] SendError<String>),
+
+    #[error("failed to join futures")]
+    JoinError(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),

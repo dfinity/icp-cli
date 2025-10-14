@@ -24,7 +24,7 @@ fn single_canister_project() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -70,7 +70,7 @@ fn multi_canister_project() {
         build:
           steps:
             - type: script
-              command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+              command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     create_dir_all(&project_dir.join("my-canister")).expect("failed to create canister directory");
@@ -118,7 +118,7 @@ fn glob_path() {
         build:
           steps:
             - type: script
-              command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+              command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     create_dir_all(&project_dir.join("canisters/my-canister"))

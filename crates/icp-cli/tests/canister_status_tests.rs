@@ -26,7 +26,7 @@ fn canister_status() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {wasm} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

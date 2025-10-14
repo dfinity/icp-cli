@@ -49,7 +49,7 @@ impl fmt::Display for Adapter {
             None => "n/a",
         };
 
-        write!(f, "({src}, sha: {sha})")
+        write!(f, "{src}, sha: {sha}")
     }
 }
 

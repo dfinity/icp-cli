@@ -22,7 +22,7 @@ use icp::{
     prelude::*,
     project,
 };
-use tracing::{Level, subscriber::set_global_default};
+use tracing::{Instrument, Level, debug, subscriber::set_global_default};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
@@ -30,11 +30,15 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer,
-    version::icp_cli_version_str,
+    logging::debug_layer,
+    store_artifact::ArtifactStore,
+    store_id::IdStore,
+    telemetry::EventLayer,
+    version::{git_sha, icp_cli_version_str},
 };
 
 mod commands;
+mod logging;
 mod options;
 mod progress;
 mod store_artifact;
@@ -94,22 +98,16 @@ async fn main() -> Result<(), Error> {
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
-        tracing_subscriber::fmt::layer(), // debug
-        EventLayer,                       // event
+        debug_layer(), // debug
+        EventLayer,    // event
     );
 
     let reg = Registry::default()
-        .with(
-            debug_layer.with_filter(
-                filter::filter_fn(|_| true)
-                    //
-                    // Only log if `debug` is set
-                    .and(filter::filter_fn(move |_| cli.debug))
-                    //
-                    // Only log if event level is debug
-                    .and(filter::filter_fn(|md| md.level() == &Level::DEBUG)),
-            ),
-        )
+        .with(debug_layer.with_filter(
+            //
+            // Only log if `debug` is set
+            filter::filter_fn(move |_| cli.debug),
+        ))
         .with(
             event_layer.with_filter(
                 filter::filter_fn(|_| true)
@@ -222,7 +220,25 @@ async fn main() -> Result<(), Error> {
         syncer,
     };
 
-    commands::dispatch(&ctx, command).await?;
+    // Execute the command within a span that includes version and SHA context
+    let trace_span = tracing::trace_span!(
+        "icp-cli",
+        version = icp_cli_version_str(),
+        git_sha = git_sha()
+    );
+
+    debug!(
+        version = icp_cli_version_str(),
+        git_sha = git_sha(),
+        command = ?command,
+        "Starting icp-cli"
+    );
+
+    commands::dispatch(&ctx, command)
+        .instrument(trace_span)
+        .await?;
+
+    debug!("Command executed successfully");
 
     Ok(())
 }

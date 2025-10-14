@@ -18,11 +18,6 @@ use crate::canister::{
 
 pub struct Script;
 
-/// Creates a Command that either runs directly or through a shell.
-///
-/// If the command is a single word pointing to an executable file, it runs directly.
-/// Otherwise, it automatically wraps the command in `sh -c` to support shell features
-/// like pipes, redirections, and multiple commands.
 fn shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
     let words = shellwords::split(s).with_context(|| format!("Cannot parse command '{s}'."))?;
 

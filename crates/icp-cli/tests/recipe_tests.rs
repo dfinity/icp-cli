@@ -7,12 +7,12 @@ use icp::fs::write_string;
 
 mod common;
 
-const RECIPE_TEMPLATE: &str = indoc! {"
+const RECIPE_TEMPLATE: &str = indoc! {r#"
     build:
       steps:
         - type: script
-          command: sh -c 'echo \"test\" > \"$ICP_WASM_OUTPUT_PATH\"'
-"};
+          command:echo "test" > "$ICP_WASM_OUTPUT_PATH"
+"#};
 const RECIPE_TEMPLATE_CHECKSUM: &str =
     "475752eb684a14dcddcb0884c275285b03b53d5519a51925d3e05eb01a494d68";
 

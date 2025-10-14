@@ -72,7 +72,7 @@ fn canister_create_with_settings() {
               build:
                 steps:
                   - type: script
-                    command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+                    command: cp {path} "$ICP_WASM_OUTPUT_PATH"
               settings:
                 compute_allocation: 1
                 memory_allocation: 4294967296
@@ -152,7 +152,7 @@ fn canister_create_with_settings_cmdline_override() {
               build:
                 steps:
                   - type: script
-                    command: sh -c 'cp {path} \"$ICP_WASM_OUTPUT_PATH\"'
+                    command: cp {path} \"$ICP_WASM_OUTPUT_PATH\"
               settings:
                 compute_allocation: 1
 

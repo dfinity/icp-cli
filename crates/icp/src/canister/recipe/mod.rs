@@ -127,9 +127,9 @@ impl Resolve for Motoko {
         let build = build::Steps {
             steps: vec![build::Step::Script(script::Adapter {
                 command: CommandField::Commands(vec![
-                    r#"sh -c 'command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }'"#.to_string(),
-                    format!(r#"sh -c 'moc {entry}'"#),
-                    r#"sh -c 'mv main.wasm "$ICP_WASM_OUTPUT_PATH"'"#.to_string(),
+                    r#"command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }"#.to_string(),
+                    format!(r#"moc {entry}"#),
+                    r#"mv main.wasm "$ICP_WASM_OUTPUT_PATH""#.to_string(),
                 ]),
             })],
         };
@@ -170,7 +170,7 @@ impl Resolve for Rust {
                         r#"cargo build {package_arg} --target wasm32-unknown-unknown --release"#
                     ),
                     format!(
-                        r#"sh -c 'mv target/wasm32-unknown-unknown/release/{output_name} "$ICP_WASM_OUTPUT_PATH"'"#
+                        r#"mv target/wasm32-unknown-unknown/release/{output_name} "$ICP_WASM_OUTPUT_PATH""#
                     ),
                 ]),
             })],

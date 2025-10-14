@@ -27,7 +27,7 @@ fn build_adapter_script_single() {
           build:
             steps:
               - type: script
-                command: sh -c 'cp {path} "$ICP_WASM_OUTPUT_PATH"'
+                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -301,7 +301,7 @@ fn build_adapter_display_multiple_failing_canisters() {
 }
 
 #[test]
-fn build_adapter_script_with_pipes_and_redirections() {
+fn build_adapter_script_with_explicit_sh_c() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -311,14 +311,14 @@ fn build_adapter_script_with_pipes_and_redirections() {
     let mut f = NamedTempFile::new().expect("failed to create temporary file");
     let path = f.path();
 
-    // Project manifest demonstrating pipes and redirections work without sh -c
+    // Project manifest with explicit sh -c
     let pm = formatdoc! {r#"
         canister:
           name: my-canister
           build:
             steps:
               - type: script
-                command: echo "hello" | cat > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
     "#};
 
     write_string(
@@ -338,5 +338,5 @@ fn build_adapter_script_with_pipes_and_redirections() {
     let mut contents = String::new();
     f.read_to_string(&mut contents)
         .expect("failed to read temporary file");
-    assert_eq!(contents, "hello\n");
+    assert_eq!(contents, "nested shell\n");
 }

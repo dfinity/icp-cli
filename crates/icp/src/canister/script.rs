@@ -23,25 +23,15 @@ pub struct Script;
 /// If the command is a single word pointing to an executable file, it runs directly.
 /// Otherwise, it automatically wraps the command in `sh -c` to support shell features
 /// like pipes, redirections, and multiple commands.
-fn direct_or_shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
+fn shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
     let words = shellwords::split(s).with_context(|| format!("Cannot parse command '{s}'."))?;
 
     if words.is_empty() {
         anyhow::bail!("Command must include at least one element");
     }
 
-    let canonical_result = dunce::canonicalize(cwd.join(&words[0]));
-    let mut cmd = if words.len() == 1 && canonical_result.is_ok() {
-        // If the command is a single word pointing to a file, execute it directly.
-        #[allow(clippy::unnecessary_unwrap)]
-        let file = canonical_result.unwrap();
-        Command::new(file)
-    } else {
-        // Execute the command in `sh -c` to allow pipes, redirections, etc.
-        let mut sh_cmd = Command::new("sh");
-        sh_cmd.args(["-c", s]);
-        sh_cmd
-    };
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", s]);
     cmd.current_dir(cwd);
     Ok(cmd)
 }
@@ -78,11 +68,10 @@ impl Build for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            let mut cmd = direct_or_shell_command(&input_cmd, params.path.as_ref()).context(
-                ScriptError::Parse {
+            let mut cmd =
+                shell_command(&input_cmd, params.path.as_ref()).context(ScriptError::Parse {
                     command: input_cmd.to_owned(),
-                },
-            )?;
+                })?;
 
             // Environment Variables
             cmd.env("ICP_WASM_OUTPUT_PATH", &params.output);
@@ -194,11 +183,10 @@ impl Synchronize for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            let mut cmd = direct_or_shell_command(&input_cmd, params.path.as_ref()).context(
-                ScriptError::Parse {
+            let mut cmd =
+                shell_command(&input_cmd, params.path.as_ref()).context(ScriptError::Parse {
                     command: input_cmd.to_owned(),
-                },
-            )?;
+                })?;
 
             // Output
             cmd.stdin(Stdio::inherit());

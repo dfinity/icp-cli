@@ -138,3 +138,10 @@ cargo build --release
 ./target/release/icp --markdown-help > docs/cli-reference.md
 ```
 
+## Contributing
+
+Contributions are welcome! Please see the [contribution guide](./.github/CONTRIBUTING.md) for more information.
+
+## License
+
+This project is licensed under the [Apache-2.0](./LICENSE) license.

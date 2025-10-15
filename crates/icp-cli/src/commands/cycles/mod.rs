@@ -1,37 +1,12 @@
-use clap::{Parser, Subcommand};
-use snafu::Snafu;
+use clap::Subcommand;
 
-use crate::{commands::Context, commands::token};
+use crate::commands::token;
 
-mod balance;
-mod mint;
-
-#[derive(Parser, Debug)]
-pub struct Cmd {
-    #[command(subcommand)]
-    subcmd: Subcmd,
-}
+pub(crate) mod balance;
+pub(crate) mod mint;
 
 #[derive(Subcommand, Debug)]
-pub enum Subcmd {
+pub enum Command {
     Balance(token::balance::Cmd),
     Mint(mint::Cmd),
-}
-
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    match cmd.subcmd {
-        Subcmd::Balance(cmd) => balance::exec(ctx, cmd).await?,
-        Subcmd::Mint(cmd) => mint::exec(ctx, cmd).await?,
-    }
-
-    Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    Balance { source: balance::CommandError },
-
-    #[snafu(transparent)]
-    Mint { source: mint::CommandError },
 }

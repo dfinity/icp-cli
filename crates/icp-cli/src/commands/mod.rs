@@ -65,13 +65,15 @@ pub enum Command {
     Canister(canister::Cmd),
 
     /// Mint and manage cycles
-    Cycles(cycles::Cmd),
+    #[command(subcommand)]
+    Cycles(cycles::Command),
 
     /// Deploy a project to an environment
     Deploy(deploy::Cmd),
 
     /// Show information about the current project environments
-    Environment(environment::Cmd),
+    #[command(subcommand)]
+    Environment(environment::Command),
 
     /// Manage your identities
     Identity(identity::IdentityCmd),

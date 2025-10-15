@@ -22,7 +22,10 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer,
+    commands::{cycles, environment},
+    store_artifact::ArtifactStore,
+    store_id::IdStore,
+    telemetry::EventLayer,
     version::icp_cli_version_str,
 };
 
@@ -208,19 +211,26 @@ async fn main() -> Result<(), Error> {
 
     match command {
         // Build
-        Command::Build(opts) => commands::build::exec(&ctx, opts).await?,
+        Command::Build(args) => commands::build::exec(&ctx, args).await?,
 
         // Canister
-        Command::Canister(opts) => commands::canister::dispatch(&ctx, opts).await?,
+        Command::Canister(cmd) => commands::canister::dispatch(&ctx, cmd).await?,
 
         // Cycles
-        Command::Cycles(opts) => commands::cycles::exec(&ctx, opts).await?,
+        Command::Cycles(cmd) => match cmd {
+            cycles::Command::Balance(args) => commands::cycles::balance::exec(&ctx, args).await?,
+            cycles::Command::Mint(args) => commands::cycles::mint::exec(&ctx, args).await?,
+        },
 
         // Deploy
-        Command::Deploy(opts) => commands::deploy::exec(&ctx, opts).await?,
+        Command::Deploy(args) => commands::deploy::exec(&ctx, args).await?,
 
         // Environment
-        Command::Environment(opts) => commands::environment::exec(&ctx, opts).await?,
+        Command::Environment(cmd) => match cmd {
+            environment::Command::List(args) => {
+                commands::environment::list::exec(&ctx, args).await?
+            }
+        },
 
         // Identity
         Command::Identity(opts) => commands::identity::dispatch(&ctx, opts).await?,

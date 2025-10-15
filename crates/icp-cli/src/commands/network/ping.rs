@@ -52,11 +52,7 @@ pub enum CommandError {
 
 pub async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
     match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
-
-        Mode::Project(_) => {
+        Mode::Global | Mode::Project(_) => {
             // Load Project
             let p = ctx.project.load().await?;
 

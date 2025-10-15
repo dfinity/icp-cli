@@ -104,20 +104,19 @@ impl<'de> Deserialize<'de> for Instructions {
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
-pub struct CanisterInner {
+pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
     /// The configuration specifying the various settings when
     /// creating the canister.
-    #[serde(default)]
     pub settings: Settings,
 
     #[serde(flatten)]
-    pub instructions: Option<Instructions>,
+    pub instructions: Instructions,
 }
 
-impl<'de> Deserialize<'de> for CanisterInner {
+impl<'de> Deserialize<'de> for CanisterManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         use serde::de::{Error, MapAccess, Visitor};
         use std::fmt;
@@ -125,7 +124,7 @@ impl<'de> Deserialize<'de> for CanisterInner {
         struct CanisterInnerVisitor;
 
         impl<'de> Visitor<'de> for CanisterInnerVisitor {
-            type Value = CanisterInner;
+            type Value = CanisterManifest;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a canister manifest with name and optional settings/instructions")
@@ -159,15 +158,14 @@ impl<'de> Deserialize<'de> for CanisterInner {
                     Settings::default()
                 };
 
+                if temp_map.is_empty() {
+                    return Err(Error::custom(format!("Canister {name} is missing a `recipe` or a `build` section.")));
+                }
                 // Try to parse instructions from remaining fields
-                let instructions = if temp_map.is_empty() {
-                    None
-                } else {
-                    Some(serde_yaml::from_value(serde_yaml::Value::Mapping(temp_map))
-                        .map_err(|e| Error::custom(format!("Failed to parse instructions for canister `{name}`: {}", e)))?)
-                };
+                let instructions =  serde_yaml::from_value(serde_yaml::Value::Mapping(temp_map))
+                        .map_err(|e| Error::custom(format!("Failed to parse instructions for canister `{name}`: {}", e)))?;
 
-                Ok(CanisterInner {
+                Ok(CanisterManifest {
                     name,
                     settings,
                     instructions,
@@ -179,20 +177,6 @@ impl<'de> Deserialize<'de> for CanisterInner {
     }
 }
 
-/// Represents the manifest describing a single canister.
-/// This struct is typically loaded from a `canister.yaml` file and defines
-/// the canister's name and how it should be built into WebAssembly.
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
-pub struct CanisterManifest {
-    /// The unique name of the canister as defined in this manifest.
-    pub name: String,
-
-    /// The configuration specifying the various settings when
-    /// creating the canister.
-    pub settings: Settings,
-
-    pub instructions: Instructions,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
@@ -203,34 +187,6 @@ pub enum ParseError {
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
-}
-
-impl TryFrom<CanisterInner> for CanisterManifest {
-    type Error = ParseError;
-
-    fn try_from(v: CanisterInner) -> Result<Self, Self::Error> {
-        let CanisterInner {
-            name,
-            settings,
-            instructions,
-        } = v;
-
-        // Instructions
-        let instructions = instructions.ok_or(ParseError::MissingInstructions)?;
-
-        Ok(CanisterManifest {
-            name,
-            settings,
-            instructions,
-        })
-    }
-}
-
-impl<'de> Deserialize<'de> for CanisterManifest {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let inner: CanisterInner = Deserialize::deserialize(d)?;
-        inner.try_into().map_err(serde::de::Error::custom)
-    }
 }
 
 #[cfg(test)]
@@ -261,7 +217,7 @@ mod tests {
 
             // Wrong Error
             Err(err) => {
-                if !format!("{err}").starts_with("Please provide instructions") {
+                if !format!("{err}").starts_with("Canister my-canister is missing a `recipe` or a `build` section") {
                     return Err(anyhow!(
                         "an empty canister manifest resulted in the wrong error: {err}"
                     ));

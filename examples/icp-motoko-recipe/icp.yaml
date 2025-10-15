@@ -1,6 +1,6 @@
 canister:
   name: my-canister
   recipe:
-    type: "prout@dfinity/motoko@zob" 
+    type: "@dfinity/motoko" 
     configuration:
       entry: src/main.mo

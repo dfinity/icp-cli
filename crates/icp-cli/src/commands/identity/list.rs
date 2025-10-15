@@ -1,22 +1,21 @@
-use clap::Parser;
+use clap::Args;
 use icp::identity::manifest::{
     LoadIdentityManifestError, load_identity_defaults, load_identity_list,
 };
 use itertools::Itertools;
-use snafu::Snafu;
 
 use crate::commands::Context;
 
-#[derive(Debug, Parser)]
-pub struct ListCmd;
+#[derive(Debug, Args)]
+pub struct ListArgs;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, thiserror::Error)]
 pub enum ListKeysError {
-    #[snafu(transparent)]
-    LoadIdentity { source: LoadIdentityManifestError },
+    #[error(transparent)]
+    LoadIdentity(#[from] LoadIdentityManifestError),
 }
 
-pub async fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
+pub async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), ListKeysError> {
     let dir = ctx.dirs.identity();
 
     let list = load_identity_list(&dir)?;

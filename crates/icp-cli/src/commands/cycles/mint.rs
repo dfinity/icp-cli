@@ -1,6 +1,6 @@
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode};
-use clap::Parser;
+use clap::Args;
 use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
@@ -20,8 +20,8 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct MintArgs {
     /// Amount of ICP to mint to cycles.
     #[arg(long, conflicts_with = "cycles")]
     pub icp: Option<BigDecimal>,
@@ -82,19 +82,19 @@ pub enum CommandError {
     NotifyMintError { src: NotifyMintErr },
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -112,11 +112,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         .sender()
         .map_err(|e| CommandError::Principal { message: e })?;
 
-    let icp_e8s_to_deposit = if let Some(icp_amount) = cmd.icp {
+    let icp_e8s_to_deposit = if let Some(icp_amount) = &args.icp {
         (icp_amount * 100_000_000_u64)
             .to_u64()
             .ok_or(CommandError::IcpAmountOverflow)?
-    } else if let Some(cycles_amount) = cmd.cycles {
+    } else if let Some(cycles_amount) = args.cycles {
         let cmc_response = agent
             .query(
                 &CYCLES_MINTING_CANISTER_PRINCIPAL,

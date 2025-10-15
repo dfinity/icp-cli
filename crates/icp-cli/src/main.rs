@@ -208,142 +208,142 @@ async fn main() -> Result<(), Error> {
 
     match command {
         // Build
-        Command::Build(args) => commands::build::exec(&ctx, args).await?,
+        Command::Build(args) => commands::build::exec(&ctx, &args).await?,
 
         // Canister
         Command::Canister(cmd) => match cmd {
             commands::canister::Command::Call(args) => {
-                commands::canister::call::exec(&ctx, args).await?
+                commands::canister::call::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Create(args) => {
-                commands::canister::create::exec(&ctx, args).await?
+                commands::canister::create::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Delete(args) => {
-                commands::canister::delete::exec(&ctx, args).await?
+                commands::canister::delete::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Info(args) => {
-                commands::canister::info::exec(&ctx, args).await?
+                commands::canister::info::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Install(args) => {
-                commands::canister::install::exec(&ctx, args).await?
+                commands::canister::install::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::List(args) => {
-                commands::canister::list::exec(&ctx, args).await?
+                commands::canister::list::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Settings(cmd) => match cmd {
                 commands::canister::settings::Command::Show(args) => {
-                    commands::canister::settings::show::exec(&ctx, args).await?
+                    commands::canister::settings::show::exec(&ctx, &args).await?
                 }
 
                 commands::canister::settings::Command::Update(args) => {
-                    commands::canister::settings::update::exec(&ctx, args).await?
+                    commands::canister::settings::update::exec(&ctx, &args).await?
                 }
             },
 
             commands::canister::Command::Show(args) => {
-                commands::canister::show::exec(&ctx, args).await?
+                commands::canister::show::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Start(args) => {
-                commands::canister::start::exec(&ctx, args).await?
+                commands::canister::start::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Status(args) => {
-                commands::canister::status::exec(&ctx, args).await?
+                commands::canister::status::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::Stop(args) => {
-                commands::canister::stop::exec(&ctx, args).await?
+                commands::canister::stop::exec(&ctx, &args).await?
             }
 
             commands::canister::Command::TopUp(args) => {
-                commands::canister::top_up::exec(&ctx, args).await?
+                commands::canister::top_up::exec(&ctx, &args).await?
             }
         },
 
         // Cycles
         Command::Cycles(cmd) => match cmd {
             commands::cycles::Command::Balance(args) => {
-                commands::cycles::balance::exec(&ctx, args).await?
+                commands::cycles::balance::exec(&ctx, &args).await?
             }
 
             commands::cycles::Command::Mint(args) => {
-                commands::cycles::mint::exec(&ctx, args).await?
+                commands::cycles::mint::exec(&ctx, &args).await?
             }
         },
 
         // Deploy
-        Command::Deploy(args) => commands::deploy::exec(&ctx, args).await?,
+        Command::Deploy(args) => commands::deploy::exec(&ctx, &args).await?,
 
         // Environment
         Command::Environment(cmd) => match cmd {
             commands::environment::Command::List(args) => {
-                commands::environment::list::exec(&ctx, args).await?
+                commands::environment::list::exec(&ctx, &args).await?
             }
         },
 
         // Identity
         Command::Identity(cmd) => match cmd {
             commands::identity::Command::Default(args) => {
-                commands::identity::default::exec(&ctx, args).await?
+                commands::identity::default::exec(&ctx, &args).await?
             }
 
             commands::identity::Command::Import(args) => {
-                commands::identity::import::exec(&ctx, args).await?
+                commands::identity::import::exec(&ctx, &args).await?
             }
 
             commands::identity::Command::List(args) => {
-                commands::identity::list::exec(&ctx, args).await?
+                commands::identity::list::exec(&ctx, &args).await?
             }
 
             commands::identity::Command::New(args) => {
-                commands::identity::new::exec(&ctx, args).await?
+                commands::identity::new::exec(&ctx, &args).await?
             }
 
             commands::identity::Command::Principal(args) => {
-                commands::identity::principal::exec(&ctx, args).await?
+                commands::identity::principal::exec(&ctx, &args).await?
             }
         },
 
         // Network
         Command::Network(cmd) => match cmd {
             commands::network::Command::List(args) => {
-                commands::network::list::exec(&ctx, args).await?
+                commands::network::list::exec(&ctx, &args).await?
             }
 
             commands::network::Command::Ping(args) => {
-                commands::network::ping::exec(&ctx, args).await?
+                commands::network::ping::exec(&ctx, &args).await?
             }
 
             commands::network::Command::Run(args) => {
-                commands::network::run::exec(&ctx, args).await?
+                commands::network::run::exec(&ctx, &args).await?
             }
         },
 
         // Project
         Command::Project(cmd) => match cmd {
             commands::project::Command::Show(args) => {
-                commands::project::show::exec(&ctx, args).await?
+                commands::project::show::exec(&ctx, &args).await?
             }
         },
 
         // Sync
-        Command::Sync(args) => commands::sync::exec(&ctx, args).await?,
+        Command::Sync(args) => commands::sync::exec(&ctx, &args).await?,
 
         // Token
         Command::Token(cmd) => match cmd {
             commands::token::Command::Balance(args) => {
-                commands::token::balance::exec(&ctx, args).await?
+                commands::token::balance::exec(&ctx, &args).await?
             }
 
             commands::token::Command::Transfer(args) => {
-                commands::token::transfer::exec(&ctx, args).await?
+                commands::token::transfer::exec(&ctx, &args).await?
             }
         },
     }

@@ -19,6 +19,6 @@ static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    Balance(balance::Cmd),
-    Transfer(transfer::Cmd),
+    Balance(balance::BalanceArgs),
+    Transfer(transfer::TransferArgs),
 }

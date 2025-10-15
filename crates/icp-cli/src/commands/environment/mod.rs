@@ -4,5 +4,5 @@ pub(crate) mod list;
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    List(list::Cmd),
+    List(list::ListArgs),
 }

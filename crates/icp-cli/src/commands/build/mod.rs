@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context as _, anyhow};
 use camino_tempfile::tempdir;
-use clap::Parser;
+use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     canister::build::{BuildError, Params},
@@ -11,8 +11,8 @@ use icp::{
 
 use crate::{commands::Context, progress::ProgressManager};
 
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct BuildArgs {
     /// The names of the canisters within the current project
     pub names: Vec<String>,
 }
@@ -42,17 +42,17 @@ pub enum CommandError {
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let p = ctx.project.load().await.context("failed to load project")?;
 
     // Choose canisters to build
-    let cnames = match cmd.names.is_empty() {
+    let cnames = match args.names.is_empty() {
         // No canisters specified
         true => p.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names.clone(),
+        false => args.names.clone(),
     };
 
     for name in &cnames {

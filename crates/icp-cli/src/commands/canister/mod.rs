@@ -16,17 +16,17 @@ pub(crate) mod top_up;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Call(call::Cmd),
-    Create(create::Cmd),
-    Delete(delete::Cmd),
-    Info(info::Cmd),
-    Install(install::Cmd),
-    List(list::Cmd),
-    Show(show::Cmd),
-    Start(start::Cmd),
-    Status(status::Cmd),
-    Stop(stop::Cmd),
-    TopUp(top_up::Cmd),
+    Call(call::CallArgs),
+    Create(create::CreateArgs),
+    Delete(delete::DeleteArgs),
+    Info(info::InfoArgs),
+    Install(install::InstallArgs),
+    List(list::ListArgs),
+    Show(show::ShowArgs),
+    Start(start::StartArgs),
+    Status(status::StatusArgs),
+    Stop(stop::StopArgs),
+    TopUp(top_up::TopUpArgs),
 
     #[command(subcommand)]
     Settings(settings::Command),

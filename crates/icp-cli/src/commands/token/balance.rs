@@ -1,6 +1,6 @@
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
-use clap::Parser;
+use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
 use icrc_ledger_types::icrc1::account::Account;
@@ -10,8 +10,8 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Args, Clone, Debug)]
+pub struct BalanceArgs {
     #[arg(default_value = "icp")]
     pub token: String,
 
@@ -54,19 +54,19 @@ pub enum CommandError {
 /// The balance is checked against a ledger canister. Support two user flows:
 /// (1) Specifying token name, and checking against known or stored mappings
 /// (2) Specifying compatible ledger canister id
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -80,13 +80,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Obtain ledger address
-    let cid = match TOKEN_LEDGER_CIDS.get(&cmd.token) {
+    let cid = match TOKEN_LEDGER_CIDS.get(&args.token) {
         // Given token matched known token names
         Some(cid) => cid.to_string(),
 
         // Given token is not known, indicating it's either already a canister id
         // or is simply a name of a token we do not know of
-        None => cmd.token.to_string(),
+        None => args.token.to_string(),
     };
 
     // Parse the canister id

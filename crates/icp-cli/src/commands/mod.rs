@@ -60,7 +60,7 @@ pub struct Context {
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
     /// Build a project
-    Build(build::Cmd),
+    Build(build::BuildArgs),
 
     /// Perform canister operations against a network
     #[command(subcommand)]
@@ -71,7 +71,7 @@ pub enum Command {
     Cycles(cycles::Command),
 
     /// Deploy a project to an environment
-    Deploy(deploy::Cmd),
+    Deploy(deploy::DeployArgs),
 
     /// Show information about the current project environments
     #[command(subcommand)]
@@ -91,7 +91,7 @@ pub enum Command {
     Project(project::Command),
 
     /// Synchronize canisters in the current environment
-    Sync(sync::Cmd),
+    Sync(sync::SyncArgs),
 
     /// Perform token transactions
     #[command(subcommand)]

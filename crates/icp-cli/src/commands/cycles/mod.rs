@@ -7,6 +7,6 @@ pub(crate) mod mint;
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    Balance(token::balance::Cmd),
-    Mint(mint::Cmd),
+    Balance(token::balance::BalanceArgs),
+    Mint(mint::MintArgs),
 }

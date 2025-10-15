@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use candid::{Decode, Encode, Nat};
-use clap::Parser;
+use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
 use icp::{agent, identity, network, prelude::*};
@@ -25,7 +25,7 @@ use crate::{
 
 pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
-#[derive(Clone, Debug, Default, Parser)]
+#[derive(Clone, Debug, Default, Args)]
 pub struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
     #[arg(long)]
@@ -44,8 +44,8 @@ pub struct CanisterSettings {
     pub reserved_cycles_limit: Option<u64>,
 }
 
-#[derive(Clone, Debug, Parser)]
-pub struct Cmd {
+#[derive(Clone, Debug, Args)]
+pub struct CreateArgs {
     /// The names of the canister within the current project
     pub names: Vec<String>,
 
@@ -130,28 +130,28 @@ pub enum CommandError {
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Collect environment canisters
-    let cnames = match cmd.names.is_empty() {
+    let cnames = match args.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names.clone(),
+        false => args.names.clone(),
     };
 
     for name in &cnames {
@@ -209,7 +209,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     //
     // If we don't specify a subnet, then the CMC will choose a random subnet
     // for each canister. Ideally, a project's canister should all live on the same subnet.
-    let subnet = match cmd.subnet {
+    let subnet = match args.subnet {
         // Target specified subnet
         Some(v) => v,
 
@@ -246,7 +246,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
-            let cmd = cmd.clone();
+            let cmd = args.clone();
             let agent = agent.clone();
             let pb = pb.clone();
 

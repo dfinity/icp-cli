@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use byte_unit::{Byte, Unit};
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Args};
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::{agent, identity, network};
@@ -12,7 +12,7 @@ use crate::{
     store_id::{Key, LookupError as LookupIdError},
 };
 
-#[derive(Clone, Debug, Default, Parser)]
+#[derive(Clone, Debug, Default, Args)]
 pub struct ControllerOpt {
     #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
     add_controller: Option<Vec<Principal>>,
@@ -30,7 +30,7 @@ impl ControllerOpt {
     }
 }
 
-#[derive(Clone, Debug, Default, Parser)]
+#[derive(Clone, Debug, Default, Args)]
 pub struct LogVisibilityOpt {
     #[arg(
         long,
@@ -57,7 +57,7 @@ impl LogVisibilityOpt {
     }
 }
 
-#[derive(Clone, Debug, Default, Parser)]
+#[derive(Clone, Debug, Default, Args)]
 pub struct EnvironmentVariableOpt {
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
@@ -72,8 +72,8 @@ impl EnvironmentVariableOpt {
     }
 }
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct UpdateArgs {
     /// The name of the canister within the current project
     pub name: String,
 
@@ -144,19 +144,19 @@ pub enum CommandError {
     Update(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -170,10 +170,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Ensure canister is included in the environment
-    if !env.canisters.contains_key(&cmd.name) {
+    if !env.canisters.contains_key(&args.name) {
         return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
-            canister: cmd.name.to_owned(),
+            canister: args.name.to_owned(),
         });
     }
 
@@ -181,14 +181,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cid = ctx.ids.lookup(&Key {
         network: env.network.name.to_owned(),
         environment: env.name.to_owned(),
-        canister: cmd.name.to_owned(),
+        canister: args.name.to_owned(),
     })?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     let mut current_status: Option<CanisterStatusResult> = None;
-    if require_current_settings(&cmd) {
+    if require_current_settings(args) {
         current_status = Some(mgmt.canister_status(&cid).await?.0);
     }
 
@@ -198,19 +198,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Handle controllers.
     let mut controllers: Option<Vec<Principal>> = None;
-    if let Some(controllers_opt) = &cmd.controllers {
+    if let Some(controllers_opt) = &args.controllers {
         controllers = get_controllers(controllers_opt, current_status.as_ref());
     }
 
     // Handle log visibility.
     let mut log_visibility: Option<LogVisibility> = None;
-    if let Some(log_visibility_opt) = cmd.log_visibility {
+    if let Some(log_visibility_opt) = args.log_visibility.clone() {
         log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
     }
 
     // Handle environment variables.
     let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
-    if let Some(environment_variables_opt) = &cmd.environment_variables {
+    if let Some(environment_variables_opt) = &args.environment_variables {
         environment_variables =
             get_environment_variables(environment_variables_opt, current_status.as_ref());
     }
@@ -222,22 +222,22 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             update = update.with_controller(controller);
         }
     }
-    if let Some(compute_allocation) = cmd.compute_allocation {
+    if let Some(compute_allocation) = args.compute_allocation {
         update = update.with_compute_allocation(compute_allocation);
     }
-    if let Some(memory_allocation) = cmd.memory_allocation {
+    if let Some(memory_allocation) = args.memory_allocation {
         update = update.with_memory_allocation(memory_allocation.as_u64());
     }
-    if let Some(freezing_threshold) = cmd.freezing_threshold {
+    if let Some(freezing_threshold) = args.freezing_threshold {
         update = update.with_freezing_threshold(freezing_threshold);
     }
-    if let Some(reserved_cycles_limit) = cmd.reserved_cycles_limit {
+    if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
         update = update.with_reserved_cycles_limit(reserved_cycles_limit);
     }
-    if let Some(wasm_memory_limit) = cmd.wasm_memory_limit {
+    if let Some(wasm_memory_limit) = args.wasm_memory_limit {
         update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
     }
-    if let Some(wasm_memory_threshold) = cmd.wasm_memory_threshold {
+    if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
     }
     if let Some(log_visibility) = log_visibility {
@@ -305,20 +305,20 @@ fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, Com
     })
 }
 
-fn require_current_settings(cmd: &Cmd) -> bool {
-    if let Some(controllers) = &cmd.controllers
+fn require_current_settings(args: &UpdateArgs) -> bool {
+    if let Some(controllers) = &args.controllers
         && controllers.require_current_settings()
     {
         return true;
     }
 
-    if let Some(log_visibility) = &cmd.log_visibility
+    if let Some(log_visibility) = &args.log_visibility
         && log_visibility.require_current_settings()
     {
         return true;
     }
 
-    if let Some(environment_variables) = &cmd.environment_variables
+    if let Some(environment_variables) = &args.environment_variables
         && environment_variables.require_current_settings()
     {
         return true;

@@ -6,7 +6,7 @@ pub(crate) mod run;
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    List(list::Cmd),
-    Ping(ping::Cmd),
-    Run(run::Cmd),
+    List(list::ListArgs),
+    Ping(ping::PingArgs),
+    Run(run::RunArgs),
 }

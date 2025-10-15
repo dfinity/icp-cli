@@ -1,9 +1,9 @@
-use clap::Parser;
+use clap::Args;
 
 use crate::commands::Context;
 
-#[derive(Debug, Parser)]
-pub struct Cmd;
+#[derive(Debug, Args)]
+pub struct ListArgs;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
@@ -11,7 +11,7 @@ pub enum CommandError {
     Project(#[from] icp::LoadError),
 }
 
-pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), CommandError> {
     // Load project
     let pm = ctx.project.load().await?;
 

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use clap::Parser;
+use clap::Args;
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
     agent,
@@ -12,8 +12,8 @@ use tokio::time::sleep;
 use crate::commands::Context;
 
 /// Try to connect to a network, and print out its status.
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct PingArgs {
     /// The compute network to connect to. By default, ping the local network.
     #[arg(value_name = "NETWORK", default_value = "local")]
     network: String,
@@ -50,7 +50,7 @@ pub enum CommandError {
     Unexpected(#[from] anyhow::Error),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
     // Load Project
     let p = ctx.project.load().await?;
 
@@ -58,7 +58,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
     // Network
-    let network = p.networks.get(&cmd.network).ok_or(CommandError::Network)?;
+    let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
 
     // NetworkAccess
     let access = ctx.network.access(network).await?;
@@ -71,7 +71,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Query
-    let status = match cmd.wait_healthy {
+    let status = match args.wait_healthy {
         // wait
         true => ping_until_healthy(&agent).await?,
 

@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::Args;
 
 use crate::{
     commands::Context,
@@ -6,8 +6,8 @@ use crate::{
     store_id::{Key, LookupError as LookupIdError},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct ShowArgs {
     /// The name of the canister within the current project
     pub name: String,
 
@@ -33,23 +33,23 @@ pub enum CommandError {
     LookupCanisterId(#[from] LookupIdError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Ensure canister is included in the environment
-    if !env.canisters.contains_key(&cmd.name) {
+    if !env.canisters.contains_key(&args.name) {
         return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
-            canister: cmd.name.to_owned(),
+            canister: args.name.to_owned(),
         });
     }
 
@@ -57,10 +57,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cid = ctx.ids.lookup(&Key {
         network: env.network.name.to_owned(),
         environment: env.name.to_owned(),
-        canister: cmd.name.to_owned(),
+        canister: args.name.to_owned(),
     })?;
 
-    println!("{cid} => {}", cmd.name);
+    println!("{cid} => {}", args.name);
 
     // TODO(or.ricon): Show canister details
     //  Things we might want to show (do we need to sub-command this?)

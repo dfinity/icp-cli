@@ -8,9 +8,9 @@ pub(crate) mod principal;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Default(default::DefaultCmd),
-    Import(import::ImportCmd),
-    List(list::ListCmd),
-    New(new::NewCmd),
-    Principal(principal::PrincipalCmd),
+    Default(default::DefaultArgs),
+    Import(import::ImportArgs),
+    List(list::ListArgs),
+    New(new::NewArgs),
+    Principal(principal::PrincipalArgs),
 }

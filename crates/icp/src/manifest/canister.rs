@@ -110,6 +110,7 @@ pub struct CanisterManifest {
 
     /// The configuration specifying the various settings when
     /// creating the canister.
+    #[serde(default)]
     pub settings: Settings,
 
     #[serde(flatten)]
@@ -121,9 +122,9 @@ impl<'de> Deserialize<'de> for CanisterManifest {
         use serde::de::{Error, MapAccess, Visitor};
         use std::fmt;
 
-        struct CanisterInnerVisitor;
+        struct CanisterManifestVisitor;
 
-        impl<'de> Visitor<'de> for CanisterInnerVisitor {
+        impl<'de> Visitor<'de> for CanisterManifestVisitor {
             type Value = CanisterManifest;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -173,21 +174,10 @@ impl<'de> Deserialize<'de> for CanisterManifest {
             }
         }
 
-        d.deserialize_map(CanisterInnerVisitor)
+        d.deserialize_map(CanisterManifestVisitor)
     }
 }
 
-
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error(
-        "Please provide instructions for building your canister in the form of a recipe or build/sync steps."
-    )]
-    MissingInstructions,
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
 
 #[cfg(test)]
 mod tests {

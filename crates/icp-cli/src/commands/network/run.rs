@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::Args;
 use icp::{
     identity::manifest::{LoadIdentityManifestError, load_identity_list},
     manifest,
@@ -8,8 +8,8 @@ use icp::{
 use crate::commands::Context;
 
 /// Run a given network
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct RunArgs {
     /// Name of the network to run
     #[arg(default_value = "local")]
     name: String,
@@ -36,13 +36,13 @@ pub enum CommandError {
     RunNetwork(#[from] RunNetworkError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Obtain network configuration
-    let network = p.networks.get(&cmd.name).ok_or(CommandError::Network {
-        name: cmd.name.to_owned(),
+    let network = p.networks.get(&args.name).ok_or(CommandError::Network {
+        name: args.name.to_owned(),
     })?;
 
     let cfg = match &network.configuration {
@@ -52,7 +52,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         // Non-managed networks cannot be started
         Configuration::Connected(_) => {
             return Err(CommandError::Unmanaged {
-                name: cmd.name.to_owned(),
+                name: args.name.to_owned(),
             });
         }
     };

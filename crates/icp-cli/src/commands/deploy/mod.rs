@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::Args;
 use ic_agent::export::Principal;
 
 use crate::{
@@ -15,8 +15,8 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct DeployArgs {
     /// Canister names
     pub names: Vec<String>,
 
@@ -76,24 +76,24 @@ pub enum CommandError {
     Sync(#[from] sync::CommandError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
     // Load the project manifest, which defines the canisters to be built.
     let p = ctx.project.load().await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
-    let cnames = match cmd.names.is_empty() {
+    let cnames = match args.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names,
+        false => args.names.clone(),
     };
 
     for name in &cnames {
@@ -120,7 +120,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let _ = ctx.term.write_line("Building canisters:");
     build::exec(
         ctx,
-        build::Cmd {
+        &build::BuildArgs {
             names: cnames.to_owned(),
         },
     )
@@ -130,13 +130,13 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let _ = ctx.term.write_line("\n\nCreating canisters:");
     let out = create::exec(
         ctx,
-        create::Cmd {
+        &create::CreateArgs {
             names: cnames.to_owned(),
-            identity: cmd.identity.clone(),
-            environment: cmd.environment.clone(),
+            identity: args.identity.clone(),
+            environment: args.environment.clone(),
 
             // Controllers
-            controller: cmd.controller.to_owned(),
+            controller: args.controller.to_owned(),
 
             // Settings
             settings: CanisterSettings {
@@ -144,8 +144,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             },
 
             quiet: false,
-            cycles: cmd.cycles,
-            subnet: cmd.subnet_id,
+            cycles: args.cycles,
+            subnet: args.subnet_id,
         },
     )
     .await;
@@ -159,10 +159,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let _ = ctx.term.write_line("\n\nSetting environment variables:");
     let out = binding_env_vars::exec(
         ctx,
-        binding_env_vars::Cmd {
+        &binding_env_vars::BindingArgs {
             names: cnames.to_owned(),
-            identity: cmd.identity.clone(),
-            environment: cmd.environment.clone(),
+            identity: args.identity.clone(),
+            environment: args.environment.clone(),
         },
     )
     .await;
@@ -177,11 +177,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
     let out = install::exec(
         ctx,
-        install::Cmd {
+        &install::InstallArgs {
             names: cnames.to_owned(),
-            mode: cmd.mode.to_owned(),
-            identity: cmd.identity.clone(),
-            environment: cmd.environment.clone(),
+            mode: args.mode.to_owned(),
+            identity: args.identity.clone(),
+            environment: args.environment.clone(),
         },
     )
     .await;
@@ -196,10 +196,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let _ = ctx.term.write_line("\n\nSyncing canisters:");
     let out = sync::exec(
         ctx,
-        sync::Cmd {
+        &sync::SyncArgs {
             names: cnames.to_owned(),
-            identity: cmd.identity.clone(),
-            environment: cmd.environment.clone(),
+            identity: args.identity.clone(),
+            environment: args.environment.clone(),
         },
     )
     .await;

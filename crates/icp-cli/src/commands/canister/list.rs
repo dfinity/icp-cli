@@ -1,9 +1,9 @@
-use clap::Parser;
+use clap::Args;
 
 use crate::{commands::Context, options::EnvironmentOpt};
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct ListArgs {
     #[command(flatten)]
     pub environment: EnvironmentOpt,
 }
@@ -17,16 +17,16 @@ pub enum CommandError {
     EnvironmentNotFound { name: String },
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     for (_, c) in env.canisters.values() {

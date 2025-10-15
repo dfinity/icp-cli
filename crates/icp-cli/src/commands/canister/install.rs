@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use clap::Parser;
+use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
@@ -15,8 +15,8 @@ use crate::{
     store_id::{Key, LookupError as LookupIdError},
 };
 
-#[derive(Clone, Debug, Parser)]
-pub struct Cmd {
+#[derive(Clone, Debug, Args)]
+pub struct InstallArgs {
     /// The names of the canisters within the current project
     pub names: Vec<String>,
 
@@ -70,19 +70,19 @@ pub enum CommandError {
     InstallAgent(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
     // Load the project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -95,12 +95,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         agent.set_root_key(k);
     }
 
-    let cnames = match cmd.names.is_empty() {
+    let cnames = match args.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names.clone(),
+        false => args.names.clone(),
     };
 
     for name in &cnames {
@@ -143,7 +143,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         // Create an async closure that handles the operation for this specific canister
         let install_fn = {
-            let cmd = cmd.clone();
+            let cmd = args.clone();
             let mgmt = mgmt.clone();
             let pb = pb.clone();
 

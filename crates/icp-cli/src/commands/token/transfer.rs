@@ -1,6 +1,6 @@
 use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
 use candid::{Decode, Encode, Nat, Principal};
-use clap::Parser;
+use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
 use icrc_ledger_types::icrc1::{
@@ -13,8 +13,8 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct TransferArgs {
     /// Token amount to transfer
     pub amount: BigDecimal,
 
@@ -68,19 +68,19 @@ pub enum CommandError {
     },
 }
 
-pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, token: &str, args: &TransferArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -157,7 +157,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
 
     // Calculate units of token to transfer
     // Ledgers do not work in decimals and instead use the smallest non-divisible unit of the token
-    let ledger_amount = cmd.amount.clone() * 10u128.pow(decimals);
+    let ledger_amount = args.amount.clone() * 10u128.pow(decimals);
 
     // Convert amount to big decimal
     let ledger_amount = ledger_amount
@@ -171,7 +171,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
 
     // Prepare transfer
     let receiver = Account {
-        owner: cmd.receiver,
+        owner: args.receiver,
         subaccount: None,
     };
 
@@ -216,7 +216,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
             CommandError::InsufficientFunds {
                 symbol: symbol.clone(),
                 balance,
-                required: cmd.amount + fee,
+                required: args.amount.clone() + fee,
             }
         }
 

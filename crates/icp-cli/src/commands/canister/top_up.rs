@@ -1,6 +1,6 @@
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
-use clap::Parser;
+use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
 use icp_canister_interfaces::cycles_ledger::{
@@ -13,8 +13,8 @@ use crate::{
     store_id::{Key, LookupError},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct TopUpArgs {
     /// The name of the canister within the current project
     pub name: String,
 
@@ -65,19 +65,19 @@ pub enum CommandError {
     Withdraw { err: WithdrawError, amount: u128 },
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -91,10 +91,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Ensure canister is included in the environment
-    if !env.canisters.contains_key(&cmd.name) {
+    if !env.canisters.contains_key(&args.name) {
         return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
-            canister: cmd.name.to_owned(),
+            canister: args.name.to_owned(),
         });
     }
 
@@ -102,11 +102,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cid = ctx.ids.lookup(&Key {
         network: env.network.name.to_owned(),
         environment: env.name.to_owned(),
-        canister: cmd.name.to_owned(),
+        canister: args.name.to_owned(),
     })?;
 
-    let args = WithdrawArgs {
-        amount: Nat::from(cmd.amount),
+    let cargs = WithdrawArgs {
+        amount: Nat::from(args.amount),
         from_subaccount: None,
         to: cid,
         created_at_time: None,
@@ -114,19 +114,19 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     let bs = agent
         .update(&CYCLES_LEDGER_PRINCIPAL, "withdraw")
-        .with_arg(Encode!(&args)?)
+        .with_arg(Encode!(&cargs)?)
         .call_and_wait()
         .await?;
 
     Decode!(&bs, WithdrawResponse)?.map_err(|err| CommandError::Withdraw {
         err,
-        amount: cmd.amount,
+        amount: args.amount,
     })?;
 
     let _ = ctx.term.write_line(&format!(
         "Topped up canister {} with {}T cycles",
-        cmd.name,
-        BigDecimal::new(cmd.amount.into(), CYCLES_LEDGER_DECIMALS)
+        args.name,
+        BigDecimal::new(args.amount.into(), CYCLES_LEDGER_DECIMALS)
     ));
 
     Ok(())

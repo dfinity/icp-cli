@@ -1,97 +1,34 @@
-use clap::{Parser, Subcommand};
-use snafu::Snafu;
+use clap::Subcommand;
 
-use crate::commands::Context;
-
-pub mod binding_env_vars;
-pub mod call;
-pub mod create;
-pub mod delete;
-pub mod info;
-pub mod install;
-pub mod list;
-pub mod settings;
-pub mod show;
-pub mod start;
-pub mod status;
-pub mod stop;
-pub mod top_up;
-
-#[derive(Debug, Parser)]
-pub struct Cmd {
-    #[command(subcommand)]
-    subcmd: CanisterSubcmd,
-}
+pub(crate) mod binding_env_vars;
+pub(crate) mod call;
+pub(crate) mod create;
+pub(crate) mod delete;
+pub(crate) mod info;
+pub(crate) mod install;
+pub(crate) mod list;
+pub(crate) mod settings;
+pub(crate) mod show;
+pub(crate) mod start;
+pub(crate) mod status;
+pub(crate) mod stop;
+pub(crate) mod top_up;
 
 #[derive(Debug, Subcommand)]
-pub enum CanisterSubcmd {
-    Call(call::Cmd),
-    Create(create::Cmd),
-    Delete(delete::Cmd),
-    Info(info::Cmd),
-    Install(install::Cmd),
-    Show(show::Cmd),
-    Settings(settings::Cmd),
-    List(list::Cmd),
-    Start(start::Cmd),
-    Status(status::Cmd),
-    Stop(stop::Cmd),
-    TopUp(top_up::Cmd),
-}
+pub enum Command {
+    Call(call::CallArgs),
+    Create(create::CreateArgs),
+    Delete(delete::DeleteArgs),
+    Info(info::InfoArgs),
+    Install(install::InstallArgs),
+    List(list::ListArgs),
 
-pub async fn dispatch(ctx: &Context, cmd: Cmd) -> Result<(), CanisterCommandError> {
-    match cmd.subcmd {
-        CanisterSubcmd::Call(subcmd) => call::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Create(subcmd) => create::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Delete(subcmd) => delete::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Info(subcmd) => info::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Install(subcmd) => install::exec(ctx, subcmd).await?,
-        CanisterSubcmd::List(subcmd) => list::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Settings(subcmd) => settings::dispatch(ctx, subcmd).await?,
-        CanisterSubcmd::Start(subcmd) => start::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Show(subcmd) => show::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Status(subcmd) => status::exec(ctx, subcmd).await?,
-        CanisterSubcmd::Stop(subcmd) => stop::exec(ctx, subcmd).await?,
-        CanisterSubcmd::TopUp(subcmd) => top_up::exec(ctx, subcmd).await?,
-    }
-    Ok(())
-}
+    #[command(subcommand)]
+    Settings(settings::Command),
 
-#[derive(Debug, Snafu)]
-pub enum CanisterCommandError {
-    #[snafu(transparent)]
-    Call { source: call::CommandError },
-
-    #[snafu(transparent)]
-    Create { source: create::CommandError },
-
-    #[snafu(transparent)]
-    Delete { source: delete::CommandError },
-
-    #[snafu(transparent)]
-    Start { source: start::CommandError },
-
-    #[snafu(transparent)]
-    Info { source: info::CommandError },
-
-    #[snafu(transparent)]
-    Install { source: install::CommandError },
-
-    #[snafu(transparent)]
-    Settings { source: settings::CommandError },
-
-    #[snafu(transparent)]
-    Show { source: show::CommandError },
-
-    #[snafu(transparent)]
-    List { source: list::CommandError },
-
-    #[snafu(transparent)]
-    Status { source: status::CommandError },
-
-    #[snafu(transparent)]
-    Stop { source: stop::CommandError },
-
-    #[snafu(transparent)]
-    TopUp { source: top_up::CommandError },
+    Show(show::ShowArgs),
+    Start(start::StartArgs),
+    Status(status::StatusArgs),
+    Stop(stop::StopArgs),
+    TopUp(top_up::TopUpArgs),
 }

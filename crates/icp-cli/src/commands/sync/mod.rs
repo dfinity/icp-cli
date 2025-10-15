@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
-use clap::Parser;
+use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     agent,
@@ -16,8 +16,8 @@ use crate::{
     store_id::{Key, LookupError},
 };
 
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct SyncArgs {
     /// Canister names
     pub names: Vec<String>,
 
@@ -64,19 +64,19 @@ pub enum CommandError {
     Synchronize(#[from] SynchronizeError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     // Load the project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -89,12 +89,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         agent.set_root_key(k);
     }
 
-    let cnames = match cmd.names.is_empty() {
+    let cnames = match args.names.is_empty() {
         // No canisters specified
         true => env.canisters.keys().cloned().collect(),
 
         // Individual canisters specified
-        false => cmd.names,
+        false => args.names.clone(),
     };
 
     for name in &cnames {

@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::Args;
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::CanisterStatusResult;
 use icp::{agent, identity, network};
@@ -10,8 +10,8 @@ use crate::{
     store_id::{Key, LookupError as LookupIdError},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct InfoArgs {
     /// The name of the canister within the current project
     pub name: String,
 
@@ -52,19 +52,19 @@ pub enum CommandError {
     Status(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Load identity
-    let id = ctx.identity.load(cmd.identity.into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
         p.environments
-            .get(cmd.environment.name())
+            .get(args.environment.name())
             .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+                name: args.environment.name().to_owned(),
             })?;
 
     // Access network
@@ -78,10 +78,10 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Ensure canister is included in the environment
-    if !env.canisters.contains_key(&cmd.name) {
+    if !env.canisters.contains_key(&args.name) {
         return Err(CommandError::EnvironmentCanister {
             environment: env.name.to_owned(),
-            canister: cmd.name.to_owned(),
+            canister: args.name.to_owned(),
         });
     }
 
@@ -89,7 +89,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let cid = ctx.ids.lookup(&Key {
         network: env.network.name.to_owned(),
         environment: env.name.to_owned(),
-        canister: cmd.name.to_owned(),
+        canister: args.name.to_owned(),
     })?;
 
     // Management Interface

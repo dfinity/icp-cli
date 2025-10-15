@@ -57,12 +57,14 @@ pub struct Context {
 }
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Command {
     /// Build a project
     Build(build::Cmd),
 
     /// Perform canister operations against a network
-    Canister(canister::Cmd),
+    #[command(subcommand)]
+    Canister(canister::Command),
 
     /// Mint and manage cycles
     #[command(subcommand)]

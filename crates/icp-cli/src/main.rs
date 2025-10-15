@@ -211,7 +211,61 @@ async fn main() -> Result<(), Error> {
         Command::Build(args) => commands::build::exec(&ctx, args).await?,
 
         // Canister
-        Command::Canister(cmd) => commands::canister::dispatch(&ctx, cmd).await?,
+        Command::Canister(cmd) => match cmd {
+            commands::canister::Command::Call(args) => {
+                commands::canister::call::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Create(args) => {
+                commands::canister::create::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Delete(args) => {
+                commands::canister::delete::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Info(args) => {
+                commands::canister::info::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Install(args) => {
+                commands::canister::install::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::List(args) => {
+                commands::canister::list::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Settings(cmd) => match cmd {
+                commands::canister::settings::Command::Show(args) => {
+                    commands::canister::settings::show::exec(&ctx, args).await?
+                }
+
+                commands::canister::settings::Command::Update(args) => {
+                    commands::canister::settings::update::exec(&ctx, args).await?
+                }
+            },
+
+            commands::canister::Command::Show(args) => {
+                commands::canister::show::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Start(args) => {
+                commands::canister::start::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Status(args) => {
+                commands::canister::status::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::Stop(args) => {
+                commands::canister::stop::exec(&ctx, args).await?
+            }
+
+            commands::canister::Command::TopUp(args) => {
+                commands::canister::top_up::exec(&ctx, args).await?
+            }
+        },
 
         // Cycles
         Command::Cycles(cmd) => match cmd {

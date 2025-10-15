@@ -149,7 +149,7 @@ mod tests {
                 settings: Settings::default(),
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
-                        recipe_type: RecipeType::Unknown("my-recipe".to_string()),
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::new(),
                         sha256: None,
                     }
@@ -178,7 +178,7 @@ mod tests {
                 settings: Settings::default(),
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
-                        recipe_type: RecipeType::Unknown("my-recipe".to_string()),
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::from([
                             ("key-1".to_string(), "value-1".into()),
                             ("key-2".to_string(), "value-2".into())
@@ -208,7 +208,7 @@ mod tests {
                 settings: Settings::default(),
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
-                        recipe_type: RecipeType::Unknown("my-recipe".to_string()),
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::new(),
                         sha256: Some(
                             "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"

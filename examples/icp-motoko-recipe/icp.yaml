@@ -4,4 +4,4 @@ canister:
     type: file://recipe.hb.yaml
     configuration:
       main: src/main.mo
-      flags: --ai-errors
+      args: --ai-errors

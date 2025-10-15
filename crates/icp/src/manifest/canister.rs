@@ -310,9 +310,67 @@ mod tests {
                 recipe:
                   type: file://my-recipe
                 build:
-                  - type: pre-built
-                    url: http://example.com/hello_world.wasm
-                    sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+                  steps:
+                    - type: pre-built
+                      url: http://example.com/hello_world.wasm
+                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+        "#) {
+            Ok(_) => {
+                return Err(anyhow!(
+                    "You should not be able to have a recipe and build steps at the same time"
+                ));
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Canister manifest cannot have both") {
+                    return Err(anyhow!(
+                        "expected 'Canister manifest cannot have both' error but got: {err}"
+                    ));
+                }
+            }
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_manifest_mix_bad_recipe_and_build() -> Result<(), Error> {
+        match serde_yaml::from_str::<CanisterManifest>(r#"
+                name: my-canister
+                recipe:
+                  type: INVALID
+                build:
+                  steps:
+                    - type: pre-built
+                      url: http://example.com/hello_world.wasm
+                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+        "#) {
+            Ok(_) => {
+                return Err(anyhow!(
+                    "You should not be able to have a recipe and build steps at the same time"
+                ));
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Canister manifest cannot have both") {
+                    return Err(anyhow!(
+                        "expected 'Canister manifest cannot have both' error but got: {err}"
+                    ));
+                }
+            }
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_manifest_mix_recipe_and_bad_build() -> Result<(), Error> {
+        match serde_yaml::from_str::<CanisterManifest>(r#"
+                name: my-canister
+                recipe:
+                  type: file://template
+                build:
+                  invalid: INVALID
         "#) {
             Ok(_) => {
                 return Err(anyhow!(

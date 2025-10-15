@@ -151,7 +151,7 @@ async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandEr
     let network = wait_for_network_descriptor(nd).await?;
     let port = network.gateway.port;
     let agent = Agent::builder()
-        .with_url(format!("127.0.0.1:{port}"))
+        .with_url(format!("http://127.0.0.1:{port}"))
         .build()?;
 
     let max_retries = 30;

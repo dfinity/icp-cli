@@ -9,7 +9,10 @@ use icp::{
     fs::read,
 };
 
-use crate::{commands::Context, progress::ProgressManager};
+use crate::{
+    commands::Context,
+    progress::{ProgressManager, ProgressManagerSettings},
+};
 
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -72,7 +75,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new(ctx);
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
     // Iterate through each resolved canister and trigger its build process.
     for (_, (canister_path, c)) in cs {

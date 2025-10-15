@@ -71,17 +71,22 @@ impl RollingLines {
     }
 }
 
+/// Settings for the progress manager
+pub struct ProgressManagerSettings {
+    /// Whether to hide the progress bars
+    pub hidden: bool,
+}
+
 /// Shared progress bar utilities for build and sync commands
 pub struct ProgressManager {
     pub multi_progress: MultiProgress,
 }
 
 impl ProgressManager {
-    pub fn new(ctx: &Context) -> Self {
+    pub fn new(settings: ProgressManagerSettings) -> Self {
         let multi_progress = MultiProgress::new();
 
-        // Disable progress bars in debug mode
-        if ctx.debug {
+        if settings.hidden {
             multi_progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         }
 

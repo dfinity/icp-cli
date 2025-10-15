@@ -54,6 +54,9 @@ pub struct Context {
 
     /// Canister synchronizer
     pub syncer: Arc<dyn Synchronize>,
+
+    /// Whether debug is enabled
+    pub debug: bool,
 }
 
 #[derive(Subcommand, Debug)]

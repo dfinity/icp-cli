@@ -14,7 +14,7 @@ use tracing::debug;
 use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
-    progress::ProgressManager,
+    progress::{ProgressManager, ProgressManagerSettings},
     store_artifact::LookupError as LookupArtifactError,
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -141,7 +141,7 @@ pub async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), CommandError>
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new();
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
     // Get the list of name to canister id for this environment
     // We need this to inject the `PUBLIC_CANISTER_ID:` environment variables

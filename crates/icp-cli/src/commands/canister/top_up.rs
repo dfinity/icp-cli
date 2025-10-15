@@ -123,7 +123,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         amount: cmd.amount,
     })?;
 
-    let _ = ctx.term.write_line(&format!(
+    ctx.term.write_line(&format!(
         "Topped up canister {} with {}T cycles",
         cmd.name,
         BigDecimal::new(cmd.amount.into(), CYCLES_LEDGER_DECIMALS)

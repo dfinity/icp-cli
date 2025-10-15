@@ -77,10 +77,15 @@ pub struct ProgressManager {
 }
 
 impl ProgressManager {
-    pub fn new() -> Self {
-        Self {
-            multi_progress: MultiProgress::new(),
+    pub fn new(ctx: &Context) -> Self {
+        let multi_progress = MultiProgress::new();
+
+        // Disable progress bars in debug mode
+        if ctx.is_debug() {
+            multi_progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         }
+
+        Self { multi_progress }
     }
 
     /// Create a new progress bar with standard configuration
@@ -213,7 +218,7 @@ impl MultiStepProgressBar {
             let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
 
             while let Some(line) = rx.recv().await {
-                debug!(line);
+                debug!("{line}");
 
                 // Update output buffer
                 rolling.push(line.clone());
@@ -244,17 +249,17 @@ impl MultiStepProgressBar {
     }
 
     pub fn dump_output(&self, ctx: &Context) {
-        let _ = ctx.term.write_line(&format!(
+        ctx.term.write_line(&format!(
             "{} output for canister {}:",
             self.output_label, self.canister_name
         ));
         for step_output in self.finished_steps.iter() {
-            let _ = ctx.term.write_line(&step_output.title);
+            ctx.term.write_line(&step_output.title);
             for line in step_output.output.iter() {
-                let _ = ctx.term.write_line(line);
+                ctx.term.write_line(line);
             }
             if step_output.output.is_empty() {
-                let _ = ctx.term.write_line("<no output>");
+                ctx.term.write_line("<no output>");
             }
         }
     }

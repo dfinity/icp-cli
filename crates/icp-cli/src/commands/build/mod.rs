@@ -73,7 +73,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new(&ctx);
+    let progress_manager = ProgressManager::new(ctx);
 
     // Iterate through each resolved canister and trigger its build process.
     for (_, (canister_path, c)) in cs {

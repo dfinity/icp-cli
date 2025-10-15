@@ -1,4 +1,5 @@
 use clap::Parser;
+use tracing::info;
 
 use crate::{
     commands::Context,
@@ -60,7 +61,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         canister: cmd.name.to_owned(),
     })?;
 
-    tracing::info!("{cid} => {}", cmd.name);
+    info!("{cid} => {}", cmd.name);
 
     // TODO(or.ricon): Show canister details
     //  Things we might want to show (do we need to sub-command this?)

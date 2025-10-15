@@ -4,6 +4,7 @@ use icp::{
     manifest,
     network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
 };
+use tracing::info;
 
 use crate::commands::Context;
 
@@ -76,8 +77,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Determine ICP accounts to seed
     let seed_accounts = ids.identities.values().map(|id| id.principal());
 
-    tracing::info!("Project root: {pdir}");
-    tracing::info!("Network root: {ndir}");
+    info!("Project root: {pdir}");
+    info!("Network root: {ndir}");
 
     run_network(
         cfg,           // config

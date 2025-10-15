@@ -3,6 +3,7 @@ use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::CanisterStatusResult;
 use icp::{agent, identity, network};
 use itertools::Itertools;
+use tracing::info;
 
 use crate::{
     commands::Context,
@@ -99,12 +100,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let (result,) = mgmt.canister_status(&cid).await?;
 
     // Info printout
-    print_info(ctx, &result);
+    print_info(&result);
 
     Ok(())
 }
 
-pub fn print_info(_ctx: &Context, result: &CanisterStatusResult) {
+pub fn print_info(result: &CanisterStatusResult) {
     let controllers: Vec<String> = result
         .settings
         .controllers
@@ -113,13 +114,13 @@ pub fn print_info(_ctx: &Context, result: &CanisterStatusResult) {
         .sorted()
         .collect();
 
-    tracing::info!("Controllers: {}", controllers.join(", "));
+    info!("Controllers: {}", controllers.join(", "));
 
     match &result.module_hash {
         Some(hash) => {
             let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-            tracing::info!("Module hash: 0x{hex_string}");
+            info!("Module hash: 0x{hex_string}");
         }
-        None => tracing::info!("Module hash: <none>"),
+        None => info!("Module hash: <none>"),
     }
 }

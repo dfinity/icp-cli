@@ -1,4 +1,5 @@
 use clap::Parser;
+use tracing::info;
 
 use crate::commands::Context;
 
@@ -17,7 +18,7 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 
     // List environments
     for e in &pm.environments {
-        tracing::info!("{e:?}");
+        info!("{e:?}");
     }
 
     Ok(())

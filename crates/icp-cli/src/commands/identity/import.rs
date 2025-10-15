@@ -16,6 +16,7 @@ use pkcs8::{
 };
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu};
+use tracing::info;
 
 use crate::commands::Context;
 
@@ -62,7 +63,7 @@ pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
     } else {
         unreachable!();
     }
-    tracing::info!("Identity \"{}\" created", cmd.name);
+    info!("Identity \"{}\" created", cmd.name);
     Ok(())
 }
 

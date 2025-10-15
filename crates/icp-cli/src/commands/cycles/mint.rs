@@ -14,6 +14,7 @@ use icp_canister_interfaces::{
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
+use tracing::info;
 
 use crate::{
     commands::Context,
@@ -215,9 +216,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // display
     let deposited = BigDecimal::new((minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(), 12);
     let new_balance = BigDecimal::new(minted.balance.into(), 12);
-    tracing::info!(
-        "Minted {deposited} TCYCLES to your account, new balance: {new_balance} TCYCLES."
-    );
+    info!("Minted {deposited} TCYCLES to your account, new balance: {new_balance} TCYCLES.");
 
     Ok(())
 }

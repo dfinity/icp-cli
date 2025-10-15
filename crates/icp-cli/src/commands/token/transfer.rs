@@ -7,6 +7,7 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
+use tracing::info;
 
 use crate::{
     commands::{Context, token::TOKEN_LEDGER_CIDS},
@@ -226,9 +227,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     })?;
 
     // Output information
-    tracing::info!(
-        "Transferred {display_amount} {symbol} to {receiver} in block {idx}"
-    );
+    info!("Transferred {display_amount} {symbol} to {receiver} in block {idx}");
 
     Ok(())
 }

@@ -2,6 +2,7 @@ use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use icp::{agent, identity, network};
+use tracing::info;
 
 use crate::{
     commands::Context,
@@ -102,21 +103,21 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 }
 
 pub fn print_settings(_ctx: &Context, result: &CanisterStatusResult) {
-    tracing::info!("Canister Settings:");
+    info!("Canister Settings:");
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    tracing::info!("  Controllers: {}", controllers.join(", "));
-    tracing::info!("  Compute allocation: {}", settings.compute_allocation);
-    tracing::info!("  Memory allocation: {}", settings.memory_allocation);
-    tracing::info!("  Freezing threshold: {}", settings.freezing_threshold);
+    info!("  Controllers: {}", controllers.join(", "));
+    info!("  Compute allocation: {}", settings.compute_allocation);
+    info!("  Memory allocation: {}", settings.memory_allocation);
+    info!("  Freezing threshold: {}", settings.freezing_threshold);
 
-    tracing::info!(
+    info!(
         "  Reserved cycles limit: {}",
         settings.reserved_cycles_limit
     );
-    tracing::info!("  Wasm memory limit: {}", settings.wasm_memory_limit);
-    tracing::info!(
+    info!("  Wasm memory limit: {}", settings.wasm_memory_limit);
+    info!(
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
     );
@@ -134,16 +135,16 @@ pub fn print_settings(_ctx: &Context, result: &CanisterStatusResult) {
             }
         }
     };
-    tracing::info!("  Log visibility: {log_visibility}");
+    info!("  Log visibility: {log_visibility}");
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
-        tracing::info!("  Environment Variables: N/A");
+        info!("  Environment Variables: N/A");
     } else {
-        tracing::info!("  Environment Variables:");
+        info!("  Environment Variables:");
         for v in &settings.environment_variables {
-            tracing::info!("    Name: {}, Value: {}", v.name, v.value);
+            info!("    Name: {}, Value: {}", v.name, v.value);
         }
     }
 }

@@ -1,4 +1,5 @@
 use clap::Parser;
+use tracing::info;
 
 use crate::commands::Context;
 
@@ -21,7 +22,7 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 
     // List networks
     for (name, cfg) in &p.networks {
-        tracing::info!("{name} => {cfg:?}");
+        info!("{name} => {cfg:?}");
     }
 
     Ok(())

@@ -1,5 +1,6 @@
 use clap::Parser;
 use icp::identity;
+use tracing::info;
 
 use crate::{commands::Context, options::IdentityOpt};
 
@@ -25,7 +26,7 @@ pub async fn exec(ctx: &Context, cmd: PrincipalCmd) -> Result<(), PrincipalError
         .sender()
         .map_err(|message| PrincipalError::Sender { message })?;
 
-    tracing::info!("{principal}");
+    info!("{principal}");
 
     Ok(())
 }

@@ -4,6 +4,7 @@ use clap::Parser;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
 use icrc_ledger_types::icrc1::account::Account;
+use tracing::info;
 
 use crate::{
     commands::{Context, token::TOKEN_LEDGER_CIDS},
@@ -148,7 +149,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     let amount = BigDecimal::from_biguint(balance, decimals);
 
     // Output information
-    tracing::info!("Balance: {amount} {symbol}");
+    info!("Balance: {amount} {symbol}");
 
     Ok(())
 }

@@ -4,6 +4,7 @@ use icp::identity::manifest::{
 };
 use itertools::Itertools;
 use snafu::Snafu;
+use tracing::info;
 
 use crate::commands::Context;
 
@@ -40,9 +41,9 @@ pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
         let principal = id.principal();
         let padded_name = format!("{name: <longest_identity_name_length$}");
         if **name == defaults.default {
-            tracing::info!("* {padded_name} {principal}");
+            info!("* {padded_name} {principal}");
         } else {
-            tracing::info!("  {padded_name} {principal}");
+            info!("  {padded_name} {principal}");
         }
     }
 

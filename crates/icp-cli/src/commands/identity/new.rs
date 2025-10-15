@@ -7,6 +7,7 @@ use icp::identity::{
 };
 use icp::{fs::write, prelude::*};
 use snafu::{ResultExt, Snafu};
+use tracing::info;
 
 #[derive(Debug, Parser)]
 pub struct NewCmd {
@@ -26,10 +27,10 @@ pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
     )?;
     if let Some(out_file) = cmd.output_seed {
         write(&out_file, mnemonic.to_string().as_bytes()).context(WriteSeedFileSnafu)?;
-        tracing::info!("Seed phrase written to file {out_file}");
+        info!("Seed phrase written to file {out_file}");
         Ok(())
     } else {
-        tracing::info!("Your seed phrase: {mnemonic}");
+        info!("Your seed phrase: {mnemonic}");
         Ok(())
     }
 }

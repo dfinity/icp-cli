@@ -4,6 +4,7 @@ use icp::identity::manifest::{
     load_identity_defaults, load_identity_list,
 };
 use snafu::Snafu;
+use tracing::info;
 
 use crate::commands::Context;
 
@@ -29,12 +30,12 @@ pub fn exec(ctx: &Context, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> 
         Some(name) => {
             let list = load_identity_list(&dir)?;
             change_default_identity(&dir, &list, &name)?;
-            tracing::info!("Set default identity to {name}");
+            info!("Set default identity to {name}");
         }
 
         None => {
             let defaults = load_identity_defaults(&dir)?;
-            tracing::info!("{}", defaults.default);
+            info!("{}", defaults.default);
         }
     }
 

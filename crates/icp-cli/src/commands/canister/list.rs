@@ -1,4 +1,5 @@
 use clap::Parser;
+use tracing::info;
 
 use crate::{commands::Context, options::EnvironmentOpt};
 
@@ -30,7 +31,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             })?;
 
     for (_, c) in env.canisters.values() {
-        tracing::info!("{c:?}");
+        info!("{c:?}");
     }
 
     Ok(())

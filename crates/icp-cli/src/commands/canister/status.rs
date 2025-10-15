@@ -2,6 +2,7 @@ use clap::Parser;
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use icp::{agent, identity, network};
+use tracing::info;
 
 use crate::{
     commands::Context,
@@ -98,28 +99,28 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let (result,) = mgmt.canister_status(&cid).await?;
 
     // Status printout
-    print_status(ctx, &result);
+    print_status(&result);
 
     Ok(())
 }
 
-pub fn print_status(_ctx: &Context, result: &CanisterStatusResult) {
-    tracing::info!("Canister Status Report:");
-    tracing::info!("  Status: {:?}", result.status);
+pub fn print_status(result: &CanisterStatusResult) {
+    info!("Canister Status Report:");
+    info!("  Status: {:?}", result.status);
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    tracing::info!("  Controllers: {}", controllers.join(", "));
-    tracing::info!("  Compute allocation: {}", settings.compute_allocation);
-    tracing::info!("  Memory allocation: {}", settings.memory_allocation);
-    tracing::info!("  Freezing threshold: {}", settings.freezing_threshold);
+    info!("  Controllers: {}", controllers.join(", "));
+    info!("  Compute allocation: {}", settings.compute_allocation);
+    info!("  Memory allocation: {}", settings.memory_allocation);
+    info!("  Freezing threshold: {}", settings.freezing_threshold);
 
-    tracing::info!(
+    info!(
         "  Reserved cycles limit: {}",
         settings.reserved_cycles_limit
     );
-    tracing::info!("  Wasm memory limit: {}", settings.wasm_memory_limit);
-    tracing::info!(
+    info!("  Wasm memory limit: {}", settings.wasm_memory_limit);
+    info!(
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
     );
@@ -137,44 +138,44 @@ pub fn print_status(_ctx: &Context, result: &CanisterStatusResult) {
             }
         }
     };
-    tracing::info!("  Log visibility: {log_visibility}");
+    info!("  Log visibility: {log_visibility}");
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
-        tracing::info!("  Environment Variables: N/A");
+        info!("  Environment Variables: N/A");
     } else {
-        tracing::info!("  Environment Variables:");
+        info!("  Environment Variables:");
         for v in &settings.environment_variables {
-            tracing::info!("    Name: {}, Value: {}", v.name, v.value);
+            info!("    Name: {}, Value: {}", v.name, v.value);
         }
     }
 
     match &result.module_hash {
         Some(hash) => {
             let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-            tracing::info!("  Module hash: 0x{hex_string}");
+            info!("  Module hash: 0x{hex_string}");
         }
-        None => tracing::info!("  Module hash: <none>"),
+        None => info!("  Module hash: <none>"),
     }
 
-    tracing::info!("  Memory size: {}", result.memory_size);
-    tracing::info!("  Cycles: {}", result.cycles);
-    tracing::info!("  Reserved cycles: {}", result.reserved_cycles);
-    tracing::info!(
+    info!("  Memory size: {}", result.memory_size);
+    info!("  Cycles: {}", result.cycles);
+    info!("  Reserved cycles: {}", result.reserved_cycles);
+    info!(
         "  Idle cycles burned per day: {}",
         result.idle_cycles_burned_per_day
     );
 
     let stats = &result.query_stats;
-    tracing::info!("  Query stats:");
-    tracing::info!("    Calls: {}", stats.num_calls_total);
-    tracing::info!("    Instructions: {}", stats.num_instructions_total);
-    tracing::info!(
+    info!("  Query stats:");
+    info!("    Calls: {}", stats.num_calls_total);
+    info!("    Instructions: {}", stats.num_instructions_total);
+    info!(
         "    Req payload bytes: {}",
         stats.request_payload_bytes_total
     );
-    tracing::info!(
+    info!(
         "    Res payload bytes: {}",
         stats.response_payload_bytes_total
     );

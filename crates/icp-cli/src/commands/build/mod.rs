@@ -8,7 +8,7 @@ use icp::{
     canister::build::{BuildError, Params},
     fs::read,
 };
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{commands::Context, progress::ProgressManager};
 
@@ -155,7 +155,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // After progress bar is finished, dump the output if build failed
                 if let Err(e) = &result {
                     pb.dump_output();
-                    tracing::error!("Failed to build canister: {e}");
+                    error!("Failed to build canister: {e}");
                 }
 
                 result

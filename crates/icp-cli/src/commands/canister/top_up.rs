@@ -6,6 +6,7 @@ use icp::{agent, identity, network};
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_DECIMALS, CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawError, WithdrawResponse,
 };
+use tracing::info;
 
 use crate::{
     commands::Context,
@@ -123,7 +124,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         amount: cmd.amount,
     })?;
 
-    tracing::info!(
+    info!(
         "Topped up canister {} with {}T cycles",
         cmd.name,
         BigDecimal::new(cmd.amount.into(), CYCLES_LEDGER_DECIMALS)

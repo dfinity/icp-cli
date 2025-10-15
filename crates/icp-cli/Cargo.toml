@@ -19,7 +19,6 @@ candid_parser.workspace = true
 candid.workspace = true
 clap-markdown.workspace = true
 clap.workspace = true
-console.workspace = true
 dialoguer.workspace = true
 elliptic-curve.workspace = true
 futures.workspace = true

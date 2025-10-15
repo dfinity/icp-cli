@@ -97,12 +97,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Get canister settings
     let (result,) = mgmt.canister_status(&cid).await?;
-    print_settings(ctx, &result);
+    print_settings(&result);
 
     Ok(())
 }
 
-pub fn print_settings(_ctx: &Context, result: &CanisterStatusResult) {
+pub fn print_settings(result: &CanisterStatusResult) {
     info!("Canister Settings:");
 
     let settings = &result.settings;

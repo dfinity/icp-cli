@@ -2503,7 +2503,6 @@ dependencies = [
  "candid_parser",
  "clap",
  "clap-markdown",
- "console 0.16.1",
  "dialoguer",
  "elliptic-curve 0.13.8",
  "futures",

@@ -17,7 +17,7 @@ use pkcs8::{
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
@@ -41,28 +41,34 @@ pub struct ImportArgs {
 }
 
 pub async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportCmdError> {
-    if let Some(from_pem) = &args.from_pem {
-        import_from_pem(
-            ctx,
-            &args.name,
-            from_pem,
-            args.decryption_password_from_file.as_deref(),
-            args.assert_key_type.clone(),
-        )?;
-    } else if let Some(path) = &args.from_seed_file {
-        let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase)?;
-    } else if args.read_seed_phrase {
-        let phrase = Password::new()
-            .with_prompt("Enter seed phrase")
-            .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
-            .interact()
-            .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase)?;
-    } else {
-        unreachable!();
+    match &ctx.mode {
+        Mode::Global | Mode::Project(_) => {
+            if let Some(from_pem) = &args.from_pem {
+                import_from_pem(
+                    ctx,
+                    &args.name,
+                    from_pem,
+                    args.decryption_password_from_file.as_deref(),
+                    args.assert_key_type.clone(),
+                )?;
+            } else if let Some(path) = &args.from_seed_file {
+                let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
+                import_from_seed_phrase(ctx, &args.name, &phrase)?;
+            } else if args.read_seed_phrase {
+                let phrase = Password::new()
+                    .with_prompt("Enter seed phrase")
+                    .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
+                    .interact()
+                    .context(ReadSeedPhraseFromTerminalSnafu)?;
+                import_from_seed_phrase(ctx, &args.name, &phrase)?;
+            } else {
+                unreachable!();
+            }
+
+            println!("Identity \"{}\" created", args.name);
+        }
     }
-    println!("Identity \"{}\" created", args.name);
+
     Ok(())
 }
 

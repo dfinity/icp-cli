@@ -9,7 +9,7 @@ use icp::{
     prelude::*,
 };
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
 pub struct NewArgs {
@@ -28,26 +28,30 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandError> {
-    let mnemonic = Mnemonic::new(
-        MnemonicType::for_key_size(256).expect("failed to get mnemonic type"),
-        Language::English,
-    );
+    match &ctx.mode {
+        Mode::Global | Mode::Project(_) => {
+            let mnemonic = Mnemonic::new(
+                MnemonicType::for_key_size(256).expect("failed to get mnemonic type"),
+                Language::English,
+            );
 
-    create_identity(
-        &ctx.dirs.identity(),
-        &args.name,
-        IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
-        CreateFormat::Plaintext,
-    )?;
+            create_identity(
+                &ctx.dirs.identity(),
+                &args.name,
+                IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
+                CreateFormat::Plaintext,
+            )?;
 
-    match &args.output_seed {
-        Some(path) => {
-            write_string(path, mnemonic.as_ref())?;
-            println!("Seed phrase written to file {path}")
-        }
+            match &args.output_seed {
+                Some(path) => {
+                    write_string(path, mnemonic.as_ref())?;
+                    println!("Seed phrase written to file {path}")
+                }
 
-        None => {
-            println!("Your seed phrase: {mnemonic}");
+                None => {
+                    println!("Your seed phrase: {mnemonic}");
+                }
+            }
         }
     }
 

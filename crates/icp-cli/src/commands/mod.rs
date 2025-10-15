@@ -5,7 +5,7 @@ use console::Term;
 use icp::{
     Directories,
     canister::{build::Build, sync::Synchronize},
-    manifest::Locate,
+    prelude::*,
 };
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
@@ -21,42 +21,10 @@ pub mod project;
 pub mod sync;
 pub mod token;
 
-pub struct Context {
-    /// Workspace locator
-    pub workspace: Arc<dyn Locate>,
-
-    /// Terminal for printing messages for the user to see
-    pub term: Term,
-
-    /// Various cli-related directories (cache, configuration, etc).
-    pub dirs: Directories,
-
-    /// Canisters ID Store for lookup and storage
-    pub ids: IdStore,
-
-    /// An artifact store for canister build artifacts
-    pub artifacts: ArtifactStore,
-
-    /// Project loader
-    pub project: Arc<dyn icp::Load>,
-
-    /// Identity loader
-    pub identity: Arc<dyn icp::identity::Load>,
-
-    /// NetworkAccess loader
-    pub network: Arc<dyn icp::network::Access>,
-
-    /// Agent creator
-    pub agent: Arc<dyn icp::agent::Create>,
-
-    /// Canister builder
-    pub builder: Arc<dyn Build>,
-
-    /// Canister synchronizer
-    pub syncer: Arc<dyn Synchronize>,
-
-    /// Whether debug is enabled
-    pub debug: bool,
+#[derive(Debug, PartialEq)]
+pub enum Mode {
+    Global,
+    Project(PathBuf),
 }
 
 #[derive(Subcommand, Debug)]
@@ -98,4 +66,42 @@ pub enum Command {
 
     /// Perform token transactions
     Token(token::Command),
+}
+
+pub struct Context {
+    /// Command exection mode
+    pub mode: Mode,
+
+    /// Terminal for printing messages for the user to see
+    pub term: Term,
+
+    /// Various cli-related directories (cache, configuration, etc).
+    pub dirs: Directories,
+
+    /// Canisters ID Store for lookup and storage
+    pub ids: IdStore,
+
+    /// An artifact store for canister build artifacts
+    pub artifacts: ArtifactStore,
+
+    /// Project loader
+    pub project: Arc<dyn icp::Load>,
+
+    /// Identity loader
+    pub identity: Arc<dyn icp::identity::Load>,
+
+    /// NetworkAccess loader
+    pub network: Arc<dyn icp::network::Access>,
+
+    /// Agent creator
+    pub agent: Arc<dyn icp::agent::Create>,
+
+    /// Canister builder
+    pub builder: Arc<dyn Build>,
+
+    /// Canister synchronizer
+    pub syncer: Arc<dyn Synchronize>,
+
+    /// Whether debug is enabled
+    pub debug: bool,
 }

@@ -194,7 +194,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // After progress bar is finished, dump the output if sync failed
                 if let Err(e) = &result {
-                    pb.dump_output();
+                    pb.dump_output_as_error();
                     error!("Failed to sync canister: {e}");
                 }
 

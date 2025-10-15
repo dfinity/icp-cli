@@ -8,7 +8,7 @@ use icp::{
     canister::build::{BuildError, Params},
     fs::read,
 };
-use tracing::{debug, error};
+use tracing::{debug, debug_span, error};
 
 use crate::{commands::Context, progress::ProgressManager};
 
@@ -85,6 +85,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             let c = c.clone();
 
             async move {
+                let _span = debug_span!("build", canister_name = c.name).entered();
+
                 // Define the build logic
                 let build_result = async {
                     // Create a temporary directory for build artifacts
@@ -100,7 +102,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                         let current_step = i + 1;
                         let pb_hdr =
                             format!("Building: step {current_step} of {step_count} {step}");
-                        debug!("{}", pb_hdr);
+                        debug!("{pb_hdr}");
                         let tx = pb.begin_step(pb_hdr);
 
                         // Perform build step
@@ -154,7 +156,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // After progress bar is finished, dump the output if build failed
                 if let Err(e) = &result {
-                    pb.dump_output();
+                    pb.dump_output_as_error();
                     error!("Failed to build canister: {e}");
                 }
 

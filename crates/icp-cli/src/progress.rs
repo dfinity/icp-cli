@@ -4,7 +4,7 @@ use futures::Future;
 use indicatif::{MultiProgress, ProgressBar as SimpleProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing::{debug, info};
+use tracing::{debug, error};
 
 use crate::commands::Context;
 
@@ -114,7 +114,6 @@ impl ProgressManager {
     ) -> MultiStepProgressBar {
         MultiStepProgressBar {
             progress_bar: self.create_progress_bar(canister_name),
-            canister_name: canister_name.to_string(),
             output_label: output_label.to_string(),
             finished_steps: Vec::new(),
             in_progress: None,
@@ -187,7 +186,6 @@ struct StepInProgress {
 
 pub struct MultiStepProgressBar {
     progress_bar: SimpleProgressBar,
-    canister_name: String,
     output_label: String,
     finished_steps: Vec<StepOutput>,
     in_progress: Option<StepInProgress>,
@@ -206,7 +204,7 @@ impl MultiStepProgressBar {
             let title = title.clone();
 
             move |msg: String| {
-                pb.set_message(format!("\n{title}\n{msg}\n"));
+                pb.set_message(format!("{title}\n{msg}\n"));
             }
         };
 
@@ -218,7 +216,7 @@ impl MultiStepProgressBar {
             let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
 
             while let Some(line) = rx.recv().await {
-                debug!("{}", line);
+                debug!("{line}");
 
                 // Update output buffer
                 rolling.push(line.clone());
@@ -248,18 +246,16 @@ impl MultiStepProgressBar {
         self.finished_steps.push(StepOutput { title, output });
     }
 
-    pub fn dump_output(&self) {
-        info!(
-            "{} output for canister {}:",
-            self.output_label, self.canister_name
-        );
+    pub fn dump_output_as_error(&self) {
+        error!("{} output:", self.output_label,);
         for step_output in self.finished_steps.iter() {
-            info!("{}", step_output.title);
+            error!(""); // just to separate the steps
+            error!("{}", step_output.title);
             for line in step_output.output.iter() {
-                info!("{}", line);
+                error!("  {line}");
             }
             if step_output.output.is_empty() {
-                info!("<no output>");
+                error!("  <no output>");
             }
         }
     }

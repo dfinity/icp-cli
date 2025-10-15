@@ -2,7 +2,7 @@ use std::io::Read;
 
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use indoc::{formatdoc, indoc};
-use predicates::{prelude::PredicateBooleanExt, str::contains};
+use predicates::str::contains;
 
 use crate::common::TestContext;
 use icp::fs::write_string;
@@ -119,23 +119,23 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Build output for canister my-canister:
+        Build output:
 
         Building: step 1 of 3 (script)
         echo "success 1"
-        success 1
+          success 1
 
         Building: step 2 of 3 (script)
         echo "success 2"
-        success 2
+          success 2
 
         Building: step 3 of 3 (script)
         for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1
-        failing build step 1
-        failing build step 2
-        failing build step 3
-        failing build step 4
-        failing build step 5
+          failing build step 1
+          failing build step 2
+          failing build step 3
+          failing build step 4
+          failing build step 5
         Failed to build canister: command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1
     "#};
 
@@ -145,7 +145,7 @@ fn build_adapter_display_failing_build_output() {
         .assert()
         .failure()
         .stdout(contains(expected_output))
-        .stdout(contains("hide this").not());
+        .stderr(contains("Error: One or more canisters failed to build"));
 }
 
 #[test]
@@ -176,15 +176,16 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Build output for canister my-canister:
+        Build output:
 
         Building: step 1 of 2 (script)
         echo "initial step succeeded"
-        initial step succeeded
+          initial step succeeded
 
         Building: step 2 of 2 (pre-built)
         path: /nonexistent/path/to/wasm.wasm, sha: invalid
-        Reading local file: /nonexistent/path/to/wasm.wasm
+          Reading local file: /nonexistent/path/to/wasm.wasm
+        Failed to build canister: failed to read prebuilt canister file
     "#};
 
     ctx.icp()
@@ -193,7 +194,7 @@ fn build_adapter_display_failing_prebuilt_output() {
         .assert()
         .failure()
         .stdout(contains(expected_output))
-        .stdout(contains("Failed to build canister:"));
+        .stderr(contains("Error: One or more canisters failed to build"));
 }
 
 #[test]
@@ -223,15 +224,15 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Build output for canister my-canister:
+        Build output:
 
         Building: step 1 of 2 (script)
         echo "step 1 succeeded"
-        step 1 succeeded
+          step 1 succeeded
 
         Building: step 2 of 2 (script)
         exit 1
-        <no output>
+          <no output>
         Failed to build canister: command 'exit 1' failed with status code 1
     "#};
 
@@ -240,7 +241,8 @@ fn build_adapter_display_failing_build_output_no_output() {
         .args(["build"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stdout(contains(expected_output))
+        .stderr(contains("Error: One or more canisters failed to build"));
 }
 
 #[test]
@@ -277,28 +279,28 @@ fn build_adapter_display_multiple_failing_canisters() {
 
     // Invoke build
     let expected_output_one = indoc! {r#"
-        Build output for canister canister-one:
+        Build output:
 
         Building: step 1 of 2 (script)
         echo "canister-one step 1"
-        canister-one step 1
+          canister-one step 1
 
         Building: step 2 of 2 (script)
         echo "canister-one error"; exit 1
-        canister-one error
+          canister-one error
         Failed to build canister: command 'echo "canister-one error"; exit 1' failed with status code 1
     "#};
 
     let expected_output_two = indoc! {r#"
-        Build output for canister canister-two:
+        Build output:
 
         Building: step 1 of 2 (script)
         echo "canister-two step 1"
-        canister-two step 1
+          canister-two step 1
 
         Building: step 2 of 2 (script)
         echo "canister-two error"; exit 1
-        canister-two error
+          canister-two error
         Failed to build canister: command 'echo "canister-two error"; exit 1' failed with status code 1
     "#};
 
@@ -308,7 +310,8 @@ fn build_adapter_display_multiple_failing_canisters() {
         .assert()
         .failure()
         .stdout(contains(expected_output_one))
-        .stdout(contains(expected_output_two));
+        .stdout(contains(expected_output_two))
+        .stderr(contains("Error: One or more canisters failed to build"));
 }
 
 #[test]
@@ -380,13 +383,15 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
+        Build output:
+
         Building: step 1 of 1 (script)
         echo "command 1"
         echo "command 2"
         echo "command 3"
-        command 1
-        command 2
-        command 3
+          command 1
+          command 2
+          command 3
         Failed to build canister: build did not result in output
     "#};
 

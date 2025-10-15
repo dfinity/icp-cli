@@ -2,12 +2,12 @@ use tracing::{Level, Subscriber};
 use tracing_subscriber::{
     Layer,
     filter::{Filtered, Targets},
-    fmt,
+    fmt::format,
     registry::LookupSpan,
 };
 
 type LoggingLayer<S> = Filtered<
-    fmt::Layer<S, fmt::format::DefaultFields, fmt::format::Format<fmt::format::Compact, ()>>,
+    tracing_subscriber::fmt::Layer<S, format::DefaultFields, format::Format<format::Full, ()>>,
     Targets,
     S,
 >;
@@ -31,9 +31,8 @@ pub fn logging_layer<S: Subscriber + for<'a> LookupSpan<'a>>(is_debug: bool) -> 
         .with_target("icp", level);
 
     tracing_subscriber::fmt::layer()
-        .compact()
         .without_time()
-        .with_level(is_debug) // Show level only in debug mode
-        .with_target(is_debug) // Show target only in debug mode
+        .with_level(is_debug)
+        .with_target(is_debug)
         .with_filter(workspace_targets)
 }

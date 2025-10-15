@@ -66,7 +66,7 @@ fn canister_status() {
         ])
         .assert()
         .success()
-        .stderr(contains("Controllers: 2vxsx-fae").and(contains(
+        .stdout(contains("Controllers: 2vxsx-fae").and(contains(
             "Module hash: 0x17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a",
         )));
 }

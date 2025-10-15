@@ -80,7 +80,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()).not()),
@@ -115,7 +115,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str())),
@@ -152,7 +152,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()).not())
@@ -188,7 +188,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_bob.as_str()).not()),
@@ -225,7 +225,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()))
@@ -263,7 +263,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains(principal_alice.as_str()).not())
@@ -303,7 +303,7 @@ fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("2vxsx-fae").not())
                 .and(contains(principal_alice.as_str()))
@@ -384,7 +384,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Controllers")));
+        .stdout(starts_with("Canister Settings:").and(contains("Log visibility: Controllers")));
 
     // Set log visibility to controllers
     ctx.icp()
@@ -415,7 +415,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(starts_with("Canister Settings:").and(contains("Log visibility: Public")));
+        .stdout(starts_with("Canister Settings:").and(contains("Log visibility: Public")));
 
     // Add log viewer.
     ctx.icp()
@@ -446,7 +446,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str())),
@@ -483,7 +483,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str()).not())
@@ -519,7 +519,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers list is empty")),
         );
@@ -555,7 +555,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str()))
@@ -593,7 +593,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers list is empty")),
         );
@@ -629,7 +629,7 @@ fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Log visibility: Allowed viewers:"))
                 .and(contains(principal_alice.as_str()))
@@ -701,7 +701,7 @@ fn canister_settings_update_miscellaneous() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Compute allocation: 0"))
                 .and(contains("Freezing threshold: 2_592_000"))
@@ -749,7 +749,7 @@ fn canister_settings_update_miscellaneous() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Compute allocation: 1"))
                 .and(contains("Memory allocation: 6_442_450_944"))
@@ -822,7 +822,7 @@ fn canister_settings_update_environment_variables() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Controllers: 2vxsx-fae"))
                 .and(contains("Environment Variables:"))
@@ -860,7 +860,7 @@ fn canister_settings_update_environment_variables() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: var1, Value: value1"))
@@ -898,7 +898,7 @@ fn canister_settings_update_environment_variables() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: var1, Value: value1").not())
@@ -937,7 +937,7 @@ fn canister_settings_update_environment_variables() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Settings:")
                 .and(contains("Environment Variables:"))
                 .and(contains("Name: var2, Value: value2").not())

@@ -124,7 +124,7 @@ fn canister_create_with_settings() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
                 .and(contains("Compute allocation: 1"))
@@ -203,7 +203,7 @@ fn canister_create_with_settings_cmdline_override() {
         ])
         .assert()
         .success()
-        .stderr(
+        .stdout(
             starts_with("Canister Status Report:")
                 .and(contains("Status: Running"))
                 .and(contains("Compute allocation: 2")),

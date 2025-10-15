@@ -76,7 +76,8 @@ pub enum Command {
     Environment(environment::Command),
 
     /// Manage your identities
-    Identity(identity::IdentityCmd),
+    #[command(subcommand)]
+    Identity(identity::Command),
 
     /// Launch and manage local test networks
     Network(network::NetworkCmd),

@@ -15,7 +15,7 @@ pub struct NewCmd {
     output_seed: Option<PathBuf>,
 }
 
-pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
+pub async fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
     let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
     let key = derive_default_key_from_seed(&mnemonic);
     create_identity(

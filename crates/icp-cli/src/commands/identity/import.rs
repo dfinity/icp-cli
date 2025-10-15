@@ -40,7 +40,7 @@ pub struct ImportCmd {
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
-pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
+pub async fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
     if let Some(from_pem) = cmd.from_pem {
         import_from_pem(
             ctx,

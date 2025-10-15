@@ -218,8 +218,13 @@ async fn main() -> Result<(), Error> {
 
         // Cycles
         Command::Cycles(cmd) => match cmd {
-            cycles::Command::Balance(args) => commands::cycles::balance::exec(&ctx, args).await?,
-            cycles::Command::Mint(args) => commands::cycles::mint::exec(&ctx, args).await?,
+            commands::cycles::Command::Balance(args) => {
+                commands::cycles::balance::exec(&ctx, args).await?
+            }
+
+            commands::cycles::Command::Mint(args) => {
+                commands::cycles::mint::exec(&ctx, args).await?
+            }
         },
 
         // Deploy
@@ -227,13 +232,33 @@ async fn main() -> Result<(), Error> {
 
         // Environment
         Command::Environment(cmd) => match cmd {
-            environment::Command::List(args) => {
+            commands::environment::Command::List(args) => {
                 commands::environment::list::exec(&ctx, args).await?
             }
         },
 
         // Identity
-        Command::Identity(opts) => commands::identity::dispatch(&ctx, opts).await?,
+        Command::Identity(cmd) => match cmd {
+            commands::identity::Command::Default(args) => {
+                commands::identity::default::exec(&ctx, args).await?
+            }
+
+            commands::identity::Command::Import(args) => {
+                commands::identity::import::exec(&ctx, args).await?
+            }
+
+            commands::identity::Command::List(args) => {
+                commands::identity::list::exec(&ctx, args).await?
+            }
+
+            commands::identity::Command::New(args) => {
+                commands::identity::new::exec(&ctx, args).await?
+            }
+
+            commands::identity::Command::Principal(args) => {
+                commands::identity::principal::exec(&ctx, args).await?
+            }
+        },
 
         // Network
         Command::Network(opts) => commands::network::dispatch(&ctx, opts).await?,

@@ -21,7 +21,7 @@ pub enum DefaultIdentityError {
     LoadList { source: LoadIdentityManifestError },
 }
 
-pub fn exec(ctx: &Context, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> {
+pub async fn exec(ctx: &Context, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> {
     // Load project directories
     let dir = ctx.dirs.identity();
 

@@ -16,7 +16,7 @@ pub enum ListKeysError {
     LoadIdentity { source: LoadIdentityManifestError },
 }
 
-pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
+pub async fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
     let dir = ctx.dirs.identity();
 
     let list = load_identity_list(&dir)?;

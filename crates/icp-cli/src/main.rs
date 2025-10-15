@@ -2,7 +2,7 @@ use std::{env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::{Context, Subcmd};
+use commands::{Command, Context};
 use console::Term;
 use icp::{
     Directories, agent,
@@ -59,7 +59,7 @@ struct Cli {
     markdown_help: bool,
 
     #[command(subcommand)]
-    command: Option<Subcmd>,
+    command: Option<Command>,
 }
 
 #[tokio::main]
@@ -206,7 +206,37 @@ async fn main() -> Result<(), Error> {
         syncer,
     };
 
-    commands::dispatch(&ctx, command).await?;
+    match command {
+        // Build
+        Command::Build(opts) => commands::build::exec(&ctx, opts).await?,
+
+        // Canister
+        Command::Canister(opts) => commands::canister::dispatch(&ctx, opts).await?,
+
+        // Cycles
+        Command::Cycles(opts) => commands::cycles::exec(&ctx, opts).await?,
+
+        // Deploy
+        Command::Deploy(opts) => commands::deploy::exec(&ctx, opts).await?,
+
+        // Environment
+        Command::Environment(opts) => commands::environment::exec(&ctx, opts).await?,
+
+        // Identity
+        Command::Identity(opts) => commands::identity::dispatch(&ctx, opts).await?,
+
+        // Network
+        Command::Network(opts) => commands::network::dispatch(&ctx, opts).await?,
+
+        // Project
+        Command::Project(opts) => commands::project::dispatch(&ctx, opts).await?,
+
+        // Sync
+        Command::Sync(opts) => commands::sync::exec(&ctx, opts).await?,
+
+        // Token
+        Command::Token(opts) => commands::token::exec(&ctx, opts).await?,
+    }
 
     Ok(())
 }

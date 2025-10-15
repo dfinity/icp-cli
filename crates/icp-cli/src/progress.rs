@@ -218,10 +218,7 @@ impl MultiStepProgressBar {
             let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
 
             while let Some(line) = rx.recv().await {
-                // Only log non-empty lines to avoid cluttering debug output
-                if !line.trim().is_empty() {
-                    debug!("{}", line);
-                }
+                debug!("{}", line);
 
                 // Update output buffer
                 rolling.push(line.clone());

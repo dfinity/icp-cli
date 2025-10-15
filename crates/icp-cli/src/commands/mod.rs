@@ -61,7 +61,7 @@ pub struct Context {
 }
 
 impl Context {
-    /// Print a message to the user.
+    /// Print a message to the user on stdout.
     pub fn println(&self, msg: &str) {
         self.output.println(msg);
     }

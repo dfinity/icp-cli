@@ -42,9 +42,7 @@ impl Output for DebugOutput {
     fn println(&self, msg: &str) {
         // Strip leading/trailing whitespace to avoid empty debug lines
         let msg = msg.trim();
-        if !msg.is_empty() {
-            tracing::debug!("{}", msg);
-        }
+        tracing::debug!("{}", msg);
     }
 
     fn is_debug(&self) -> bool {

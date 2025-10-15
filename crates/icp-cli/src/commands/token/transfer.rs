@@ -226,7 +226,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     })?;
 
     // Output information
-    ctx.term.write_line(&format!(
+    let _ = ctx.term.write_line(&format!(
         "Transferred {display_amount} {symbol} to {receiver} in block {idx}"
     ));
 

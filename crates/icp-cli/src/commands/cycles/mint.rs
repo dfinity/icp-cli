@@ -215,7 +215,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // display
     let deposited = BigDecimal::new((minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(), 12);
     let new_balance = BigDecimal::new(minted.balance.into(), 12);
-    ctx.term.write_line(&format!(
+    let _ = ctx.term.write_line(&format!(
         "Minted {deposited} TCYCLES to your account, new balance: {new_balance} TCYCLES."
     ));
 

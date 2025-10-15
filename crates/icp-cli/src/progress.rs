@@ -81,7 +81,7 @@ impl ProgressManager {
         let multi_progress = MultiProgress::new();
 
         // Disable progress bars in debug mode
-        if ctx.is_debug() {
+        if ctx.debug {
             multi_progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         }
 
@@ -249,17 +249,17 @@ impl MultiStepProgressBar {
     }
 
     pub fn dump_output(&self, ctx: &Context) {
-        ctx.term.write_line(&format!(
+        let _ = ctx.term.write_line(&format!(
             "{} output for canister {}:",
             self.output_label, self.canister_name
         ));
         for step_output in self.finished_steps.iter() {
-            ctx.term.write_line(&step_output.title);
+            let _ = ctx.term.write_line(&step_output.title);
             for line in step_output.output.iter() {
-                ctx.term.write_line(line);
+                let _ = ctx.term.write_line(line);
             }
             if step_output.output.is_empty() {
-                ctx.term.write_line("<no output>");
+                let _ = ctx.term.write_line("<no output>");
             }
         }
     }

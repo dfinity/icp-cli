@@ -148,7 +148,7 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     let amount = BigDecimal::from_biguint(balance, decimals);
 
     // Output information
-    ctx.term.write_line(&format!("Balance: {amount} {symbol}"));
+    let _ = ctx.term.write_line(&format!("Balance: {amount} {symbol}"));
 
     Ok(())
 }

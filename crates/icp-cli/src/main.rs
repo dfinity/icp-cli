@@ -3,6 +3,7 @@ use std::{env::current_dir, sync::Arc};
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::{Context, Subcmd};
+use console::Term;
 use icp::{
     Directories, agent,
     canister::{
@@ -21,7 +22,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    logging::Terminal,
+    logging::TermWriter,
     store_artifact::ArtifactStore,
     store_id::IdStore,
     telemetry::EventLayer,
@@ -85,7 +86,13 @@ async fn main() -> Result<(), Error> {
     };
 
     // Printing for user-facing messages
-    let term = Terminal::new(cli.debug);
+    let term = Term::read_write_pair(
+        std::io::stdin(),
+        TermWriter {
+            debug: cli.debug,
+            writer: Box::new(std::io::stdout()),
+        },
+    );
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
@@ -207,6 +214,7 @@ async fn main() -> Result<(), Error> {
         agent: agent_creator,
         builder,
         syncer,
+        debug: cli.debug,
     };
 
     // Execute the command within a span that includes version and SHA context

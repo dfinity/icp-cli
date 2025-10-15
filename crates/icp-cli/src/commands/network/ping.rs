@@ -8,6 +8,7 @@ use icp::{
     network::{self},
 };
 use tokio::time::sleep;
+use tracing::{debug, info};
 
 use crate::commands::Context;
 
@@ -73,18 +74,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Query
     let status = match cmd.wait_healthy {
         // wait
-        true => ping_until_healthy(ctx, &agent).await?,
+        true => ping_until_healthy(&agent).await?,
 
         // dont wait
         false => agent.status().await?,
     };
 
-    ctx.println(&format!("{status}"));
+    info!("{status}");
 
     Ok(())
 }
 
-async fn ping_until_healthy(ctx: &Context, agent: &Agent) -> Result<Status, CommandError> {
+async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
     let mut retries = 0;
 
     loop {
@@ -104,7 +105,7 @@ async fn ping_until_healthy(ctx: &Context, agent: &Agent) -> Result<Status, Comm
                 return Ok(status);
             }
 
-            ctx.println(&format!("{status}"));
+            debug!("Network not yet healthy: {status}");
         }
 
         if retries >= 60 {

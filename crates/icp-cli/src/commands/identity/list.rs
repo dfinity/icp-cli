@@ -40,9 +40,9 @@ pub fn exec(ctx: &Context, _cmd: ListCmd) -> Result<(), ListKeysError> {
         let principal = id.principal();
         let padded_name = format!("{name: <longest_identity_name_length$}");
         if **name == defaults.default {
-            ctx.println(&format!("* {padded_name} {principal}"));
+            tracing::info!("* {padded_name} {principal}");
         } else {
-            ctx.println(&format!("  {padded_name} {principal}"));
+            tracing::info!("  {padded_name} {principal}");
         }
     }
 

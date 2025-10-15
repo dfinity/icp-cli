@@ -17,7 +17,7 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 
     // List environments
     for e in &pm.environments {
-        ctx.println(&format!("{e:?}"));
+        tracing::info!("{e:?}");
     }
 
     Ok(())

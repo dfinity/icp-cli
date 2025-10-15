@@ -4,7 +4,7 @@ use futures::Future;
 use indicatif::{MultiProgress, ProgressBar as SimpleProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::commands::Context;
 
@@ -81,7 +81,7 @@ impl ProgressManager {
         let multi_progress = MultiProgress::new();
 
         // Disable progress bars in debug mode
-        if ctx.output.is_debug() {
+        if ctx.debug {
             multi_progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         }
 
@@ -248,18 +248,18 @@ impl MultiStepProgressBar {
         self.finished_steps.push(StepOutput { title, output });
     }
 
-    pub fn dump_output(&self, ctx: &Context) {
-        ctx.println(&format!(
+    pub fn dump_output(&self) {
+        info!(
             "{} output for canister {}:",
             self.output_label, self.canister_name
-        ));
+        );
         for step_output in self.finished_steps.iter() {
-            ctx.println(&step_output.title);
+            info!("{}", step_output.title);
             for line in step_output.output.iter() {
-                ctx.println(line);
+                info!("{}", line);
             }
             if step_output.output.is_empty() {
-                ctx.println("<no output>");
+                info!("<no output>");
             }
         }
     }

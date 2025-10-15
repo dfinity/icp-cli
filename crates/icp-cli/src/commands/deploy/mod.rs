@@ -117,7 +117,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Build the selected canisters
-    ctx.println("Building canisters:");
+    tracing::info!("Building canisters:");
     build::exec(
         ctx,
         build::Cmd {
@@ -127,7 +127,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     .await?;
 
     // Create the selected canisters
-    ctx.println("\n\nCreating canisters:");
+    tracing::info!("\n\nCreating canisters:");
     let out = create::exec(
         ctx,
         create::Cmd {
@@ -156,7 +156,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         return Err(err.into());
     }
 
-    ctx.println("\n\nSetting environment variables:");
+    tracing::info!("\n\nSetting environment variables:");
     let out = binding_env_vars::exec(
         ctx,
         binding_env_vars::Cmd {
@@ -174,7 +174,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Install the selected canisters
-    ctx.println("\n\nInstalling canisters:");
+    tracing::info!("\n\nInstalling canisters:");
     let out = install::exec(
         ctx,
         install::Cmd {
@@ -193,7 +193,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     }
 
     // Sync the selected canisters
-    ctx.println("\n\nSyncing canisters:");
+    tracing::info!("\n\nSyncing canisters:");
     let out = sync::exec(
         ctx,
         sync::Cmd {

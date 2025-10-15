@@ -73,7 +73,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new(ctx);
+    let progress_manager = ProgressManager::new(&ctx);
 
     // Iterate through each resolved canister and trigger its build process.
     for (_, (canister_path, c)) in cs {
@@ -154,8 +154,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
                 // After progress bar is finished, dump the output if build failed
                 if let Err(e) = &result {
-                    pb.dump_output(ctx);
-                    ctx.println(&format!("Failed to build canister: {e}"));
+                    pb.dump_output();
+                    tracing::error!("Failed to build canister: {e}");
                 }
 
                 result

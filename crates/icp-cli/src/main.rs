@@ -29,8 +29,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    logging::debug_layer,
-    output::{DebugOutput, Output, TermOutput},
+    logging::logging_layer,
     store_artifact::ArtifactStore,
     store_id::IdStore,
     telemetry::EventLayer,
@@ -40,7 +39,6 @@ use crate::{
 mod commands;
 mod logging;
 mod options;
-mod output;
 mod progress;
 mod store_artifact;
 mod store_id;
@@ -94,36 +92,18 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    // Output handler - choose implementation based on debug flag
-    let output: Arc<dyn Output> = if cli.debug {
-        Arc::new(DebugOutput::new())
-    } else {
-        Arc::new(TermOutput::new())
-    };
-
     // Logging and Telemetry
-    let (debug_layer, event_layer) = (
-        debug_layer(), // debug
-        EventLayer,    // event
+    let reg = Registry::default().with(logging_layer(cli.debug)).with(
+        EventLayer.with_filter(
+            filter::filter_fn(|_| true)
+                //
+                // Only log to telemetry layer if target is `events`
+                .and(filter::filter_fn(move |md| md.target() == "events"))
+                //
+                // Only log to telemetry layer if level if `trace`
+                .and(filter::filter_fn(|md| md.level() == &Level::TRACE)),
+        ),
     );
-
-    let reg = Registry::default()
-        .with(debug_layer.with_filter(
-            //
-            // Only log if `debug` is set
-            filter::filter_fn(move |_| cli.debug),
-        ))
-        .with(
-            event_layer.with_filter(
-                filter::filter_fn(|_| true)
-                    //
-                    // Only log to telemetry layer if target is `events`
-                    .and(filter::filter_fn(move |md| md.target() == "events"))
-                    //
-                    // Only log to telemetry layer if level if `trace`
-                    .and(filter::filter_fn(|md| md.level() == &Level::TRACE)),
-            ),
-        );
 
     // Set the configured subscriber registry as the global default for tracing
     // This enables the logging and telemetry layers we configured above
@@ -213,7 +193,6 @@ async fn main() -> Result<(), Error> {
     // Setup environment
     let ctx = Context {
         workspace: mloc,
-        output,
         dirs,
         ids,
         artifacts,
@@ -223,6 +202,7 @@ async fn main() -> Result<(), Error> {
         agent: agent_creator,
         builder,
         syncer,
+        debug: cli.debug,
     };
 
     // Execute the command within a span that includes version and SHA context

@@ -76,8 +76,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Determine ICP accounts to seed
     let seed_accounts = ids.identities.values().map(|id| id.principal());
 
-    ctx.println(&format!("Project root: {pdir}"));
-    ctx.println(&format!("Network root: {ndir}"));
+    tracing::info!("Project root: {pdir}");
+    tracing::info!("Network root: {ndir}");
 
     run_network(
         cfg,           // config

@@ -60,7 +60,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         canister: cmd.name.to_owned(),
     })?;
 
-    ctx.println(&format!("{cid} => {}", cmd.name));
+    tracing::info!("{cid} => {}", cmd.name);
 
     // TODO(or.ricon): Show canister details
     //  Things we might want to show (do we need to sub-command this?)

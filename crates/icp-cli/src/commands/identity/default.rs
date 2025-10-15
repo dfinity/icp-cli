@@ -29,12 +29,12 @@ pub fn exec(ctx: &Context, cmd: DefaultCmd) -> Result<(), DefaultIdentityError> 
         Some(name) => {
             let list = load_identity_list(&dir)?;
             change_default_identity(&dir, &list, &name)?;
-            ctx.println(&format!("Set default identity to {name}"));
+            tracing::info!("Set default identity to {name}");
         }
 
         None => {
             let defaults = load_identity_defaults(&dir)?;
-            ctx.println(&defaults.default);
+            tracing::info!("{}", defaults.default);
         }
     }
 

@@ -238,7 +238,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new(ctx);
+    let progress_manager = ProgressManager::new(&ctx);
 
     for (_, c) in cs.values() {
         // Create progress bar with standard configuration

@@ -226,9 +226,9 @@ pub async fn exec(ctx: &Context, token: &str, cmd: Cmd) -> Result<(), CommandErr
     })?;
 
     // Output information
-    ctx.println(&format!(
+    tracing::info!(
         "Transferred {display_amount} {symbol} to {receiver} in block {idx}"
-    ));
+    );
 
     Ok(())
 }

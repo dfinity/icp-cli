@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::{
     commands::{canister::CanisterCommandError, network::NetworkCommandError},
-    output::Output,
     store_artifact::ArtifactStore,
     store_id::IdStore,
 };
@@ -28,9 +27,6 @@ mod token;
 pub struct Context {
     /// Workspace locator
     pub workspace: Arc<dyn Locate>,
-
-    /// Output handler for printing messages to the user
-    pub output: Arc<dyn Output>,
 
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Directories,
@@ -58,13 +54,9 @@ pub struct Context {
 
     /// Canister synchronizer
     pub syncer: Arc<dyn Synchronize>,
-}
 
-impl Context {
-    /// Print a message to the user on stdout.
-    pub fn println(&self, msg: &str) {
-        self.output.println(msg);
-    }
+    /// Debug flag
+    pub debug: bool,
 }
 
 #[derive(Parser, Debug)]

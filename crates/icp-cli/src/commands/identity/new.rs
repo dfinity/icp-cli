@@ -26,10 +26,10 @@ pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
     )?;
     if let Some(out_file) = cmd.output_seed {
         write(&out_file, mnemonic.to_string().as_bytes()).context(WriteSeedFileSnafu)?;
-        ctx.println(&format!("Seed phrase written to file {out_file}"));
+        tracing::info!("Seed phrase written to file {out_file}");
         Ok(())
     } else {
-        ctx.println(&format!("Your seed phrase: {mnemonic}"));
+        tracing::info!("Your seed phrase: {mnemonic}");
         Ok(())
     }
 }

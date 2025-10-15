@@ -123,11 +123,11 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         amount: cmd.amount,
     })?;
 
-    ctx.println(&format!(
+    tracing::info!(
         "Topped up canister {} with {}T cycles",
         cmd.name,
         BigDecimal::new(cmd.amount.into(), CYCLES_LEDGER_DECIMALS)
-    ));
+    );
 
     Ok(())
 }

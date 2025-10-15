@@ -101,37 +101,25 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     Ok(())
 }
 
-pub fn print_settings(ctx: &Context, result: &CanisterStatusResult) {
-    ctx.println("Canister Settings:");
+pub fn print_settings(_ctx: &Context, result: &CanisterStatusResult) {
+    tracing::info!("Canister Settings:");
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    ctx.println(&format!("  Controllers: {}", controllers.join(", ")));
-    ctx.println(&format!(
-        "  Compute allocation: {}",
-        settings.compute_allocation
-    ));
-    ctx.println(&format!(
-        "  Memory allocation: {}",
-        settings.memory_allocation
-    ));
-    ctx.println(&format!(
-        "  Freezing threshold: {}",
-        settings.freezing_threshold
-    ));
+    tracing::info!("  Controllers: {}", controllers.join(", "));
+    tracing::info!("  Compute allocation: {}", settings.compute_allocation);
+    tracing::info!("  Memory allocation: {}", settings.memory_allocation);
+    tracing::info!("  Freezing threshold: {}", settings.freezing_threshold);
 
-    ctx.println(&format!(
+    tracing::info!(
         "  Reserved cycles limit: {}",
         settings.reserved_cycles_limit
-    ));
-    ctx.println(&format!(
-        "  Wasm memory limit: {}",
-        settings.wasm_memory_limit
-    ));
-    ctx.println(&format!(
+    );
+    tracing::info!("  Wasm memory limit: {}", settings.wasm_memory_limit);
+    tracing::info!(
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
-    ));
+    );
 
     let log_visibility = match &settings.log_visibility {
         LogVisibility::Controllers => "Controllers".to_string(),
@@ -146,16 +134,16 @@ pub fn print_settings(ctx: &Context, result: &CanisterStatusResult) {
             }
         }
     };
-    ctx.println(&format!("  Log visibility: {log_visibility}"));
+    tracing::info!("  Log visibility: {log_visibility}");
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
-        ctx.println("  Environment Variables: N/A");
+        tracing::info!("  Environment Variables: N/A");
     } else {
-        ctx.println("  Environment Variables:");
+        tracing::info!("  Environment Variables:");
         for v in &settings.environment_variables {
-            ctx.println(&format!("    Name: {}, Value: {}", v.name, v.value));
+            tracing::info!("    Name: {}, Value: {}", v.name, v.value);
         }
     }
 }

@@ -62,7 +62,7 @@ pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
     } else {
         unreachable!();
     }
-    ctx.println(&format!("Identity \"{}\" created", cmd.name));
+    tracing::info!("Identity \"{}\" created", cmd.name);
     Ok(())
 }
 

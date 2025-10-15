@@ -1,9 +1,9 @@
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Seek, Write};
 
 use snafu::prelude::*;
 
 use crate::{
-    fs::{create_dir_all, json},
+    fs::{create_dir_all, json, read_to_string},
     network::{
         config::NetworkDescriptorModel,
         lock::{AcquireWriteLockError, OpenFileForWriteLockError, RwFileLock},
@@ -143,6 +143,46 @@ impl NetworkDirectory {
         }
         Ok(())
     }
+
+    fn open_background_runner_pid_file_for_writelock(
+        &self,
+    ) -> Result<RwFileLock, OpenFileForWriteLockError> {
+        RwFileLock::open_for_write(self.structure.background_network_runner_pid_file())
+    }
+
+    pub fn save_background_network_runner_pid(&self, pid: u32) -> Result<(), SavePidError> {
+        let mut file_lock = self.open_background_runner_pid_file_for_writelock()?;
+        let mut write_guard = file_lock.acquire_write_lock()?;
+
+        // Truncate the file first
+        write_guard.set_len(0).context(TruncatePidFileSnafu {
+            path: self.structure.background_network_runner_pid_file(),
+        })?;
+
+        (*write_guard)
+            .seek(std::io::SeekFrom::Start(0))
+            .context(TruncatePidFileSnafu {
+                path: self.structure.background_network_runner_pid_file(),
+            })?;
+
+        // Write the PID
+        write!(*write_guard, "{}", pid).context(WritePidSnafu {
+            path: self.structure.background_network_runner_pid_file(),
+        })?;
+
+        Ok(())
+    }
+
+    pub fn load_background_network_runner_pid(&self) -> Result<Option<u32>, LoadPidError> {
+        let path = self.structure.background_network_runner_pid_file();
+
+        read_to_string(&path)
+            .map(|content| content.trim().parse::<u32>().ok())
+            .or_else(|err| match err.kind() {
+                ErrorKind::NotFound => Ok(None),
+                _ => Err(err).context(ReadPidSnafu { path: path.clone() }),
+            })
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -170,4 +210,34 @@ pub enum CleanupNetworkDescriptorError {
 
     #[snafu(transparent)]
     AcquireWriteLock { source: AcquireWriteLockError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum SavePidError {
+    #[snafu(transparent)]
+    OpenFileForWriteLock { source: OpenFileForWriteLockError },
+
+    #[snafu(transparent)]
+    AcquireWriteLock { source: AcquireWriteLockError },
+
+    #[snafu(display("failed to truncate PID file at {path}"))]
+    TruncatePidFile {
+        source: std::io::Error,
+        path: PathBuf,
+    },
+
+    #[snafu(display("failed to write PID to {path}"))]
+    WritePid {
+        source: std::io::Error,
+        path: PathBuf,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadPidError {
+    #[snafu(display("failed to read PID from {path}"))]
+    ReadPid {
+        source: crate::fs::Error,
+        path: PathBuf,
+    },
 }

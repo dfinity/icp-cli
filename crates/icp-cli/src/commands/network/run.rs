@@ -1,4 +1,7 @@
-use std::{process::Command, time::Duration};
+use std::{
+    process::{Child, Command},
+    time::Duration,
+};
 
 use clap::Parser;
 use ic_agent::{Agent, AgentError};
@@ -56,6 +59,9 @@ pub enum CommandError {
 
     #[error(transparent)]
     RunNetwork(#[from] RunNetworkError),
+
+    #[error(transparent)]
+    SavePid(#[from] icp::network::SavePidError),
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -102,7 +108,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     eprintln!("Network root: {ndir}");
 
     if cmd.background {
-        run_in_background()?;
+        let child = run_in_background()?;
+        nd.save_background_network_runner_pid(child.id())?;
         wait_for_healthy_network(&nd).await?;
     } else {
         run_network(
@@ -116,7 +123,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn run_in_background() -> Result<(), CommandError> {
+fn run_in_background() -> Result<Child, CommandError> {
     // Background strategy is different; we spawn `dfx` with the same arguments
     // (minus --background), ping and exit.
     let exe = std::env::current_exe().expect("Failed to get current executable.");
@@ -124,9 +131,8 @@ fn run_in_background() -> Result<(), CommandError> {
     // Skip 1 because arg0 is this executable's path.
     cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
         .env(BACKGROUND_ENV_VAR, "true"); // Set the environment variable which will be used by the second start.
-
-    cmd.spawn().expect("Failed to spawn child process.");
-    Ok(())
+    let child = cmd.spawn().expect("Failed to spawn child process.");
+    Ok(child)
 }
 
 async fn retry_with_timeout<F, Fut, T>(mut f: F, max_retries: usize, delay_ms: u64) -> Option<T>

@@ -14,7 +14,7 @@ use icp::{
     prelude::*,
     project,
 };
-use tracing::{Level, subscriber::set_global_default};
+use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
@@ -22,11 +22,15 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer,
-    version::icp_cli_version_str,
+    logging::TermWriter,
+    store_artifact::ArtifactStore,
+    store_id::IdStore,
+    telemetry::EventLayer,
+    version::{git_sha, icp_cli_version_str},
 };
 
 mod commands;
+mod logging;
 mod options;
 mod progress;
 mod store_artifact;
@@ -82,7 +86,13 @@ async fn main() -> Result<(), Error> {
     };
 
     // Printing for user-facing messages
-    let term = Term::stdout();
+    let term = Term::read_write_pair(
+        std::io::stdin(),
+        TermWriter {
+            debug: cli.debug,
+            writer: Box::new(std::io::stdout()),
+        },
+    );
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
@@ -204,9 +214,28 @@ async fn main() -> Result<(), Error> {
         agent: agent_creator,
         builder,
         syncer,
+        debug: cli.debug,
     };
 
-    commands::dispatch(&ctx, command).await?;
+    // Execute the command within a span that includes version and SHA context
+    let trace_span = trace_span!(
+        "icp-cli",
+        version = icp_cli_version_str(),
+        git_sha = git_sha()
+    );
+
+    debug!(
+        version = icp_cli_version_str(),
+        git_sha = git_sha(),
+        command = ?command,
+        "Starting icp-cli"
+    );
+
+    commands::dispatch(&ctx, command)
+        .instrument(trace_span)
+        .await?;
+
+    debug!("Command executed successfully");
 
     Ok(())
 }

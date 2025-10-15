@@ -19,7 +19,7 @@ use rand::seq::IndexedRandom;
 use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
-    progress::ProgressManager,
+    progress::{ProgressManager, ProgressManagerSettings},
     store_id::{Key, LookupError, RegisterError},
 };
 
@@ -238,7 +238,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent operations
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new();
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
     for (_, c) in cs.values() {
         // Create progress bar with standard configuration

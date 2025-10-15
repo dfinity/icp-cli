@@ -80,15 +80,18 @@ pub enum Command {
     Identity(identity::Command),
 
     /// Launch and manage local test networks
-    Network(network::NetworkCmd),
+    #[command(subcommand)]
+    Network(network::Command),
 
     /// Display information about the current project
     #[clap(hide = true)] // TODO: figure out how to structure the commands later
-    Project(project::Cmd),
+    #[command(subcommand)]
+    Project(project::Command),
 
     /// Synchronize canisters in the current environment
     Sync(sync::Cmd),
 
     /// Perform token transactions
-    Token(token::Cmd),
+    #[command(subcommand)]
+    Token(token::Command),
 }

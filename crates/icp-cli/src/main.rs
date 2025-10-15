@@ -22,10 +22,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    commands::{cycles, environment},
-    store_artifact::ArtifactStore,
-    store_id::IdStore,
-    telemetry::EventLayer,
+    store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer,
     version::icp_cli_version_str,
 };
 
@@ -261,16 +258,40 @@ async fn main() -> Result<(), Error> {
         },
 
         // Network
-        Command::Network(opts) => commands::network::dispatch(&ctx, opts).await?,
+        Command::Network(cmd) => match cmd {
+            commands::network::Command::List(args) => {
+                commands::network::list::exec(&ctx, args).await?
+            }
+
+            commands::network::Command::Ping(args) => {
+                commands::network::ping::exec(&ctx, args).await?
+            }
+
+            commands::network::Command::Run(args) => {
+                commands::network::run::exec(&ctx, args).await?
+            }
+        },
 
         // Project
-        Command::Project(opts) => commands::project::dispatch(&ctx, opts).await?,
+        Command::Project(cmd) => match cmd {
+            commands::project::Command::Show(args) => {
+                commands::project::show::exec(&ctx, args).await?
+            }
+        },
 
         // Sync
-        Command::Sync(opts) => commands::sync::exec(&ctx, opts).await?,
+        Command::Sync(args) => commands::sync::exec(&ctx, args).await?,
 
         // Token
-        Command::Token(opts) => commands::token::exec(&ctx, opts).await?,
+        Command::Token(cmd) => match cmd {
+            commands::token::Command::Balance(args) => {
+                commands::token::balance::exec(&ctx, args).await?
+            }
+
+            commands::token::Command::Transfer(args) => {
+                commands::token::transfer::exec(&ctx, args).await?
+            }
+        },
     }
 
     Ok(())

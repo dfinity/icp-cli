@@ -77,10 +77,15 @@ pub struct ProgressManager {
 }
 
 impl ProgressManager {
-    pub fn new() -> Self {
-        Self {
-            multi_progress: MultiProgress::new(),
+    pub fn new(ctx: &Context) -> Self {
+        let multi_progress = MultiProgress::new();
+
+        // Disable progress bars in debug mode
+        if ctx.output.is_debug() {
+            multi_progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         }
+
+        Self { multi_progress }
     }
 
     /// Create a new progress bar with standard configuration
@@ -201,7 +206,7 @@ impl MultiStepProgressBar {
             let title = title.clone();
 
             move |msg: String| {
-                pb.set_message(format!("{title}\n{msg}\n"));
+                pb.set_message(format!("\n{title}\n{msg}\n"));
             }
         };
 
@@ -213,7 +218,10 @@ impl MultiStepProgressBar {
             let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
 
             while let Some(line) = rx.recv().await {
-                debug!(line);
+                // Only log non-empty lines to avoid cluttering debug output
+                if !line.trim().is_empty() {
+                    debug!("{}", line);
+                }
 
                 // Update output buffer
                 rolling.push(line.clone());
@@ -244,17 +252,17 @@ impl MultiStepProgressBar {
     }
 
     pub fn dump_output(&self, ctx: &Context) {
-        let _ = ctx.term.write_line(&format!(
+        ctx.println(&format!(
             "{} output for canister {}:",
             self.output_label, self.canister_name
         ));
         for step_output in self.finished_steps.iter() {
-            let _ = ctx.term.write_line(&step_output.title);
+            ctx.println(&step_output.title);
             for line in step_output.output.iter() {
-                let _ = ctx.term.write_line(line);
+                ctx.println(line);
             }
             if step_output.output.is_empty() {
-                let _ = ctx.term.write_line("<no output>");
+                ctx.println("<no output>");
             }
         }
     }

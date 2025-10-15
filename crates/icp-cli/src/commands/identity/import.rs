@@ -62,7 +62,7 @@ pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
     } else {
         unreachable!();
     }
-    println!("Identity \"{}\" created", cmd.name);
+    ctx.println(&format!("Identity \"{}\" created", cmd.name));
     Ok(())
 }
 

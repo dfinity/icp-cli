@@ -98,31 +98,43 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let (result,) = mgmt.canister_status(&cid).await?;
 
     // Status printout
-    print_status(&result);
+    print_status(ctx, &result);
 
     Ok(())
 }
 
-pub fn print_status(result: &CanisterStatusResult) {
-    eprintln!("Canister Status Report:");
-    eprintln!("  Status: {:?}", result.status);
+pub fn print_status(ctx: &Context, result: &CanisterStatusResult) {
+    ctx.println("Canister Status Report:");
+    ctx.println(&format!("  Status: {:?}", result.status));
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    eprintln!("  Controllers: {}", controllers.join(", "));
-    eprintln!("  Compute allocation: {}", settings.compute_allocation);
-    eprintln!("  Memory allocation: {}", settings.memory_allocation);
-    eprintln!("  Freezing threshold: {}", settings.freezing_threshold);
+    ctx.println(&format!("  Controllers: {}", controllers.join(", ")));
+    ctx.println(&format!(
+        "  Compute allocation: {}",
+        settings.compute_allocation
+    ));
+    ctx.println(&format!(
+        "  Memory allocation: {}",
+        settings.memory_allocation
+    ));
+    ctx.println(&format!(
+        "  Freezing threshold: {}",
+        settings.freezing_threshold
+    ));
 
-    eprintln!(
+    ctx.println(&format!(
         "  Reserved cycles limit: {}",
         settings.reserved_cycles_limit
-    );
-    eprintln!("  Wasm memory limit: {}", settings.wasm_memory_limit);
-    eprintln!(
+    ));
+    ctx.println(&format!(
+        "  Wasm memory limit: {}",
+        settings.wasm_memory_limit
+    ));
+    ctx.println(&format!(
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
-    );
+    ));
 
     let log_visibility = match &settings.log_visibility {
         LogVisibility::Controllers => "Controllers".to_string(),
@@ -137,45 +149,48 @@ pub fn print_status(result: &CanisterStatusResult) {
             }
         }
     };
-    eprintln!("  Log visibility: {log_visibility}");
+    ctx.println(&format!("  Log visibility: {log_visibility}"));
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
-        eprintln!("  Environment Variables: N/A",);
+        ctx.println("  Environment Variables: N/A");
     } else {
-        eprintln!("  Environment Variables:");
+        ctx.println("  Environment Variables:");
         for v in &settings.environment_variables {
-            eprintln!("    Name: {}, Value: {}", v.name, v.value);
+            ctx.println(&format!("    Name: {}, Value: {}", v.name, v.value));
         }
     }
 
     match &result.module_hash {
         Some(hash) => {
             let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-            eprintln!("  Module hash: 0x{hex_string}");
+            ctx.println(&format!("  Module hash: 0x{hex_string}"));
         }
-        None => eprintln!("  Module hash: <none>"),
+        None => ctx.println("  Module hash: <none>"),
     }
 
-    eprintln!("  Memory size: {}", result.memory_size);
-    eprintln!("  Cycles: {}", result.cycles);
-    eprintln!("  Reserved cycles: {}", result.reserved_cycles);
-    eprintln!(
+    ctx.println(&format!("  Memory size: {}", result.memory_size));
+    ctx.println(&format!("  Cycles: {}", result.cycles));
+    ctx.println(&format!("  Reserved cycles: {}", result.reserved_cycles));
+    ctx.println(&format!(
         "  Idle cycles burned per day: {}",
         result.idle_cycles_burned_per_day
-    );
+    ));
 
     let stats = &result.query_stats;
-    eprintln!("  Query stats:");
-    eprintln!("    Calls: {}", stats.num_calls_total);
-    eprintln!("    Instructions: {}", stats.num_instructions_total);
-    eprintln!(
+    ctx.println("  Query stats:");
+    ctx.println(&format!("    Calls: {}", stats.num_calls_total));
+    ctx.println(&format!(
+        "    Instructions: {}",
+        stats.num_instructions_total
+    ));
+    ctx.println(&format!(
         "    Req payload bytes: {}",
         stats.request_payload_bytes_total
-    );
-    eprintln!(
+    ));
+    ctx.println(&format!(
         "    Res payload bytes: {}",
         stats.response_payload_bytes_total
-    );
+    ));
 }

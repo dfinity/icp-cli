@@ -96,30 +96,42 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Get canister settings
     let (result,) = mgmt.canister_status(&cid).await?;
-    print_settings(&result);
+    print_settings(ctx, &result);
 
     Ok(())
 }
 
-pub fn print_settings(result: &CanisterStatusResult) {
-    eprintln!("Canister Settings:");
+pub fn print_settings(ctx: &Context, result: &CanisterStatusResult) {
+    ctx.println("Canister Settings:");
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    eprintln!("  Controllers: {}", controllers.join(", "));
-    eprintln!("  Compute allocation: {}", settings.compute_allocation);
-    eprintln!("  Memory allocation: {}", settings.memory_allocation);
-    eprintln!("  Freezing threshold: {}", settings.freezing_threshold);
+    ctx.println(&format!("  Controllers: {}", controllers.join(", ")));
+    ctx.println(&format!(
+        "  Compute allocation: {}",
+        settings.compute_allocation
+    ));
+    ctx.println(&format!(
+        "  Memory allocation: {}",
+        settings.memory_allocation
+    ));
+    ctx.println(&format!(
+        "  Freezing threshold: {}",
+        settings.freezing_threshold
+    ));
 
-    eprintln!(
+    ctx.println(&format!(
         "  Reserved cycles limit: {}",
         settings.reserved_cycles_limit
-    );
-    eprintln!("  Wasm memory limit: {}", settings.wasm_memory_limit);
-    eprintln!(
+    ));
+    ctx.println(&format!(
+        "  Wasm memory limit: {}",
+        settings.wasm_memory_limit
+    ));
+    ctx.println(&format!(
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
-    );
+    ));
 
     let log_visibility = match &settings.log_visibility {
         LogVisibility::Controllers => "Controllers".to_string(),
@@ -134,16 +146,16 @@ pub fn print_settings(result: &CanisterStatusResult) {
             }
         }
     };
-    eprintln!("  Log visibility: {log_visibility}");
+    ctx.println(&format!("  Log visibility: {log_visibility}"));
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
-        eprintln!("  Environment Variables: N/A",);
+        ctx.println("  Environment Variables: N/A");
     } else {
-        eprintln!("  Environment Variables:");
+        ctx.println("  Environment Variables:");
         for v in &settings.environment_variables {
-            eprintln!("    Name: {}, Value: {}", v.name, v.value);
+            ctx.println(&format!("    Name: {}, Value: {}", v.name, v.value));
         }
     }
 }

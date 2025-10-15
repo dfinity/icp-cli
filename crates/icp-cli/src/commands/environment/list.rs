@@ -17,7 +17,7 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 
     // List environments
     for e in &pm.environments {
-        let _ = ctx.term.write_line(&format!("{e:?}"));
+        ctx.println(&format!("{e:?}"));
     }
 
     Ok(())

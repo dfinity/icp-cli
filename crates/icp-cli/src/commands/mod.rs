@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use crate::{
     commands::{canister::CanisterCommandError, network::NetworkCommandError},
+    output::Output,
     store_artifact::ArtifactStore,
     store_id::IdStore,
 };
 use clap::{Parser, Subcommand};
-use console::Term;
 use icp::{
     Directories,
     canister::{build::Build, sync::Synchronize},
@@ -29,8 +29,8 @@ pub struct Context {
     /// Workspace locator
     pub workspace: Arc<dyn Locate>,
 
-    /// Terminal for printing messages for the user to see
-    pub term: Term,
+    /// Output handler for printing messages to the user
+    pub output: Arc<dyn Output>,
 
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Directories,
@@ -58,6 +58,13 @@ pub struct Context {
 
     /// Canister synchronizer
     pub syncer: Arc<dyn Synchronize>,
+}
+
+impl Context {
+    /// Print a message to the user.
+    pub fn println(&self, msg: &str) {
+        self.output.println(msg);
+    }
 }
 
 #[derive(Parser, Debug)]

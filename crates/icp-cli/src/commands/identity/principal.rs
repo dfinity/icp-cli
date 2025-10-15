@@ -25,7 +25,7 @@ pub async fn exec(ctx: &Context, cmd: PrincipalCmd) -> Result<(), PrincipalError
         .sender()
         .map_err(|message| PrincipalError::Sender { message })?;
 
-    println!("{principal}");
+    ctx.println(&format!("{principal}"));
 
     Ok(())
 }

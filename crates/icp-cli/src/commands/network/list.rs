@@ -21,7 +21,7 @@ pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
 
     // List networks
     for (name, cfg) in &p.networks {
-        eprintln!("{name} => {cfg:?}");
+        ctx.println(&format!("{name} => {cfg:?}"));
     }
 
     Ok(())

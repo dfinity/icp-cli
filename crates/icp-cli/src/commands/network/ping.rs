@@ -73,18 +73,18 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Query
     let status = match cmd.wait_healthy {
         // wait
-        true => ping_until_healthy(&agent).await?,
+        true => ping_until_healthy(ctx, &agent).await?,
 
         // dont wait
         false => agent.status().await?,
     };
 
-    println!("{status}");
+    ctx.println(&format!("{status}"));
 
     Ok(())
 }
 
-async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
+async fn ping_until_healthy(ctx: &Context, agent: &Agent) -> Result<Status, CommandError> {
     let mut retries = 0;
 
     loop {
@@ -104,7 +104,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
                 return Ok(status);
             }
 
-            eprintln!("{status}");
+            ctx.println(&format!("{status}"));
         }
 
         if retries >= 60 {

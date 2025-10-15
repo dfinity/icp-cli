@@ -3,7 +3,6 @@ use std::{collections::HashMap, env::current_dir, sync::Arc};
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::{Context, Subcmd};
-use console::Term;
 use icp::{
     Directories, agent,
     canister::{
@@ -31,6 +30,7 @@ use tracing_subscriber::{
 
 use crate::{
     logging::debug_layer,
+    output::{DebugOutput, Output, TermOutput},
     store_artifact::ArtifactStore,
     store_id::IdStore,
     telemetry::EventLayer,
@@ -40,6 +40,7 @@ use crate::{
 mod commands;
 mod logging;
 mod options;
+mod output;
 mod progress;
 mod store_artifact;
 mod store_id;
@@ -93,8 +94,12 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    // Printing for user-facing messages
-    let term = Term::stdout();
+    // Output handler - choose implementation based on debug flag
+    let output: Arc<dyn Output> = if cli.debug {
+        Arc::new(DebugOutput::new())
+    } else {
+        Arc::new(TermOutput::new())
+    };
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
@@ -208,7 +213,7 @@ async fn main() -> Result<(), Error> {
     // Setup environment
     let ctx = Context {
         workspace: mloc,
-        term,
+        output,
         dirs,
         ids,
         artifacts,

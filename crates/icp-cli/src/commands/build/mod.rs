@@ -8,6 +8,7 @@ use icp::{
     canister::build::{BuildError, Params},
     fs::read,
 };
+use tracing::debug;
 
 use crate::{commands::Context, progress::ProgressManager};
 
@@ -72,7 +73,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister builds
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new();
+    let progress_manager = ProgressManager::new(ctx);
 
     // Iterate through each resolved canister and trigger its build process.
     for (_, (canister_path, c)) in cs {
@@ -98,7 +99,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                         // Indicate to user the current step being executed
                         let current_step = i + 1;
                         let pb_hdr =
-                            format!("\nBuilding: step {current_step} of {step_count} {step}");
+                            format!("Building: step {current_step} of {step_count} {step}");
+                        debug!("{}", pb_hdr);
                         let tx = pb.begin_step(pb_hdr);
 
                         // Perform build step
@@ -153,9 +155,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // After progress bar is finished, dump the output if build failed
                 if let Err(e) = &result {
                     pb.dump_output(ctx);
-                    let _ = ctx
-                        .term
-                        .write_line(&format!("Failed to build canister: {e}"));
+                    ctx.println(&format!("Failed to build canister: {e}"));
                 }
 
                 result

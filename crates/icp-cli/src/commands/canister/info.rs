@@ -99,12 +99,12 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     let (result,) = mgmt.canister_status(&cid).await?;
 
     // Info printout
-    print_info(&result);
+    print_info(ctx, &result);
 
     Ok(())
 }
 
-pub fn print_info(result: &CanisterStatusResult) {
+pub fn print_info(ctx: &Context, result: &CanisterStatusResult) {
     let controllers: Vec<String> = result
         .settings
         .controllers
@@ -113,13 +113,13 @@ pub fn print_info(result: &CanisterStatusResult) {
         .sorted()
         .collect();
 
-    eprintln!("Controllers: {}", controllers.join(", "));
+    ctx.println(&format!("Controllers: {}", controllers.join(", ")));
 
     match &result.module_hash {
         Some(hash) => {
             let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-            eprintln!("Module hash: 0x{hex_string}");
+            ctx.println(&format!("Module hash: 0x{hex_string}"));
         }
-        None => eprintln!("Module hash: <none>"),
+        None => ctx.println("Module hash: <none>"),
     }
 }

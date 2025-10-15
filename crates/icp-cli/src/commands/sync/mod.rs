@@ -126,7 +126,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Prepare a futures set for concurrent canister syncs
     let mut futs = FuturesOrdered::new();
 
-    let progress_manager = ProgressManager::new();
+    let progress_manager = ProgressManager::new(ctx);
 
     // Iterate through each resolved canister and trigger its sync process.
     for (_, (canister_path, c)) in cs {
@@ -194,9 +194,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
                 // After progress bar is finished, dump the output if sync failed
                 if let Err(e) = &result {
                     pb.dump_output(ctx);
-                    let _ = ctx
-                        .term
-                        .write_line(&format!("Failed to sync canister: {e}"));
+                    ctx.println(&format!("Failed to sync canister: {e}"));
                 }
 
                 result

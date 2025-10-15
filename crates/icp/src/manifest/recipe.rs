@@ -69,45 +69,6 @@ impl<'de> Deserialize<'de> for RecipeType {
     }
 }
 
-// impl From<String> for RecipeType {
-//     fn from(value: String) -> Self {
-//         let v = value.as_str();
-// 
-//         if v.starts_with("file://") {
-//             let path = v.strip_prefix("file://").expect("prefix missing").into();
-// 
-//             return Self::File(path);
-//         }
-// 
-//         if v.starts_with("http://") || v.starts_with("https://") {
-//             return Self::Url(v.to_owned());
-//         }
-// 
-//         if v.starts_with("@") {
-//             let recipe_type = v.strip_prefix("@").expect("prefix missing");
-// 
-//             // Check for version delimiter
-//             let (v, version) = if recipe_type.contains("@") {
-//                 // Version is specified
-//                 recipe_type.rsplit_once("@").expect("delimiter missing")
-//             } else {
-//                 // Assume latest
-//                 (recipe_type, "latest")
-//             };
-// 
-//             let (registry, recipe) = v.split_once("/").expect("delimiter missing");
-// 
-//             return Self::Registry {
-//                 name: registry.to_owned(),
-//                 recipe: recipe.to_owned(),
-//                 version: version.to_owned(),
-//             };
-//         }
-// 
-//         panic!("Unable to convert {value} into a valid recipe type.")
-//     }
-// }
-
 impl From<RecipeType> for String {
     fn from(value: RecipeType) -> Self {
         match value {

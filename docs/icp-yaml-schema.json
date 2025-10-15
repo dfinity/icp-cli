@@ -160,42 +160,60 @@
       "type": "object"
     },
     "Instructions": {
-      "anyOf": [
+      "oneOf": [
         {
+          "additionalProperties": false,
           "properties": {
-            "recipe": {
-              "$ref": "#/definitions/Recipe"
+            "Recipe": {
+              "properties": {
+                "recipe": {
+                  "$ref": "#/definitions/Recipe"
+                }
+              },
+              "required": [
+                "recipe"
+              ],
+              "type": "object"
             }
           },
           "required": [
-            "recipe"
+            "Recipe"
           ],
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
-            "build": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Steps"
+            "BuildSync": {
+              "properties": {
+                "build": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Steps"
+                    }
+                  ],
+                  "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+                },
+                "sync": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Steps2"
+                    }
+                  ],
+                  "default": {
+                    "steps": []
+                  },
+                  "description": "The configuration specifying how to sync the canister"
                 }
-              ],
-              "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
-            },
-            "sync": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Steps2"
-                }
-              ],
-              "default": {
-                "steps": []
               },
-              "description": "The configuration specifying how to sync the canister"
+              "required": [
+                "build"
+              ],
+              "type": "object"
             }
           },
           "required": [
-            "build"
+            "BuildSync"
           ],
           "type": "object"
         }
@@ -296,12 +314,52 @@
         {
           "additionalProperties": false,
           "properties": {
-            "unknown": {
+            "file": {
               "type": "string"
             }
           },
           "required": [
-            "unknown"
+            "file"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "registry": {
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "recipe": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "recipe",
+                "version"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "registry"
           ],
           "type": "object"
         }

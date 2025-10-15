@@ -22,12 +22,13 @@ pub enum Command {
     Info(info::InfoArgs),
     Install(install::InstallArgs),
     List(list::ListArgs),
+
+    #[command(subcommand)]
+    Settings(settings::Command),
+
     Show(show::ShowArgs),
     Start(start::StartArgs),
     Status(status::StatusArgs),
     Stop(stop::StopArgs),
     TopUp(top_up::TopUpArgs),
-
-    #[command(subcommand)]
-    Settings(settings::Command),
 }

@@ -1,9 +1,7 @@
 canister:
   name: my-canister
   recipe:
-    type: motoko
+    type: file://recipe.hb.yaml
     configuration:
-      # entry point file (defaults to main.mo)
       main: src/main.mo
-      # additional Motoko compiler flags
       flags: --ai-errors

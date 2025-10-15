@@ -43,6 +43,7 @@ rand.workspace = true
 reqwest.workspace = true
 sec1.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 serde.workspace = true
 snafu.workspace = true
 thiserror.workspace = true

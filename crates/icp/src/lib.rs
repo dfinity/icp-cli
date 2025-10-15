@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Context;
 use async_trait::async_trait;
 pub use directories::{Directories, DirectoriesError};
+use serde::Serialize;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -26,7 +27,7 @@ fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Canister {
     pub name: String,
 
@@ -41,20 +42,20 @@ pub struct Canister {
     pub sync: sync::Steps,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Network {
     pub name: String,
     pub configuration: Configuration,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Environment {
     pub name: String,
     pub network: Network,
     pub canisters: HashMap<String, (PathBuf, Canister)>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub canisters: HashMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,

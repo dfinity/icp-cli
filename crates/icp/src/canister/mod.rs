@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 use async_trait::async_trait;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{LoadPath, fs::read, manifest::CanisterManifest, prelude::*};
 
@@ -15,7 +15,7 @@ pub mod script;
 pub mod sync;
 
 /// Canister settings, such as compute and memory allocation.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
     pub compute_allocation: Option<u64>,

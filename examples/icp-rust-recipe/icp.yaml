@@ -1,7 +1,11 @@
 canister:
   name: my-canister
   recipe:
-    type: rust
+    type: file://recipe.hb.yaml
     configuration:
       # cargo package for canister (required field)
       package: icp-canister
+      shrink: true
+      metadata:
+        - name: "crate:version"
+          value: 1.0.0

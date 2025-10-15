@@ -48,15 +48,15 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ###### **Subcommands:**
 
-* `build` — 
-* `canister` — 
-* `cycles` — 
-* `deploy` — 
-* `environment` — 
-* `identity` — 
-* `network` — 
-* `sync` — 
-* `token` — 
+* `build` — Build a project
+* `canister` — Perform canister operations against a network
+* `cycles` — Mint and manage cycles
+* `deploy` — Deploy a project to an environment
+* `environment` — Show information about the current project environments
+* `identity` — Manage your identities
+* `network` — Launch and manage local test networks
+* `sync` — Synchronize canisters in the current environment
+* `token` — Perform token transactions
 
 ###### **Options:**
 
@@ -75,6 +75,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli build`
 
+Build a project
+
 **Usage:** `icp-cli build [NAMES]...`
 
 ###### **Arguments:**
@@ -84,6 +86,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 
 ## `icp-cli canister`
+
+Perform canister operations against a network
 
 **Usage:** `icp-cli canister <COMMAND>`
 
@@ -353,6 +357,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli cycles`
 
+Mint and manage cycles
+
 **Usage:** `icp-cli cycles <COMMAND>`
 
 ###### **Subcommands:**
@@ -390,6 +396,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli deploy`
 
+Deploy a project to an environment
+
 **Usage:** `icp-cli deploy [OPTIONS] [NAMES]...`
 
 ###### **Arguments:**
@@ -417,6 +425,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli environment`
 
+Show information about the current project environments
+
 **Usage:** `icp-cli environment <COMMAND>`
 
 ###### **Subcommands:**
@@ -432,6 +442,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 
 ## `icp-cli identity`
+
+Manage your identities
 
 **Usage:** `icp-cli identity <COMMAND>`
 
@@ -505,6 +517,8 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli network`
 
+Launch and manage local test networks
+
 **Usage:** `icp-cli network <COMMAND>`
 
 ###### **Subcommands:**
@@ -557,6 +571,8 @@ Run a given network
 
 ## `icp-cli sync`
 
+Synchronize canisters in the current environment
+
 **Usage:** `icp-cli sync [OPTIONS] [NAMES]...`
 
 ###### **Arguments:**
@@ -572,6 +588,8 @@ Run a given network
 
 
 ## `icp-cli token`
+
+Perform token transactions
 
 **Usage:** `icp-cli token [TOKEN] <COMMAND>`
 

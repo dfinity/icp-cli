@@ -1,7 +1,6 @@
 canister:
   name: my-canister
   recipe:
-    type: motoko
+    type: file://recipe.hb.yaml
     configuration:
-      # main motoko entry point (defaults to main.mo)
       entry: src/main.mo

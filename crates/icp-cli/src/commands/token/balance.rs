@@ -12,9 +12,6 @@ use crate::{
 
 #[derive(Args, Clone, Debug)]
 pub struct BalanceArgs {
-    #[arg(default_value = "icp")]
-    pub token: String,
-
     #[command(flatten)]
     pub identity: IdentityOpt,
 
@@ -54,7 +51,7 @@ pub enum CommandError {
 /// The balance is checked against a ledger canister. Support two user flows:
 /// (1) Specifying token name, and checking against known or stored mappings
 /// (2) Specifying compatible ledger canister id
-pub async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, token: &str, args: &BalanceArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
@@ -80,13 +77,13 @@ pub async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), CommandError>
     }
 
     // Obtain ledger address
-    let cid = match TOKEN_LEDGER_CIDS.get(&args.token) {
+    let cid = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
         Some(cid) => cid.to_string(),
 
         // Given token is not known, indicating it's either already a canister id
         // or is simply a name of a token we do not know of
-        None => args.token.to_string(),
+        None => token.to_string(),
     };
 
     // Parse the canister id

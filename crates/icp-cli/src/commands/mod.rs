@@ -94,6 +94,5 @@ pub enum Command {
     Sync(sync::SyncArgs),
 
     /// Perform token transactions
-    #[command(subcommand)]
     Token(token::Command),
 }

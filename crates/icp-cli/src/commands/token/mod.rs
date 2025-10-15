@@ -1,4 +1,4 @@
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
 use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_LEDGER_CID};
 use phf::phf_map;
 
@@ -17,8 +17,17 @@ static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
     "cycles" => CYCLES_LEDGER_CID,
 };
 
-#[derive(Subcommand, Debug)]
-pub enum Command {
+#[derive(Debug, Parser)]
+pub struct Command {
+    #[arg(default_value = "icp")]
+    pub token: String,
+
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Commands {
     Balance(balance::BalanceArgs),
     Transfer(transfer::TransferArgs),
 }

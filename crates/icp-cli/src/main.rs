@@ -337,13 +337,13 @@ async fn main() -> Result<(), Error> {
         Command::Sync(args) => commands::sync::exec(&ctx, &args).await?,
 
         // Token
-        Command::Token(cmd) => match cmd {
-            commands::token::Command::Balance(args) => {
-                commands::token::balance::exec(&ctx, &args).await?
+        Command::Token(cmd) => match cmd.command {
+            commands::token::Commands::Balance(args) => {
+                commands::token::balance::exec(&ctx, &cmd.token, &args).await?
             }
 
-            commands::token::Command::Transfer(args) => {
-                commands::token::transfer::exec(&ctx, &args).await?
+            commands::token::Commands::Transfer(args) => {
+                commands::token::transfer::exec(&ctx, &cmd.token, &args).await?
             }
         },
     }

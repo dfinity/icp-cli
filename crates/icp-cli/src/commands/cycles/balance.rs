@@ -7,7 +7,7 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, args: &token::balance::BalanceArgs) -> Result<(), CommandError> {
-    let mut args = args.to_owned();
-    args.token = "cycles".to_string();
-    token::balance::exec(ctx, &args).await.map_err(Into::into)
+    token::balance::exec(ctx, "cycles", args)
+        .await
+        .map_err(Into::into)
 }

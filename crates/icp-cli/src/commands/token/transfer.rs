@@ -15,9 +15,6 @@ use crate::{
 
 #[derive(Debug, Args)]
 pub struct TransferArgs {
-    #[arg(default_value = "icp")]
-    pub token: String,
-
     /// Token amount to transfer
     pub amount: BigDecimal,
 
@@ -71,7 +68,7 @@ pub enum CommandError {
     },
 }
 
-pub async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, token: &str, args: &TransferArgs) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
@@ -97,13 +94,13 @@ pub async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), CommandError
     }
 
     // Obtain ledger address
-    let cid = match TOKEN_LEDGER_CIDS.get(&args.token) {
+    let cid = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
         Some(cid) => cid.to_string(),
 
         // Given token is not known, indicating it's either already a canister id
         // or is simply a name of a token we do not know of
-        None => args.token.to_string(),
+        None => token.to_string(),
     };
 
     // Parse the canister id

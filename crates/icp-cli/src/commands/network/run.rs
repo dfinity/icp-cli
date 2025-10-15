@@ -5,7 +5,7 @@ use icp::{
     network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
 };
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 /// Run a given network
 #[derive(Args, Debug)]
@@ -37,55 +37,60 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
+        }
 
-    // Obtain network configuration
-    let network = p.networks.get(&args.name).ok_or(CommandError::Network {
-        name: args.name.to_owned(),
-    })?;
+        Mode::Project(pdir) => {
+            // Load project
+            let p = ctx.project.load().await?;
 
-    let cfg = match &network.configuration {
-        // Locally-managed network
-        Configuration::Managed(cfg) => cfg,
-
-        // Non-managed networks cannot be started
-        Configuration::Connected(_) => {
-            return Err(CommandError::Unmanaged {
+            // Obtain network configuration
+            let network = p.networks.get(&args.name).ok_or(CommandError::Network {
                 name: args.name.to_owned(),
-            });
+            })?;
+
+            let cfg = match &network.configuration {
+                // Locally-managed network
+                Configuration::Managed(cfg) => cfg,
+
+                // Non-managed networks cannot be started
+                Configuration::Connected(_) => {
+                    return Err(CommandError::Unmanaged {
+                        name: args.name.to_owned(),
+                    });
+                }
+            };
+
+            // Network root
+            let ndir = pdir.join(".icp").join("networks").join(&network.name);
+
+            // Network directory
+            let nd = NetworkDirectory::new(
+                &network.name,               // name
+                &ndir,                       // network_root
+                &ctx.dirs.port_descriptor(), // port_descriptor_dir
+            );
+
+            // Identities
+            let ids = load_identity_list(&ctx.dirs.identity())?;
+
+            // Determine ICP accounts to seed
+            let seed_accounts = ids.identities.values().map(|id| id.principal());
+
+            eprintln!("Project root: {pdir}");
+            eprintln!("Network root: {ndir}");
+
+            run_network(
+                cfg,           // config
+                nd,            // nd
+                pdir,          // project_root
+                seed_accounts, // seed_accounts
+            )
+            .await?;
         }
     };
-
-    // Project root
-    let pdir = ctx.workspace.locate()?;
-
-    // Network root
-    let ndir = pdir.join(".icp").join("networks").join(&network.name);
-
-    // Network directory
-    let nd = NetworkDirectory::new(
-        &network.name,               // name
-        &ndir,                       // network_root
-        &ctx.dirs.port_descriptor(), // port_descriptor_dir
-    );
-
-    // Identities
-    let ids = load_identity_list(&ctx.dirs.identity())?;
-
-    // Determine ICP accounts to seed
-    let seed_accounts = ids.identities.values().map(|id| id.principal());
-
-    eprintln!("Project root: {pdir}");
-    eprintln!("Network root: {ndir}");
-
-    run_network(
-        cfg,           // config
-        nd,            // nd
-        &pdir,         // project_root
-        seed_accounts, // seed_accounts
-    )
-    .await?;
 
     Ok(())
 }

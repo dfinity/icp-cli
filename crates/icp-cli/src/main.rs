@@ -10,7 +10,9 @@ use icp::{
         self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
         script::Script, sync::Syncer,
     },
-    identity, manifest, network,
+    identity,
+    manifest::{self, Locate, LocateError},
+    network,
     prelude::*,
     project,
 };
@@ -22,6 +24,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
+    commands::Mode,
     logging::TermWriter,
     store_artifact::ArtifactStore,
     store_id::IdStore,
@@ -149,6 +152,18 @@ async fn main() -> Result<(), Error> {
         cli.project_dir,            // dir
     ));
 
+    // Infer execution mode
+    let mode = match mloc.locate() {
+        // Project
+        Ok(dir) => Mode::Project(dir),
+
+        // Global
+        Err(LocateError::NotFound(_)) => Mode::Global,
+
+        // Failure
+        Err(LocateError::Unexpected(err)) => panic!("{err}"),
+    };
+
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
 
@@ -203,7 +218,7 @@ async fn main() -> Result<(), Error> {
 
     // Setup environment
     let ctx = Context {
-        workspace: mloc,
+        mode,
         term,
         dirs,
         ids,

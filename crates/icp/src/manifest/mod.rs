@@ -70,7 +70,7 @@ impl Default for Environments {
 #[derive(Debug, thiserror::Error)]
 pub enum LocateError {
     #[error("project manifest not found in {0}")]
-    NoManifest(PathBuf),
+    NotFound(PathBuf),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -99,7 +99,7 @@ impl Locate for Locator {
         // Specified path
         if let Some(dir) = &self.dir {
             if !dir.join(PROJECT_MANIFEST).exists() {
-                return Err(LocateError::NoManifest(dir.to_owned()));
+                return Err(LocateError::NotFound(dir.to_owned()));
             }
 
             return Ok(dir.to_owned());
@@ -115,7 +115,7 @@ impl Locate for Locator {
                     continue;
                 }
 
-                return Err(LocateError::NoManifest(self.cwd.to_owned()));
+                return Err(LocateError::NotFound(self.cwd.to_owned()));
             }
 
             return Ok(dir);

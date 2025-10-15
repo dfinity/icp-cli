@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
 pub struct ListArgs;
@@ -12,12 +12,20 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), CommandError> {
-    // Load project
-    let pm = ctx.project.load().await?;
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
+        }
 
-    // List environments
-    for e in &pm.environments {
-        let _ = ctx.term.write_line(&format!("{e:?}"));
+        Mode::Project(_) => {
+            // Load project
+            let pm = ctx.project.load().await?;
+
+            // List environments
+            for e in &pm.environments {
+                let _ = ctx.term.write_line(&format!("{e:?}"));
+            }
+        }
     }
 
     Ok(())

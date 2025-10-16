@@ -3,16 +3,27 @@ use std::{collections::HashMap, fmt::Display};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+/// Represents the accepted values for a recipe type in
+/// the canister manifets
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase", from = "String")]
 pub enum RecipeType {
+    /// path to a locally defined recipe
     File(String),
 
+    /// url to a remote recipe
     Url(String),
 
+    /// A recipe hosted in a known registry
+    /// in yaml, the format is "@<registry>/<recipe>@<version>"
     Registry {
+        /// the name of registry
         name: String,
+
+        /// the name of the recipe
         recipe: String,
+
+        /// the version of the recipe, deserializes to `latest` when not provided
         version: String,
     },
 }

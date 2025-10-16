@@ -1,6 +1,6 @@
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
-use clap::Parser;
+use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
 use icp_canister_interfaces::cycles_ledger::{
@@ -8,13 +8,13 @@ use icp_canister_interfaces::cycles_ledger::{
 };
 
 use crate::{
-    commands::Context,
+    commands::{Context, Mode},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError},
 };
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct TopUpArgs {
     /// The name of the canister within the current project
     pub name: String,
 
@@ -65,69 +65,76 @@ pub enum CommandError {
     Withdraw { err: WithdrawError, amount: u128 },
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
+pub async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
+        }
 
-    // Load identity
-    let id = ctx.identity.load(cmd.identity.clone().into()).await?;
+        Mode::Project(_) => {
+            // Load project
+            let p = ctx.project.load().await?;
 
-    // Load target environment
-    let env =
-        p.environments
-            .get(cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
+            // Load identity
+            let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Load target environment
+            let env = p.environments.get(args.environment.name()).ok_or(
+                CommandError::EnvironmentNotFound {
+                    name: args.environment.name().to_owned(),
+                },
+            )?;
+
+            // Access network
+            let access = ctx.network.access(&env.network).await?;
+
+            // Agent
+            let agent = ctx.agent.create(id, &access.url).await?;
+
+            if let Some(k) = access.root_key {
+                agent.set_root_key(k);
+            }
+
+            // Ensure canister is included in the environment
+            if !env.canisters.contains_key(&args.name) {
+                return Err(CommandError::EnvironmentCanister {
+                    environment: env.name.to_owned(),
+                    canister: args.name.to_owned(),
+                });
+            }
+
+            // Lookup the canister id
+            let cid = ctx.ids.lookup(&Key {
+                network: env.network.name.to_owned(),
+                environment: env.name.to_owned(),
+                canister: args.name.to_owned(),
             })?;
 
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+            let cargs = WithdrawArgs {
+                amount: Nat::from(args.amount),
+                from_subaccount: None,
+                to: cid,
+                created_at_time: None,
+            };
 
-    // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
+            let bs = agent
+                .update(&CYCLES_LEDGER_PRINCIPAL, "withdraw")
+                .with_arg(Encode!(&cargs)?)
+                .call_and_wait()
+                .await?;
 
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
+            Decode!(&bs, WithdrawResponse)?.map_err(|err| CommandError::Withdraw {
+                err,
+                amount: args.amount,
+            })?;
+
+            let _ = ctx.term.write_line(&format!(
+                "Topped up canister {} with {}T cycles",
+                args.name,
+                BigDecimal::new(args.amount.into(), CYCLES_LEDGER_DECIMALS)
+            ));
+        }
     }
-
-    // Ensure canister is included in the environment
-    if !env.canisters.contains_key(&cmd.name) {
-        return Err(CommandError::EnvironmentCanister {
-            environment: env.name.to_owned(),
-            canister: cmd.name.to_owned(),
-        });
-    }
-
-    // Lookup the canister id
-    let cid = ctx.ids.lookup(&Key {
-        network: env.network.name.to_owned(),
-        environment: env.name.to_owned(),
-        canister: cmd.name.to_owned(),
-    })?;
-
-    let args = WithdrawArgs {
-        amount: Nat::from(cmd.amount),
-        from_subaccount: None,
-        to: cid,
-        created_at_time: None,
-    };
-
-    let bs = agent
-        .update(&CYCLES_LEDGER_PRINCIPAL, "withdraw")
-        .with_arg(Encode!(&args)?)
-        .call_and_wait()
-        .await?;
-
-    Decode!(&bs, WithdrawResponse)?.map_err(|err| CommandError::Withdraw {
-        err,
-        amount: cmd.amount,
-    })?;
-
-    let _ = ctx.term.write_line(&format!(
-        "Topped up canister {} with {}T cycles",
-        cmd.name,
-        BigDecimal::new(cmd.amount.into(), CYCLES_LEDGER_DECIMALS)
-    ));
 
     Ok(())
 }

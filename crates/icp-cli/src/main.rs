@@ -2,7 +2,7 @@ use std::{env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::{Context, Subcmd};
+use commands::{Command, Context};
 use console::Term;
 use icp::{
     Directories, agent,
@@ -10,11 +10,13 @@ use icp::{
         self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
         script::Script, sync::Syncer,
     },
-    identity, manifest, network,
+    identity,
+    manifest::{self, Locate, LocateError},
+    network,
     prelude::*,
     project,
 };
-use tracing::{Level, subscriber::set_global_default};
+use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
@@ -22,11 +24,16 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    store_artifact::ArtifactStore, store_id::IdStore, telemetry::EventLayer,
-    version::icp_cli_version_str,
+    commands::Mode,
+    logging::TermWriter,
+    store_artifact::ArtifactStore,
+    store_id::IdStore,
+    telemetry::EventLayer,
+    version::{git_sha, icp_cli_version_str},
 };
 
 mod commands;
+mod logging;
 mod options;
 mod progress;
 mod store_artifact;
@@ -59,7 +66,7 @@ struct Cli {
     markdown_help: bool,
 
     #[command(subcommand)]
-    command: Option<Subcmd>,
+    command: Option<Command>,
 }
 
 #[tokio::main]
@@ -82,7 +89,13 @@ async fn main() -> Result<(), Error> {
     };
 
     // Printing for user-facing messages
-    let term = Term::stdout();
+    let term = Term::read_write_pair(
+        std::io::stdin(),
+        TermWriter {
+            debug: cli.debug,
+            writer: Box::new(std::io::stdout()),
+        },
+    );
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
@@ -139,6 +152,18 @@ async fn main() -> Result<(), Error> {
         cli.project_dir,            // dir
     ));
 
+    // Infer execution mode
+    let mode = match mloc.locate() {
+        // Project
+        Ok(dir) => Mode::Project(dir),
+
+        // Global
+        Err(LocateError::NotFound(_)) => Mode::Global,
+
+        // Failure
+        Err(LocateError::Unexpected(err)) => panic!("{err}"),
+    };
+
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
 
@@ -193,7 +218,7 @@ async fn main() -> Result<(), Error> {
 
     // Setup environment
     let ctx = Context {
-        workspace: mloc,
+        mode,
         term,
         dirs,
         ids,
@@ -204,9 +229,232 @@ async fn main() -> Result<(), Error> {
         agent: agent_creator,
         builder,
         syncer,
+        debug: cli.debug,
     };
 
-    commands::dispatch(&ctx, command).await?;
+    // Execute the command within a span that includes version and SHA context
+    let trace_span = trace_span!(
+        "icp-cli",
+        version = icp_cli_version_str(),
+        git_sha = git_sha()
+    );
+
+    debug!(
+        version = icp_cli_version_str(),
+        git_sha = git_sha(),
+        command = ?command,
+        "Starting icp-cli"
+    );
+
+    match command {
+        // Build
+        Command::Build(args) => {
+            commands::build::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
+
+        // Canister
+        Command::Canister(cmd) => match cmd {
+            commands::canister::Command::Call(args) => {
+                commands::canister::call::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Create(args) => {
+                commands::canister::create::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Delete(args) => {
+                commands::canister::delete::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Info(args) => {
+                commands::canister::info::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Install(args) => {
+                commands::canister::install::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::List(args) => {
+                commands::canister::list::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Settings(cmd) => match cmd {
+                commands::canister::settings::Command::Show(args) => {
+                    commands::canister::settings::show::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::settings::Command::Update(args) => {
+                    commands::canister::settings::update::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+            },
+
+            commands::canister::Command::Show(args) => {
+                commands::canister::show::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Start(args) => {
+                commands::canister::start::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Status(args) => {
+                commands::canister::status::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::Stop(args) => {
+                commands::canister::stop::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::canister::Command::TopUp(args) => {
+                commands::canister::top_up::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+
+        // Cycles
+        Command::Cycles(cmd) => match cmd {
+            commands::cycles::Command::Balance(args) => {
+                commands::cycles::balance::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::cycles::Command::Mint(args) => {
+                commands::cycles::mint::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+
+        // Deploy
+        Command::Deploy(args) => {
+            commands::deploy::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
+
+        // Environment
+        Command::Environment(cmd) => match cmd {
+            commands::environment::Command::List(args) => {
+                commands::environment::list::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+
+        // Identity
+        Command::Identity(cmd) => match cmd {
+            commands::identity::Command::Default(args) => {
+                commands::identity::default::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::identity::Command::Import(args) => {
+                commands::identity::import::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::identity::Command::List(args) => {
+                commands::identity::list::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::identity::Command::New(args) => {
+                commands::identity::new::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::identity::Command::Principal(args) => {
+                commands::identity::principal::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+
+        // Network
+        Command::Network(cmd) => match cmd {
+            commands::network::Command::List(args) => {
+                commands::network::list::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::network::Command::Ping(args) => {
+                commands::network::ping::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::network::Command::Run(args) => {
+                commands::network::run::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+
+        // Project
+        Command::Project(cmd) => match cmd {
+            commands::project::Command::Show(args) => {
+                commands::project::show::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+
+        // Sync
+        Command::Sync(args) => {
+            commands::sync::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
+
+        // Token
+        Command::Token(cmd) => match cmd.command {
+            commands::token::Commands::Balance(args) => {
+                commands::token::balance::exec(&ctx, &cmd.token, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::token::Commands::Transfer(args) => {
+                commands::token::transfer::exec(&ctx, &cmd.token, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+        },
+    }
+
+    debug!("Command executed successfully");
 
     Ok(())
 }

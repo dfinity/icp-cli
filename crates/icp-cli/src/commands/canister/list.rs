@@ -1,9 +1,12 @@
-use clap::Parser;
+use clap::Args;
 
-use crate::{commands::Context, options::EnvironmentOpt};
+use crate::{
+    commands::{Context, Mode},
+    options::EnvironmentOpt,
+};
 
-#[derive(Debug, Parser)]
-pub struct Cmd {
+#[derive(Debug, Args)]
+pub struct ListArgs {
     #[command(flatten)]
     pub environment: EnvironmentOpt,
 }
@@ -17,20 +20,27 @@ pub enum CommandError {
     EnvironmentNotFound { name: String },
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
+pub async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
+        }
 
-    // Load target environment
-    let env =
-        p.environments
-            .get(cmd.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: cmd.environment.name().to_owned(),
-            })?;
+        Mode::Project(_) => {
+            // Load project
+            let p = ctx.project.load().await?;
 
-    for (_, c) in env.canisters.values() {
-        let _ = ctx.term.write_line(&format!("{c:?}"));
+            // Load target environment
+            let env = p.environments.get(args.environment.name()).ok_or(
+                CommandError::EnvironmentNotFound {
+                    name: args.environment.name().to_owned(),
+                },
+            )?;
+
+            for (_, c) in env.canisters.values() {
+                let _ = ctx.term.write_line(&format!("{c:?}"));
+            }
+        }
     }
 
     Ok(())

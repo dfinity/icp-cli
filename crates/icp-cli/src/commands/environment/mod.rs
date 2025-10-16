@@ -1,31 +1,8 @@
-use clap::{Parser, Subcommand};
-use snafu::Snafu;
+use clap::Subcommand;
 
-mod list;
-
-use crate::commands::Context;
-
-#[derive(Parser, Debug)]
-pub struct Cmd {
-    #[command(subcommand)]
-    subcmd: Subcmd,
-}
+pub(crate) mod list;
 
 #[derive(Subcommand, Debug)]
-pub enum Subcmd {
-    List(list::Cmd),
-}
-
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    match cmd.subcmd {
-        Subcmd::List(cmd) => list::exec(ctx, cmd).await?,
-    }
-
-    Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    List { source: list::CommandError },
+pub enum Command {
+    List(list::ListArgs),
 }

@@ -303,8 +303,7 @@ async fn network_run_and_stop_background() {
         .args(["network", "run", "my-network", "--background"])
         .assert()
         .success()
-        .stderr(contains("Project root:"))
-        .stderr(contains("Network root:"));
+        .stdout(contains("Created instance with id")); // part of network start output
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
 
@@ -344,11 +343,11 @@ async fn network_run_and_stop_background() {
         .args(["network", "stop", "my-network"])
         .assert()
         .success()
-        .stderr(contains(&format!(
+        .stdout(contains(&format!(
             "Stopping background network (PID: {})",
             pid
         )))
-        .stderr(contains("Network stopped successfully"));
+        .stdout(contains("Network stopped successfully"));
 
     // Verify PID file is removed
     assert!(

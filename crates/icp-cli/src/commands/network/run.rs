@@ -1,6 +1,10 @@
 use std::{
     io::{BufRead, BufReader},
     process::{Child, Command, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::Duration,
 };
@@ -117,7 +121,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         nd.save_background_network_runner_pid(child.id())?;
 
         // Relay stdout/stderr from child to parent until network is healthy
-        relay_child_output_until_healthy(&mut child, &nd).await?;
+        relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
 
         // Explicitly forget the child handle so parent doesn't wait for it
         std::mem::forget(child);
@@ -162,36 +166,48 @@ async fn relay_child_output_until_healthy(
     child: &mut Child,
     nd: &NetworkDirectory,
 ) -> Result<(), CommandError> {
-    // Take stdout and stderr from the child
     let stdout = child.stdout.take().expect("Failed to take child stdout");
     let stderr = child.stderr.take().expect("Failed to take child stderr");
-    let term = ctx.term.clone();
+
+    // Use atomic bool to signal threads to stop
+    let should_stop = Arc::new(AtomicBool::new(false));
 
     // Spawn threads to relay output
+    let term = ctx.term.clone();
+    let should_stop_clone = Arc::clone(&should_stop);
     let stdout_thread = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
+            if should_stop_clone.load(Ordering::Relaxed) {
+                break;
+            }
             if let Ok(line) = line {
-                let _ = term.write_line(&line); // stdout -> stdout
+                let _ = term.write_line(&line);
             }
         }
     });
 
     let term = ctx.term.clone();
+    let should_stop_clone = Arc::clone(&should_stop);
     let stderr_thread = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
+            if should_stop_clone.load(Ordering::Relaxed) {
+                break;
+            }
             if let Ok(line) = line {
-                let _ = term.write_line(&line); // stderr -> stderr
+                let _ = term.write_line(&line);
             }
         }
     });
 
-    // Wait for network to become healthy
     wait_for_healthy_network(nd).await?;
 
-    // Note: We don't join the threads - they'll continue running until the pipes close
-    // or we can just let them be orphaned since the parent is about to exit
+    // Signal threads to stop
+    should_stop.store(true, Ordering::Relaxed);
+
+    // Don't join the threads - they're likely blocked on I/O waiting for the next line.
+    // They'll terminate naturally when the parent process exits and the pipes close, or when the next line arrives.
     drop(stdout_thread);
     drop(stderr_thread);
 

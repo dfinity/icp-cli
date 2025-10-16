@@ -51,8 +51,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
             type Value = CanisterManifest;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter
-                    .write_str("a canister manifest with name and optional settings/instructions")
+                formatter.write_str("a canister manifest with a name, optional settings and either a recipe or build instructions")
             }
 
             // We're going to build the canister manifest manually

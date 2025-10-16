@@ -102,77 +102,75 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 let has_build = temp_map.contains_key(&build_key);
                 let has_sync = temp_map.contains_key(&sync_key);
 
-                // Validate that we don't have conflicting or missing sections
-                if has_recipe && has_build {
-                    return Err(Error::custom(format!(
-                        "Canister {name} cannot have both a `recipe` and a `build` section"
-                    )));
+                match (has_recipe, has_build, has_sync) {
+                    (true, true, _) => {
+                        // Can't have a recipe and a build
+                        Err(Error::custom(format!(
+                            "Canister {name} cannot have both a `recipe` and a `build` section"
+                        )))
+                    },
+                    (true, false, true) => {
+                        // Can't have a recipe and a sync sections
+                        Err(Error::custom(format!(
+                            "Canister {name} cannot have both a `recipe` and a `sync` section"
+                        )))
+                    },
+                    (false, false, _) => {
+                        // We must have recipe or build
+                        Err(Error::custom(format!(
+                            "Canister {name} must have a `recipe` or a `build` section"
+                        )))
+                    },
+                    (true, false, false) => {
+                        // We have a a recipe
+                        let recipe: Recipe = serde_yaml::from_value(
+                            temp_map
+                                .get(&recipe_key)
+                                .ok_or_else(|| Error::custom("recipe field not found"))?
+                                .clone(),
+                        )
+                        .map_err(|e| {
+                            Error::custom(format!("Canister {name} failed to parse recipe: {}", e))
+                        })?;
+
+                        Ok(CanisterManifest {
+                            name,
+                            settings,
+                            instructions: Instructions::Recipe { recipe },
+                        })
+
+                    },
+                    (false, true, _) => {
+                        // We have a build section
+
+                        // Try to deserialize as BuildSync variant
+                        #[derive(Deserialize)]
+                        struct BuildSyncHelper {
+                            build: build::Steps,
+                            #[serde(default)]
+                            sync: sync::Steps,
+                        }
+
+                        let helper: BuildSyncHelper = serde_yaml::from_value(
+                            serde_yaml::Value::Mapping(temp_map),
+                        )
+                        .map_err(|e| {
+                            Error::custom(format!(
+                                "Canister {name} failed to parse build/sync instructions: {}",
+                                e
+                            ))
+                        })?;
+
+                        Ok(CanisterManifest {
+                            name,
+                            settings,
+                            instructions: Instructions::BuildSync {
+                                build: helper.build,
+                                sync: helper.sync,
+                            },
+                        })
+                    },
                 }
-
-                if has_recipe && has_sync {
-                    return Err(Error::custom(format!(
-                        "Canister {name} cannot have both a `recipe` and a `sync` section"
-                    )));
-                }
-
-                if !has_recipe && !has_build {
-                    return Err(Error::custom(format!(
-                        "Canister {name} must have a `recipe` or a `build` section"
-                    )));
-                }
-
-                // Try to parse the instructions
-
-                if has_recipe {
-                    let recipe: Recipe = serde_yaml::from_value(
-                        temp_map
-                            .get(&recipe_key)
-                            .ok_or_else(|| Error::custom("recipe field not found"))?
-                            .clone(),
-                    )
-                    .map_err(|e| {
-                        Error::custom(format!("Canister {name} failed to parse recipe: {}", e))
-                    })?;
-                    return Ok(CanisterManifest {
-                        name,
-                        settings,
-                        instructions: Instructions::Recipe { recipe },
-                    });
-                }
-
-                if has_build {
-                    // Try to deserialize as BuildSync variant
-                    #[derive(Deserialize)]
-                    struct BuildSyncHelper {
-                        build: build::Steps,
-                        #[serde(default)]
-                        sync: sync::Steps,
-                    }
-
-                    let helper: BuildSyncHelper = serde_yaml::from_value(
-                        serde_yaml::Value::Mapping(temp_map),
-                    )
-                    .map_err(|e| {
-                        Error::custom(format!(
-                            "Canister {name} failed to parse build/sync instructions: {}",
-                            e
-                        ))
-                    })?;
-
-                    return Ok(CanisterManifest {
-                        name,
-                        settings,
-                        instructions: Instructions::BuildSync {
-                            build: helper.build,
-                            sync: helper.sync,
-                        },
-                    });
-                }
-
-                // Should be unreachable
-                Err(Error::custom(
-                    "Canister {name} unknown error parsing manifest",
-                ))
             }
         }
 

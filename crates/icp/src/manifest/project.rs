@@ -154,10 +154,11 @@ mod tests {
     use std::collections::HashMap;
 
     use anyhow::{Error, anyhow};
+    use indoc::indoc;
 
     use crate::{
         canister::{Settings, build, sync},
-        manifest::{canister::Instructions, environment::CanisterSelection},
+        manifest::{adapter::script, canister::Instructions, environment::CanisterSelection},
         network::Configuration,
     };
 
@@ -180,20 +181,26 @@ mod tests {
     #[test]
     fn canister() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 canister:
                   name: my-canister
                   build:
-                    steps: []
-                "#
-            )?,
+                    steps:
+                      - type: script
+                        command: dosomething.sh
+            "#})?,
             ProjectManifest {
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
-                        build: build::Steps { steps: vec![] },
+                        build: build::Steps {
+                            steps: vec![build::Step::Script(script::Adapter {
+                                command: script::CommandField::Command(
+                                    "dosomething.sh".to_string()
+                                )
+                            })]
+                        },
                         sync: sync::Steps { steps: vec![] },
                     },
                 })],
@@ -206,22 +213,56 @@ mod tests {
     }
 
     #[test]
+    fn project_with_invalid_canister_should_fail() -> Result<(), Error> {
+        // This canister is invalid because
+        match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
+            canister:
+              name: my-canister
+              build:
+                steps: []
+        "#})
+        {
+            Ok(_) => {
+                return Err(anyhow!(
+                    "A project manifest with an invalid canister manifest should be invalid"
+                ));
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Canister my-canister is invalid") {
+                    return Err(anyhow!(
+                        "expected 'Canister my-canister is invalid' error but got: {err}"
+                    ));
+                }
+            }
+        };
+
+        Ok(())
+    }
+
+    #[test]
     fn canisters_in_list() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 canisters:
                   - name: my-canister
                     build:
-                      steps: []
-                "#
-            )?,
+                      steps:
+                        - type: script
+                          command: dosomething.sh
+            "#})?,
             ProjectManifest {
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
-                        build: build::Steps { steps: vec![] },
+                        build: build::Steps {
+                            steps: vec![build::Step::Script(script::Adapter {
+                                command: script::CommandField::Command(
+                                    "dosomething.sh".to_string()
+                                )
+                            })]
+                        },
                         sync: sync::Steps { steps: vec![] },
                     },
                 })],
@@ -236,22 +277,28 @@ mod tests {
     #[test]
     fn canisters_mixed() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 canisters:
                   - name: my-canister
                     build:
-                      steps: []
+                      steps:
+                        - type: script
+                          command: dosomething.sh
                   - canisters/*
-                "#
-            )?,
+            "#})?,
             ProjectManifest {
                 canisters: vec![
                     Item::Manifest(CanisterManifest {
                         name: "my-canister".to_string(),
                         settings: Settings::default(),
                         instructions: crate::manifest::canister::Instructions::BuildSync {
-                            build: build::Steps { steps: vec![] },
+                            build: build::Steps {
+                                steps: vec![build::Step::Script(script::Adapter {
+                                    command: script::CommandField::Command(
+                                        "dosomething.sh".to_string()
+                                    )
+                                })]
+                            },
                             sync: sync::Steps { steps: vec![] },
                         },
                     }),
@@ -268,12 +315,10 @@ mod tests {
     #[test]
     fn network() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 network:
                   name: my-network
-                "#
-            )?,
+            "#})?,
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::Networks(vec![NetworkManifest {
@@ -292,12 +337,10 @@ mod tests {
     #[test]
     fn networks_in_list() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 networks:
                   - name: my-network
-                "#
-            )?,
+            "#})?,
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::Networks(vec![NetworkManifest {
@@ -316,14 +359,12 @@ mod tests {
     #[test]
     fn environment() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 environment:
                   name: my-environment
                   network: my-network
                   canisters: [my-canister]
-                "#
-            )?,
+            "#})?,
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
@@ -344,14 +385,12 @@ mod tests {
     #[test]
     fn environment_in_list() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(
-                r#"
+            serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 environments:
                   - name: my-environment
                     network: my-network
                     canisters: [my-canister]
-                "#
-            )?,
+            "#})?,
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),

@@ -192,11 +192,16 @@ mod tests {
         adapter::{
             assets,
             prebuilt::{self, RemoteSource, SourceField},
+            script,
         },
         recipe::RecipeType,
     };
 
     use super::*;
+
+    const CANNOT_HAVE_BOTH: &str =
+        "Canister my-canister cannot have both a `recipe` and a `build` section";
+    const ARRAY_NOT_EMPTY: &str = "Array must not be empty";
 
     #[test]
     fn empty() -> Result<(), Error> {
@@ -250,9 +255,6 @@ mod tests {
 
         Ok(())
     }
-
-    const CANNOT_HAVE_BOTH: &str =
-        "Canister my-canister cannot have both a `recipe` and a `build` section";
 
     #[test]
     fn invalid_manifest_mix_recipe_and_build() -> Result<(), Error> {
@@ -467,12 +469,42 @@ mod tests {
     }
 
     #[test]
+    fn empty_steps_is_not_allowed() -> Result<(), Error> {
+        match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+                name: my-canister
+                build:
+                  steps: []
+                sync:
+                  steps:
+                    - type: assets
+                      dir: dist
+        "#})
+        {
+            Ok(_) => {
+                return Err(anyhow!(
+                    "You should not be able to have a recipe and build steps at the same time"
+                ));
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains(ARRAY_NOT_EMPTY) {
+                    return Err(anyhow!("expected '{ARRAY_NOT_EMPTY}' error but got: {err}"));
+                }
+            }
+        };
+
+        Ok(())
+    }
+
+    #[test]
     fn sync_steps() -> Result<(), Error> {
         assert_eq!(
             serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
                 name: my-canister
                 build:
-                  steps: []
+                  steps:
+                    - type: script
+                      command: dosomething.sh
                 sync:
                   steps:
                     - type: assets
@@ -482,7 +514,11 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
-                    build: build::Steps { steps: vec![] },
+                    build: build::Steps {
+                        steps: vec![build::Step::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string())
+                        })]
+                    },
                     sync: sync::Steps {
                         steps: vec![sync::Step::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),

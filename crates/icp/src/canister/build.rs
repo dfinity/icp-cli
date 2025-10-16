@@ -7,7 +7,10 @@ use tokio::sync::mpsc::{Sender, error::SendError};
 
 use crate::{
     canister::{build, script::ScriptError},
-    manifest::adapter::{prebuilt, script},
+    manifest::{
+        adapter::{prebuilt, script},
+        serde_helpers::non_empty_vec,
+    },
     prelude::*,
 };
 
@@ -51,6 +54,7 @@ impl fmt::Display for Step {
 /// including the adapters and build steps responsible for the build.
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Steps {
+    #[serde(deserialize_with = "non_empty_vec")]
     pub steps: Vec<Step>,
 }
 

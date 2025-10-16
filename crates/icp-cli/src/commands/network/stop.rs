@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use icp::{manifest, network::NetworkDirectory};
+use icp::{fs::remove_file, manifest, network::NetworkDirectory};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
 use crate::commands::Context;
@@ -37,9 +37,6 @@ pub enum CommandError {
 
     #[error("process {pid} did not exit within {timeout} seconds")]
     Timeout { pid: Pid, timeout: u64 },
-
-    #[error("failed to remove PID file: {source}")]
-    RemovePidFile { source: std::io::Error },
 }
 
 pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
@@ -71,7 +68,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
             name: cmd.name.clone(),
         })?;
 
-    eprintln!("Stopping background network (PID: {})...", pid);
+    let _ = ctx
+        .term
+        .write_line(&format!("Stopping background network (PID: {})...", pid));
 
     // Send SIGINT to the process
     send_sigint(pid);
@@ -81,9 +80,9 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
     // Remove PID file
     let pid_file = nd.structure.background_network_runner_pid_file();
-    std::fs::remove_file(&pid_file).map_err(|source| CommandError::RemovePidFile { source })?;
+    let _ = remove_file(&pid_file); // Cleanup is nice, but optional
 
-    eprintln!("Network stopped successfully");
+    let _ = ctx.term.write_line("Network stopped successfully");
 
     Ok(())
 }

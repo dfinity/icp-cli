@@ -15,6 +15,7 @@ use icp::{
         run_network,
     },
 };
+use tracing::debug;
 
 use crate::commands::Context;
 
@@ -108,8 +109,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     // Determine ICP accounts to seed
     let seed_accounts = ids.identities.values().map(|id| id.principal());
 
-    eprintln!("Project root: {pdir}");
-    eprintln!("Network root: {ndir}");
+    debug!("Project root: {pdir}");
+    debug!("Network root: {ndir}");
 
     if cmd.background {
         let mut child = run_in_background()?;
@@ -157,28 +158,31 @@ fn run_in_background() -> Result<Child, CommandError> {
 }
 
 async fn relay_child_output_until_healthy(
+    ctx: &Context,
     child: &mut Child,
     nd: &NetworkDirectory,
 ) -> Result<(), CommandError> {
     // Take stdout and stderr from the child
     let stdout = child.stdout.take().expect("Failed to take child stdout");
     let stderr = child.stderr.take().expect("Failed to take child stderr");
+    let term = ctx.term.clone();
 
     // Spawn threads to relay output
     let stdout_thread = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             if let Ok(line) = line {
-                println!("{}", line); // stdout -> stdout
+                let _ = term.write_line(&line); // stdout -> stdout
             }
         }
     });
 
+    let term = ctx.term.clone();
     let stderr_thread = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             if let Ok(line) = line {
-                eprintln!("{}", line); // stderr -> stderr
+                let _ = term.write_line(&line); // stderr -> stderr
             }
         }
     });

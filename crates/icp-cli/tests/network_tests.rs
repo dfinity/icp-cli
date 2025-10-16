@@ -287,8 +287,8 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .success();
 }
 
-#[test]
-fn network_run_background() {
+#[tokio::test]
+async fn network_run_background() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("icp");
@@ -303,4 +303,29 @@ fn network_run_background() {
         .args(["network", "run", "my-network", "--background"])
         .assert()
         .success();
+    let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
+
+    // Verify PID file was written
+    let pid_file_path = project_dir
+        .join(".icp")
+        .join("networks")
+        .join("my-network")
+        .join("background_network_runner.pid");
+    assert!(
+        pid_file_path.exists(),
+        "PID file should exist at {:?}",
+        pid_file_path
+    );
+
+    // Verify network can be pinged with agent.status()
+    let agent = ic_agent::Agent::builder()
+        .with_url(format!("http://127.0.0.1:{}", network.gateway_port))
+        .build()
+        .expect("Failed to build agent");
+
+    let status = agent.status().await.expect("Failed to get network status");
+    assert!(
+        matches!(&status.replica_health_status, Some(health) if health == "healthy"),
+        "Network should be healthy"
+    );
 }

@@ -1,4 +1,5 @@
 use indoc::formatdoc;
+use serde::Deserialize;
 use std::{str::FromStr, string::FromUtf8Error};
 
 use crate::{
@@ -180,18 +181,30 @@ impl Resolve for Handlebars {
             })?;
 
         // Read the rendered YAML canister manifest
-        let insts = serde_yaml::from_str::<Instructions>(&out);
+        // Recipes can only render buid/sync
+        #[derive(Deserialize)]
+        struct BuildSyncHelper {
+            build: build::Steps,
+            #[serde(default)]
+            sync: sync::Steps,
+        }
+
+        let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
         let insts = match insts {
-            Ok(insts) => insts,
+            Ok(helper) => Instructions::BuildSync {
+                build: helper.build,
+                sync: helper.sync,
+            },
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
-                Unable to render template into valid yaml: {e}
+                Unable to render recipe {} template into valid yaml: {e}
+
                 Rendered content:
                 ------
                 {out}
                 ------
-            "#}
+            "#, recipe.recipe_type}
             ),
         };
 

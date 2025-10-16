@@ -1,5 +1,5 @@
 use std::{
-    process::{Child, Command},
+    process::{Child, Command, Stdio},
     time::Duration,
 };
 
@@ -97,6 +97,8 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         &ndir,                       // network_root
         &ctx.dirs.port_descriptor(), // port_descriptor_dir
     );
+    nd.ensure_exists()
+        .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
 
     // Identities
     let ids = load_identity_list(&ctx.dirs.identity())?;
@@ -130,7 +132,10 @@ fn run_in_background() -> Result<Child, CommandError> {
     let mut cmd = Command::new(exe);
     // Skip 1 because arg0 is this executable's path.
     cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
-        .env(BACKGROUND_ENV_VAR, "true"); // Set the environment variable which will be used by the second start.
+        .env(BACKGROUND_ENV_VAR, "true") // Set the environment variable which will be used by the second start.
+        .stdin(Stdio::null()) // Redirect stdin from /dev/null
+        .stdout(Stdio::null()) // Redirect stdout to /dev/null
+        .stderr(Stdio::null()); // Redirect stderr to /dev/null
     let child = cmd.spawn().expect("Failed to spawn child process.");
     Ok(child)
 }

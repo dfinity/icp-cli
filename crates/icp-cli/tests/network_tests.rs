@@ -286,3 +286,21 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
 }
+
+#[test]
+fn network_run_background() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // start network in background
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "run", "my-network", "--background"])
+        .assert()
+        .success();
+}

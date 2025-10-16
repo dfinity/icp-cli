@@ -312,9 +312,11 @@
       "type": "object"
     },
     "RecipeType": {
+      "description": "Represents the accepted values for a recipe type in the canister manifets",
       "oneOf": [
         {
           "additionalProperties": false,
+          "description": "path to a locally defined recipe",
           "properties": {
             "file": {
               "type": "string"
@@ -327,6 +329,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "url to a remote recipe",
           "properties": {
             "url": {
               "type": "string"
@@ -339,16 +342,20 @@
         },
         {
           "additionalProperties": false,
+          "description": "A recipe hosted in a known registry in yaml, the format is \"@<registry>/<recipe>@<version>\"",
           "properties": {
             "registry": {
               "properties": {
                 "name": {
+                  "description": "the name of registry",
                   "type": "string"
                 },
                 "recipe": {
+                  "description": "the name of the recipe",
                   "type": "string"
                 },
                 "version": {
+                  "description": "the version of the recipe, deserializes to `latest` when not provided",
                   "type": "string"
                 }
               },

@@ -51,7 +51,8 @@ impl<'de> Deserialize<'de> for CanisterManifest {
             type Value = CanisterManifest;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a canister manifest with name and optional settings/instructions")
+                formatter
+                    .write_str("a canister manifest with name and optional settings/instructions")
             }
 
             // We're going to build the canister manifest manually
@@ -61,7 +62,9 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 A: MapAccess<'de>,
             {
                 let mut temp_map = serde_yaml::Mapping::new();
-                while let Some((key, value)) = map.next_entry::<serde_yaml::Value, serde_yaml::Value>()? {
+                while let Some((key, value)) =
+                    map.next_entry::<serde_yaml::Value, serde_yaml::Value>()?
+                {
                     temp_map.insert(key, value);
                 }
 
@@ -72,7 +75,6 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 let build_key = serde_yaml::Value::String("build".to_string());
                 let sync_key = serde_yaml::Value::String("sync".to_string());
 
-
                 // Extract name (required)
                 let name: String = temp_map
                     .remove(&name_key)
@@ -82,12 +84,17 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                     .to_string();
 
                 // Extract settings (optional, with default)
-                let settings: Settings = if let Some(settings_value) = temp_map.remove(&settings_key) {
-                    serde_yaml::from_value(settings_value)
-                        .map_err(|e| Error::custom(format!("Failed to parse settings for canister `{name}`: {}", e)))?
-                } else {
-                    Settings::default()
-                };
+                let settings: Settings =
+                    if let Some(settings_value) = temp_map.remove(&settings_key) {
+                        serde_yaml::from_value(settings_value).map_err(|e| {
+                            Error::custom(format!(
+                                "Failed to parse settings for canister `{name}`: {}",
+                                e
+                            ))
+                        })?
+                    } else {
+                        Settings::default()
+                    };
 
                 //
                 // Build out the instructions
@@ -98,35 +105,43 @@ impl<'de> Deserialize<'de> for CanisterManifest {
 
                 // Validate that we don't have conflicting or missing sections
                 if has_recipe && has_build {
-                    return Err(Error::custom(format!("Canister {name} cannot have both a `recipe` and a `build` section")));
+                    return Err(Error::custom(format!(
+                        "Canister {name} cannot have both a `recipe` and a `build` section"
+                    )));
                 }
 
                 if has_recipe && has_sync {
-                    return Err(Error::custom(format!("Canister {name} cannot have both a `recipe` and a `sync` section")));
+                    return Err(Error::custom(format!(
+                        "Canister {name} cannot have both a `recipe` and a `sync` section"
+                    )));
                 }
 
                 if !has_recipe && !has_build {
-                    return Err(Error::custom(format!("Canister {name} must have a `recipe` or a `build` section")));
+                    return Err(Error::custom(format!(
+                        "Canister {name} must have a `recipe` or a `build` section"
+                    )));
                 }
 
                 // Try to parse the instructions
 
                 if has_recipe {
-
                     let recipe: Recipe = serde_yaml::from_value(
-                        temp_map.get(&recipe_key)
-                            .ok_or_else(|| Error::custom("recipe field not found"))? 
-                            .clone()
-                    ).map_err(|e| Error::custom(format!("Canister {name} failed to parse recipe: {}", e)))?;
+                        temp_map
+                            .get(&recipe_key)
+                            .ok_or_else(|| Error::custom("recipe field not found"))?
+                            .clone(),
+                    )
+                    .map_err(|e| {
+                        Error::custom(format!("Canister {name} failed to parse recipe: {}", e))
+                    })?;
                     return Ok(CanisterManifest {
-                                name,
-                                settings,
-                                instructions: Instructions::Recipe { recipe }
+                        name,
+                        settings,
+                        instructions: Instructions::Recipe { recipe },
                     });
                 }
 
                 if has_build {
-
                     // Try to deserialize as BuildSync variant
                     #[derive(Deserialize)]
                     struct BuildSyncHelper {
@@ -135,9 +150,16 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         sync: sync::Steps,
                     }
 
-                    let helper: BuildSyncHelper = serde_yaml::from_value(serde_yaml::Value::Mapping(temp_map))
-                        .map_err(|e| Error::custom(format!("Canister {name} failed to parse build/sync instructions: {}", e)))?;
-                    
+                    let helper: BuildSyncHelper = serde_yaml::from_value(
+                        serde_yaml::Value::Mapping(temp_map),
+                    )
+                    .map_err(|e| {
+                        Error::custom(format!(
+                            "Canister {name} failed to parse build/sync instructions: {}",
+                            e
+                        ))
+                    })?;
+
                     return Ok(CanisterManifest {
                         name,
                         settings,
@@ -147,16 +169,17 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         },
                     });
                 }
-                
+
                 // Should be unreachable
-                Err(Error::custom("Canister {name} unknown error parsing manifest"))
+                Err(Error::custom(
+                    "Canister {name} unknown error parsing manifest",
+                ))
             }
         }
 
         d.deserialize_map(CanisterManifestVisitor)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -187,7 +210,9 @@ mod tests {
 
             // Wrong Error
             Err(err) => {
-                if !format!("{err}").starts_with("Canister my-canister must have a `recipe` or a `build` section") {
+                if !format!("{err}")
+                    .starts_with("Canister my-canister must have a `recipe` or a `build` section")
+                {
                     return Err(anyhow!(
                         "an empty canister manifest resulted in the wrong error: {err}"
                     ));
@@ -201,18 +226,17 @@ mod tests {
     #[test]
     fn invalid_recipe_bad_type() -> Result<(), Error> {
         // This should now fail because "unknown_type" is not a valid recipe type
-        match serde_yaml::from_str::<CanisterManifest>( indoc! {r#"
+        match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
             name: my-canister
             recipe:
               type: unknown_type
               configuration:
                 field: value
 
-        "#}) {
+        "#})
+        {
             Ok(_) => {
-                return Err(anyhow!(
-                    "An invalid recipe type should result in an error"
-                ));
+                return Err(anyhow!("An invalid recipe type should result in an error"));
             }
             Err(err) => {
                 let err_msg = format!("{err}");
@@ -227,7 +251,8 @@ mod tests {
         Ok(())
     }
 
-    const CANNOT_HAVE_BOTH : &str = "Canister my-canister cannot have both a `recipe` and a `build` section";
+    const CANNOT_HAVE_BOTH: &str =
+        "Canister my-canister cannot have both a `recipe` and a `build` section";
 
     #[test]
     fn invalid_manifest_mix_recipe_and_build() -> Result<(), Error> {
@@ -240,7 +265,8 @@ mod tests {
                     - type: pre-built
                       url: http://example.com/hello_world.wasm
                       sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-        "#}) {
+        "#})
+        {
             Ok(_) => {
                 return Err(anyhow!(
                     "You should not be able to have a recipe and build steps at the same time"
@@ -270,7 +296,8 @@ mod tests {
                     - type: pre-built
                       url: http://example.com/hello_world.wasm
                       sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-        "#}) {
+        "#})
+        {
             Ok(_) => {
                 return Err(anyhow!(
                     "You should not be able to have a recipe and build steps at the same time"
@@ -297,7 +324,8 @@ mod tests {
                   type: file://template
                 build:
                   invalid: INVALID
-        "#}) {
+        "#})
+        {
             Ok(_) => {
                 return Err(anyhow!(
                     "You should not be able to have a recipe and build steps at the same time"
@@ -386,7 +414,7 @@ mod tests {
                 settings: Settings::default(),
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
-                        recipe_type: RecipeType::Registry{
+                        recipe_type: RecipeType::Registry {
                             name: "dfinity".to_string(),
                             recipe: "dummy".to_string(),
                             version: "latest".to_string(),

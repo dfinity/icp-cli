@@ -27,8 +27,8 @@ impl Display for RecipeType {
 impl<'de> Deserialize<'de> for RecipeType {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
-
+        D: serde::Deserializer<'de>,
+    {
         let v = String::deserialize(deserializer)?;
 
         if v.starts_with("file://") {
@@ -65,7 +65,6 @@ impl<'de> Deserialize<'de> for RecipeType {
         Err(serde::de::Error::custom(format!(
             "Invalid recipe type: {v}"
         )))
-
     }
 }
 

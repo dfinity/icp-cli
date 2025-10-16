@@ -122,9 +122,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 
         // Relay stdout/stderr from child to parent until network is healthy
         relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
-
-        // Explicitly forget the child handle so parent doesn't wait for it
-        std::mem::forget(child);
     } else {
         run_network(
             cfg,           // config

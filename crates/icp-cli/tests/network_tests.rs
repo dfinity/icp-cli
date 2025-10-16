@@ -297,12 +297,15 @@ async fn network_run_background() {
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
         .expect("failed to write project manifest");
 
-    // start network in background
+    // start network in background and verify we can see child process output
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "run", "my-network", "--background"])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("Project root:"))
+        .stderr(contains("Network root:"));
+
     let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
 
     // Verify PID file was written

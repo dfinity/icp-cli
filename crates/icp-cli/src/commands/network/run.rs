@@ -1,5 +1,7 @@
 use std::{
+    io::{BufRead, BufReader},
     process::{Child, Command, Stdio},
+    thread,
     time::Duration,
 };
 
@@ -110,9 +112,14 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     eprintln!("Network root: {ndir}");
 
     if cmd.background {
-        let child = run_in_background()?;
+        let mut child = run_in_background()?;
         nd.save_background_network_runner_pid(child.id())?;
-        wait_for_healthy_network(&nd).await?;
+
+        // Relay stdout/stderr from child to parent until network is healthy
+        relay_child_output_until_healthy(&mut child, &nd).await?;
+
+        // Explicitly forget the child handle so parent doesn't wait for it
+        std::mem::forget(child);
     } else {
         run_network(
             cfg,           // config
@@ -126,18 +133,65 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
 }
 
 fn run_in_background() -> Result<Child, CommandError> {
-    // Background strategy is different; we spawn `dfx` with the same arguments
-    // (minus --background), ping and exit.
+    // Background strategy: spawn a child process with piped stdout/stderr
+    // so the parent can relay output until the network is healthy, then detach.
     let exe = std::env::current_exe().expect("Failed to get current executable.");
     let mut cmd = Command::new(exe);
     // Skip 1 because arg0 is this executable's path.
     cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
         .env(BACKGROUND_ENV_VAR, "true") // Set the environment variable which will be used by the second start.
         .stdin(Stdio::null()) // Redirect stdin from /dev/null
-        .stdout(Stdio::null()) // Redirect stdout to /dev/null
-        .stderr(Stdio::null()); // Redirect stderr to /dev/null
+        .stdout(Stdio::piped()) // Capture stdout so parent can relay it
+        .stderr(Stdio::piped()); // Capture stderr so parent can relay it
+
+    // On Unix, create a new process group so the child can continue running
+    // independently after the parent exits
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
     let child = cmd.spawn().expect("Failed to spawn child process.");
     Ok(child)
+}
+
+async fn relay_child_output_until_healthy(
+    child: &mut Child,
+    nd: &NetworkDirectory,
+) -> Result<(), CommandError> {
+    // Take stdout and stderr from the child
+    let stdout = child.stdout.take().expect("Failed to take child stdout");
+    let stderr = child.stderr.take().expect("Failed to take child stderr");
+
+    // Spawn threads to relay output
+    let stdout_thread = thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                println!("{}", line); // stdout -> stdout
+            }
+        }
+    });
+
+    let stderr_thread = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                eprintln!("{}", line); // stderr -> stderr
+            }
+        }
+    });
+
+    // Wait for network to become healthy
+    wait_for_healthy_network(nd).await?;
+
+    // Note: We don't join the threads - they'll continue running until the pipes close
+    // or we can just let them be orphaned since the parent is about to exit
+    drop(stdout_thread);
+    drop(stderr_thread);
+
+    Ok(())
 }
 
 async fn retry_with_timeout<F, Fut, T>(mut f: F, max_retries: usize, delay_ms: u64) -> Option<T>

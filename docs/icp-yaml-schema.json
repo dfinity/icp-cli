@@ -676,34 +676,30 @@
     }
   },
   "description": "Schema for icp.yaml project configuration files used by the ICP CLI",
-  "oneOf": [
-    {
-      "additionalProperties": false,
-      "properties": {
-        "canister": {
-          "$ref": "#/definitions/CanisterManifest"
-        }
+  "properties": {
+    "canisters": {
+      "items": {
+        "$ref": "#/definitions/Item_for_CanisterManifest"
       },
-      "required": [
-        "canister"
-      ],
-      "type": "object"
+      "type": "array"
     },
-    {
-      "additionalProperties": false,
-      "properties": {
-        "canisters": {
-          "items": {
-            "$ref": "#/definitions/Item_for_CanisterManifest"
-          },
-          "type": "array"
-        }
+    "environments": {
+      "items": {
+        "$ref": "#/definitions/EnvironmentManifest"
       },
-      "required": [
-        "canisters"
-      ],
-      "type": "object"
+      "type": "array"
+    },
+    "networks": {
+      "items": {
+        "$ref": "#/definitions/NetworkManifest"
+      },
+      "type": "array"
     }
+  },
+  "required": [
+    "canisters",
+    "environments",
+    "networks"
   ],
   "title": "ICP Project Configuration",
   "type": "object"

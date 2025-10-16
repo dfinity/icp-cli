@@ -78,18 +78,6 @@ impl From<Environments> for Vec<EnvironmentManifest> {
     }
 }
 
-// #[derive(Debug, Deserialize, JsonSchema)]
-// pub struct ProjectInner {
-//     #[serde(flatten)]
-//     pub canisters: Option<Canisters>,
-// 
-//     #[serde(flatten)]
-//     pub networks: Option<Networks>,
-// 
-//     #[serde(flatten)]
-//     pub environments: Option<Environments>,
-// }
-
 #[derive(Debug, PartialEq, JsonSchema)]
 pub struct ProjectManifest {
     pub canisters: Vec<Item<CanisterManifest>>,
@@ -99,7 +87,6 @@ pub struct ProjectManifest {
 
 impl<'de> Deserialize<'de> for ProjectManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-
         use serde::de::{Error, MapAccess, Visitor};
         use std::fmt;
 
@@ -109,7 +96,9 @@ impl<'de> Deserialize<'de> for ProjectManifest {
             type Value = ProjectManifest;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a project manifest with canister, network and environment definitions")
+                formatter.write_str(
+                    "a project manifest with canister, network and environment definitions",
+                )
             }
 
             // We're going to build the project manifest manually
@@ -138,49 +127,58 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                 let has_canisters = top_map.contains_key(&canisters_key);
 
                 let canisters: Vec<Item<CanisterManifest>> = match (has_canister, has_canisters) {
-
-                    (true, true) => {  // This is an invalid case
+                    (true, true) => {
+                        // This is an invalid case
 
                         return Err(Error::custom(
-                            "Project cannot define both `canister` and `canisters` sections"
+                            "Project cannot define both `canister` and `canisters` sections",
                         ));
+                    }
 
-                    },
+                    (true, false) => {
+                        // There is a single inline canister manifest
 
-                    (true, false) => {  // There is a single inline canister manifest
+                        let canister_value = top_map
+                            .remove(&canister_key)
+                            .ok_or_else(|| Error::custom("Invalid `canister` key"))?;
 
-                        let canister_value = top_map.remove(&canister_key)
-                            .ok_or_else(|| Error::custom("`canister` key does not exist"))?;
-
-                        let canister_manifest : CanisterManifest = serde_yaml::from_value(canister_value).map_err(|e| {
-                            Error::custom(format!("Failed to load canister manifest: {}", e))
-                        })?;
+                        let canister_manifest: CanisterManifest =
+                            serde_yaml::from_value(canister_value).map_err(|e| {
+                                Error::custom(format!("Failed to load canister manifest: {}", e))
+                            })?;
 
                         Canisters::Canister(canister_manifest).into()
+                    }
 
-                    },
+                    (false, true) => {
+                        // We have a list of Canisters
 
-                    (false, true) => { // We have a list of Canisters
-
-                        if let serde_yaml::Value::Sequence(seq) = top_map.remove(&canisters_key)
-                            .ok_or_else(|| Error::custom("`canisters` key does not exist"))? {
-
-                            let mut canisters: Vec<Item<CanisterManifest>> = Vec::with_capacity(seq.len());
+                        if let serde_yaml::Value::Sequence(seq) = top_map
+                            .remove(&canisters_key)
+                            .ok_or_else(|| Error::custom("`canisters` key does not exist"))?
+                        {
+                            let mut canisters: Vec<Item<CanisterManifest>> =
+                                Vec::with_capacity(seq.len());
 
                             for v in seq {
-
                                 let item: Item<CanisterManifest> = match v {
-                                    serde_yaml::Value::String(s) => {
-                                        Item::Path(s)
-                                    },
+                                    serde_yaml::Value::String(s) => Item::Path(s),
                                     serde_yaml::Value::Mapping(mapping) => {
-                                        let canister_manifest : CanisterManifest = serde_yaml::from_value(mapping.into()).map_err(|e| {
-                                            Error::custom(format!("Failed to load canister manifest: {}", e))
-                                        })?;
+                                        let canister_manifest: CanisterManifest =
+                                            serde_yaml::from_value(mapping.into()).map_err(
+                                                |e| {
+                                                    Error::custom(format!(
+                                                        "Failed to load canister manifest: {}",
+                                                        e
+                                                    ))
+                                                },
+                                            )?;
                                         Item::Manifest(canister_manifest)
-                                    },
+                                    }
                                     _ => {
-                                        return Err(Error::custom("Invalid entry type in `canisters`"));
+                                        return Err(Error::custom(
+                                            "Invalid entry type in `canisters`",
+                                        ));
                                     }
                                 };
 
@@ -188,83 +186,159 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             }
 
                             canisters
-
                         } else {
                             return Err(Error::custom("Expected an array for `canisters`"));
                         }
+                    }
 
-                    },
-
-                    (false, false) => { // No canister definition, we use the default
+                    (false, false) => {
+                        // No canister definition, we use the default
                         Canisters::default().into()
-                    },
+                    }
+                };
+
+                // Deserialize the environments, we support:
+                // - no environments defined, in which case we end up with the defaults
+                // - environment - a single environment is defined
+                // - environments - a list of environments are defined
+                let environment_key = serde_yaml::Value::String("environment".to_string());
+                let environments_key = serde_yaml::Value::String("environments".to_string());
+
+                let has_environment = top_map.contains_key(&environment_key);
+                let has_environments = top_map.contains_key(&environments_key);
+
+                let environments: Vec<EnvironmentManifest> = match (
+                    has_environment,
+                    has_environments,
+                ) {
+                    (true, true) => {
+                        // This is an invalid case
+
+                        return Err(Error::custom(
+                            "Project cannot define both `environment` and `environments` sections",
+                        ));
+                    }
+                    (true, false) => {
+                        // Single environment defined
+
+                        let environment_value = top_map
+                            .remove(&environment_key)
+                            .ok_or_else(|| Error::custom("Invalid `environment` key"))?;
+
+                        let environment_manifest: EnvironmentManifest =
+                            serde_yaml::from_value(environment_value).map_err(|e| {
+                                Error::custom(format!("Failed to load environment manifest: {}", e))
+                            })?;
+
+                        [
+                            Into::<Vec<EnvironmentManifest>>::into(Environments::default()),
+                            vec![environment_manifest],
+                        ]
+                        .concat()
+                    }
+                    (false, true) => {
+                        if let serde_yaml::Value::Sequence(seq) = top_map
+                            .remove(&environments_key)
+                            .ok_or_else(|| Error::custom("'environments' key does not exist"))?
+                        {
+                            let mut environments: Vec<EnvironmentManifest> =
+                                Vec::with_capacity(seq.len());
+
+                            for v in seq {
+                                let environment_manifest =
+                                    serde_yaml::from_value(v).map_err(|e| {
+                                        Error::custom(format!("Failed to load environment: {}", e))
+                                    })?;
+
+                                environments.push(environment_manifest);
+                            }
+
+                            [
+                                Into::<Vec<EnvironmentManifest>>::into(Environments::default()),
+                                environments,
+                            ]
+                            .concat()
+                        } else {
+                            return Err(Error::custom("Expected an array for `environments`"));
+                        }
+                    }
+                    (false, false) => Environments::default().into(),
+                };
+
+                // Deserialize the networks, we support:
+                // - no networks defined, in which case we end up with the defaults
+                // - network - a single network is defined
+                // - networks - a list of networks are defined
+                let network_key = serde_yaml::Value::String("network".to_string());
+                let networks_key = serde_yaml::Value::String("networks".to_string());
+
+                let has_network = top_map.contains_key(&network_key);
+                let has_networks = top_map.contains_key(&networks_key);
+
+                let networks: Vec<NetworkManifest> = match (has_network, has_networks) {
+                    (true, true) => {
+                        // This is an invalid case
+
+                        return Err(Error::custom(
+                            "Project cannot define both `network` and `networks` sections",
+                        ));
+                    }
+                    (true, false) => {
+                        // Single network defined
+
+                        let network_value = top_map
+                            .remove(&network_key)
+                            .ok_or_else(|| Error::custom("Invalid `network` key"))?;
+
+                        let network_manifest: NetworkManifest =
+                            serde_yaml::from_value(network_value).map_err(|e| {
+                                Error::custom(format!("Failed to load network manifest: {}", e))
+                            })?;
+
+                        [
+                            Into::<Vec<NetworkManifest>>::into(Networks::default()),
+                            vec![network_manifest],
+                        ]
+                        .concat()
+                    }
+                    (false, true) => {
+                        if let serde_yaml::Value::Sequence(seq) = top_map
+                            .remove(&networks_key)
+                            .ok_or_else(|| Error::custom("'networks' key does not exist"))?
+                        {
+                            let mut networks: Vec<NetworkManifest> = Vec::with_capacity(seq.len());
+
+                            for v in seq {
+                                let network_manifest = serde_yaml::from_value(v).map_err(|e| {
+                                    Error::custom(format!("Failed to load network: {}", e))
+                                })?;
+
+                                networks.push(network_manifest);
+                            }
+
+                            [
+                                Into::<Vec<NetworkManifest>>::into(Networks::default()),
+                                networks,
+                            ]
+                            .concat()
+                        } else {
+                            return Err(Error::custom("Expected an array for `networks`"));
+                        }
+                    }
+                    (false, false) => Networks::default().into(),
                 };
 
                 Ok(ProjectManifest {
                     canisters,
-                    networks: Networks::default().into(),
-                    environments: Environments::default().into()
+                    networks,
+                    environments,
                 })
             }
         }
 
         d.deserialize_map(ProjectManifestVisitor)
     }
-
 }
-
-
-// impl From<ProjectInner> for ProjectManifest {
-//     fn from(v: ProjectInner) -> Self {
-//         let ProjectInner {
-//             canisters,
-//             networks,
-//             environments,
-//         } = v;
-// 
-//         // Canisters
-//         let canisters = canisters.unwrap_or_default().into();
-// 
-//         // Networks
-//         let networks = match networks {
-//             // None specified, use defaults
-//             None => Networks::default().into(),
-// 
-//             // Network(s) specified, append to default
-//             Some(vs) => [
-//                 Into::<Vec<NetworkManifest>>::into(Networks::default()),
-//                 Into::<Vec<NetworkManifest>>::into(vs),
-//             ]
-//             .concat(),
-//         };
-// 
-//         // Environments
-//         let environments = match environments {
-//             // None specified, use defaults
-//             None => Environments::default().into(),
-// 
-//             // Environment(s) specified, append to default
-//             Some(vs) => [
-//                 Into::<Vec<EnvironmentManifest>>::into(Environments::default()),
-//                 Into::<Vec<EnvironmentManifest>>::into(vs),
-//             ]
-//             .concat(),
-//         };
-// 
-//         Self {
-//             canisters,
-//             networks,
-//             environments,
-//         }
-//     }
-// }
-// 
-// impl<'de> Deserialize<'de> for ProjectManifest {
-//     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-//         let inner: ProjectInner = Deserialize::deserialize(d)?;
-//         Ok(inner.into())
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -346,9 +420,9 @@ mod tests {
             }
             Err(err) => {
                 let err_msg = format!("{err}");
-                if !err_msg.contains("Canister my-canister is invalid") {
+                if !err_msg.contains("Canister my-canister failed to parse") {
                     return Err(anyhow!(
-                        "expected 'Canister my-canister is invalid' error but got: {err}"
+                        "expected 'Canister my-canister failed to parse' error but got: {err}"
                     ));
                 }
             }

@@ -4,10 +4,65 @@
   "definitions": {
     "CanisterManifest": {
       "description": "Represents the manifest describing a single canister. This struct is typically loaded from a `canister.yaml` file and defines the canister's name and how it should be built into WebAssembly.",
-      "properties": {
-        "instructions": {
-          "$ref": "#/definitions/Instructions"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Recipe": {
+              "properties": {
+                "recipe": {
+                  "$ref": "#/definitions/Recipe"
+                }
+              },
+              "required": [
+                "recipe"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "Recipe"
+          ],
+          "type": "object"
         },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "BuildSync": {
+              "properties": {
+                "build": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Steps"
+                    }
+                  ],
+                  "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+                },
+                "sync": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Steps2"
+                    }
+                  ],
+                  "default": {
+                    "steps": []
+                  },
+                  "description": "The configuration specifying how to sync the canister"
+                }
+              },
+              "required": [
+                "build"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "BuildSync"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
         "name": {
           "description": "The unique name of the canister as defined in this manifest.",
           "type": "string"
@@ -18,13 +73,20 @@
               "$ref": "#/definitions/Settings"
             }
           ],
+          "default": {
+            "compute_allocation": null,
+            "environment_variables": null,
+            "freezing_threshold": null,
+            "memory_allocation": null,
+            "reserved_cycles_limit": null,
+            "wasm_memory_limit": null,
+            "wasm_memory_threshold": null
+          },
           "description": "The configuration specifying the various settings when creating the canister."
         }
       },
       "required": [
-        "instructions",
-        "name",
-        "settings"
+        "name"
       ],
       "type": "object"
     },
@@ -158,66 +220,6 @@
         }
       },
       "type": "object"
-    },
-    "Instructions": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "Recipe": {
-              "properties": {
-                "recipe": {
-                  "$ref": "#/definitions/Recipe"
-                }
-              },
-              "required": [
-                "recipe"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "Recipe"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "BuildSync": {
-              "properties": {
-                "build": {
-                  "allOf": [
-                    {
-                      "$ref": "#/definitions/Steps"
-                    }
-                  ],
-                  "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
-                },
-                "sync": {
-                  "allOf": [
-                    {
-                      "$ref": "#/definitions/Steps2"
-                    }
-                  ],
-                  "default": {
-                    "steps": []
-                  },
-                  "description": "The configuration specifying how to sync the canister"
-                }
-              },
-              "required": [
-                "build"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "BuildSync"
-          ],
-          "type": "object"
-        }
-      ]
     },
     "Item_for_CanisterManifest": {
       "anyOf": [

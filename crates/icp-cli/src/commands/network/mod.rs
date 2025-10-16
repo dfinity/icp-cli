@@ -6,6 +6,7 @@ use crate::commands::Context;
 mod list;
 mod ping;
 mod run;
+mod stop;
 
 #[derive(Parser, Debug)]
 pub struct NetworkCmd {
@@ -18,6 +19,7 @@ pub enum NetworkSubcmd {
     List(list::Cmd),
     Ping(ping::Cmd),
     Run(run::Cmd),
+    Stop(stop::Cmd),
 }
 
 pub async fn dispatch(ctx: &Context, cmd: NetworkCmd) -> Result<(), NetworkCommandError> {
@@ -25,6 +27,7 @@ pub async fn dispatch(ctx: &Context, cmd: NetworkCmd) -> Result<(), NetworkComma
         NetworkSubcmd::List(cmd) => list::exec(ctx, cmd).await?,
         NetworkSubcmd::Ping(cmd) => ping::exec(ctx, cmd).await?,
         NetworkSubcmd::Run(cmd) => run::exec(ctx, cmd).await?,
+        NetworkSubcmd::Stop(cmd) => stop::exec(ctx, cmd).await?,
     }
 
     Ok(())
@@ -40,4 +43,7 @@ pub enum NetworkCommandError {
 
     #[snafu(transparent)]
     Run { source: run::CommandError },
+
+    #[snafu(transparent)]
+    Stop { source: stop::CommandError },
 }

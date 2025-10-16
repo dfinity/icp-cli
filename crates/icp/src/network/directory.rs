@@ -1,6 +1,7 @@
 use std::io::{ErrorKind, Seek, Write};
 
 use snafu::prelude::*;
+use sysinfo::Pid;
 
 use crate::{
     fs::{create_dir_all, json, read_to_string},
@@ -173,11 +174,11 @@ impl NetworkDirectory {
         Ok(())
     }
 
-    pub fn load_background_network_runner_pid(&self) -> Result<Option<u32>, LoadPidError> {
+    pub fn load_background_network_runner_pid(&self) -> Result<Option<Pid>, LoadPidError> {
         let path = self.structure.background_network_runner_pid_file();
 
         read_to_string(&path)
-            .map(|content| content.trim().parse::<u32>().ok())
+            .map(|content| content.trim().parse::<Pid>().ok())
             .or_else(|err| match err.kind() {
                 ErrorKind::NotFound => Ok(None),
                 _ => Err(err).context(ReadPidSnafu { path: path.clone() }),

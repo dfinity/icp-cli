@@ -50,6 +50,7 @@ itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 lazy_static = "1.5.0"
 mockall = "0.13.1"
+nix = { version = "0.30.1", features = ["process", "signal"] }
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 pem = "3.0.5"
@@ -67,6 +68,7 @@ shellwords = "1.1.0"
 slog = "2.7.0"
 snafu = "0.8.5"
 strum = { version = "0.27", features = ["derive"] }
+sysinfo = "0.37.2"
 tempfile = "3"
 thiserror = "2.0.16"
 time = "0.3.9"

@@ -288,7 +288,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
 }
 
 #[tokio::test]
-async fn network_run_background() {
+async fn network_run_and_stop_background() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("icp");
@@ -297,7 +297,7 @@ async fn network_run_background() {
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
         .expect("failed to write project manifest");
 
-    // start network in background and verify we can see child process output
+    // Start network in background and verify we can see child process output
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "run", "my-network", "--background"])
@@ -320,7 +320,13 @@ async fn network_run_background() {
         pid_file_path
     );
 
-    // Verify network can be pinged with agent.status()
+    let pid_contents = std::fs::read_to_string(&pid_file_path).expect("Failed to read PID file");
+    let pid: u32 = pid_contents
+        .trim()
+        .parse()
+        .expect("PID file should contain a valid process ID");
+
+    // Verify network is healthy with agent.status()
     let agent = ic_agent::Agent::builder()
         .with_url(format!("http://127.0.0.1:{}", network.gateway_port))
         .build()
@@ -331,4 +337,34 @@ async fn network_run_background() {
         matches!(&status.replica_health_status, Some(health) if health == "healthy"),
         "Network should be healthy"
     );
+
+    // Stop the network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "stop", "my-network"])
+        .assert()
+        .success()
+        .stderr(contains(&format!(
+            "Stopping background network (PID: {})",
+            pid
+        )))
+        .stderr(contains("Network stopped successfully"));
+
+    // Verify PID file is removed
+    assert!(
+        !pid_file_path.exists(),
+        "PID file should be removed after stopping"
+    );
+
+    // Verify process is no longer running
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::kill;
+        use nix::unistd::Pid;
+        let nix_pid = Pid::from_raw(pid as i32);
+        assert!(
+            kill(nix_pid, None).is_err(),
+            "Process should no longer be running"
+        );
+    }
 }

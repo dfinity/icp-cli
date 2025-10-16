@@ -4,4 +4,4 @@ canister:
     type: file://recipe.hb.yaml
     configuration:
       main: src/main.mo
-      args: --ai-errors
+      args: --incremental-gc

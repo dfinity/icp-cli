@@ -332,4 +332,3 @@ fn recipe_local_file_valid_checksum() {
         .assert()
         .success();
 }
-

@@ -346,13 +346,11 @@ mod tests {
     #[test]
     fn recipe() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(
-                r#"
+            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
                 name: my-canister
                 recipe:
                   type: file://my-recipe
-                "#
-            )?,
+            "#})?,
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
@@ -423,6 +421,37 @@ mod tests {
                             "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
                                 .to_string()
                         ),
+                    }
+                },
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn recipe_with_settings() -> Result<(), Error> {
+        assert_eq!(
+            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+                name: my-canister
+                settings:
+                  compute_allocation: 3
+                  memory_allocation: 4294967296
+                recipe:
+                  type: file://my-recipe
+            "#})?,
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings {
+                    compute_allocation: Some(3),
+                    memory_allocation: Some(4294967296),
+                    ..Default::default()
+                },
+                instructions: Instructions::Recipe {
+                    recipe: Recipe {
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
+                        configuration: HashMap::new(),
+                        sha256: None,
                     }
                 },
             },

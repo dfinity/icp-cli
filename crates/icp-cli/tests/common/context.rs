@@ -248,12 +248,13 @@ impl TestContext {
         let timeout = 45;
         eprintln!("Waiting for network descriptor at {descriptor_path} - limit {timeout}s");
         let network_descriptor = loop {
+            let elapsed = start_time.elapsed().as_secs();
             if descriptor_path.exists() && descriptor_path.is_file() {
                 let contents = fs::read_to_string(&descriptor_path)
                     .expect("Failed to read network descriptor");
                 let parsed = serde_json::from_str::<serde_json::Value>(&contents);
                 if let Ok(value) = parsed {
-                    eprintln!("Network descriptor found at {descriptor_path}");
+                    eprintln!("Network descriptor found at {descriptor_path} after {elapsed}s");
                     break value;
                 } else {
                     eprintln!(
@@ -261,8 +262,10 @@ impl TestContext {
                     );
                 }
             }
-            if start_time.elapsed().as_secs() > timeout {
-                panic!("Timed out waiting for network descriptor at {descriptor_path}");
+            if elapsed > timeout {
+                panic!(
+                    "Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s"
+                );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         };

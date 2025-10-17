@@ -207,7 +207,7 @@ pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutEr
         }
 
         if start_time.elapsed().as_secs() > 30 {
-            return Err(WaitForPortTimeoutError)
+            return Err(WaitForPortTimeoutError);
         }
         sleep(Duration::from_millis(100)).await;
     }

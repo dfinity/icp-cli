@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 bigdecimal.workspace = true
 bip32.workspace = true
 byte-unit.workspace = true

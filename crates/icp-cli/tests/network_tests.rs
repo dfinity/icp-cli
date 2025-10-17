@@ -69,9 +69,8 @@ fn network_same_port() {
 #[test]
 #[file_serial(port8001, port8002)]
 fn two_projects_different_fixed_ports() {
-    let ctx = TestContext::new();
-
-    let project_dir_a = ctx.create_project_dir("a");
+    let ctx_a = TestContext::new();
+    let project_dir_a = ctx_a.create_project_dir("a");
 
     // Project manifest
     write_string(
@@ -86,7 +85,8 @@ fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let project_dir_b = ctx.create_project_dir("b");
+    let ctx_b = TestContext::new();
+    let project_dir_b = ctx_b.create_project_dir("b");
 
     // Project manifest
     write_string(
@@ -101,15 +101,15 @@ fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx.start_network_in(&project_dir_a, "my-network");
+    let _a_guard = ctx_a.start_network_in(&project_dir_a, "my-network");
 
     eprintln!("wait for network A healthy");
-    ctx.ping_until_healthy(&project_dir_a, "my-network");
+    ctx_a.ping_until_healthy(&project_dir_a, "my-network");
 
-    let _b_guard = ctx.start_network_in(&project_dir_b, "my-network");
+    let _b_guard = ctx_b.start_network_in(&project_dir_b, "my-network");
 
     eprintln!("wait for network B healthy");
-    ctx.ping_until_healthy(&project_dir_b, "my-network");
+    ctx_b.ping_until_healthy(&project_dir_b, "my-network");
 }
 
 // TODO(or.ricon) This is broken

@@ -3,12 +3,11 @@ use icp_canister_interfaces::cycles_minting_canister::{
     CYCLES_MINTING_CANISTER_PRINCIPAL, GetDefaultSubnetsResponse,
 };
 use pocket_ic::nonblocking::PocketIc;
-use std::cell::Ref;
 
 use crate::common::TestContext;
 
 pub struct Client<'a> {
-    pic: Ref<'a, PocketIc>,
+    pic: &'a PocketIc,
 }
 
 impl<'a> Client<'a> {

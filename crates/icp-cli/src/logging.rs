@@ -3,7 +3,13 @@ use std::{
     os::fd::{AsRawFd, RawFd},
 };
 
-use tracing::debug;
+use tracing::{Level, Subscriber, debug};
+use tracing_subscriber::{
+    Layer,
+    filter::{Filtered, Targets},
+    fmt::format,
+    registry::LookupSpan,
+};
 
 #[derive(Debug)]
 pub struct TermWriter<W: Write + AsRawFd> {
@@ -32,4 +38,20 @@ impl<W: Write + AsRawFd> AsRawFd for TermWriter<W> {
     fn as_raw_fd(&self) -> RawFd {
         self.writer.as_raw_fd()
     }
+}
+
+type DebugLayer<S> = Filtered<
+    tracing_subscriber::fmt::Layer<S, format::DefaultFields, format::Format<format::Full, ()>>,
+    Targets,
+    S,
+>;
+
+pub fn debug_layer<S: Subscriber + for<'a> LookupSpan<'a>>() -> DebugLayer<S> {
+    let workspace_targets = Targets::new()
+        .with_target("icp-cli", Level::DEBUG)
+        .with_target("icp", Level::DEBUG);
+
+    tracing_subscriber::fmt::layer()
+        .without_time()
+        .with_filter(workspace_targets)
 }

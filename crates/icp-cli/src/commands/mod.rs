@@ -10,26 +10,27 @@ use icp::{
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
-pub mod build;
-pub mod canister;
-pub mod cycles;
-pub mod deploy;
-pub mod environment;
-pub mod identity;
-pub mod network;
-pub mod project;
-pub mod sync;
-pub mod token;
+pub(crate) mod args;
+pub(crate) mod build;
+pub(crate) mod canister;
+pub(crate) mod cycles;
+pub(crate) mod deploy;
+pub(crate) mod environment;
+pub(crate) mod identity;
+pub(crate) mod network;
+pub(crate) mod project;
+pub(crate) mod sync;
+pub(crate) mod token;
 
 #[derive(Debug, PartialEq)]
-pub enum Mode {
+pub(crate) enum Mode {
     Global,
     Project(PathBuf),
 }
 
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum Command {
+pub(crate) enum Command {
     /// Build a project
     Build(build::BuildArgs),
 
@@ -68,40 +69,40 @@ pub enum Command {
     Token(token::Command),
 }
 
-pub struct Context {
+pub(crate) struct Context {
     /// Command exection mode
-    pub mode: Mode,
+    pub(crate) mode: Mode,
 
     /// Terminal for printing messages for the user to see
-    pub term: Term,
+    pub(crate) term: Term,
 
     /// Various cli-related directories (cache, configuration, etc).
-    pub dirs: Directories,
+    pub(crate) dirs: Directories,
 
     /// Canisters ID Store for lookup and storage
-    pub ids: IdStore,
+    pub(crate) ids: IdStore,
 
     /// An artifact store for canister build artifacts
-    pub artifacts: ArtifactStore,
+    pub(crate) artifacts: ArtifactStore,
 
     /// Project loader
-    pub project: Arc<dyn icp::Load>,
+    pub(crate) project: Arc<dyn icp::Load>,
 
     /// Identity loader
-    pub identity: Arc<dyn icp::identity::Load>,
+    pub(crate) identity: Arc<dyn icp::identity::Load>,
 
     /// NetworkAccess loader
-    pub network: Arc<dyn icp::network::Access>,
+    pub(crate) network: Arc<dyn icp::network::Access>,
 
     /// Agent creator
-    pub agent: Arc<dyn icp::agent::Create>,
+    pub(crate) agent: Arc<dyn icp::agent::Create>,
 
     /// Canister builder
-    pub builder: Arc<dyn Build>,
+    pub(crate) builder: Arc<dyn Build>,
 
     /// Canister synchronizer
-    pub syncer: Arc<dyn Synchronize>,
+    pub(crate) syncer: Arc<dyn Synchronize>,
 
     /// Whether debug is enabled
-    pub debug: bool,
+    pub(crate) debug: bool,
 }

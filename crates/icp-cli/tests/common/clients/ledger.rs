@@ -5,12 +5,11 @@ use icrc_ledger_types::icrc1::{
     transfer::TransferArg,
 };
 use pocket_ic::nonblocking::PocketIc;
-use std::cell::Ref;
 
 use crate::common::TestContext;
 
 pub struct Client<'a> {
-    pic: Ref<'a, PocketIc>,
+    pic: &'a PocketIc,
 }
 
 impl<'a> Client<'a> {

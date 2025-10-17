@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::OnceCell,
     env,
     ffi::OsString,
     fs::{self, create_dir_all},
@@ -21,7 +21,7 @@ pub struct TestContext {
     bin_dir: PathBuf,
     asset_dir: PathBuf,
     os_path: OsString,
-    pocketic: RefCell<Option<PocketIc>>,
+    pocketic: OnceCell<PocketIc>,
 }
 
 impl TestContext {
@@ -47,7 +47,7 @@ impl TestContext {
             bin_dir,
             asset_dir,
             os_path,
-            pocketic: RefCell::new(None),
+            pocketic: OnceCell::new(),
         }
     }
 
@@ -92,6 +92,8 @@ impl TestContext {
         project_dir
     }
 
+    /// Calling this method more than once will panic.
+    /// Calling this method after calling [TestContext::start_network_with_config] will panic.
     pub fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
@@ -114,7 +116,10 @@ impl TestContext {
             network_descriptor.pocketic_instance_id,
             None,
         );
-        self.pocketic.replace(Some(pocketic));
+        self.pocketic
+            .set(pocketic)
+            .ok()
+            .expect("PocketIc should not be already initialized");
 
         child_guard
     }
@@ -130,6 +135,8 @@ impl TestContext {
 
     /// Start a network with a custom number of application subnets.
     /// This bypasses the CLI and directly spawns PocketIC with the specified configuration.
+    /// Calling this method more than once will panic.
+    /// Calling this method after calling [TestContext::start_network_in] will panic.
     pub async fn start_network_with_config(
         &self,
         project_dir: &Path,
@@ -214,7 +221,10 @@ impl TestContext {
             instance.instance_id,
             None,
         );
-        self.pocketic.replace(Some(pocketic));
+        self.pocketic
+            .set(pocketic)
+            .ok()
+            .expect("PocketIc should not be already initialized");
 
         // Wrap child in ChildGuard
         ChildGuard { child }
@@ -323,9 +333,9 @@ impl TestContext {
             .expect("Failed to write network descriptor file");
     }
 
-    pub fn pocketic(&self) -> Ref<'_, PocketIc> {
-        Ref::map(self.pocketic.borrow(), |opt| {
-            opt.as_ref().expect("PocketIc instance not initialized")
-        })
+    pub fn pocketic(&self) -> &PocketIc {
+        self.pocketic
+            .get()
+            .expect("PocketIc instance not initialized")
     }
 }

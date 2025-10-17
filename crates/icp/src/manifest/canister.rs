@@ -108,19 +108,19 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         Err(Error::custom(format!(
                             "Canister {name} cannot have both a `recipe` and a `build` section"
                         )))
-                    },
+                    }
                     (true, false, true) => {
                         // Can't have a recipe and a sync sections
                         Err(Error::custom(format!(
                             "Canister {name} cannot have both a `recipe` and a `sync` section"
                         )))
-                    },
+                    }
                     (false, false, _) => {
                         // We must have recipe or build
                         Err(Error::custom(format!(
                             "Canister {name} must have a `recipe` or a `build` section"
                         )))
-                    },
+                    }
                     (true, false, false) => {
                         // We have a a recipe
                         let recipe: Recipe = serde_yaml::from_value(
@@ -138,8 +138,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             settings,
                             instructions: Instructions::Recipe { recipe },
                         })
-
-                    },
+                    }
                     (false, true, _) => {
                         // We have a build section
 
@@ -169,7 +168,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                                 sync: helper.sync,
                             },
                         })
-                    },
+                    }
                 }
             }
         }

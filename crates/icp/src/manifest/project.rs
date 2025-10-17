@@ -111,7 +111,6 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                 while let Some((key, value)) =
                     map.next_entry::<serde_yaml::Value, serde_yaml::Value>()?
                 {
-                    eprintln!("Adding {key:#?} --> {value:#?}");
                     top_map.insert(key, value);
                 }
 

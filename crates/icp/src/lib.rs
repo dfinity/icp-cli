@@ -70,7 +70,7 @@ pub enum LoadError {
     #[error("failed to load path")]
     Path,
 
-    #[error("failed to load manifest")]
+    #[error("failed to load the project manifest")]
     Manifest,
 
     #[error(transparent)]

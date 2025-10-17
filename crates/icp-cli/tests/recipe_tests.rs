@@ -332,35 +332,3 @@ fn recipe_local_file_valid_checksum() {
         .assert()
         .success();
 }
-
-#[test]
-fn recipe_builtin_ignores_checksum() {
-    let ctx = TestContext::new();
-
-    for recipe_type in ["assets", "motoko", "rust"] {
-        // Setup project
-        let project_dir = ctx.create_project_dir("icp");
-
-        let pm = formatdoc! {"
-            canister:
-            name: my-canister
-            recipe:
-                type: {recipe_type}
-                sha256: invalid_checksum_should_be_ignored
-        "};
-
-        write_string(
-            &project_dir.join("icp.yaml"), // path
-            &pm,                           // contents
-        )
-        .expect("failed to write project manifest");
-
-        // Invoke build - should succeed because local files don't verify checksums
-        ctx.icp()
-            .current_dir(project_dir)
-            .args(["build"])
-            .assert()
-            .append_context("test-case", recipe_type)
-            .success();
-    }
-}

@@ -1,4 +1,4 @@
-use icp::manifest::project::ProjectInner;
+use icp::manifest::project::ProjectManifest;
 use schemars::schema_for;
 
 const ID: &str = "https://dfinity.org/schemas/icp-yaml/v1.0.0";
@@ -8,7 +8,7 @@ const DESCRIPTION: &str = "Schema for icp.yaml project configuration files used 
 /// Generate JSON Schema for icp.yaml configuration files
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate schema for the main ProjectManifest type
-    let schema = schema_for!(ProjectInner);
+    let schema = schema_for!(ProjectManifest);
 
     // Add metadata to the schema
     let mut schema_json = serde_json::to_value(schema)?;

@@ -10,19 +10,19 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct StatusArgs {
+pub(crate) struct StatusArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) name: String,
 
     #[command(flatten)]
-    identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -51,7 +51,7 @@ pub enum CommandError {
     Status(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");
@@ -110,7 +110,8 @@ pub async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), CommandError> 
     Ok(())
 }
 
-pub fn print_status(result: &CanisterStatusResult) {
+// TODO(or.ricon): Convert this to indoc?
+fn print_status(result: &CanisterStatusResult) {
     eprintln!("Canister Status Report:");
     eprintln!("  Status: {:?}", result.status);
 

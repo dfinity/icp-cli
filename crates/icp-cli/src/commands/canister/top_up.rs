@@ -14,23 +14,23 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct TopUpArgs {
+pub(crate) struct TopUpArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) name: String,
 
     /// Amount of cycles to top up
     #[arg(long)]
-    pub amount: u128,
+    pub(crate) amount: u128,
 
     #[command(flatten)]
-    identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -65,7 +65,7 @@ pub enum CommandError {
     Withdraw { err: WithdrawError, amount: u128 },
 }
 
-pub async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

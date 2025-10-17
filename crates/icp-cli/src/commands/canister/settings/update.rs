@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct ControllerOpt {
+pub(crate) struct ControllerOpt {
     #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
     add_controller: Option<Vec<Principal>>,
 
@@ -25,13 +25,13 @@ pub struct ControllerOpt {
 }
 
 impl ControllerOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_controller.is_some() || self.remove_controller.is_some()
     }
 }
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct LogVisibilityOpt {
+pub(crate) struct LogVisibilityOpt {
     #[arg(
         long,
         value_parser = log_visibility_parser,
@@ -52,13 +52,13 @@ pub struct LogVisibilityOpt {
 }
 
 impl LogVisibilityOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_log_viewer.is_some() || self.remove_log_viewer.is_some()
     }
 }
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct EnvironmentVariableOpt {
+pub(crate) struct EnvironmentVariableOpt {
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
 
@@ -67,52 +67,52 @@ pub struct EnvironmentVariableOpt {
 }
 
 impl EnvironmentVariableOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_environment_variable.is_some() || self.remove_environment_variable.is_some()
     }
 }
 
 #[derive(Debug, Args)]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) name: String,
 
     #[command(flatten)]
-    identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 
     #[command(flatten)]
-    controllers: Option<ControllerOpt>,
+    pub(crate) controllers: Option<ControllerOpt>,
 
     #[arg(long, value_parser = compute_allocation_parser)]
-    compute_allocation: Option<u8>,
+    pub(crate) compute_allocation: Option<u8>,
 
     #[arg(long, value_parser = memory_parser)]
-    memory_allocation: Option<Byte>,
+    pub(crate) memory_allocation: Option<Byte>,
 
     #[arg(long, value_parser = freezing_threshold_parser)]
-    freezing_threshold: Option<u64>,
+    pub(crate) freezing_threshold: Option<u64>,
 
     #[arg(long, value_parser = reserved_cycles_limit_parser)]
-    reserved_cycles_limit: Option<u128>,
+    pub(crate) reserved_cycles_limit: Option<u128>,
 
     #[arg(long, value_parser = memory_parser)]
-    wasm_memory_limit: Option<Byte>,
+    pub(crate) wasm_memory_limit: Option<Byte>,
 
     #[arg(long, value_parser = memory_parser)]
-    wasm_memory_threshold: Option<Byte>,
+    pub(crate) wasm_memory_threshold: Option<Byte>,
 
     #[command(flatten)]
-    log_visibility: Option<LogVisibilityOpt>,
+    pub(crate) log_visibility: Option<LogVisibilityOpt>,
 
     #[command(flatten)]
-    environment_variables: Option<EnvironmentVariableOpt>,
+    pub(crate) environment_variables: Option<EnvironmentVariableOpt>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -144,7 +144,7 @@ pub enum CommandError {
     Update(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

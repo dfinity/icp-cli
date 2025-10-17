@@ -3,25 +3,28 @@ use ic_agent::AgentError;
 use icp::{agent, identity, network};
 
 use crate::{
-    commands::{Context, Mode},
+    commands::{Context, Mode, args},
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };
 
 #[derive(Debug, Args)]
-pub struct StopArgs {
+pub(crate) struct StopArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) canister: args::Canister,
 
     #[command(flatten)]
-    identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
+    #[error("an invalid argument was provided")]
+    Args,
+
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -50,13 +53,21 @@ pub enum CommandError {
     Stop(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
+            let args::Canister::Name(_name) = &args.canister else {
+                return Err(CommandError::Args);
+            };
+
             unimplemented!("global mode is not implemented yet");
         }
 
         Mode::Project(_) => {
+            let args::Canister::Name(name) = &args.canister else {
+                return Err(CommandError::Args);
+            };
+
             // Load project
             let p = ctx.project.load().await?;
 
@@ -81,10 +92,10 @@ pub async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandError> {
             }
 
             // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
+            if !env.canisters.contains_key(name) {
                 return Err(CommandError::EnvironmentCanister {
                     environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
+                    canister: name.to_owned(),
                 });
             }
 
@@ -92,7 +103,7 @@ pub async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandError> {
             let cid = ctx.ids.lookup(&Key {
                 network: env.network.name.to_owned(),
                 environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
+                canister: name.to_owned(),
             })?;
 
             // Management Interface

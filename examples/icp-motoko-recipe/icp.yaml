@@ -1,6 +1,6 @@
 canister:
   name: my-canister
   recipe:
-    type: "aaa@dfinity/motoko" 
+    type: "@dfinity/motoko" 
     configuration:
       entry: src/main.mo

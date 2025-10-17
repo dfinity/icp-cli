@@ -14,7 +14,7 @@ use crate::{
     is_glob,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, Item, Locate, canister::Instructions,
-        environment::CanisterSelection, project::ProjectManifest,
+        environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType,
     },
     prelude::*,
 };
@@ -73,8 +73,8 @@ pub enum LoadManifestError {
     #[error("failed to load canister manifest")]
     Canister,
 
-    #[error("failed to resolve canister recipe")]
-    Recipe,
+    #[error("failed to resolve canister recipe: {0}")]
+    Recipe(RecipeType),
 
     #[error("project contains two similarly named {kind}s: '{name}'")]
     Duplicate { kind: String, name: String },
@@ -173,7 +173,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         .recipe
                         .resolve(recipe)
                         .await
-                        .context(LoadManifestError::Recipe)?,
+                        .context(LoadManifestError::Recipe(recipe.recipe_type.clone()))?,
                 };
 
                 // Check for duplicates

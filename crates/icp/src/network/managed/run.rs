@@ -196,8 +196,9 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
 }
 
 pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
-    let mut retries = 0;
-    while retries < 3000 {
+    let start_time = std::time::Instant::now();
+
+    loop {
         if let Ok(contents) = read_to_string(path)
             && contents.ends_with('\n')
             && let Ok(port) = contents.trim().parse::<u16>()
@@ -205,10 +206,11 @@ pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutEr
             return Ok(port);
         }
 
+        if start_time.elapsed().as_secs() > 30 {
+            return Err(WaitForPortTimeoutError);
+        }
         sleep(Duration::from_millis(100)).await;
-        retries += 1;
     }
-    Err(WaitForPortTimeoutError)
 }
 
 #[derive(Debug, Snafu)]

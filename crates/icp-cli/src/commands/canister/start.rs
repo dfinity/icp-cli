@@ -58,7 +58,7 @@ pub(crate) enum CommandError {
 pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
-            let args::Canister::Name(_name) = &args.canister else {
+            let args::Canister::Principal(_) = &args.canister else {
                 return Err(CommandError::Args);
             };
 

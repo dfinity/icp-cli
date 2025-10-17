@@ -1,15 +1,14 @@
 use clap::Args;
 
 use crate::{
-    commands::{Context, Mode},
+    commands::{Context, Mode, args},
     options::EnvironmentOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
-    /// The name of the canister within the current project
-    pub(crate) name: String,
+    pub(crate) canister: args::Canister,
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
@@ -17,6 +16,9 @@ pub(crate) struct ShowArgs {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
+    #[error("an invalid argument was provided")]
+    Args,
+
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -36,10 +38,18 @@ pub(crate) enum CommandError {
 pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
+            let args::Canister::Principal(_) = &args.canister else {
+                return Err(CommandError::Args);
+            };
+
             unimplemented!("global mode is not implemented yet");
         }
 
         Mode::Project(_) => {
+            let args::Canister::Name(name) = &args.canister else {
+                return Err(CommandError::Args);
+            };
+
             // Load project
             let p = ctx.project.load().await?;
 
@@ -51,10 +61,10 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandEr
             )?;
 
             // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
+            if !env.canisters.contains_key(name) {
                 return Err(CommandError::EnvironmentCanister {
                     environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
+                    canister: name.to_owned(),
                 });
             }
 
@@ -62,10 +72,10 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandEr
             let cid = ctx.ids.lookup(&Key {
                 network: env.network.name.to_owned(),
                 environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
+                canister: name.to_owned(),
             })?;
 
-            println!("{cid} => {}", args.name);
+            println!("{cid} => {}", name);
 
             // TODO(or.ricon): Show canister details
             //  Things we might want to show (do we need to sub-command this?)

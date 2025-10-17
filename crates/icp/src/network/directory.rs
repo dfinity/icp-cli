@@ -151,7 +151,7 @@ impl NetworkDirectory {
         RwFileLock::open_for_write(self.structure.background_network_runner_pid_file())
     }
 
-    pub fn save_background_network_runner_pid(&self, pid: u32) -> Result<(), SavePidError> {
+    pub fn save_background_network_runner_pid(&self, pid: Pid) -> Result<(), SavePidError> {
         let mut file_lock = self.open_background_runner_pid_file_for_writelock()?;
         let mut write_guard = file_lock.acquire_write_lock()?;
 
@@ -159,7 +159,6 @@ impl NetworkDirectory {
         write_guard.set_len(0).context(TruncatePidFileSnafu {
             path: self.structure.background_network_runner_pid_file(),
         })?;
-
         (*write_guard)
             .seek(std::io::SeekFrom::Start(0))
             .context(TruncatePidFileSnafu {

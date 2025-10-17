@@ -14,11 +14,9 @@ use ic_agent::{Agent, AgentError};
 use icp::{
     identity::manifest::{LoadIdentityManifestError, load_identity_list},
     manifest,
-    network::{
-        Configuration, NetworkDirectory, RunNetworkError, config::NetworkDescriptorModel,
-        run_network,
-    },
+    network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
 };
+use sysinfo::Pid;
 use tracing::debug;
 
 use crate::commands::{Context, Mode};
@@ -115,8 +113,7 @@ pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
 
             if args.background {
                 let mut child = run_in_background()?;
-                nd.save_background_network_runner_pid(child.id())?;
-
+                nd.save_background_network_runner_pid(Pid::from(child.id() as usize))?;
                 relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
             } else {
                 run_network(
@@ -140,12 +137,11 @@ async fn relay_child_output_until_healthy(
     let stdout = child.stdout.take().expect("Failed to take child stdout");
     let stderr = child.stderr.take().expect("Failed to take child stderr");
 
-    // Use atomic bool to signal threads to stop
-    let should_stop = Arc::new(AtomicBool::new(false));
+    let stop_printing_child_output = Arc::new(AtomicBool::new(false));
 
     // Spawn threads to relay output
     let term = ctx.term.clone();
-    let should_stop_clone = Arc::clone(&should_stop);
+    let should_stop_clone = Arc::clone(&stop_printing_child_output);
     let stdout_thread = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
@@ -159,7 +155,7 @@ async fn relay_child_output_until_healthy(
     });
 
     let term = ctx.term.clone();
-    let should_stop_clone = Arc::clone(&should_stop);
+    let should_stop_clone = Arc::clone(&stop_printing_child_output);
     let stderr_thread = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
@@ -175,10 +171,10 @@ async fn relay_child_output_until_healthy(
     wait_for_healthy_network(nd).await?;
 
     // Signal threads to stop
-    should_stop.store(true, Ordering::Relaxed);
+    stop_printing_child_output.store(true, Ordering::Relaxed);
 
     // Don't join the threads - they're likely blocked on I/O waiting for the next line.
-    // They'll terminate naturally when the parent process exits and the pipes close, or when the next line arrives.
+    // They'll terminate naturally when the pipes close, or when the next line arrives.
     drop(stdout_thread);
     drop(stderr_thread);
 
@@ -187,8 +183,6 @@ async fn relay_child_output_until_healthy(
 
 #[allow(clippy::result_large_err)]
 fn run_in_background() -> Result<Child, CommandError> {
-    // Background strategy: spawn a child process with piped stdout/stderr
-    // so the parent can relay output until the network is healthy, then detach.
     let exe = std::env::current_exe().expect("Failed to get current executable.");
     let mut cmd = Command::new(exe);
     // Skip 1 because arg0 is this executable's path.
@@ -228,15 +222,31 @@ where
 }
 
 async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandError> {
-    let network = wait_for_network_descriptor(nd).await?;
+    let max_retries = 30;
+    let delay_ms = 1000;
+
+    // Wait for network descriptor to be written
+    let network = retry_with_timeout(
+        || async move {
+            if let Ok(Some(descriptor)) = nd.load_network_descriptor() {
+                return Some(descriptor);
+            }
+            None
+        },
+        max_retries,
+        delay_ms,
+    )
+    .await
+    .ok_or(CommandError::Timeout {
+        err: "timed out waiting for network descriptor".to_string(),
+    })?;
+
+    // Wait for network to report itself healthy
     let port = network.gateway.port;
     let agent = Agent::builder()
         .with_url(format!("http://127.0.0.1:{port}"))
         .build()?;
-
-    let max_retries = 30;
-    let delay_ms = 1000;
-    let result: Option<()> = retry_with_timeout(
+    retry_with_timeout(
         || {
             let agent = agent.clone();
             async move {
@@ -253,37 +263,8 @@ async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandEr
         max_retries,
         delay_ms,
     )
-    .await;
-
-    match result {
-        Some(()) => Ok(()),
-        None => Err(CommandError::Timeout {
-            err: "timed out waiting for network to start".to_string(),
-        }),
-    }
-}
-
-async fn wait_for_network_descriptor(
-    nd: &NetworkDirectory,
-) -> Result<NetworkDescriptorModel, CommandError> {
-    let max_retries = 30;
-    let delay_ms = 1000;
-    let result: Option<NetworkDescriptorModel> = retry_with_timeout(
-        || async move {
-            if let Ok(Some(descriptor)) = nd.load_network_descriptor() {
-                return Some(descriptor);
-            }
-            None
-        },
-        max_retries,
-        delay_ms,
-    )
-    .await;
-
-    match result {
-        Some(descriptor) => Ok(descriptor),
-        None => Err(CommandError::Timeout {
-            err: "timed out waiting for network descriptor".to_string(),
-        }),
-    }
+    .await
+    .ok_or(CommandError::Timeout {
+        err: "timed out waiting for network to start".to_string(),
+    })
 }

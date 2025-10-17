@@ -50,7 +50,6 @@ itertools = "0.14.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 lazy_static = "1.5.0"
 mockall = "0.13.1"
-nix = { version = "0.30.1", features = ["process", "signal"] }
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 pem = "3.0.5"

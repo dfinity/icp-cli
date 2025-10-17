@@ -53,12 +53,12 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
             })?;
 
             // Network root
-            let ndir = pdir.join(".icp").join("networks").join(&cmd.name);
+            let nroot = pdir.join(".icp").join("networks").join(&cmd.name);
 
             // Network directory
             let nd = NetworkDirectory::new(
                 &cmd.name,                   // name
-                &ndir,                       // network_root
+                &nroot,                      // network_root
                 &ctx.dirs.port_descriptor(), // port_descriptor_dir
             );
 
@@ -73,13 +73,9 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
                 .term
                 .write_line(&format!("Stopping background network (PID: {})...", pid));
 
-            // Send SIGINT to the process
             send_sigint(pid);
-
-            // Wait for process to exit
             wait_for_process_exit(pid)?;
 
-            // Remove PID file
             let pid_file = nd.structure.background_network_runner_pid_file();
             let _ = remove_file(&pid_file); // Cleanup is nice, but optional
 
@@ -104,7 +100,6 @@ fn wait_for_process_exit(pid: Pid) -> Result<(), CommandError> {
     let mut system = System::new();
 
     loop {
-        // Check if process is still running
         system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
         if system.process(pid).is_none() {
             return Ok(());
@@ -117,7 +112,6 @@ fn wait_for_process_exit(pid: Pid) -> Result<(), CommandError> {
             });
         }
 
-        // Sleep briefly before checking again
         std::thread::sleep(Duration::from_millis(100));
     }
 }

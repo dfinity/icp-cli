@@ -4,6 +4,7 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 use serial_test::file_serial;
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
@@ -320,7 +321,7 @@ async fn network_run_and_stop_background() {
     );
 
     let pid_contents = std::fs::read_to_string(&pid_file_path).expect("Failed to read PID file");
-    let pid: u32 = pid_contents
+    let pid: Pid = pid_contents
         .trim()
         .parse()
         .expect("PID file should contain a valid process ID");
@@ -355,15 +356,12 @@ async fn network_run_and_stop_background() {
         "PID file should be removed after stopping"
     );
 
-    // Verify process is no longer running
-    #[cfg(unix)]
-    {
-        use nix::sys::signal::kill;
-        use nix::unistd::Pid;
-        let nix_pid = Pid::from_raw(pid as i32);
-        assert!(
-            kill(nix_pid, None).is_err(),
-            "Process should no longer be running"
-        );
-    }
+    // Verify contrller process is no longer running
+    // We do not check that the PocketIC process is no longer running because it will take a while to shut down on its own.
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+    assert!(
+        system.process(pid).is_none(),
+        "Process should no longer be running"
+    );
 }

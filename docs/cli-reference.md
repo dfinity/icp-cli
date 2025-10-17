@@ -12,11 +12,11 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister delete`↴](#icp-cli-canister-delete)
 * [`icp-cli canister info`↴](#icp-cli-canister-info)
 * [`icp-cli canister install`↴](#icp-cli-canister-install)
-* [`icp-cli canister show`↴](#icp-cli-canister-show)
+* [`icp-cli canister list`↴](#icp-cli-canister-list)
 * [`icp-cli canister settings`↴](#icp-cli-canister-settings)
 * [`icp-cli canister settings show`↴](#icp-cli-canister-settings-show)
 * [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
-* [`icp-cli canister list`↴](#icp-cli-canister-list)
+* [`icp-cli canister show`↴](#icp-cli-canister-show)
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
@@ -98,9 +98,9 @@ Perform canister operations against a network
 * `delete` — 
 * `info` — 
 * `install` — 
-* `show` — 
-* `settings` — 
 * `list` — 
+* `settings` — 
+* `show` — 
 * `start` — 
 * `status` — 
 * `stop` — 
@@ -206,13 +206,9 @@ Perform canister operations against a network
 
 
 
-## `icp-cli canister show`
+## `icp-cli canister list`
 
-**Usage:** `icp-cli canister show [OPTIONS] <NAME>`
-
-###### **Arguments:**
-
-* `<NAME>` — The name of the canister within the current project
+**Usage:** `icp-cli canister list [OPTIONS]`
 
 ###### **Options:**
 
@@ -279,9 +275,13 @@ Perform canister operations against a network
 
 
 
-## `icp-cli canister list`
+## `icp-cli canister show`
 
-**Usage:** `icp-cli canister list [OPTIONS]`
+**Usage:** `icp-cli canister show [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The name of the canister within the current project
 
 ###### **Options:**
 

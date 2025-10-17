@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use clap::Parser;
+use clap::Args;
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
     agent,
@@ -9,11 +9,11 @@ use icp::{
 };
 use tokio::time::sleep;
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 /// Try to connect to a network, and print out its status.
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct PingArgs {
     /// The compute network to connect to. By default, ping the local network.
     #[arg(value_name = "NETWORK", default_value = "local")]
     network: String,
@@ -50,36 +50,40 @@ pub enum CommandError {
     Unexpected(#[from] anyhow::Error),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load Project
-    let p = ctx.project.load().await?;
+pub async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global | Mode::Project(_) => {
+            // Load Project
+            let p = ctx.project.load().await?;
 
-    // Identity
-    let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
+            // Identity
+            let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
-    // Network
-    let network = p.networks.get(&cmd.network).ok_or(CommandError::Network)?;
+            // Network
+            let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
 
-    // NetworkAccess
-    let access = ctx.network.access(network).await?;
+            // NetworkAccess
+            let access = ctx.network.access(network).await?;
 
-    // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
+            // Agent
+            let agent = ctx.agent.create(id, &access.url).await?;
 
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
+            if let Some(k) = access.root_key {
+                agent.set_root_key(k);
+            }
+
+            // Query
+            let status = match args.wait_healthy {
+                // wait
+                true => ping_until_healthy(&agent).await?,
+
+                // dont wait
+                false => agent.status().await?,
+            };
+
+            println!("{status}");
+        }
     }
-
-    // Query
-    let status = match cmd.wait_healthy {
-        // wait
-        true => ping_until_healthy(&agent).await?,
-
-        // dont wait
-        false => agent.status().await?,
-    };
-
-    println!("{status}");
 
     Ok(())
 }

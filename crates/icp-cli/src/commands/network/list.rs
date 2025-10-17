@@ -1,10 +1,10 @@
-use clap::Parser;
+use clap::Args;
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 /// List networks in the project
-#[derive(Parser, Debug)]
-pub struct Cmd;
+#[derive(Args, Debug)]
+pub struct ListArgs;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
@@ -15,13 +15,21 @@ pub enum CommandError {
     Unexpected(#[from] anyhow::Error),
 }
 
-pub async fn exec(ctx: &Context, _: Cmd) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
+pub async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
+        }
 
-    // List networks
-    for (name, cfg) in &p.networks {
-        eprintln!("{name} => {cfg:?}");
+        Mode::Project(_) => {
+            // Load project
+            let p = ctx.project.load().await?;
+
+            // List networks
+            for (name, cfg) in &p.networks {
+                eprintln!("{name} => {cfg:?}");
+            }
+        }
     }
 
     Ok(())

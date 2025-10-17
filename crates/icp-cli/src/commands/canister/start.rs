@@ -1,3 +1,4 @@
+use anyhow::{Context as _, anyhow};
 use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
@@ -56,7 +57,7 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
+    let (agent, cid) = match &ctx.mode {
         Mode::Global => {
             let args::Canister::Principal(_) = &args.canister else {
                 return Err(CommandError::Args);
@@ -108,13 +109,14 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandE
                 canister: name.to_owned(),
             })?;
 
-            // Management Interface
-            let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
-            // Instruct management canister to start canister
-            mgmt.start_canister(&cid).await?;
+            (agent, cid)
         }
-    }
+    };
+
+    (ctx.ops.canister.start)(&agent)
+        .start(&cid)
+        .await
+        .context(anyhow!("failed to start canister {cid}"))?;
 
     Ok(())
 }

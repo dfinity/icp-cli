@@ -1,3 +1,4 @@
+use anyhow::{Context as _, anyhow};
 use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
@@ -51,10 +52,13 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Stop(#[from] AgentError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
+    let (agent, cid) = match &ctx.mode {
         Mode::Global => {
             let args::Canister::Principal(_) = &args.canister else {
                 return Err(CommandError::Args);
@@ -106,13 +110,14 @@ pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandEr
                 canister: name.to_owned(),
             })?;
 
-            // Management Interface
-            let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
-            // Instruct management canister to stop canister
-            mgmt.stop_canister(&cid).await?;
+            (agent, cid)
         }
-    }
+    };
+
+    (ctx.ops.canister.stop)(&agent)
+        .stop(&cid)
+        .await
+        .context(anyhow!("failed to stop canister {cid}"))?;
 
     Ok(())
 }

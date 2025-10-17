@@ -1,44 +1,59 @@
-use crate::commands::Context;
 use bip39::{Language, Mnemonic, MnemonicType};
-use clap::Parser;
-use icp::identity::{
-    key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
-    seed::derive_default_key_from_seed,
+use clap::Args;
+use icp::{
+    fs::write_string,
+    identity::{
+        key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
+        seed::derive_default_key_from_seed,
+    },
+    prelude::*,
 };
-use icp::{fs::write, prelude::*};
-use snafu::{ResultExt, Snafu};
 
-#[derive(Debug, Parser)]
-pub struct NewCmd {
+use crate::commands::{Context, Mode};
+
+#[derive(Debug, Args)]
+pub struct NewArgs {
     name: String,
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
 }
 
-pub fn exec(ctx: &Context, cmd: NewCmd) -> Result<(), NewIdentityError> {
-    let mnemonic = Mnemonic::new(MnemonicType::for_key_size(256).unwrap(), Language::English);
-    let key = derive_default_key_from_seed(&mnemonic);
-    create_identity(
-        &ctx.dirs.identity(),
-        &cmd.name,
-        IdentityKey::Secp256k1(key),
-        CreateFormat::Plaintext,
-    )?;
-    if let Some(out_file) = cmd.output_seed {
-        write(&out_file, mnemonic.to_string().as_bytes()).context(WriteSeedFileSnafu)?;
-        println!("Seed phrase written to file {out_file}");
-        Ok(())
-    } else {
-        println!("Your seed phrase: {mnemonic}");
-        Ok(())
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    CreateIdentityError(#[from] CreateIdentityError),
+
+    #[error("failed to write seed file")]
+    WriteSeedFileError(#[from] icp::fs::Error),
 }
 
-#[derive(Debug, Snafu)]
-pub enum NewIdentityError {
-    #[snafu(transparent)]
-    CreateIdentityError { source: CreateIdentityError },
+pub async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global | Mode::Project(_) => {
+            let mnemonic = Mnemonic::new(
+                MnemonicType::for_key_size(256).expect("failed to get mnemonic type"),
+                Language::English,
+            );
 
-    #[snafu(display("failed to write seed file"))]
-    WriteSeedFileError { source: icp::fs::Error },
+            create_identity(
+                &ctx.dirs.identity(),
+                &args.name,
+                IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
+                CreateFormat::Plaintext,
+            )?;
+
+            match &args.output_seed {
+                Some(path) => {
+                    write_string(path, mnemonic.as_ref())?;
+                    println!("Seed phrase written to file {path}")
+                }
+
+                None => {
+                    println!("Your seed phrase: {mnemonic}");
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

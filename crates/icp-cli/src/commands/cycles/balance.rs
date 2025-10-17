@@ -1,17 +1,13 @@
-use snafu::Snafu;
-
 use crate::{commands::Context, commands::token};
 
-pub async fn exec(ctx: &Context, cmd: token::balance::Cmd) -> Result<(), CommandError> {
-    token::balance::exec(ctx, "cycles", cmd)
-        .await
-        .map_err(Into::into)
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Balance(#[from] token::balance::CommandError),
 }
 
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    Balance {
-        source: token::balance::CommandError,
-    },
+pub async fn exec(ctx: &Context, args: &token::balance::BalanceArgs) -> Result<(), CommandError> {
+    token::balance::exec(ctx, "cycles", args)
+        .await
+        .map_err(Into::into)
 }

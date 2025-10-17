@@ -1,9 +1,9 @@
 use std::fmt;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CommandField {
     /// Command used to build a canister
@@ -23,7 +23,7 @@ impl CommandField {
 }
 
 /// Configuration for a custom canister build adapter.
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Adapter {
     /// Command used to build a canister
     #[serde(flatten)]
@@ -33,11 +33,11 @@ pub struct Adapter {
 impl fmt::Display for Adapter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let cmd = match &self.command {
-            CommandField::Command(c) => format!("command: {c}"),
-            CommandField::Commands(cs) => format!("{} commands", cs.len()),
+            CommandField::Command(c) => c,
+            CommandField::Commands(cs) => &cs.join("\n"),
         };
 
-        write!(f, "({cmd})")
+        write!(f, "{cmd}")
     }
 }
 

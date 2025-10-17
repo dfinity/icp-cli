@@ -1,12 +1,9 @@
 use clap::{Parser, Subcommand};
 use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_LEDGER_CID};
 use phf::phf_map;
-use snafu::Snafu;
 
-use crate::commands::Context;
-
-pub mod balance;
-mod transfer;
+pub(crate) mod balance;
+pub(crate) mod transfer;
 
 /// A compile-time map of token names to their corresponding ledger canister IDs.
 ///
@@ -20,37 +17,17 @@ static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
     "cycles" => CYCLES_LEDGER_CID,
 };
 
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Debug, Parser)]
+pub struct Command {
     #[arg(default_value = "icp")]
     pub token: String,
 
     #[command(subcommand)]
-    subcmd: Subcmd,
+    pub command: Commands,
 }
 
-#[derive(Subcommand, Debug)]
-pub enum Subcmd {
-    Balance(balance::Cmd),
-    Transfer(transfer::Cmd),
-}
-
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    let token = cmd.token;
-
-    match cmd.subcmd {
-        Subcmd::Balance(cmd) => balance::exec(ctx, &token, cmd).await?,
-        Subcmd::Transfer(cmd) => transfer::exec(ctx, &token, cmd).await?,
-    }
-
-    Ok(())
-}
-
-#[derive(Debug, Snafu)]
-pub enum CommandError {
-    #[snafu(transparent)]
-    Balance { source: balance::CommandError },
-
-    #[snafu(transparent)]
-    Transfer { source: transfer::CommandError },
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    Balance(balance::BalanceArgs),
+    Transfer(transfer::TransferArgs),
 }

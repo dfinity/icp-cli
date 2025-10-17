@@ -13,7 +13,6 @@ pub fn icp_cli_version_str() -> &'static str {
 }
 
 /// Returns the git sha of the build.
-#[allow(unused)]
 pub fn git_sha() -> &'static str {
     &GIT_SHA
 }

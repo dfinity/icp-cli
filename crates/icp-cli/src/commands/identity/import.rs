@@ -1,5 +1,5 @@
 use bip39::{Language, Mnemonic};
-use clap::{ArgGroup, Parser};
+use clap::{ArgGroup, Args};
 use dialoguer::Password;
 use icp::identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
@@ -17,11 +17,11 @@ use pkcs8::{
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
-pub struct ImportCmd {
+pub struct ImportArgs {
     name: String,
 
     #[arg(long, value_name = "FILE", group = "import-from")]
@@ -40,29 +40,35 @@ pub struct ImportCmd {
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
-pub fn exec(ctx: &Context, cmd: ImportCmd) -> Result<(), ImportCmdError> {
-    if let Some(from_pem) = cmd.from_pem {
-        import_from_pem(
-            ctx,
-            &cmd.name,
-            &from_pem,
-            cmd.decryption_password_from_file.as_deref(),
-            cmd.assert_key_type,
-        )?;
-    } else if let Some(path) = &cmd.from_seed_file {
-        let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
-        import_from_seed_phrase(ctx, &cmd.name, &phrase)?;
-    } else if cmd.read_seed_phrase {
-        let phrase = Password::new()
-            .with_prompt("Enter seed phrase")
-            .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
-            .interact()
-            .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(ctx, &cmd.name, &phrase)?;
-    } else {
-        unreachable!();
+pub async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportCmdError> {
+    match &ctx.mode {
+        Mode::Global | Mode::Project(_) => {
+            if let Some(from_pem) = &args.from_pem {
+                import_from_pem(
+                    ctx,
+                    &args.name,
+                    from_pem,
+                    args.decryption_password_from_file.as_deref(),
+                    args.assert_key_type.clone(),
+                )?;
+            } else if let Some(path) = &args.from_seed_file {
+                let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
+                import_from_seed_phrase(ctx, &args.name, &phrase)?;
+            } else if args.read_seed_phrase {
+                let phrase = Password::new()
+                    .with_prompt("Enter seed phrase")
+                    .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
+                    .interact()
+                    .context(ReadSeedPhraseFromTerminalSnafu)?;
+                import_from_seed_phrase(ctx, &args.name, &phrase)?;
+            } else {
+                unreachable!();
+            }
+
+            println!("Identity \"{}\" created", args.name);
+        }
     }
-    println!("Identity \"{}\" created", cmd.name);
+
     Ok(())
 }
 

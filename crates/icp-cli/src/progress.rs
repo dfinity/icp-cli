@@ -71,16 +71,26 @@ impl RollingLines {
     }
 }
 
+/// Settings for the progress manager
+pub struct ProgressManagerSettings {
+    /// Whether to hide the progress bars
+    pub hidden: bool,
+}
+
 /// Shared progress bar utilities for build and sync commands
 pub struct ProgressManager {
     pub multi_progress: MultiProgress,
 }
 
 impl ProgressManager {
-    pub fn new() -> Self {
-        Self {
-            multi_progress: MultiProgress::new(),
+    pub fn new(settings: ProgressManagerSettings) -> Self {
+        let multi_progress = MultiProgress::new();
+
+        if settings.hidden {
+            multi_progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         }
+
+        Self { multi_progress }
     }
 
     /// Create a new progress bar with standard configuration
@@ -213,7 +223,7 @@ impl MultiStepProgressBar {
             let mut complete = RollingLines::new(MAX_LINES_PER_STEP); // We need _some_ limit to prevent consuming infinite memory
 
             while let Some(line) = rx.recv().await {
-                debug!(line);
+                debug!("{line}");
 
                 // Update output buffer
                 rolling.push(line.clone());

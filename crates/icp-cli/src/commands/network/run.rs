@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use clap::Parser;
+use clap::Args;
 use ic_agent::{Agent, AgentError};
 use icp::{
     identity::manifest::{LoadIdentityManifestError, load_identity_list},
@@ -21,11 +21,11 @@ use icp::{
 };
 use tracing::debug;
 
-use crate::commands::Context;
+use crate::commands::{Context, Mode};
 
 /// Run a given network
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct RunArgs {
     /// Name of the network to run
     #[arg(default_value = "local")]
     name: String,
@@ -65,89 +65,71 @@ pub enum CommandError {
     SavePid(#[from] icp::network::SavePidError),
 }
 
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
+pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
+        }
 
-    // Obtain network configuration
-    let network = p.networks.get(&cmd.name).ok_or(CommandError::Network {
-        name: cmd.name.to_owned(),
-    })?;
+        Mode::Project(pdir) => {
+            // Load project
+            let p = ctx.project.load().await?;
 
-    let cfg = match &network.configuration {
-        // Locally-managed network
-        Configuration::Managed(cfg) => cfg,
+            // Obtain network configuration
+            let network = p.networks.get(&args.name).ok_or(CommandError::Network {
+                name: args.name.to_owned(),
+            })?;
 
-        // Non-managed networks cannot be started
-        Configuration::Connected(_) => {
-            return Err(CommandError::Unmanaged {
-                name: cmd.name.to_owned(),
-            });
+            let cfg = match &network.configuration {
+                // Locally-managed network
+                Configuration::Managed(cfg) => cfg,
+
+                // Non-managed networks cannot be started
+                Configuration::Connected(_) => {
+                    return Err(CommandError::Unmanaged {
+                        name: args.name.to_owned(),
+                    });
+                }
+            };
+
+            // Network root
+            let ndir = pdir.join(".icp").join("networks").join(&network.name);
+
+            // Network directory
+            let nd = NetworkDirectory::new(
+                &network.name,               // name
+                &ndir,                       // network_root
+                &ctx.dirs.port_descriptor(), // port_descriptor_dir
+            );
+            nd.ensure_exists()
+                .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
+
+            // Identities
+            let ids = load_identity_list(&ctx.dirs.identity())?;
+
+            // Determine ICP accounts to seed
+            let seed_accounts = ids.identities.values().map(|id| id.principal());
+
+            debug!("Project root: {pdir}");
+            debug!("Network root: {ndir}");
+
+            if args.background {
+                let mut child = run_in_background()?;
+                nd.save_background_network_runner_pid(child.id())?;
+
+                relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
+            } else {
+                run_network(
+                    cfg,           // config
+                    nd,            // nd
+                    &pdir,         // project_root
+                    seed_accounts, // seed_accounts
+                )
+                .await?;
+            }
         }
     };
-
-    // Project root
-    let pdir = ctx.workspace.locate()?;
-
-    // Network root
-    let ndir = pdir.join(".icp").join("networks").join(&network.name);
-
-    // Network directory
-    let nd = NetworkDirectory::new(
-        &network.name,               // name
-        &ndir,                       // network_root
-        &ctx.dirs.port_descriptor(), // port_descriptor_dir
-    );
-    nd.ensure_exists()
-        .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
-
-    // Identities
-    let ids = load_identity_list(&ctx.dirs.identity())?;
-
-    // Determine ICP accounts to seed
-    let seed_accounts = ids.identities.values().map(|id| id.principal());
-
-    debug!("Project root: {pdir}");
-    debug!("Network root: {ndir}");
-
-    if cmd.background {
-        let mut child = run_in_background()?;
-        nd.save_background_network_runner_pid(child.id())?;
-
-        relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
-    } else {
-        run_network(
-            cfg,           // config
-            nd,            // nd
-            &pdir,         // project_root
-            seed_accounts, // seed_accounts
-        )
-        .await?;
-    }
     Ok(())
-}
-
-fn run_in_background() -> Result<Child, CommandError> {
-    // Background strategy: spawn a child process with piped stdout/stderr
-    // so the parent can relay output until the network is healthy, then detach.
-    let exe = std::env::current_exe().expect("Failed to get current executable.");
-    let mut cmd = Command::new(exe);
-    // Skip 1 because arg0 is this executable's path.
-    cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
-        .stdin(Stdio::null()) // Redirect stdin from /dev/null
-        .stdout(Stdio::piped()) // Capture stdout so parent can relay it
-        .stderr(Stdio::piped()); // Capture stderr so parent can relay it
-
-    // On Unix, create a new process group so the child can continue running
-    // independently after the parent exits
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-
-    let child = cmd.spawn().expect("Failed to spawn child process.");
-    Ok(child)
 }
 
 async fn relay_child_output_until_healthy(
@@ -201,6 +183,29 @@ async fn relay_child_output_until_healthy(
     drop(stderr_thread);
 
     Ok(())
+}
+
+fn run_in_background() -> Result<Child, CommandError> {
+    // Background strategy: spawn a child process with piped stdout/stderr
+    // so the parent can relay output until the network is healthy, then detach.
+    let exe = std::env::current_exe().expect("Failed to get current executable.");
+    let mut cmd = Command::new(exe);
+    // Skip 1 because arg0 is this executable's path.
+    cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
+        .stdin(Stdio::null()) // Redirect stdin from /dev/null
+        .stdout(Stdio::piped()) // Capture stdout so parent can relay it
+        .stderr(Stdio::piped()); // Capture stderr so parent can relay it
+
+    // On Unix, create a new process group so the child can continue running
+    // independently after the parent exits
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    let child = cmd.spawn().expect("Failed to spawn child process.");
+    Ok(child)
 }
 
 async fn retry_with_timeout<F, Fut, T>(mut f: F, max_retries: usize, delay_ms: u64) -> Option<T>

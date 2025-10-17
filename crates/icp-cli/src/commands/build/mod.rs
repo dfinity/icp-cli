@@ -2,17 +2,20 @@ use std::collections::HashMap;
 
 use anyhow::{Context as _, anyhow};
 use camino_tempfile::tempdir;
-use clap::Parser;
+use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     canister::build::{BuildError, Params},
     fs::read,
 };
 
-use crate::{commands::Context, progress::ProgressManager};
+use crate::{
+    commands::{Context, Mode},
+    progress::{ProgressManager, ProgressManagerSettings},
+};
 
-#[derive(Parser, Debug)]
-pub struct Cmd {
+#[derive(Args, Debug)]
+pub struct BuildArgs {
     /// The names of the canisters within the current project
     pub names: Vec<String>,
 }
@@ -42,140 +45,151 @@ pub enum CommandError {
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.
-pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
-    // Load the project manifest, which defines the canisters to be built.
-    let p = ctx.project.load().await.context("failed to load project")?;
-
-    // Choose canisters to build
-    let cnames = match cmd.names.is_empty() {
-        // No canisters specified
-        true => p.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
-        false => cmd.names.clone(),
-    };
-
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
+    match &ctx.mode {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented yet");
         }
-    }
 
-    let cs = p
-        .canisters
-        .iter()
-        .filter(|(k, _)| cnames.contains(k))
-        .collect::<HashMap<_, _>>();
+        Mode::Project(_) => {
+            // Load the project manifest, which defines the canisters to be built.
+            let p = ctx.project.load().await.context("failed to load project")?;
 
-    // Prepare a futures set for concurrent canister builds
-    let mut futs = FuturesOrdered::new();
+            // Choose canisters to build
+            let cnames = match args.names.is_empty() {
+                // No canisters specified
+                true => p.canisters.keys().cloned().collect(),
 
-    let progress_manager = ProgressManager::new();
+                // Individual canisters specified
+                false => args.names.clone(),
+            };
 
-    // Iterate through each resolved canister and trigger its build process.
-    for (_, (canister_path, c)) in cs {
-        // Create progress bar with standard configuration
-        let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Build");
-
-        // Create an async closure that handles the build process for this specific canister
-        let fut = {
-            let c = c.clone();
-
-            async move {
-                // Define the build logic
-                let build_result = async {
-                    // Create a temporary directory for build artifacts
-                    let build_dir =
-                        tempdir().context("failed to create a temporary build directory")?;
-
-                    // Prepare a path for our output wasm
-                    let wasm_output_path = build_dir.path().join("out.wasm");
-
-                    let step_count = c.build.steps.len();
-                    for (i, step) in c.build.steps.iter().enumerate() {
-                        // Indicate to user the current step being executed
-                        let current_step = i + 1;
-                        let pb_hdr = format!("\nBuilding: {step} {current_step} of {step_count}");
-                        let tx = pb.begin_step(pb_hdr);
-
-                        // Perform build step
-                        let build_result = ctx
-                            .builder
-                            .build(
-                                step, // step
-                                &Params {
-                                    path: canister_path.to_owned(),
-                                    output: wasm_output_path.to_owned(),
-                                },
-                                Some(tx),
-                            )
-                            .await;
-
-                        // Ensure background receiver drains all messages
-                        pb.end_step().await;
-
-                        if let Err(e) = build_result {
-                            return Err(CommandError::Build(e));
-                        }
-                    }
-
-                    // Verify a file exists in the wasm output path
-                    if !wasm_output_path.exists() {
-                        return Err(CommandError::MissingOutput);
-                    }
-
-                    // Load wasm output
-                    let wasm = read(&wasm_output_path).context(CommandError::ReadOutput)?;
-
-                    // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
-
-                    // Save the wasm artifact
-                    ctx.artifacts
-                        .save(&c.name, &wasm)
-                        .context(CommandError::ArtifactStore)?;
-
-                    Ok::<_, CommandError>(())
+            for name in &cnames {
+                if !p.canisters.contains_key(name) {
+                    return Err(CommandError::CanisterNotFound {
+                        name: name.to_owned(),
+                    });
                 }
-                .await;
-
-                // Execute with progress tracking for final state
-                let result = ProgressManager::execute_with_progress(
-                    &pb,
-                    async { build_result },
-                    || "Built successfully".to_string(),
-                    |err| format!("Failed to build canister: {err}"),
-                )
-                .await;
-
-                // After progress bar is finished, dump the output if build failed
-                if let Err(e) = &result {
-                    pb.dump_output(ctx);
-                    let _ = ctx
-                        .term
-                        .write_line(&format!("Failed to build canister: {e}"));
-                }
-
-                result
             }
-        };
 
-        futs.push_back(fut);
-    }
+            let cs = p
+                .canisters
+                .iter()
+                .filter(|(k, _)| cnames.contains(k))
+                .collect::<HashMap<_, _>>();
 
-    // Consume the set of futures and abort if an error occurs
-    let mut found_error = false;
-    while let Some(res) = futs.next().await {
-        if res.is_err() {
-            found_error = true;
+            // Prepare a futures set for concurrent canister builds
+            let mut futs = FuturesOrdered::new();
+
+            let progress_manager =
+                ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+
+            // Iterate through each resolved canister and trigger its build process.
+            for (_, (canister_path, c)) in cs {
+                // Create progress bar with standard configuration
+                let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Build");
+
+                // Create an async closure that handles the build process for this specific canister
+                let fut = {
+                    let c = c.clone();
+
+                    async move {
+                        // Define the build logic
+                        let build_result = async {
+                            // Create a temporary directory for build artifacts
+                            let build_dir = tempdir()
+                                .context("failed to create a temporary build directory")?;
+
+                            // Prepare a path for our output wasm
+                            let wasm_output_path = build_dir.path().join("out.wasm");
+
+                            let step_count = c.build.steps.len();
+                            for (i, step) in c.build.steps.iter().enumerate() {
+                                // Indicate to user the current step being executed
+                                let current_step = i + 1;
+                                let pb_hdr = format!(
+                                    "\nBuilding: step {current_step} of {step_count} {step}"
+                                );
+                                let tx = pb.begin_step(pb_hdr);
+
+                                // Perform build step
+                                let build_result = ctx
+                                    .builder
+                                    .build(
+                                        step, // step
+                                        &Params {
+                                            path: canister_path.to_owned(),
+                                            output: wasm_output_path.to_owned(),
+                                        },
+                                        Some(tx),
+                                    )
+                                    .await;
+
+                                // Ensure background receiver drains all messages
+                                pb.end_step().await;
+
+                                if let Err(e) = build_result {
+                                    return Err(CommandError::Build(e));
+                                }
+                            }
+
+                            // Verify a file exists in the wasm output path
+                            if !wasm_output_path.exists() {
+                                return Err(CommandError::MissingOutput);
+                            }
+
+                            // Load wasm output
+                            let wasm = read(&wasm_output_path).context(CommandError::ReadOutput)?;
+
+                            // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
+
+                            // Save the wasm artifact
+                            ctx.artifacts
+                                .save(&c.name, &wasm)
+                                .context(CommandError::ArtifactStore)?;
+
+                            Ok::<_, CommandError>(())
+                        }
+                        .await;
+
+                        // Execute with progress tracking for final state
+                        let result = ProgressManager::execute_with_progress(
+                            &pb,
+                            async { build_result },
+                            || "Built successfully".to_string(),
+                            |err| format!("Failed to build canister: {err}"),
+                        )
+                        .await;
+
+                        // After progress bar is finished, dump the output if build failed
+                        if let Err(e) = &result {
+                            pb.dump_output(ctx);
+                            let _ = ctx
+                                .term
+                                .write_line(&format!("Failed to build canister: {e}"));
+                        }
+
+                        result
+                    }
+                };
+
+                futs.push_back(fut);
+            }
+
+            // Consume the set of futures and abort if an error occurs
+            let mut found_error = false;
+            while let Some(res) = futs.next().await {
+                if res.is_err() {
+                    found_error = true;
+                }
+            }
+
+            if found_error {
+                return Err(CommandError::Unexpected(anyhow!(
+                    "One or more canisters failed to build"
+                )));
+            }
         }
-    }
-
-    if found_error {
-        return Err(CommandError::Unexpected(anyhow!(
-            "One or more canisters failed to build"
-        )));
     }
 
     Ok(())

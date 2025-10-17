@@ -2452,6 +2452,7 @@ dependencies = [
  "ic-utils",
  "icp-canister-interfaces",
  "icrc-ledger-types",
+ "indoc",
  "itertools 0.14.0",
  "k256 0.13.4",
  "p256",

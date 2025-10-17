@@ -10,12 +10,13 @@ use crate::manifest::{
     project::{Canisters, Environments, Networks},
 };
 
-pub mod adapter;
-pub mod canister;
-pub mod environment;
-pub mod network;
+pub(crate) mod adapter;
+pub(crate) mod canister;
+pub(crate) mod environment;
+pub(crate) mod network;
 pub mod project;
-pub mod recipe;
+pub(crate) mod recipe;
+pub(crate) mod serde_helpers;
 
 pub use {canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest};
 

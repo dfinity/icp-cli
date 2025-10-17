@@ -23,8 +23,6 @@ use tracing::debug;
 
 use crate::commands::Context;
 
-const BACKGROUND_ENV_VAR: &str = "ICP_CLI_RUN_NETWORK_BACKGROUND";
-
 /// Run a given network
 #[derive(Parser, Debug)]
 pub struct Cmd {
@@ -35,10 +33,6 @@ pub struct Cmd {
     /// Starts the network in a background process. This command will exit once the network is running.
     #[arg(long)]
     background: bool,
-
-    /// Set if this is the process that runs the network in the background
-    #[arg(long, env = BACKGROUND_ENV_VAR, hide = true)]
-    run_in_background: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -120,7 +114,6 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
         let mut child = run_in_background()?;
         nd.save_background_network_runner_pid(child.id())?;
 
-        // Relay stdout/stderr from child to parent until network is healthy
         relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
     } else {
         run_network(
@@ -141,7 +134,6 @@ fn run_in_background() -> Result<Child, CommandError> {
     let mut cmd = Command::new(exe);
     // Skip 1 because arg0 is this executable's path.
     cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
-        .env(BACKGROUND_ENV_VAR, "true") // Set the environment variable which will be used by the second start.
         .stdin(Stdio::null()) // Redirect stdin from /dev/null
         .stdout(Stdio::piped()) // Capture stdout so parent can relay it
         .stderr(Stdio::piped()); // Capture stderr so parent can relay it

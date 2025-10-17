@@ -6,16 +6,14 @@ use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
 use crate::commands::Context;
 
+const TIMEOUT_SECS: u64 = 30;
+
 /// Stop a background network
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to stop
     #[arg(default_value = "local")]
     name: String,
-
-    /// Maximum time to wait for the process to exit (in seconds)
-    #[arg(long, default_value = "30")]
-    timeout: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -76,7 +74,7 @@ pub async fn exec(ctx: &Context, cmd: Cmd) -> Result<(), CommandError> {
     send_sigint(pid);
 
     // Wait for process to exit
-    wait_for_process_exit(pid, cmd.timeout)?;
+    wait_for_process_exit(pid)?;
 
     // Remove PID file
     let pid_file = nd.structure.background_network_runner_pid_file();
@@ -95,9 +93,9 @@ fn send_sigint(pid: Pid) {
     }
 }
 
-fn wait_for_process_exit(pid: Pid, timeout_secs: u64) -> Result<(), CommandError> {
+fn wait_for_process_exit(pid: Pid) -> Result<(), CommandError> {
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(timeout_secs);
+    let timeout = Duration::from_secs(TIMEOUT_SECS);
     let mut system = System::new();
 
     loop {
@@ -110,7 +108,7 @@ fn wait_for_process_exit(pid: Pid, timeout_secs: u64) -> Result<(), CommandError
         if start.elapsed() > timeout {
             return Err(CommandError::Timeout {
                 pid,
-                timeout: timeout_secs,
+                timeout: TIMEOUT_SECS,
             });
         }
 

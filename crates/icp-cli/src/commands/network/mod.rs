@@ -6,7 +6,7 @@ pub(crate) mod run;
 pub(crate) mod stop;
 
 #[derive(Subcommand, Debug)]
-pub enum NetworkSubcmd {
+pub enum Command {
     List(list::ListArgs),
     Ping(ping::PingArgs),
     Run(run::RunArgs),

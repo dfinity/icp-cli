@@ -403,25 +403,25 @@ async fn main() -> Result<(), Error> {
 
         // Network
         Command::Network(cmd) => match cmd {
-            commands::network::NetworkSubcmd::List(args) => {
+            commands::network::Command::List(args) => {
                 commands::network::list::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
-            commands::network::NetworkSubcmd::Ping(args) => {
+            commands::network::Command::Ping(args) => {
                 commands::network::ping::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
-            commands::network::NetworkSubcmd::Run(args) => {
+            commands::network::Command::Run(args) => {
                 commands::network::run::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
-            commands::network::NetworkSubcmd::Stop(args) => {
+            commands::network::Command::Stop(args) => {
                 commands::network::stop::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?

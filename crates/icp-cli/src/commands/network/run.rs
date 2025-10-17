@@ -187,12 +187,12 @@ fn run_in_background() -> Result<Child, CommandError> {
     let mut cmd = Command::new(exe);
     // Skip 1 because arg0 is this executable's path.
     cmd.args(std::env::args().skip(1).filter(|a| !a.eq("--background")))
-        .stdin(Stdio::null()) // Redirect stdin from /dev/null
-        .stdout(Stdio::piped()) // Capture stdout so parent can relay it
-        .stderr(Stdio::piped()); // Capture stderr so parent can relay it
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped()) // Capture stdout so we can relay it
+        .stderr(Stdio::piped()); // Capture stderr so we can relay it
 
     // On Unix, create a new process group so the child can continue running
-    // independently after the parent exits
+    // independently after the run command exits
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

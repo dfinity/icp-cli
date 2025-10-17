@@ -54,7 +54,7 @@ pub enum Command {
 
     /// Launch and manage local test networks
     #[command(subcommand)]
-    Network(network::NetworkSubcmd),
+    Network(network::Command),
 
     /// Display information about the current project
     #[clap(hide = true)] // TODO: figure out how to structure the commands later

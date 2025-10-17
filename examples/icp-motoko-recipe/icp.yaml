@@ -1,7 +1,7 @@
 canister:
   name: my-canister
   recipe:
-    type: file://recipe.hb.yaml
+    type: "@dfinity/motoko" 
     configuration:
       main: src/main.mo
       args: --incremental-gc

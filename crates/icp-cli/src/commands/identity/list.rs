@@ -7,15 +7,15 @@ use itertools::Itertools;
 use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
-pub struct ListArgs;
+pub(crate) struct ListArgs;
 
 #[derive(Debug, thiserror::Error)]
-pub enum ListKeysError {
+pub(crate) enum ListKeysError {
     #[error(transparent)]
     LoadIdentity(#[from] LoadIdentityManifestError),
 }
 
-pub async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), ListKeysError> {
+pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), ListKeysError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
             let dir = ctx.dirs.identity();

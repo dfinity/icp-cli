@@ -15,13 +15,13 @@ use crate::{
 };
 
 #[derive(Args, Debug)]
-pub struct BuildArgs {
+pub(crate) struct BuildArgs {
     /// The names of the canisters within the current project
-    pub names: Vec<String>,
+    pub(crate) names: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },
 
@@ -45,7 +45,7 @@ pub enum CommandError {
 }
 
 /// Executes the build command, compiling canisters defined in the project manifest.
-pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

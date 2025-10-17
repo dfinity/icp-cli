@@ -7,7 +7,7 @@ pub(crate) mod new;
 pub(crate) mod principal;
 
 #[derive(Debug, Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     Default(default::DefaultArgs),
     Import(import::ImportArgs),
     List(list::ListArgs),

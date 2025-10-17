@@ -14,22 +14,22 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct TransferArgs {
+pub(crate) struct TransferArgs {
     /// Token amount to transfer
-    pub amount: BigDecimal,
+    pub(crate) amount: BigDecimal,
 
     /// The receiver of the token transfer
-    pub receiver: Principal,
+    pub(crate) receiver: Principal,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -68,7 +68,11 @@ pub enum CommandError {
     },
 }
 
-pub async fn exec(ctx: &Context, token: &str, args: &TransferArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(
+    ctx: &Context,
+    token: &str,
+    args: &TransferArgs,
+) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

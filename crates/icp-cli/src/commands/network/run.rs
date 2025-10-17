@@ -9,14 +9,14 @@ use crate::commands::{Context, Mode};
 
 /// Run a given network
 #[derive(Args, Debug)]
-pub struct RunArgs {
+pub(crate) struct RunArgs {
     /// Name of the network to run
     #[arg(default_value = "local")]
     name: String,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -36,7 +36,7 @@ pub enum CommandError {
     RunNetwork(#[from] RunNetworkError),
 }
 
-pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

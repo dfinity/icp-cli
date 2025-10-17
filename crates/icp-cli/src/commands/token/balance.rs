@@ -11,16 +11,16 @@ use crate::{
 };
 
 #[derive(Args, Clone, Debug)]
-pub struct BalanceArgs {
+pub(crate) struct BalanceArgs {
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -51,7 +51,11 @@ pub enum CommandError {
 /// The balance is checked against a ledger canister. Support two user flows:
 /// (1) Specifying token name, and checking against known or stored mappings
 /// (2) Specifying compatible ledger canister id
-pub async fn exec(ctx: &Context, token: &str, args: &BalanceArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(
+    ctx: &Context,
+    token: &str,
+    args: &BalanceArgs,
+) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

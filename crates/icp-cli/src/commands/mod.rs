@@ -17,10 +17,12 @@ pub(crate) mod cycles;
 pub(crate) mod deploy;
 pub(crate) mod environment;
 pub(crate) mod identity;
+pub(crate) mod macros;
 pub(crate) mod network;
 pub(crate) mod project;
 pub(crate) mod sync;
 pub(crate) mod token;
+pub(crate) mod validation;
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Mode {

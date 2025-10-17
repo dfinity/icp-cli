@@ -122,7 +122,7 @@ pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
                 run_network(
                     cfg,           // config
                     nd,            // nd
-                    &pdir,         // project_root
+                    pdir,          // project_root
                     seed_accounts, // seed_accounts
                 )
                 .await?;
@@ -185,6 +185,7 @@ async fn relay_child_output_until_healthy(
     Ok(())
 }
 
+#[allow(clippy::result_large_err)]
 fn run_in_background() -> Result<Child, CommandError> {
     // Background strategy: spawn a child process with piped stdout/stderr
     // so the parent can relay output until the network is healthy, then detach.
@@ -240,12 +241,12 @@ async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandEr
             let agent = agent.clone();
             async move {
                 let status = agent.status().await;
-                if let Ok(status) = status {
-                    if matches!(&status.replica_health_status, Some(status) if status == "healthy")
-                    {
-                        return Some(());
-                    }
+                if let Ok(status) = status
+                    && matches!(&status.replica_health_status, Some(status) if status == "healthy")
+                {
+                    return Some(());
                 }
+
                 None
             }
         },
@@ -268,14 +269,11 @@ async fn wait_for_network_descriptor(
     let max_retries = 30;
     let delay_ms = 1000;
     let result: Option<NetworkDescriptorModel> = retry_with_timeout(
-        || {
-            let nd = nd;
-            async move {
-                if let Ok(Some(descriptor)) = nd.load_network_descriptor() {
-                    return Some(descriptor);
-                }
-                None
+        || async move {
+            if let Ok(Some(descriptor)) = nd.load_network_descriptor() {
+                return Some(descriptor);
             }
+            None
         },
         max_retries,
         delay_ms,

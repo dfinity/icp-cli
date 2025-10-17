@@ -343,7 +343,7 @@ async fn network_run_and_stop_background() {
         .args(["network", "stop", "my-network"])
         .assert()
         .success()
-        .stdout(contains(&format!(
+        .stdout(contains(format!(
             "Stopping background network (PID: {})",
             pid
         )))

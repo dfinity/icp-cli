@@ -1,6 +1,6 @@
 use crate::commands::{
     Mode,
-    args::{Canister, Network},
+    args::{Canister, Environment, Network},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -55,7 +55,7 @@ const PLEASE_PROVIDE_A_CANISTER_PRINCIPAL_IN_GLOBAL_MODE: &str = r#"
 "#;
 
 pub(crate) fn network_or_environment_not_both<'a>(
-    network_environment: impl Into<(&'a Option<Network>, &'a Option<String>)>,
+    network_environment: impl Into<(&'a Option<Network>, &'a Option<Environment>)>,
     m: &Mode,
 ) -> Option<&'static str> {
     let (network, environment) = network_environment.into();
@@ -68,7 +68,7 @@ const PLEASE_PROVIDE_EITHER_A_NETWORK_OR_AN_ENVIRONMENT_BUT_NOT_BOTH: &str = r#"
 "#;
 
 pub(crate) fn environments_are_not_available_in_a_global_mode<'a>(
-    environment: impl Into<(&'a Option<String>,)>,
+    environment: impl Into<(&'a Option<Environment>,)>,
     m: &Mode,
 ) -> Option<&'static str> {
     let (environment,) = environment.into();
@@ -148,10 +148,10 @@ mod test_network_or_environment_not_both {
 
     struct Args {
         network: Option<args::Network>,
-        environment: Option<String>,
+        environment: Option<args::Environment>,
     }
 
-    impl_from_args!(Args, network: Option<args::Network>, environment: Option<String>);
+    impl_from_args!(Args, network: Option<args::Network>, environment: Option<args::Environment>);
 
     #[test]
     fn test() {
@@ -161,7 +161,7 @@ mod test_network_or_environment_not_both {
                 // Args
                 &Args {
                     network: Some(args::Network::Name("my-network".to_string())),
-                    environment: Some("my-environment".to_string()),
+                    environment: Some(args::Environment::Name("my-environment".to_string())),
                 },
                 //
                 // Modes
@@ -172,7 +172,7 @@ mod test_network_or_environment_not_both {
                 // Args
                 &Args {
                     network: Some(args::Network::Url("http://www.example.com".to_string())),
-                    environment: Some("my-environment".to_string()),
+                    environment: Some(args::Environment::Name("my-environment".to_string())),
                 },
                 //
                 // Modes
@@ -194,15 +194,15 @@ mod test_network_or_environment_not_both {
 
 #[cfg(test)]
 mod test_environments_are_not_available_in_a_global_mode {
-    use crate::impl_from_args;
+    use crate::{commands::args, impl_from_args};
 
     use super::*;
 
     struct Args {
-        environment: Option<String>,
+        environment: Option<args::Environment>,
     }
 
-    impl_from_args!(Args, environment: Option<String>);
+    impl_from_args!(Args, environment: Option<args::Environment>);
 
     #[test]
     fn test() {
@@ -210,7 +210,7 @@ mod test_environments_are_not_available_in_a_global_mode {
             //
             // Args
             &Args {
-                environment: Some("my-environment".to_string()),
+                environment: Some(args::Environment::Name("my-environment".to_string())),
             },
             //
             // Mode

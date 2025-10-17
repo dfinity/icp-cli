@@ -32,6 +32,23 @@ impl From<&str> for Network {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Environment {
+    Name(String),
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self::Name("local".to_string())
+    }
+}
+
+impl From<&str> for Environment {
+    fn from(v: &str) -> Self {
+        Self::Name(v.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use candid::Principal;

@@ -24,7 +24,7 @@ pub(crate) mod sync;
 pub(crate) mod token;
 pub(crate) mod validation;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Mode {
     Global,
     Project(PathBuf),

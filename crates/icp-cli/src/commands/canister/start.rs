@@ -4,8 +4,12 @@ use ic_agent::AgentError;
 use icp::{agent, identity, network};
 
 use crate::{
-    commands::{Context, Mode, args},
-    options::{EnvironmentOpt, IdentityOpt},
+    commands::{
+        Context, Mode, args,
+        validation::{self, Validate, ValidateError},
+    },
+    impl_from_args,
+    options::IdentityOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
 
@@ -16,8 +20,32 @@ pub(crate) struct StartArgs {
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) network: Option<args::Network>,
+
+    pub(crate) environment: Option<args::Environment>,
+}
+
+impl_from_args!(StartArgs, canister: args::Canister);
+impl_from_args!(StartArgs, network: Option<args::Network>);
+impl_from_args!(StartArgs, environment: Option<args::Environment>);
+impl_from_args!(StartArgs, network: Option<args::Network>, environment: Option<args::Environment>);
+
+impl Validate for StartArgs {
+    fn validate(&self, mode: &Mode) -> Result<(), ValidateError> {
+        for test in [
+            validation::a_canister_id_is_required_in_global_mode,
+            validation::a_network_name_is_required_in_project_mode,
+            validation::a_network_url_is_required_in_global_mode,
+            validation::environments_are_not_available_in_a_global_mode,
+            validation::network_or_environment_not_both,
+        ] {
+            test(self, mode)
+                .map(|msg| anyhow::format_err!(msg))
+                .map_or(Ok(()), Err)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,7 +87,13 @@ pub(crate) enum CommandError {
 pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandError> {
     let (agent, cid) = match &ctx.mode {
         Mode::Global => {
+            // Argument (Canister)
             let args::Canister::Principal(_) = &args.canister else {
+                return Err(CommandError::Args);
+            };
+
+            // Argument (Network)
+            let Some(args::Network::Url(_)) = args.network.clone() else {
                 return Err(CommandError::Args);
             };
 
@@ -67,9 +101,13 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandE
         }
 
         Mode::Project(_) => {
+            // Argument (Canister)
             let args::Canister::Name(name) = &args.canister else {
                 return Err(CommandError::Args);
             };
+
+            // Argument (Environment)
+            let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
 
             // Load project
             let p = ctx.project.load().await?;
@@ -78,11 +116,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandE
             let id = ctx.identity.load(args.identity.clone().into()).await?;
 
             // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+            let env = p
+                .environments
+                .get(&env)
+                .ok_or(CommandError::EnvironmentNotFound { name: env })?;
 
             // Access network
             let access = ctx.network.access(&env.network).await?;

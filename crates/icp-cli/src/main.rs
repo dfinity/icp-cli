@@ -1,6 +1,6 @@
 use std::{env::current_dir, sync::Arc};
 
-use anyhow::Error;
+use anyhow::{Context as _, Error};
 use clap::{CommandFactory, Parser};
 use commands::{Command, Context};
 use console::Term;
@@ -24,7 +24,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    commands::Mode,
+    commands::{Mode, validation::Validate},
     logging::TermWriter,
     operations::canister::{Starter, Stopper},
     store_artifact::ArtifactStore,
@@ -228,7 +228,7 @@ async fn main() -> Result<(), Error> {
 
     // Setup environment
     let ctx = Context {
-        mode,
+        mode: mode.clone(),
         term,
         dirs,
         ids,
@@ -324,6 +324,9 @@ async fn main() -> Result<(), Error> {
             }
 
             commands::canister::Command::Start(args) => {
+                args.validate(&mode)
+                    .context("canister start: invalid command arguments")?;
+
                 commands::canister::start::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?

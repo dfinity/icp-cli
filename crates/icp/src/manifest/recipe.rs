@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 /// Represents the accepted values for a recipe type in
-/// the canister manifets
+/// the canister manifest
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase", from = "String")]
 pub enum RecipeType {

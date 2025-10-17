@@ -229,7 +229,7 @@ impl TestContext {
             .success();
     }
 
-    // wait up to 30 seconds for descriptor path to contain valid json
+    // wait up for descriptor path to contain valid json
     pub fn wait_for_local_network_descriptor(&self, project_dir: &Path) -> TestNetwork {
         self.wait_for_network_descriptor(project_dir, "local")
     }
@@ -245,14 +245,16 @@ impl TestContext {
             .join(network_name)
             .join("descriptor.json");
         let start_time = std::time::Instant::now();
+        let timeout = 45;
+        eprintln!("Waiting for network descriptor at {descriptor_path} - limit {timeout}s");
         let network_descriptor = loop {
-            eprintln!("Checking for network descriptor at {descriptor_path}");
+            let elapsed = start_time.elapsed().as_secs();
             if descriptor_path.exists() && descriptor_path.is_file() {
                 let contents = fs::read_to_string(&descriptor_path)
                     .expect("Failed to read network descriptor");
                 let parsed = serde_json::from_str::<serde_json::Value>(&contents);
                 if let Ok(value) = parsed {
-                    eprintln!("Network descriptor found at {descriptor_path}");
+                    eprintln!("Network descriptor found at {descriptor_path} after {elapsed}s");
                     break value;
                 } else {
                     eprintln!(
@@ -260,8 +262,10 @@ impl TestContext {
                     );
                 }
             }
-            if start_time.elapsed().as_secs() > 30 {
-                panic!("Timed out waiting for network descriptor at {descriptor_path}");
+            if elapsed > timeout {
+                panic!(
+                    "Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s"
+                );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         };

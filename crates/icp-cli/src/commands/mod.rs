@@ -8,7 +8,7 @@ use icp::{
     prelude::*,
 };
 
-use crate::{store_artifact::ArtifactStore, store_id::IdStore};
+use crate::{operations::Initializers, store_artifact::ArtifactStore, store_id::IdStore};
 
 pub(crate) mod args;
 pub(crate) mod build;
@@ -102,6 +102,9 @@ pub(crate) struct Context {
 
     /// Canister synchronizer
     pub(crate) syncer: Arc<dyn Synchronize>,
+
+    /// Operations initializers
+    pub(crate) ops: Initializers,
 
     /// Whether debug is enabled
     pub(crate) debug: bool,

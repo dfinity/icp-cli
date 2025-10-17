@@ -26,6 +26,7 @@ use tracing_subscriber::{
 use crate::{
     commands::Mode,
     logging::TermWriter,
+    operations::canister::{Starter, Stopper},
     store_artifact::ArtifactStore,
     store_id::IdStore,
     telemetry::EventLayer,
@@ -217,6 +218,14 @@ async fn main() -> Result<(), Error> {
     // Agent creator
     let agent_creator = Arc::new(agent::Creator);
 
+    // Operations
+    let ops = operations::Initializers {
+        canister: operations::canister::Initializers {
+            start: Box::new(Starter::arc),
+            stop: Box::new(Stopper::arc),
+        },
+    };
+
     // Setup environment
     let ctx = Context {
         mode,
@@ -230,6 +239,7 @@ async fn main() -> Result<(), Error> {
         agent: agent_creator,
         builder,
         syncer,
+        ops,
         debug: cli.debug,
     };
 

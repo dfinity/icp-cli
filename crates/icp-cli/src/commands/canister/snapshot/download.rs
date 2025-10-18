@@ -1,6 +1,5 @@
 use clap::Args;
-use icp::identity;
-use std::path::PathBuf;
+use icp::{identity, prelude::PathBuf};
 
 use crate::commands::canister::snapshot::{SnapshotId, directory_parser};
 use crate::commands::{Context, Mode};

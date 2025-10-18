@@ -1,9 +1,9 @@
 use clap::Subcommand;
 use ic_management_canister_types::UploadCanisterSnapshotMetadataResult;
+use icp::prelude::PathBuf;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Formatter},
-    path::PathBuf,
     str::FromStr,
 };
 
@@ -43,7 +43,7 @@ fn directory_parser(path: &str) -> Result<PathBuf, String> {
     } else {
         Err(format!(
             "Path '{}' does not exist or is not a directory.",
-            path.display()
+            path
         ))
     }
 }

@@ -17,6 +17,7 @@ pub struct UploadArgs {
     environment: EnvironmentOpt,
 
     /// If a snapshot ID is specified, this snapshot will replace it and reuse the ID.
+    #[arg(long)]
     replace: Option<SnapshotId>,
 
     /// The directory to upload the snapshot from.

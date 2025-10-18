@@ -9,6 +9,7 @@ pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod settings;
 pub(crate) mod show;
+pub(crate) mod snapshot;
 pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
@@ -27,6 +28,10 @@ pub enum Command {
     Settings(settings::Command),
 
     Show(show::ShowArgs),
+
+    #[command(subcommand)]
+    Snapshot(snapshot::Command),
+
     Start(start::StartArgs),
     Status(status::StatusArgs),
     Stop(stop::StopArgs),

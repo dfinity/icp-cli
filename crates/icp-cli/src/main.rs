@@ -312,6 +312,44 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
+            commands::canister::Command::Snapshot(cmd) => match cmd {
+                commands::canister::snapshot::Command::Create(args) => {
+                    commands::canister::snapshot::create::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Delete(args) => {
+                    commands::canister::snapshot::delete::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Download(args) => {
+                    commands::canister::snapshot::download::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::List(args) => {
+                    commands::canister::snapshot::list::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Load(args) => {
+                    commands::canister::snapshot::load::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Upload(args) => {
+                    commands::canister::snapshot::upload::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+            },
+
             commands::canister::Command::Start(args) => {
                 commands::canister::start::exec(&ctx, &args)
                     .instrument(trace_span)

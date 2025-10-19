@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use clap::Args;
-use futures::{StreamExt, stream::FuturesOrdered};
+use futures::{StreamExt, stream::FuturesUnordered};
 use icp::{
     agent,
     canister::sync::{Params, SynchronizeError},
@@ -129,7 +129,7 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
             }
 
             // Prepare a futures set for concurrent canister syncs
-            let mut futs = FuturesOrdered::new();
+            let mut futs = FuturesUnordered::new();
 
             let progress_manager =
                 ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
@@ -198,30 +198,42 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
                         )
                         .await;
 
-                        // After progress bar is finished, dump the output if sync failed
-                        if let Err(e) = &result {
-                            pb.dump_output(ctx);
-                            let _ = ctx
-                                .term
-                                .write_line(&format!("Failed to sync canister: {e}"));
-                        }
+                        // If sync failed, get the output for later display
+                        let output = if result.is_err() {
+                            Some(pb.dump_output())
+                        } else {
+                            None
+                        };
 
-                        result
+                        (result, output)
                     }
                 };
 
-                futs.push_back(fut);
+                futs.push(fut);
             }
 
-            // Consume the set of futures and collect errors
-            let mut found_error = false;
-            while let Some(res) = futs.next().await {
-                if res.is_err() {
-                    found_error = true;
+            // Collect all results to ensure all progress bars reach their final state
+            let mut failed_outputs = Vec::new();
+
+            while let Some((res, output)) = futs.next().await {
+                if let Err(_e) = res {
+                    if let Some(output) = output {
+                        failed_outputs.push(output);
+                    }
                 }
             }
 
-            if found_error {
+            // If any syncs failed, dump the output and abort
+            if !failed_outputs.is_empty() {
+                // Use MultiProgress println to write without clearing progress bars
+                let _ = progress_manager.multi_progress.println("");
+
+                // Dump the output for failed canisters
+                for output in failed_outputs {
+                    let _ = progress_manager.multi_progress.println(&output);
+                    let _ = progress_manager.multi_progress.println("");
+                }
+
                 return Err(CommandError::Synchronize(SynchronizeError::Unexpected(
                     anyhow!("One or more canisters failed to sync"),
                 )));

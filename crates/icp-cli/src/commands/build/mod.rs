@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::{Context as _, anyhow};
 use camino_tempfile::tempdir;
 use clap::Args;
-use futures::{StreamExt, stream::FuturesOrdered};
+use futures::{StreamExt, stream::FuturesUnordered};
 use icp::{
     canister::build::{BuildError, Params},
     fs::read,
@@ -79,7 +79,7 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                 .collect::<HashMap<_, _>>();
 
             // Prepare a futures set for concurrent canister builds
-            let mut futs = FuturesOrdered::new();
+            let mut futs = FuturesUnordered::new();
 
             let progress_manager =
                 ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
@@ -107,9 +107,8 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                             for (i, step) in c.build.steps.iter().enumerate() {
                                 // Indicate to user the current step being executed
                                 let current_step = i + 1;
-                                let pb_hdr = format!(
-                                    "\nBuilding: step {current_step} of {step_count} {step}"
-                                );
+                                let pb_hdr =
+                                    format!("Building: step {current_step} of {step_count} {step}");
                                 let tx = pb.begin_step(pb_hdr);
 
                                 // Perform build step
@@ -161,30 +160,43 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                         )
                         .await;
 
-                        // After progress bar is finished, dump the output if build failed
-                        if let Err(e) = &result {
-                            pb.dump_output(ctx);
-                            let _ = ctx
-                                .term
-                                .write_line(&format!("Failed to build canister: {e}"));
-                        }
+                        // If build failed, get the output for later display
+                        let output = if result.is_err() {
+                            Some(pb.dump_output())
+                        } else {
+                            None
+                        };
 
-                        result
+                        (result, output)
                     }
                 };
 
-                futs.push_back(fut);
+                futs.push(fut);
             }
 
-            // Consume the set of futures and abort if an error occurs
-            let mut found_error = false;
-            while let Some(res) = futs.next().await {
-                if res.is_err() {
-                    found_error = true;
+            // Consume the set of futures and collect results
+            let mut failed_outputs = Vec::new();
+
+            while let Some((res, output)) = futs.next().await {
+                if let Err(e) = res {
+                    if let Some(output) = output {
+                        failed_outputs.push((output, e));
+                    }
+                    // Stop iterating and dump output immediately on first failure
+                    break;
                 }
             }
 
-            if found_error {
+            futs.clear();
+
+            // If any builds failed, dump the output and abort
+            if !failed_outputs.is_empty() {
+                for (output, e) in failed_outputs {
+                    let _ = ctx.term.write_line("");
+                    let _ = ctx.term.write_line(&output);
+                    let _ = ctx.term.write_line(&format!("Build error: {e}"));
+                }
+
                 return Err(CommandError::Unexpected(anyhow!(
                     "One or more canisters failed to build"
                 )));

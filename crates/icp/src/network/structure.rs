@@ -47,8 +47,8 @@ impl NetworkDirectoryStructure {
         self.pocketic_dir().join("port")
     }
 
-    /// When running a network in the background, we store the PID of the background controlling process here.
-    /// Once that process receives a SIGINT, it will shut down the network.
+    /// When running a network in the background, we store the PID of the background controlling `icp` process here.
+    /// This does _not_ contain pocket-ic processess.
     pub fn background_network_runner_pid_file(&self) -> PathBuf {
         self.network_root.join("background_network_runner.pid")
     }

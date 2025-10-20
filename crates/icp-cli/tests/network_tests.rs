@@ -15,7 +15,10 @@ use sysinfo::{Pid, ProcessesToUpdate, System};
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
 };
-use icp::{fs::write_string, prelude::*};
+use icp::{
+    fs::{read_to_string, write_string},
+    prelude::*,
+};
 
 mod common;
 
@@ -326,8 +329,8 @@ async fn network_run_and_stop_background() {
         pid_file_path
     );
 
-    let pid_contents = std::fs::read_to_string(&pid_file_path).expect("Failed to read PID file");
-    let pid: Pid = pid_contents
+    let pid_contents = read_to_string(&pid_file_path).expect("Failed to read PID file");
+    let background_controller_pid: Pid = pid_contents
         .trim()
         .parse()
         .expect("PID file should contain a valid process ID");
@@ -352,7 +355,7 @@ async fn network_run_and_stop_background() {
         .success()
         .stdout(contains(format!(
             "Stopping background network (PID: {})",
-            pid
+            background_controller_pid
         )))
         .stdout(contains("Network stopped successfully"));
 
@@ -364,9 +367,9 @@ async fn network_run_and_stop_background() {
 
     // Verify controller process is no longer running
     let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+    system.refresh_processes(ProcessesToUpdate::Some(&[background_controller_pid]), true);
     assert!(
-        system.process(pid).is_none(),
+        system.process(background_controller_pid).is_none(),
         "Process should no longer be running"
     );
 

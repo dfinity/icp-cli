@@ -29,6 +29,7 @@ pub struct RunArgs {
     name: String,
 
     /// Starts the network in a background process. This command will exit once the network is running.
+    /// To stop the network, use 'icp network stop'.
     #[arg(long)]
     background: bool,
 }
@@ -227,12 +228,7 @@ async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandEr
 
     // Wait for network descriptor to be written
     let network = retry_with_timeout(
-        || async move {
-            if let Ok(Some(descriptor)) = nd.load_network_descriptor() {
-                return Some(descriptor);
-            }
-            None
-        },
+        || async move { nd.load_network_descriptor().unwrap_or(None) },
         max_retries,
         delay_ms,
     )

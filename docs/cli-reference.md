@@ -122,8 +122,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -138,8 +138,7 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>`
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically
@@ -164,8 +163,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -180,8 +179,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -202,8 +201,7 @@ Perform canister operations against a network
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -213,8 +211,7 @@ Perform canister operations against a network
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -240,8 +237,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -256,8 +253,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 * `--add-controller <ADD_CONTROLLER>`
 * `--remove-controller <REMOVE_CONTROLLER>`
 * `--set-controller <SET_CONTROLLER>`
@@ -286,8 +283,7 @@ Perform canister operations against a network
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -318,8 +314,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -334,8 +330,8 @@ Perform canister operations against a network
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -351,8 +347,8 @@ Perform canister operations against a network
 
 * `--amount <AMOUNT>` — Amount of cycles to top up
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -376,8 +372,8 @@ Mint and manage cycles
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -389,9 +385,9 @@ Mint and manage cycles
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -419,8 +415,7 @@ Deploy a project to an environment
 
   Default value: `2000000000000`
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -602,8 +597,7 @@ Synchronize canisters in the current environment
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -633,8 +627,8 @@ Perform token transactions
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
@@ -650,8 +644,8 @@ Perform token transactions
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 

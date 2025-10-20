@@ -17,7 +17,7 @@ use pocket_ic::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
-use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
+use std::{env::var, fs::read_to_string, io::Write, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
@@ -177,19 +177,27 @@ pub enum RunPocketIcError {
     WaitForPort { source: WaitForPortError },
 }
 
+#[derive(Debug)]
 pub enum ShutdownReason {
     CtrlC,
     ChildExited,
 }
 
+/// Write to stderr, ignoring any errors. This is safe to use even when stderr is closed
+/// (e.g., in a background process after the parent exits), unlike eprintln! which panics.
+fn safe_eprintln(msg: &str) {
+    let _ = std::io::stderr().write_all(msg.as_bytes());
+    let _ = std::io::stderr().write_all(b"\n");
+}
+
 async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     select!(
         _ = ctrl_c() => {
-            eprintln!("Received Ctrl-C, shutting down PocketIC...");
+            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         res = notice_child_exit(child) => {
-            eprintln!("PocketIC exited with status: {:?}", res.status);
+            safe_eprintln(&format!("PocketIC exited with status: {:?}", res.status));
             ShutdownReason::ChildExited
         }
     )

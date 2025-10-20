@@ -356,12 +356,18 @@ async fn network_run_and_stop_background() {
         "PID file should be removed after stopping"
     );
 
-    // Verify contrller process is no longer running
-    // We do not check that the PocketIC process is no longer running because it will take a while to shut down on its own.
+    // Verify controller process is no longer running
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
     assert!(
         system.process(pid).is_none(),
         "Process should no longer be running"
+    );
+
+    // Verify network is no longer reachable
+    let status_result = agent.status().await;
+    assert!(
+        status_result.is_err(),
+        "Network should not be reachable after stopping"
     );
 }

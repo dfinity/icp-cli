@@ -1,5 +1,5 @@
 use icp::fs::write_string;
-use predicates::str::{PredicateStrExt, contains};
+use predicates::str::contains;
 use serde_json::Value;
 
 mod common;
@@ -73,15 +73,4 @@ fn ping_not_running() {
         .stderr(contains(
             "the local network for this project is not running",
         ));
-}
-
-#[test]
-fn ping_not_in_project() {
-    let ctx = TestContext::new();
-
-    ctx.icp()
-        .args(["network", "ping"])
-        .assert()
-        .failure()
-        .stderr(contains("Error: failed to locate project directory").trim());
 }

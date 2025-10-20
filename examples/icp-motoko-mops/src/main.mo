@@ -1,6 +1,6 @@
-import Text "mo:base/Text";
+import Text "mo:core/Text";
 
-actor {
+persistent actor {
   public query func greet(name : Text) : async Text {
     return "Hello, " # name # "!";
   };

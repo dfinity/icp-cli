@@ -6,8 +6,6 @@ use itertools::Itertools;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
 
-use crate::commands::Context;
-
 /// The maximum number of lines to display for a step output
 pub const MAX_LINES_PER_STEP: usize = 10_000;
 
@@ -253,20 +251,34 @@ impl MultiStepProgressBar {
         self.finished_steps.push(StepOutput { title, output });
     }
 
-    pub fn dump_output(&self, ctx: &Context) {
-        let _ = ctx.term.write_line(&format!(
-            "{} output for canister {}:",
-            self.output_label, self.canister_name
+    pub fn dump_output(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+
+        lines.push(format!(
+            "[{}] {} output:",
+            self.canister_name, self.output_label
         ));
+
         for step_output in self.finished_steps.iter() {
-            let _ = ctx.term.write_line(&step_output.title);
-            for line in step_output.output.iter() {
-                let _ = ctx.term.write_line(line);
+            for line in step_output.title.lines() {
+                if !line.is_empty() {
+                    lines.push(format!("[{}] {}:", self.canister_name, line));
+                }
             }
+
             if step_output.output.is_empty() {
-                let _ = ctx.term.write_line("<no output>");
+                lines.push(format!("[{}] <no output>", self.canister_name));
+            } else {
+                lines.extend(
+                    step_output
+                        .output
+                        .iter()
+                        .map(|s| format!("[{}] > {s}", self.canister_name)),
+                );
             }
         }
+
+        lines
     }
 }
 

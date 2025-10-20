@@ -181,13 +181,13 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                 if let Err(e) = res
                     && let Some(output) = output
                 {
-                    failed_outputs.push((output, e));
+                    failed_outputs.push((e, output));
                 }
             }
 
             // If any builds failed, dump the output and abort
             if !failed_outputs.is_empty() {
-                for (output, e) in failed_outputs {
+                for (e, output) in failed_outputs {
                     for line in output {
                         let _ = ctx.term.write_line(&line);
                     }

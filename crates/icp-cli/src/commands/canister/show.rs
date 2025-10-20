@@ -2,7 +2,6 @@ use clap::Args;
 
 use crate::{
     commands::{Context, Mode, args},
-    options::EnvironmentOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
 
@@ -10,8 +9,8 @@ use crate::{
 pub(crate) struct ShowArgs {
     pub(crate) canister: args::Canister,
 
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    #[arg(long)]
+    pub(crate) environment: Option<args::Environment>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -50,15 +49,17 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandEr
                 return Err(CommandError::Args);
             };
 
+            // Argument (Environment)
+            let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
+
             // Load project
             let p = ctx.project.load(pdir).await?;
 
             // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+            let env = p
+                .environments
+                .get(&env)
+                .ok_or(CommandError::EnvironmentNotFound { name: env })?;
 
             // Ensure canister is included in the environment
             if !env.canisters.contains_key(name) {

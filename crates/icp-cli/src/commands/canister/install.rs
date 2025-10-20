@@ -8,8 +8,8 @@ use icp::{agent, identity, network};
 use tracing::debug;
 
 use crate::{
-    commands::{Context, Mode},
-    options::{EnvironmentOpt, IdentityOpt},
+    commands::{Context, Mode, args},
+    options::IdentityOpt,
     progress::{ProgressManager, ProgressManagerSettings},
     store_artifact::LookupError as LookupArtifactError,
     store_id::{Key, LookupError as LookupIdError},
@@ -27,8 +27,8 @@ pub(crate) struct InstallArgs {
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    #[arg(long)]
+    pub(crate) environment: Option<args::Environment>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -77,6 +77,9 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
         }
 
         Mode::Project(pdir) => {
+            // Argument (Environment)
+            let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
+
             // Load the project
             let p = ctx.project.load(pdir).await?;
 
@@ -84,11 +87,10 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
             let id = ctx.identity.load(args.identity.clone().into()).await?;
 
             // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+            let env = p
+                .environments
+                .get(&env)
+                .ok_or(CommandError::EnvironmentNotFound { name: env })?;
 
             // Access network
             let access = ctx.network.access(&env.network).await?;

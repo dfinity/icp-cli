@@ -17,8 +17,8 @@ use icp_canister_interfaces::{
 use rand::seq::IndexedRandom;
 
 use crate::{
-    commands::{Context, Mode},
-    options::{EnvironmentOpt, IdentityOpt},
+    commands::{Context, Mode, args},
+    options::IdentityOpt,
     progress::{ProgressManager, ProgressManagerSettings},
     store_id::{Key, LookupError, RegisterError},
 };
@@ -52,8 +52,8 @@ pub(crate) struct CreateArgs {
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    #[arg(long)]
+    pub(crate) environment: Option<args::Environment>,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -137,6 +137,9 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         }
 
         Mode::Project(pdir) => {
+            // Argument (Environment)
+            let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
+
             // Load project
             let p = ctx.project.load(pdir).await?;
 
@@ -144,11 +147,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
             let id = ctx.identity.load(args.identity.clone().into()).await?;
 
             // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+            let env = p
+                .environments
+                .get(&env)
+                .ok_or(CommandError::EnvironmentNotFound { name: env })?;
 
             // Collect environment canisters
             let cnames = match args.names.is_empty() {

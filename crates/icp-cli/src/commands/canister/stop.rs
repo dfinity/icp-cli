@@ -5,7 +5,7 @@ use icp::{agent, identity, network};
 
 use crate::{
     commands::{Context, Mode, args},
-    options::{EnvironmentOpt, IdentityOpt},
+    options::IdentityOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
 
@@ -17,8 +17,11 @@ pub(crate) struct StopArgs {
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    #[arg(long)]
+    pub(crate) network: Option<args::Network>,
+
+    #[arg(long)]
+    pub(crate) environment: Option<args::Environment>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -60,17 +63,32 @@ pub(crate) enum CommandError {
 pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandError> {
     let (agent, cid) = match &ctx.mode {
         Mode::Global => {
-            let args::Canister::Principal(_) = &args.canister else {
+            // Argument (Canister)
+            let args::Canister::Principal(cid) = &args.canister else {
                 return Err(CommandError::Args);
             };
 
-            unimplemented!("global mode is not implemented yet");
+            // Argument (Network)
+            let Some(args::Network::Url(url)) = args.network.clone() else {
+                return Err(CommandError::Args);
+            };
+
+            // Load identity
+            let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Agent
+            let agent = ctx.agent.create(id, &url).await?;
+
+            (agent, cid.to_owned())
         }
 
         Mode::Project(pdir) => {
             let args::Canister::Name(name) = &args.canister else {
                 return Err(CommandError::Args);
             };
+
+            // Argument (Environment)
+            let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
 
             // Load project
             let p = ctx.project.load(pdir).await?;
@@ -79,11 +97,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), CommandEr
             let id = ctx.identity.load(args.identity.clone().into()).await?;
 
             // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+            let env = p
+                .environments
+                .get(&env)
+                .ok_or(CommandError::EnvironmentNotFound { name: env })?;
 
             // Access network
             let access = ctx.network.access(&env.network).await?;

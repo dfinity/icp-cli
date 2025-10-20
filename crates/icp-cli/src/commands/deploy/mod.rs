@@ -3,7 +3,7 @@ use ic_agent::export::Principal;
 
 use crate::{
     commands::{
-        Context, Mode, build,
+        Context, Mode, args, build,
         canister::{
             binding_env_vars,
             create::{self, CanisterSettings},
@@ -11,7 +11,7 @@ use crate::{
         },
         sync,
     },
-    options::{EnvironmentOpt, IdentityOpt},
+    options::IdentityOpt,
 };
 
 #[derive(Args, Debug)]
@@ -38,8 +38,8 @@ pub(crate) struct DeployArgs {
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    #[arg(long)]
+    pub(crate) environment: Option<args::Environment>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -82,15 +82,17 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         }
 
         Mode::Project(pdir) => {
+            // Argument (Environment)
+            let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
+
             // Load the project manifest, which defines the canisters to be built.
             let p = ctx.project.load(pdir).await?;
 
             // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+            let env = p
+                .environments
+                .get(&env)
+                .ok_or(CommandError::EnvironmentNotFound { name: env })?;
 
             let cnames = match args.names.is_empty() {
                 // No canisters specified
@@ -166,6 +168,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
                 &binding_env_vars::BindingArgs {
                     names: cnames.to_owned(),
                     identity: args.identity.clone(),
+                    network: None,
                     environment: args.environment.clone(),
                 },
             )

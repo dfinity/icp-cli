@@ -14,6 +14,7 @@ pub(crate) mod status;
 pub(crate) mod stop;
 pub(crate) mod top_up;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     Call(call::CallArgs),

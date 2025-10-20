@@ -178,10 +178,10 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
             let mut failed_outputs = Vec::new();
 
             while let Some((res, output)) = futs.next().await {
-                if let Err(e) = res {
-                    if let Some(output) = output {
-                        failed_outputs.push((output, e));
-                    }
+                if let Err(e) = res
+                    && let Some(output) = output
+                {
+                    failed_outputs.push((output, e));
                 }
             }
 

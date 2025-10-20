@@ -261,7 +261,9 @@ impl MultiStepProgressBar {
 
         for step_output in self.finished_steps.iter() {
             for line in step_output.title.lines() {
-                lines.push(format!("[{}] {}:", self.canister_name, line));
+                if !line.is_empty() {
+                    lines.push(format!("[{}] {}:", self.canister_name, line));
+                }
             }
 
             if step_output.output.is_empty() {

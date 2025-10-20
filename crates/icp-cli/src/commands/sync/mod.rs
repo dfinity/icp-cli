@@ -203,7 +203,7 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
                             for line in pb.dump_output() {
                                 let _ = ctx.term.write_line(&line);
                             }
-                            let _ = ctx.term.write_line(&print_sync_error(&e));
+                            let _ = ctx.term.write_line(&print_sync_error(e));
                             let _ = ctx.term.write_line("");
                         }
 

@@ -1,12 +1,13 @@
 use clap::Args;
-use ic_agent::AgentError;
 use ic_management_canister_types::LoadCanisterSnapshotArgs;
-use icp::{agent, identity, network};
 
 use crate::{
-    commands::{Context, Mode, canister::snapshot::SnapshotId},
+    commands::{
+        Context, Mode,
+        canister::snapshot::{CommandError, SnapshotId},
+    },
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
+    store_id::Key,
 };
 
 #[derive(Debug, Args)]
@@ -22,36 +23,6 @@ pub struct LoadArgs {
 
     /// The ID of the snapshot to load.
     snapshot: SnapshotId,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[error(transparent)]
-    Lookup(#[from] LookupIdError),
-
-    #[error(transparent)]
-    Status(#[from] AgentError),
 }
 
 pub async fn exec(ctx: &Context, args: &LoadArgs) -> Result<(), CommandError> {

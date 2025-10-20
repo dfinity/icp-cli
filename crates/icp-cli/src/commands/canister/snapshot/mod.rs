@@ -1,11 +1,14 @@
 use clap::Subcommand;
+use ic_agent::AgentError;
 use ic_management_canister_types::UploadCanisterSnapshotMetadataResult;
-use icp::prelude::PathBuf;
+use icp::{agent, identity, network, prelude::PathBuf};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Formatter},
     str::FromStr,
 };
+
+use crate::store_id::LookupError as LookupIdError;
 
 pub(crate) mod create;
 pub(crate) mod delete;
@@ -57,4 +60,34 @@ pub enum Command {
     List(list::ListArgs),
     Load(load::LoadArgs),
     Upload(upload::UploadArgs),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Identity(#[from] identity::LoadError),
+
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error(transparent)]
+    Access(#[from] network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] agent::CreateError),
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
+    EnvironmentCanister {
+        environment: String,
+        canister: String,
+    },
+
+    #[error(transparent)]
+    Lookup(#[from] LookupIdError),
+
+    #[error(transparent)]
+    Status(#[from] AgentError),
 }

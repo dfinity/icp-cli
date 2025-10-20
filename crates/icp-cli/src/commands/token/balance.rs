@@ -24,6 +24,9 @@ pub(crate) struct BalanceArgs {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
+    #[error("an invalid argument was provided")]
+    Args,
+
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -59,9 +62,23 @@ pub(crate) async fn exec(
     token: &str,
     args: &BalanceArgs,
 ) -> Result<(), CommandError> {
-    match &ctx.mode {
+    let (agent, owner) = match &ctx.mode {
         Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
+            // Argument (Network)
+            let Some(args::Network::Url(url)) = args.network.clone() else {
+                return Err(CommandError::Args);
+            };
+
+            // Load identity
+            let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Convert identity to sender principal
+            let owner = id.sender().map_err(|err| CommandError::Principal { err })?;
+
+            // Agent
+            let agent = ctx.agent.create(id, &url).await?;
+
+            (agent, owner)
         }
 
         Mode::Project(pdir) => {
@@ -73,6 +90,9 @@ pub(crate) async fn exec(
 
             // Load identity
             let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Convert identity to sender principal
+            let owner = id.sender().map_err(|err| CommandError::Principal { err })?;
 
             // Load target environment
             let env = p
@@ -90,83 +110,80 @@ pub(crate) async fn exec(
                 agent.set_root_key(k);
             }
 
-            // Obtain ledger address
-            let cid = match TOKEN_LEDGER_CIDS.get(token) {
-                // Given token matched known token names
-                Some(cid) => cid.to_string(),
-
-                // Given token is not known, indicating it's either already a canister id
-                // or is simply a name of a token we do not know of
-                None => token.to_string(),
-            };
-
-            // Parse the canister id
-            let cid = Principal::from_text(cid).map_err(|err| CommandError::Principal {
-                err: err.to_string(),
-            })?;
-
-            // Perform the required ledger calls
-            let (balance, decimals, symbol) = tokio::join!(
-                //
-                // Obtain token balance
-                async {
-                    // Convert identity to sender principal
-                    let owner = id.sender().map_err(|err| CommandError::Principal { err })?;
-
-                    // Specify sub-account
-                    let subaccount = None;
-
-                    // Perform query
-                    let resp = agent
-                        .query(&cid, "icrc1_balance_of")
-                        .with_arg(
-                            Encode!(&Account { owner, subaccount }).expect("failed to encode arg"),
-                        )
-                        .await?;
-
-                    // Decode response
-                    Ok::<_, CommandError>(Decode!(&resp, Nat)?)
-                },
-                //
-                // Obtain the number of decimals the token uses
-                async {
-                    // Perform query
-                    let resp = agent
-                        .query(&cid, "icrc1_decimals")
-                        .with_arg(Encode!(&()).expect("failed to encode arg"))
-                        .await?;
-
-                    // Decode response
-                    Ok::<_, CommandError>(Decode!(&resp, u8)?)
-                },
-                //
-                // Obtain the symbol of the token
-                async {
-                    // Perform query
-                    let resp = agent
-                        .query(&cid, "icrc1_symbol")
-                        .with_arg(Encode!(&()).expect("failed to encode arg"))
-                        .await?;
-
-                    // Decode response
-                    Ok::<_, CommandError>(Decode!(&resp, String)?)
-                },
-            );
-
-            // Check for errors
-            let (Nat(balance), decimals, symbol) = (
-                balance?,         //
-                decimals? as i64, //
-                symbol?,          //
-            );
-
-            // Calculate amount
-            let amount = BigDecimal::from_biguint(balance, decimals);
-
-            // Output information
-            let _ = ctx.term.write_line(&format!("Balance: {amount} {symbol}"));
+            (agent, owner)
         }
-    }
+    };
+
+    // Obtain ledger address
+    let cid = match TOKEN_LEDGER_CIDS.get(token) {
+        // Given token matched known token names
+        Some(cid) => cid.to_string(),
+
+        // Given token is not known, indicating it's either already a canister id
+        // or is simply a name of a token we do not know of
+        None => token.to_string(),
+    };
+
+    // Parse the canister id
+    let cid = Principal::from_text(cid).map_err(|err| CommandError::Principal {
+        err: err.to_string(),
+    })?;
+
+    // Perform the required ledger calls
+    let (balance, decimals, symbol) = tokio::join!(
+        //
+        // Obtain token balance
+        async {
+            // Specify sub-account
+            let subaccount = None;
+
+            // Perform query
+            let resp = agent
+                .query(&cid, "icrc1_balance_of")
+                .with_arg(Encode!(&Account { owner, subaccount }).expect("failed to encode arg"))
+                .await?;
+
+            // Decode response
+            Ok::<_, CommandError>(Decode!(&resp, Nat)?)
+        },
+        //
+        // Obtain the number of decimals the token uses
+        async {
+            // Perform query
+            let resp = agent
+                .query(&cid, "icrc1_decimals")
+                .with_arg(Encode!(&()).expect("failed to encode arg"))
+                .await?;
+
+            // Decode response
+            Ok::<_, CommandError>(Decode!(&resp, u8)?)
+        },
+        //
+        // Obtain the symbol of the token
+        async {
+            // Perform query
+            let resp = agent
+                .query(&cid, "icrc1_symbol")
+                .with_arg(Encode!(&()).expect("failed to encode arg"))
+                .await?;
+
+            // Decode response
+            Ok::<_, CommandError>(Decode!(&resp, String)?)
+        },
+    );
+
+    // Check for errors
+    let (Nat(balance), decimals, symbol) = (
+        balance?,         //
+        decimals? as i64, //
+        symbol?,          //
+    );
+
+    // Calculate amount
+    let amount = BigDecimal::from_biguint(balance, decimals);
+
+    // Output information
+    let _ = ctx.term.write_line(&format!("Balance: {amount} {symbol}"));
 
     Ok(())
 }

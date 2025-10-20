@@ -26,9 +26,9 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), CommandEr
             unimplemented!("global mode is not implemented yet");
         }
 
-        Mode::Project(_) => {
+        Mode::Project(pdir) => {
             // Load project
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // Load target environment
             let env = p.environments.get(args.environment.name()).ok_or(

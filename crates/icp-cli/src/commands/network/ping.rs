@@ -52,9 +52,13 @@ pub(crate) enum CommandError {
 
 pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
     match &ctx.mode {
-        Mode::Global | Mode::Project(_) => {
+        Mode::Global => {
+            unimplemented!("global mode is not implemented");
+        }
+
+        Mode::Project(pdir) => {
             // Load Project
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // Identity
             let id = ctx.identity.load(IdentitySelection::Anonymous).await?;

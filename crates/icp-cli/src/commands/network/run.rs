@@ -44,7 +44,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
 
         Mode::Project(pdir) => {
             // Load project
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // Obtain network configuration
             let network = p.networks.get(&args.name).ok_or(CommandError::Network {

@@ -21,9 +21,9 @@ pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), CommandError
             unimplemented!("global mode is not implemented yet");
         }
 
-        Mode::Project(_) => {
+        Mode::Project(pdir) => {
             // Load project
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // List networks
             for (name, cfg) in &p.networks {

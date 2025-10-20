@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    manifest::{PROJECT_MANIFEST, project::ProjectManifest},
     network::Configuration,
     prelude::*,
 };
@@ -79,7 +79,7 @@ pub enum LoadError {
 
 #[async_trait]
 pub trait Load: Sync + Send {
-    async fn load(&self) -> Result<Project, LoadError>;
+    async fn load(&self, dir: &Path) -> Result<Project, LoadError>;
 }
 
 #[async_trait]
@@ -98,21 +98,23 @@ pub struct ProjectLoaders {
 }
 
 pub struct Loader {
-    pub locate: Arc<dyn Locate>,
-    pub project: ProjectLoaders,
+    project: ProjectLoaders,
+}
+
+impl Loader {
+    pub fn new(project: ProjectLoaders) -> Self {
+        Self { project }
+    }
 }
 
 #[async_trait]
 impl Load for Loader {
-    async fn load(&self) -> Result<Project, LoadError> {
-        // Locate project root
-        let pdir = self.locate.locate().context(LoadError::Locate)?;
-
+    async fn load(&self, dir: &Path) -> Result<Project, LoadError> {
         // Load project manifest
         let m = self
             .project
             .path
-            .load(&pdir.join(PROJECT_MANIFEST))
+            .load(&dir.join(PROJECT_MANIFEST))
             .await
             .context(LoadError::Path)?;
 
@@ -138,12 +140,12 @@ impl<T, V> Lazy<T, V> {
 
 #[async_trait]
 impl<T: Load> Load for Lazy<T, Project> {
-    async fn load(&self) -> Result<Project, LoadError> {
+    async fn load(&self, dir: &Path) -> Result<Project, LoadError> {
         if let Some(v) = self.1.lock().await.as_ref() {
             return Ok(v.to_owned());
         }
 
-        let v = self.0.load().await?;
+        let v = self.0.load(dir).await?;
 
         let mut g = self.1.lock().await;
         if g.is_none() {

@@ -23,7 +23,6 @@ pub(crate) enum CommandError {
 pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
-            // Load project directories
             let dir = ctx.dirs.identity();
 
             match &args.name {

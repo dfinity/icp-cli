@@ -82,9 +82,9 @@ pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), Comman
             unimplemented!("global mode is not implemented yet");
         }
 
-        Mode::Project(_) => {
+        Mode::Project(pdir) => {
             // Load the project
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // Load identity
             let id = ctx.identity.load(args.identity.clone().into()).await?;

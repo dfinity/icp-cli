@@ -77,13 +77,13 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandE
             unimplemented!("global mode is not implemented yet");
         }
 
-        Mode::Project(_) => {
+        Mode::Project(pdir) => {
             let args::Canister::Name(name) = &args.canister else {
                 return Err(CommandError::Args);
             };
 
             // Load project
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // Load identity
             let id = ctx.identity.load(args.identity.clone().into()).await?;

@@ -22,6 +22,9 @@ pub(crate) struct BuildArgs {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
+    #[error(transparent)]
+    Project(#[from] icp::LoadError),
+
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },
 
@@ -51,9 +54,9 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandE
             unimplemented!("global mode is not implemented yet");
         }
 
-        Mode::Project(_) => {
+        Mode::Project(pdir) => {
             // Load the project manifest, which defines the canisters to be built.
-            let p = ctx.project.load().await.context("failed to load project")?;
+            let p = ctx.project.load(pdir).await?;
 
             // Choose canisters to build
             let cnames = match args.names.is_empty() {

@@ -81,9 +81,9 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
             unimplemented!("global mode is not implemented yet");
         }
 
-        Mode::Project(_) => {
+        Mode::Project(pdir) => {
             // Load the project manifest, which defines the canisters to be built.
-            let p = ctx.project.load().await?;
+            let p = ctx.project.load(pdir).await?;
 
             // Load target environment
             let env = p.environments.get(args.environment.name()).ok_or(

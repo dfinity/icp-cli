@@ -196,11 +196,7 @@ async fn main() -> Result<(), Error> {
         }),
     };
 
-    let pload = icp::Loader {
-        locate: mloc.clone(),
-        project: ploaders,
-    };
-
+    let pload = icp::Loader::new(ploaders);
     let pload = icp::Lazy::new(pload);
     let pload = Arc::new(pload);
 

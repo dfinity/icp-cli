@@ -43,7 +43,7 @@ fn ensure_canister_stopped(status: CanisterStatusType, canister: &str) -> Result
     match status {
         CanisterStatusType::Stopped => Ok(()),
         CanisterStatusType::Running => Err(CommandError::CanisterNotStopped(format!(
-            "Canister {canister} is running. Run `dfx canister stop` to stop it first"
+            "Canister {canister} is running. Run 'icp canister stop' to stop it first"
         ))),
         CanisterStatusType::Stopping => Err(CommandError::CanisterNotStopped(format!(
             "Canister {canister} is stopping but is not yet stopped. Wait a few seconds and try again"

@@ -1,3 +1,9 @@
+use icp_canister_interfaces::{
+    cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
+    cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
+    internet_identity::INTERNET_IDENTITY_PRINCIPAL, nns_root::NNS_ROOT_PRINCIPAL,
+    registry::REGISTRY_PRINCIPAL,
+};
 use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
@@ -63,9 +69,8 @@ fn network_same_port() {
 #[test]
 #[file_serial(port8001, port8002)]
 fn two_projects_different_fixed_ports() {
-    let ctx = TestContext::new();
-
-    let project_dir_a = ctx.create_project_dir("a");
+    let ctx_a = TestContext::new();
+    let project_dir_a = ctx_a.create_project_dir("a");
 
     // Project manifest
     write_string(
@@ -80,7 +85,8 @@ fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let project_dir_b = ctx.create_project_dir("b");
+    let ctx_b = TestContext::new();
+    let project_dir_b = ctx_b.create_project_dir("b");
 
     // Project manifest
     write_string(
@@ -95,15 +101,15 @@ fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx.start_network_in(&project_dir_a, "my-network");
+    let _a_guard = ctx_a.start_network_in(&project_dir_a, "my-network");
 
     eprintln!("wait for network A healthy");
-    ctx.ping_until_healthy(&project_dir_a, "my-network");
+    ctx_a.ping_until_healthy(&project_dir_a, "my-network");
 
-    let _b_guard = ctx.start_network_in(&project_dir_b, "my-network");
+    let _b_guard = ctx_b.start_network_in(&project_dir_b, "my-network");
 
     eprintln!("wait for network B healthy");
-    ctx.ping_until_healthy(&project_dir_b, "my-network");
+    ctx_b.ping_until_healthy(&project_dir_b, "my-network");
 }
 
 // TODO(or.ricon) This is broken
@@ -285,4 +291,64 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
+}
+
+#[tokio::test]
+async fn network_starts_with_canisters_preset() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#}, // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _guard = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
+    let pocket_ic = ctx.pocketic();
+    let controller = Some(NNS_ROOT_PRINCIPAL);
+
+    // ICP ledger
+    let icp_ledger_status = pocket_ic
+        .canister_status(ICP_LEDGER_PRINCIPAL, controller)
+        .await
+        .unwrap();
+    assert!(icp_ledger_status.module_hash.is_some());
+
+    // Cycles ledger
+    let cycles_ledger_status = pocket_ic
+        .canister_status(CYCLES_LEDGER_PRINCIPAL, controller)
+        .await
+        .unwrap();
+    assert!(cycles_ledger_status.module_hash.is_some());
+
+    // Cycles minting
+    let cycles_minting_status = pocket_ic
+        .canister_status(CYCLES_MINTING_CANISTER_PRINCIPAL, controller)
+        .await
+        .unwrap();
+    assert!(cycles_minting_status.module_hash.is_some());
+
+    // Registry
+    let registry_status = pocket_ic
+        .canister_status(REGISTRY_PRINCIPAL, controller)
+        .await
+        .unwrap();
+    assert!(registry_status.module_hash.is_some());
+
+    // Internet identity
+    let internet_identity_status = pocket_ic
+        .canister_status(INTERNET_IDENTITY_PRINCIPAL, controller)
+        .await
+        .unwrap();
+    assert!(internet_identity_status.module_hash.is_some());
 }

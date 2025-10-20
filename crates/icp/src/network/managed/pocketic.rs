@@ -33,6 +33,9 @@ pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
             // Same as above
             registry: Some(IcpFeaturesConfig::DefaultConfig),
 
+            // Same as above
+            ii: Some(IcpFeaturesConfig::DefaultConfig),
+
             // The rest of the features are disabled by default
             ..Default::default()
         }),

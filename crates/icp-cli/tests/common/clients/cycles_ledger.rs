@@ -2,12 +2,11 @@ use candid::{Decode, Encode, Nat, Principal};
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use pocket_ic::nonblocking::PocketIc;
-use std::cell::Ref;
 
 use crate::common::TestContext;
 
 pub struct Client<'a> {
-    pic: Ref<'a, PocketIc>,
+    pic: &'a PocketIc,
 }
 
 impl<'a> Client<'a> {

@@ -25,7 +25,7 @@ use tracing_subscriber::{
 
 use crate::{
     commands::{Mode, validation::Validate},
-    logging::TermWriter,
+    logging::{TermWriter, debug_layer},
     operations::canister::{Starter, Stopper},
     store_artifact::ArtifactStore,
     store_id::IdStore,
@@ -101,8 +101,8 @@ async fn main() -> Result<(), Error> {
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
-        tracing_subscriber::fmt::layer(), // debug
-        EventLayer,                       // event
+        debug_layer(), // debug
+        EventLayer,    // event
     );
 
     let reg = Registry::default()

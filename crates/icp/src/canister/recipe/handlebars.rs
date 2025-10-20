@@ -1,4 +1,5 @@
 use indoc::formatdoc;
+use serde::Deserialize;
 use std::{str::FromStr, string::FromUtf8Error};
 
 use crate::{
@@ -74,50 +75,16 @@ pub enum HandlebarsError {
 #[async_trait]
 impl Resolve for Handlebars {
     async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
-        // Sanity check recipe type
-        let recipe_type = match &recipe.recipe_type {
-            RecipeType::Unknown(typ) => typ.to_owned(),
+        // Find the template
+        let tmpl = match &recipe.recipe_type {
+            RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
+            RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
+            RecipeType::Registry {
+                name,
+                recipe,
+                version,
+            } => TemplateSource::Registry(name.to_owned(), recipe.to_owned(), version.to_owned()),
         };
-
-        // Infer source for recipe template (local, remote, built-in, etc)
-        let tmpl = (|recipe_type: String| {
-            if recipe_type.starts_with("file://") {
-                let path = recipe_type
-                    .strip_prefix("file://")
-                    .map(Path::new)
-                    .expect("prefix missing")
-                    .into();
-
-                return TemplateSource::LocalPath(path);
-            }
-
-            if recipe_type.starts_with("http://") || recipe_type.starts_with("https://") {
-                return TemplateSource::RemoteUrl(recipe_type);
-            }
-
-            if recipe_type.starts_with("@") {
-                let recipe_type = recipe_type.strip_prefix("@").expect("prefix missing");
-
-                // Check for version delimiter
-                let (v, version) = if recipe_type.contains("@") {
-                    // Version is specified
-                    recipe_type.rsplit_once("@").expect("delimiter missing")
-                } else {
-                    // Assume latest
-                    (recipe_type, "latest")
-                };
-
-                let (registry, recipe) = v.split_once("/").expect("delimiter missing");
-
-                return TemplateSource::Registry(
-                    registry.to_owned(),
-                    recipe.to_owned(),
-                    version.to_owned(),
-                );
-            }
-
-            panic!("Invalid recipe type: {recipe_type}");
-        })(recipe_type.clone());
 
         // TMP(or.ricon): Temporarily hardcode a dfinity registry
         let tmpl = match tmpl {
@@ -208,24 +175,36 @@ impl Resolve for Handlebars {
             .map_err(|err| ResolveError::Handlebars {
                 source: HandlebarsError::Render {
                     source: err,
-                    recipe: recipe_type.to_owned(),
+                    recipe: recipe.recipe_type.clone().into(),
                     template: tmpl.to_owned(),
                 },
             })?;
 
         // Read the rendered YAML canister manifest
-        let insts = serde_yaml::from_str::<Instructions>(&out);
+        // Recipes can only render buid/sync
+        #[derive(Deserialize)]
+        struct BuildSyncHelper {
+            build: build::Steps,
+            #[serde(default)]
+            sync: sync::Steps,
+        }
+
+        let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
         let insts = match insts {
-            Ok(insts) => insts,
+            Ok(helper) => Instructions::BuildSync {
+                build: helper.build,
+                sync: helper.sync,
+            },
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
-                Unable to render template into valid yaml: {e}
+                Unable to render recipe {} template into valid yaml: {e}
+
                 Rendered content:
                 ------
                 {out}
                 ------
-            "#}
+            "#, recipe.recipe_type}
             ),
         };
 

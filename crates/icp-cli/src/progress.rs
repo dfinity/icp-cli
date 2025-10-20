@@ -251,25 +251,32 @@ impl MultiStepProgressBar {
         self.finished_steps.push(StepOutput { title, output });
     }
 
-    pub fn dump_output(&self) -> String {
+    pub fn dump_output(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
         lines.push(format!(
-            "{} output for canister {}:",
-            self.output_label, self.canister_name
+            "[{}] {} output:",
+            self.canister_name, self.output_label
         ));
 
         for step_output in self.finished_steps.iter() {
-            lines.push(format!("\n{}:", step_output.title));
+            for line in step_output.title.lines() {
+                lines.push(format!("[{}] {}:", self.canister_name, line));
+            }
 
             if step_output.output.is_empty() {
-                lines.push("<no output>".to_string());
+                lines.push(format!("[{}] <no output>", self.canister_name));
             } else {
-                lines.extend(step_output.output.iter().map(|s| format!("> {s}")));
+                lines.extend(
+                    step_output
+                        .output
+                        .iter()
+                        .map(|s| format!("[{}] > {s}", self.canister_name)),
+                );
             }
         }
 
-        lines.join("\n")
+        lines
     }
 }
 

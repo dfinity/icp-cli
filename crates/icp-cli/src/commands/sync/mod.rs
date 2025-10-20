@@ -194,17 +194,17 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
                             &pb,
                             async { sync_result },
                             || format!("Synced successfully: {cid}"),
-                            |err| format!("Failed to sync canister: {err}"),
+                            print_sync_error,
                         )
                         .await;
 
                         // After progress bar is finished, dump the output if sync failed
                         if let Err(e) = &result {
-                            let output = pb.dump_output();
-                            let _ = ctx.term.write_str(&output);
-                            let _ = ctx
-                                .term
-                                .write_line(&format!("Failed to sync canister: {e}"));
+                            for line in pb.dump_output() {
+                                let _ = ctx.term.write_line(&line);
+                            }
+                            let _ = ctx.term.write_line(&print_sync_error(&e));
+                            let _ = ctx.term.write_line("");
                         }
 
                         result
@@ -231,4 +231,8 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     }
 
     Ok(())
+}
+
+fn print_sync_error(err: &CommandError) -> String {
+    format!("Failed to sync canister: {err}")
 }

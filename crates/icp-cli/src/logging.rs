@@ -22,7 +22,7 @@ impl<W: Write + AsRawFd> Write for TermWriter<W> {
         if !self.debug {
             self.writer.write(buf)?;
         }
-        debug!("{}", String::from_utf8_lossy(buf));
+        debug!("{}", String::from_utf8_lossy(buf).trim());
         Ok(buf.len())
     }
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::{Context as _, anyhow};
 use camino_tempfile::tempdir;
 use clap::Args;
-use futures::{StreamExt, stream::FuturesUnordered};
+use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     canister::build::{BuildError, Params},
     fs::read,
@@ -79,7 +79,7 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                 .collect::<HashMap<_, _>>();
 
             // Prepare a futures set for concurrent canister builds
-            let mut futs = FuturesUnordered::new();
+            let mut futs = FuturesOrdered::new();
 
             let progress_manager =
                 ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
@@ -156,7 +156,7 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                             &pb,
                             async { build_result },
                             || "Built successfully".to_string(),
-                            |err| format!("Failed to build canister: {err}"),
+                            print_build_error,
                         )
                         .await;
 
@@ -171,7 +171,7 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                     }
                 };
 
-                futs.push(fut);
+                futs.push_back(fut);
             }
 
             // Consume the set of futures and collect results
@@ -182,19 +182,17 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                     if let Some(output) = output {
                         failed_outputs.push((output, e));
                     }
-                    // Stop iterating and dump output immediately on first failure
-                    break;
                 }
             }
-
-            futs.clear();
 
             // If any builds failed, dump the output and abort
             if !failed_outputs.is_empty() {
                 for (output, e) in failed_outputs {
+                    for line in output {
+                        let _ = ctx.term.write_line(&line);
+                    }
+                    let _ = ctx.term.write_line(&print_build_error(&e));
                     let _ = ctx.term.write_line("");
-                    let _ = ctx.term.write_line(&output);
-                    let _ = ctx.term.write_line(&format!("Build error: {e}"));
                 }
 
                 return Err(CommandError::Unexpected(anyhow!(
@@ -205,4 +203,8 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
     }
 
     Ok(())
+}
+
+fn print_build_error(err: &CommandError) -> String {
+    format!("Failed to build canister: {err}")
 }

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub use directory::NetworkDirectory;
+pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 
 use crate::{

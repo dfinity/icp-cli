@@ -47,6 +47,7 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 serde.workspace = true
 snafu.workspace = true
+sysinfo.workspace = true
 thiserror.workspace = true
 tiny-bip39.workspace = true
 tokio.workspace = true

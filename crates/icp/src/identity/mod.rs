@@ -82,6 +82,7 @@ pub trait Load: Sync + Send {
 }
 
 pub struct Loader {
+    /// Directory for identities
     pub dir: PathBuf,
 }
 

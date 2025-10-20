@@ -89,16 +89,22 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandE
     let (agent, cid) = match &ctx.mode {
         Mode::Global => {
             // Argument (Canister)
-            let args::Canister::Principal(_) = &args.canister else {
+            let args::Canister::Principal(cid) = &args.canister else {
                 return Err(CommandError::Args);
             };
 
             // Argument (Network)
-            let Some(args::Network::Url(_)) = args.network.clone() else {
+            let Some(args::Network::Url(url)) = args.network.clone() else {
                 return Err(CommandError::Args);
             };
 
-            unimplemented!("global mode is not implemented yet");
+            // Load identity
+            let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Agent
+            let agent = ctx.agent.create(id, &url).await?;
+
+            (agent, cid.to_owned())
         }
 
         Mode::Project(pdir) => {

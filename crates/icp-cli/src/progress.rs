@@ -7,7 +7,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::debug;
 
 /// The maximum number of lines to display for a step output
-pub const MAX_LINES_PER_STEP: usize = 10_000;
+pub(crate) const MAX_LINES_PER_STEP: usize = 10_000;
 
 // Animation frames for the spinner - creates a rotating star effect
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
@@ -37,20 +37,20 @@ fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
 
 /// A fixed-capacity rolling buffer that always holds the last `capacity` items.
 #[derive(Debug)]
-pub struct RollingLines {
+pub(crate) struct RollingLines {
     buf: VecDeque<String>,
     capacity: usize,
 }
 
 impl RollingLines {
     /// Create a new buffer with a fixed capacity.
-    pub fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         let buf = VecDeque::with_capacity(capacity);
         Self { buf, capacity }
     }
 
     /// Push a new line, evicting the oldest if full.
-    pub fn push(&mut self, line: String) {
+    pub(crate) fn push(&mut self, line: String) {
         if self.buf.len() == self.capacity {
             self.buf.pop_front();
         }
@@ -59,29 +59,29 @@ impl RollingLines {
     }
 
     /// Get an iterator over the current contents (in order).
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &str> {
         self.buf.iter().map(|s| s.as_str())
     }
 
     /// Convert the buffer into an iterator (in order).
-    pub fn into_iter(self) -> impl Iterator<Item = String> {
+    pub(crate) fn into_iter(self) -> impl Iterator<Item = String> {
         self.buf.into_iter()
     }
 }
 
 /// Settings for the progress manager
-pub struct ProgressManagerSettings {
+pub(crate) struct ProgressManagerSettings {
     /// Whether to hide the progress bars
-    pub hidden: bool,
+    pub(crate) hidden: bool,
 }
 
 /// Shared progress bar utilities for build and sync commands
-pub struct ProgressManager {
-    pub multi_progress: MultiProgress,
+pub(crate) struct ProgressManager {
+    pub(crate) multi_progress: MultiProgress,
 }
 
 impl ProgressManager {
-    pub fn new(settings: ProgressManagerSettings) -> Self {
+    pub(crate) fn new(settings: ProgressManagerSettings) -> Self {
         let multi_progress = MultiProgress::new();
 
         if settings.hidden {
@@ -92,7 +92,7 @@ impl ProgressManager {
     }
 
     /// Create a new progress bar with standard configuration
-    pub fn create_progress_bar(&self, canister_name: &str) -> SimpleProgressBar {
+    pub(crate) fn create_progress_bar(&self, canister_name: &str) -> SimpleProgressBar {
         let pb = self
             .multi_progress
             .add(SimpleProgressBar::new_spinner().with_style(make_style(
@@ -110,7 +110,7 @@ impl ProgressManager {
     }
 
     /// Create a new progress bar for a multi-step operation.
-    pub fn create_multi_step_progress_bar(
+    pub(crate) fn create_multi_step_progress_bar(
         &self,
         canister_name: &str,
         output_label: &str,
@@ -125,7 +125,7 @@ impl ProgressManager {
     }
 
     /// Execute a task with progress tracking and automatic style updates
-    pub async fn execute_with_progress<F, R, E, P>(
+    pub(crate) async fn execute_with_progress<F, R, E, P>(
         progress_bar: &P,
         task: F,
         success_message: impl Fn() -> String,
@@ -147,7 +147,7 @@ impl ProgressManager {
     }
 
     /// Execute a task with custom progress handling for errors that should display as success
-    pub async fn execute_with_custom_progress<F, R, E, P>(
+    pub(crate) async fn execute_with_custom_progress<F, R, E, P>(
         progress_bar: &P,
         task: F,
         success_message: impl Fn() -> String,
@@ -188,7 +188,7 @@ struct StepInProgress {
     receiver: JoinHandle<Vec<String>>,
 }
 
-pub struct MultiStepProgressBar {
+pub(crate) struct MultiStepProgressBar {
     progress_bar: SimpleProgressBar,
     canister_name: String,
     output_label: String,
@@ -197,7 +197,7 @@ pub struct MultiStepProgressBar {
 }
 
 impl MultiStepProgressBar {
-    pub fn begin_step(&mut self, title: String) -> mpsc::Sender<String> {
+    pub(crate) fn begin_step(&mut self, title: String) -> mpsc::Sender<String> {
         if self.in_progress.is_some() {
             panic!("step already in progress");
         }
@@ -243,7 +243,7 @@ impl MultiStepProgressBar {
         tx
     }
 
-    pub async fn end_step(&mut self) {
+    pub(crate) async fn end_step(&mut self) {
         let StepInProgress { title, receiver } =
             self.in_progress.take().expect("no step in progress");
         let output = receiver.await.unwrap();
@@ -251,7 +251,7 @@ impl MultiStepProgressBar {
         self.finished_steps.push(StepOutput { title, output });
     }
 
-    pub fn dump_output(&self) -> Vec<String> {
+    pub(crate) fn dump_output(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
         lines.push(format!(
@@ -282,7 +282,7 @@ impl MultiStepProgressBar {
     }
 }
 
-pub trait ProgressBar {
+pub(crate) trait ProgressBar {
     fn set_style(&self, style: ProgressStyle);
     fn set_message(&self, message: String);
     fn finish(&self);

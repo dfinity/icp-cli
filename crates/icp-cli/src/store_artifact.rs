@@ -7,7 +7,7 @@ use icp::{
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
-pub enum SaveError {
+pub(crate) enum SaveError {
     #[snafu(display("failed to create artifacts directory"))]
     ArtifactsDir { source: icp::fs::Error },
 
@@ -16,7 +16,7 @@ pub enum SaveError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LookupError {
+pub(crate) enum LookupError {
     #[snafu(display("failed to read artifact file"))]
     LookupReadFileError { source: icp::fs::Error },
 
@@ -24,13 +24,13 @@ pub enum LookupError {
     LookupArtifactNotFound { name: String },
 }
 
-pub struct ArtifactStore {
+pub(crate) struct ArtifactStore {
     path: PathBuf,
     lock: Mutex<()>,
 }
 
 impl ArtifactStore {
-    pub fn new(path: &Path) -> Self {
+    pub(crate) fn new(path: &Path) -> Self {
         Self {
             path: path.to_owned(),
             lock: Mutex::new(()),
@@ -39,7 +39,7 @@ impl ArtifactStore {
 }
 
 impl ArtifactStore {
-    pub fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+    pub(crate) fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
         // Lock Artifact Store
         let _g = self
             .lock
@@ -55,7 +55,7 @@ impl ArtifactStore {
         Ok(())
     }
 
-    pub fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    pub(crate) fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
         // Lock Artifact Store
         let _g = self
             .lock

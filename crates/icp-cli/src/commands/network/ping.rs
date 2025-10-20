@@ -13,7 +13,7 @@ use crate::commands::{Context, Mode};
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]
-pub struct PingArgs {
+pub(crate) struct PingArgs {
     /// The compute network to connect to. By default, ping the local network.
     #[arg(value_name = "NETWORK", default_value = "local")]
     network: String,
@@ -24,7 +24,7 @@ pub struct PingArgs {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -50,7 +50,7 @@ pub enum CommandError {
     Unexpected(#[from] anyhow::Error),
 }
 
-pub async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
             // Load Project

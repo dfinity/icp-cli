@@ -20,19 +20,19 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Args)]
-pub struct BindingArgs {
+pub(crate) struct BindingArgs {
     /// The names of the canisters within the current project
-    pub names: Vec<String>,
+    pub(crate) names: Vec<String>,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -76,7 +76,7 @@ pub enum CommandError {
     InstallAgent(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

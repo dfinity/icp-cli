@@ -8,18 +8,18 @@ use pocket_ic::nonblocking::PocketIc;
 
 use crate::common::TestContext;
 
-pub struct Client<'a> {
+pub(crate) struct Client<'a> {
     pic: &'a PocketIc,
 }
 
 impl<'a> Client<'a> {
-    pub fn new(ctx: &'a TestContext) -> Self {
+    pub(crate) fn new(ctx: &'a TestContext) -> Self {
         Self {
             pic: ctx.pocketic(),
         }
     }
 
-    pub async fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
+    pub(crate) async fn balance_of(&self, owner: Principal, subaccount: Option<Subaccount>) -> Nat {
         let arg = Account { owner, subaccount };
         let bytes = Encode!(&arg).unwrap();
         let result = &self
@@ -35,7 +35,7 @@ impl<'a> Client<'a> {
         Decode!(result, Nat).unwrap()
     }
 
-    pub async fn mint_icp(
+    pub(crate) async fn mint_icp(
         &self,
         owner: Principal,
         subaccount: Option<Subaccount>,

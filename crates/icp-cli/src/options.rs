@@ -2,7 +2,7 @@ use clap::{ArgGroup, Args};
 use icp::identity::IdentitySelection;
 
 #[derive(Args, Clone, Debug, Default)]
-pub struct IdentityOpt {
+pub(crate) struct IdentityOpt {
     /// The user identity to run this command as.
     #[arg(long, global = true)]
     identity: Option<String>,
@@ -25,7 +25,7 @@ impl From<IdentityOpt> for IdentitySelection {
 
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("environment-select").multiple(false)))]
-pub struct EnvironmentOpt {
+pub(crate) struct EnvironmentOpt {
     /// Override the environment to connect to. By default, the local environment is used.
     #[arg(
         long,
@@ -41,7 +41,7 @@ pub struct EnvironmentOpt {
 }
 
 impl EnvironmentOpt {
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         // Support --ic
         if self.ic {
             return "ic";

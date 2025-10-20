@@ -6,13 +6,13 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct ListArgs {
+pub(crate) struct ListArgs {
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -20,7 +20,7 @@ pub enum CommandError {
     EnvironmentNotFound { name: String },
 }
 
-pub async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

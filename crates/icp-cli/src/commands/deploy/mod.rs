@@ -15,35 +15,35 @@ use crate::{
 };
 
 #[derive(Args, Debug)]
-pub struct DeployArgs {
+pub(crate) struct DeployArgs {
     /// Canister names
-    pub names: Vec<String>,
+    pub(crate) names: Vec<String>,
 
     /// Specifies the mode of canister installation.
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
-    pub mode: String,
+    pub(crate) mode: String,
 
     /// The subnet id to use for the canisters being deployed.
     #[clap(long)]
-    pub subnet_id: Option<Principal>,
+    pub(crate) subnet_id: Option<Principal>,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[arg(long)]
-    pub controller: Vec<Principal>,
+    pub(crate) controller: Vec<Principal>,
 
     /// Cycles to fund canister creation (in cycles).
     #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES)]
-    pub cycles: u128,
+    pub(crate) cycles: u128,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -75,7 +75,7 @@ pub enum CommandError {
     Sync(#[from] sync::CommandError),
 }
 
-pub async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

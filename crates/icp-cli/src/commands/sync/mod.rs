@@ -17,19 +17,19 @@ use crate::{
 };
 
 #[derive(Args, Debug)]
-pub struct SyncArgs {
+pub(crate) struct SyncArgs {
     /// Canister names
-    pub names: Vec<String>,
+    pub(crate) names: Vec<String>,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -64,7 +64,7 @@ pub enum CommandError {
     Synchronize(#[from] SynchronizeError),
 }
 
-pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

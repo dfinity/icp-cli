@@ -11,9 +11,9 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct InfoArgs {
+pub(crate) struct InfoArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) name: String,
 
     #[command(flatten)]
     identity: IdentityOpt,
@@ -23,7 +23,7 @@ pub struct InfoArgs {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -52,7 +52,7 @@ pub enum CommandError {
     Status(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");
@@ -111,7 +111,7 @@ pub async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandError> {
     Ok(())
 }
 
-pub fn print_info(result: &CanisterStatusResult) {
+pub(crate) fn print_info(result: &CanisterStatusResult) {
     let controllers: Vec<String> = result
         .settings
         .controllers

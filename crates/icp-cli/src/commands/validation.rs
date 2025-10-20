@@ -13,32 +13,35 @@ pub(crate) trait Validate {
     fn validate(&self, mode: &Mode) -> Result<(), ValidateError>;
 }
 
+#[cfg(test)]
 pub(crate) mod helpers {
-    use crate::commands::{Mode, args};
+    use crate::commands::Mode;
 
-    pub(crate) trait IntoOptions<T> {
-        fn into_options(self) -> Vec<Option<T>>;
-    }
+    // #[cfg(test)]
+    // pub(crate) trait IntoOptions<T> {
+    //     fn into_options(self) -> Vec<Option<T>>;
+    // }
 
-    impl<T> IntoOptions<T> for Vec<T> {
-        fn into_options(self) -> Vec<Option<T>> {
-            self.into_iter().fold(vec![None], |mut acc, cur| {
-                acc.push(Some(cur));
-                acc
-            })
-        }
-    }
+    // #[cfg(test)]
+    // impl<T> IntoOptions<T> for Vec<T> {
+    //     fn into_options(self) -> Vec<Option<T>> {
+    //         self.into_iter().fold(vec![None], |mut acc, cur| {
+    //             acc.push(Some(cur));
+    //             acc
+    //         })
+    //     }
+    // }
 
     pub(crate) fn all_modes() -> Vec<Mode> {
         vec![Mode::Global, Mode::Project("dir".into())]
     }
 
-    pub(crate) fn all_networks() -> Vec<args::Network> {
-        vec![
-            args::Network::Name("my-network".to_string()),
-            args::Network::Url("http::/www.example.com".to_string()),
-        ]
-    }
+    // pub(crate) fn all_networks() -> Vec<args::Network> {
+    //     vec![
+    //         args::Network::Name("my-network".to_string()),
+    //         args::Network::Url("http::/www.example.com".to_string()),
+    //     ]
+    // }
 }
 
 pub(crate) fn a_canister_id_is_required_in_global_mode<'a>(

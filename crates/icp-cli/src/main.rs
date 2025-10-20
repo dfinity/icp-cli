@@ -420,6 +420,12 @@ async fn main() -> Result<(), Error> {
                     .instrument(trace_span)
                     .await?
             }
+
+            commands::network::Command::Stop(args) => {
+                commands::network::stop::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
         },
 
         // Project

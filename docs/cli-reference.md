@@ -110,11 +110,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister call`
 
-**Usage:** `icp-cli canister call [OPTIONS] <NAME> <METHOD> <ARGS>`
+**Usage:** `icp-cli canister call [OPTIONS] <CANISTER> <METHOD> <ARGS>`
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of canister to call to
+* `<CANISTER>`
 * `<METHOD>` — Name of canister method to call into
 * `<ARGS>` — String representation of canister call arguments
 
@@ -154,11 +154,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister delete`
 
-**Usage:** `icp-cli canister delete [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister delete [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
@@ -170,11 +170,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister info`
 
-**Usage:** `icp-cli canister info [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister info [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
@@ -230,11 +230,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister settings show`
 
-**Usage:** `icp-cli canister settings show [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
@@ -246,11 +246,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister settings update`
 
-**Usage:** `icp-cli canister settings update [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister settings update [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
@@ -277,11 +277,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister show`
 
-**Usage:** `icp-cli canister show [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister show [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
@@ -292,27 +292,27 @@ Perform canister operations against a network
 
 ## `icp-cli canister start`
 
-**Usage:** `icp-cli canister start [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister start [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 
 
 
 ## `icp-cli canister status`
 
-**Usage:** `icp-cli canister status [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister status [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 
@@ -324,11 +324,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister stop`
 
-**Usage:** `icp-cli canister stop [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister stop [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>` — The name of the canister within the current project
 
 ###### **Options:**
 
@@ -340,11 +340,11 @@ Perform canister operations against a network
 
 ## `icp-cli canister top-up`
 
-**Usage:** `icp-cli canister top-up [OPTIONS] --amount <AMOUNT> <NAME>`
+**Usage:** `icp-cli canister top-up [OPTIONS] --amount <AMOUNT> <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>`
 
 ###### **Options:**
 

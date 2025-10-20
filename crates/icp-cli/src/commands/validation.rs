@@ -96,19 +96,6 @@ const A_NETWORK_URL_IS_REQUIRED_IN_GLOBAL_MODE: &str = r#"
     A network `url` is required in global mode.
 "#;
 
-pub(crate) fn a_network_name_is_required_in_project_mode<'a>(
-    network: impl Into<(&'a Option<Network>,)>,
-    m: &Mode,
-) -> Option<&'static str> {
-    let (network,) = network.into();
-    (matches!(m, Mode::Project(_)) && !matches!(network, Some(Network::Name(_))))
-        .then_some(A_NETWORK_NAME_IS_REQUIRED_IN_PROJECT_MODE)
-}
-
-const A_NETWORK_NAME_IS_REQUIRED_IN_PROJECT_MODE: &str = r#"
-    A network `name` is required in project mode.
-"#;
-
 #[cfg(test)]
 mod test_a_canister_id_is_required_in_global_mode {
     use crate::impl_from_args;
@@ -252,37 +239,6 @@ mod test_a_network_url_is_required_in_global_mode {
         );
         match out {
             Some(msg) if msg == A_NETWORK_URL_IS_REQUIRED_IN_GLOBAL_MODE => {}
-            _ => panic!("invalid validation output: {out:?}"),
-        }
-    }
-}
-
-#[cfg(test)]
-mod test_a_network_name_is_required_in_project_mode {
-    use crate::{commands::args, impl_from_args};
-
-    use super::*;
-
-    struct Args {
-        network: Option<args::Network>,
-    }
-
-    impl_from_args!(Args, network: Option<args::Network>);
-
-    #[test]
-    fn test() {
-        let out = a_network_name_is_required_in_project_mode(
-            //
-            // Args
-            &Args {
-                network: Some(args::Network::Url("http://www.example.com".to_string())),
-            },
-            //
-            // Mode
-            &Mode::Project("dir".into()),
-        );
-        match out {
-            Some(msg) if msg == A_NETWORK_NAME_IS_REQUIRED_IN_PROJECT_MODE => {}
             _ => panic!("invalid validation output: {out:?}"),
         }
     }

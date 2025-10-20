@@ -20,8 +20,10 @@ pub(crate) struct StartArgs {
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
+    #[arg(long)]
     pub(crate) network: Option<args::Network>,
 
+    #[arg(long)]
     pub(crate) environment: Option<args::Environment>,
 }
 
@@ -34,7 +36,6 @@ impl Validate for StartArgs {
     fn validate(&self, mode: &Mode) -> Result<(), ValidateError> {
         for test in [
             validation::a_canister_id_is_required_in_global_mode,
-            validation::a_network_name_is_required_in_project_mode,
             validation::a_network_url_is_required_in_global_mode,
             validation::environments_are_not_available_in_a_global_mode,
             validation::network_or_environment_not_both,

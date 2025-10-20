@@ -12,9 +12,9 @@ use tracing_subscriber::{
 };
 
 #[derive(Debug)]
-pub struct TermWriter<W: Write + AsRawFd> {
-    pub debug: bool,
-    pub writer: Box<W>,
+pub(crate) struct TermWriter<W: Write + AsRawFd> {
+    pub(crate) debug: bool,
+    pub(crate) writer: Box<W>,
 }
 
 impl<W: Write + AsRawFd> Write for TermWriter<W> {
@@ -46,7 +46,7 @@ type DebugLayer<S> = Filtered<
     S,
 >;
 
-pub fn debug_layer<S: Subscriber + for<'a> LookupSpan<'a>>() -> DebugLayer<S> {
+pub(crate) fn debug_layer<S: Subscriber + for<'a> LookupSpan<'a>>() -> DebugLayer<S> {
     let workspace_targets = Targets::new()
         .with_target("icp-cli", Level::DEBUG)
         .with_target("icp", Level::DEBUG);

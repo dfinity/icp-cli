@@ -4,7 +4,11 @@ use ic_agent::AgentError;
 use icp::{agent, identity, network};
 
 use crate::{
-    commands::{Context, Mode, args},
+    commands::{
+        Context, Mode, args,
+        validation::{self, Validate, ValidateError},
+    },
+    impl_from_args,
     options::IdentityOpt,
     store_id::{Key, LookupError as LookupIdError},
 };
@@ -22,6 +26,28 @@ pub(crate) struct StopArgs {
 
     #[arg(long)]
     pub(crate) environment: Option<args::Environment>,
+}
+
+impl_from_args!(StopArgs, canister: args::Canister);
+impl_from_args!(StopArgs, network: Option<args::Network>);
+impl_from_args!(StopArgs, environment: Option<args::Environment>);
+impl_from_args!(StopArgs, network: Option<args::Network>, environment: Option<args::Environment>);
+
+impl Validate for StopArgs {
+    fn validate(&self, mode: &Mode) -> Result<(), ValidateError> {
+        for test in [
+            validation::a_canister_id_is_required_in_global_mode,
+            validation::a_network_url_is_required_in_global_mode,
+            validation::environments_are_not_available_in_a_global_mode,
+            validation::network_or_environment_not_both,
+        ] {
+            test(self, mode)
+                .map(|msg| anyhow::format_err!(msg))
+                .map_or(Ok(()), Err)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

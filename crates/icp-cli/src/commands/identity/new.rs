@@ -12,14 +12,14 @@ use icp::{
 use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
-pub struct NewArgs {
+pub(crate) struct NewArgs {
     name: String,
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     CreateIdentityError(#[from] CreateIdentityError),
 
@@ -27,7 +27,7 @@ pub enum CommandError {
     WriteSeedFileError(#[from] icp::fs::Error),
 }
 
-pub async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
             let mnemonic = Mnemonic::new(

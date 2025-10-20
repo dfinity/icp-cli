@@ -9,7 +9,7 @@ use tracing_subscriber::{Layer, layer};
 /// A visitor that collects field-value pairs from tracing events and spans
 /// into a HashMap where both keys and values are strings.
 #[derive(Default)]
-pub struct FieldCollector(HashMap<String, String>);
+pub(crate) struct FieldCollector(HashMap<String, String>);
 
 impl Visit for FieldCollector {
     /// Records a field and its debug representation as a string.
@@ -24,7 +24,7 @@ impl Visit for FieldCollector {
 
 /// A tracing layer that processes events by collecting their fields
 /// and printing them to stdout.
-pub struct EventLayer;
+pub(crate) struct EventLayer;
 
 impl<S: Subscriber> Layer<S> for EventLayer {
     /// Called when a tracing event occurs. Collects all fields from the event

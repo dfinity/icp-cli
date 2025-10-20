@@ -5,19 +5,19 @@ use url::Url;
 
 use httptest::{Expectation, Server, matchers::*, responders::*};
 
-pub mod clients;
+pub(crate) mod clients;
 mod context;
 
-pub use context::TestContext;
+pub(crate) use context::TestContext;
 
 #[cfg(unix)]
-pub const PATH_SEPARATOR: &str = ":";
+pub(crate) const PATH_SEPARATOR: &str = ":";
 
 #[cfg(windows)]
-pub const PATH_SEPARATOR: &str = ";";
+pub(crate) const PATH_SEPARATOR: &str = ";";
 
 /// A network manifest for a network using a random port
-pub const NETWORK_RANDOM_PORT: &str = r#"
+pub(crate) const NETWORK_RANDOM_PORT: &str = r#"
 network:
   name: my-network
   mode: managed
@@ -26,7 +26,7 @@ network:
 "#;
 
 /// An environment manifest utilizing the above network
-pub const ENVIRONMENT_RANDOM_PORT: &str = r#"
+pub(crate) const ENVIRONMENT_RANDOM_PORT: &str = r#"
 environment:
   name: my-environment
   network: my-network
@@ -37,10 +37,11 @@ environment:
 /// References:
 /// - http://localhost:8000/_/topology
 /// - http://localhost:8000/_/dashboard
-pub const SUBNET_ID: &str = "cok7q-nnbiu-4xwf6-7gpqg-kwzft-mqypn-uepxh-mx2hy-q4wuy-5s5my-eae";
+pub(crate) const SUBNET_ID: &str =
+    "cok7q-nnbiu-4xwf6-7gpqg-kwzft-mqypn-uepxh-mx2hy-q4wuy-5s5my-eae";
 
 // Spawns a test server that expects a single request and responds with a 200 status code and the given body
-pub fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httptest::Server {
+pub(crate) fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httptest::Server {
     // Run the server
     let server = Server::run();
 
@@ -57,19 +58,19 @@ pub fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httptest::Ser
 
 // A network run by icp-cli for a test. These fields are read from the network descriptor
 // after starting the network.
-pub struct TestNetwork {
-    pub pocketic_url: Url,
-    pub pocketic_instance_id: usize,
-    pub gateway_port: u16,
-    pub root_key: String,
+pub(crate) struct TestNetwork {
+    pub(crate) pocketic_url: Url,
+    pub(crate) pocketic_instance_id: usize,
+    pub(crate) gateway_port: u16,
+    pub(crate) root_key: String,
 }
 
-pub struct ChildGuard {
+pub(crate) struct ChildGuard {
     child: Child,
 }
 
 impl ChildGuard {
-    pub fn spawn(cmd: &mut Command) -> std::io::Result<Self> {
+    pub(crate) fn spawn(cmd: &mut Command) -> std::io::Result<Self> {
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;

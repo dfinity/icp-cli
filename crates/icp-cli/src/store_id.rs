@@ -7,15 +7,15 @@ use snafu::{ResultExt, Snafu};
 
 /// An association-key, used for associating an existing canister to an ID on a network
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Key {
+pub(crate) struct Key {
     /// Network name
-    pub network: String,
+    pub(crate) network: String,
 
     /// Environment name
-    pub environment: String,
+    pub(crate) environment: String,
 
     /// Canister name
-    pub canister: String,
+    pub(crate) canister: String,
 }
 
 /// Association of a canister name and an ID
@@ -23,7 +23,7 @@ pub struct Key {
 struct Association(Key, Principal);
 
 #[derive(Debug, Snafu)]
-pub enum RegisterError {
+pub(crate) enum RegisterError {
     #[snafu(display("failed to load canister id store"))]
     RegisterLoadStore { source: json::Error },
 
@@ -38,7 +38,7 @@ pub enum RegisterError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LookupError {
+pub(crate) enum LookupError {
     #[snafu(display("failed to load canister id store"))]
     LookupLoadStore { source: json::Error },
 
@@ -52,13 +52,13 @@ pub enum LookupError {
     EnvironmentNotFound { name: String },
 }
 
-pub struct IdStore {
+pub(crate) struct IdStore {
     path: PathBuf,
     lock: Mutex<()>,
 }
 
 impl IdStore {
-    pub fn new(path: &Path) -> Self {
+    pub(crate) fn new(path: &Path) -> Self {
         Self {
             path: path.to_owned(),
             lock: Mutex::new(()),
@@ -67,7 +67,7 @@ impl IdStore {
 }
 
 impl IdStore {
-    pub fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
+    pub(crate) fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -101,7 +101,7 @@ impl IdStore {
         Ok(())
     }
 
-    pub fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    pub(crate) fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -129,7 +129,7 @@ impl IdStore {
         })
     }
 
-    pub fn lookup_by_environment(
+    pub(crate) fn lookup_by_environment(
         &self,
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {

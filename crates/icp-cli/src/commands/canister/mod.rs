@@ -15,7 +15,7 @@ pub(crate) mod stop;
 pub(crate) mod top_up;
 
 #[derive(Debug, Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     Call(call::CallArgs),
     Create(create::CreateArgs),
     Delete(delete::DeleteArgs),

@@ -21,7 +21,7 @@ use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
-pub struct ImportArgs {
+pub(crate) struct ImportArgs {
     name: String,
 
     #[arg(long, value_name = "FILE", group = "import-from")]
@@ -40,7 +40,7 @@ pub struct ImportArgs {
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
-pub async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportCmdError> {
+pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportCmdError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
             if let Some(from_pem) = &args.from_pem {
@@ -73,7 +73,7 @@ pub async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportCmdError
 }
 
 #[derive(Snafu, Debug)]
-pub enum ImportCmdError {
+pub(crate) enum ImportCmdError {
     #[snafu(transparent)]
     PemImport { source: LoadKeyError },
 
@@ -285,7 +285,7 @@ fn import_from_seed_phrase(ctx: &Context, name: &str, phrase: &str) -> Result<()
 }
 
 #[derive(Debug, Snafu)]
-pub enum LoadKeyError {
+pub(crate) enum LoadKeyError {
     #[snafu(display("unknown PEM formats: expected {}; found {}", expected.join(", "), found.join(", ")))]
     UnknownPemFormat {
         expected: Vec<&'static str>,
@@ -340,7 +340,7 @@ pub enum LoadKeyError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum DeriveKeyError {
+pub(crate) enum DeriveKeyError {
     #[snafu(display("failed to read seed file"))]
     ReadSeedFile { source: icp::fs::Error },
 

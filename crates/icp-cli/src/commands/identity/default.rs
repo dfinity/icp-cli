@@ -7,12 +7,12 @@ use icp::identity::manifest::{
 use crate::commands::{Context, Mode};
 
 #[derive(Debug, Args)]
-pub struct DefaultArgs {
+pub(crate) struct DefaultArgs {
     name: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     ChangeDefault(#[from] ChangeDefaultsError),
 
@@ -20,7 +20,7 @@ pub enum CommandError {
     LoadList(#[from] LoadIdentityManifestError),
 }
 
-pub async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
             // Load project directories

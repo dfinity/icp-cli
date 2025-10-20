@@ -21,24 +21,24 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct MintArgs {
+pub(crate) struct MintArgs {
     /// Amount of ICP to mint to cycles.
     #[arg(long, conflicts_with = "cycles")]
-    pub icp: Option<BigDecimal>,
+    pub(crate) icp: Option<BigDecimal>,
 
     /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
     #[arg(long, conflicts_with = "icp")]
-    pub cycles: Option<u128>,
+    pub(crate) cycles: Option<u128>,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -82,7 +82,7 @@ pub enum CommandError {
     NotifyMintError { src: NotifyMintErr },
 }
 
-pub async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

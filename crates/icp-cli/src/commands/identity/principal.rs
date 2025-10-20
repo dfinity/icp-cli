@@ -7,13 +7,13 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct PrincipalArgs {
+pub(crate) struct PrincipalArgs {
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum PrincipalError {
+pub(crate) enum PrincipalError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
@@ -21,7 +21,7 @@ pub enum PrincipalError {
     Sender { message: String },
 }
 
-pub async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), PrincipalError> {
+pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), PrincipalError> {
     match &ctx.mode {
         Mode::Global | Mode::Project(_) => {
             let id = ctx.identity.load(args.identity.clone().into()).await?;

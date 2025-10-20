@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct ControllerOpt {
+pub(crate) struct ControllerOpt {
     #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
     add_controller: Option<Vec<Principal>>,
 
@@ -25,13 +25,13 @@ pub struct ControllerOpt {
 }
 
 impl ControllerOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_controller.is_some() || self.remove_controller.is_some()
     }
 }
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct LogVisibilityOpt {
+pub(crate) struct LogVisibilityOpt {
     #[arg(
         long,
         value_parser = log_visibility_parser,
@@ -52,13 +52,13 @@ pub struct LogVisibilityOpt {
 }
 
 impl LogVisibilityOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_log_viewer.is_some() || self.remove_log_viewer.is_some()
     }
 }
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct EnvironmentVariableOpt {
+pub(crate) struct EnvironmentVariableOpt {
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
 
@@ -67,15 +67,15 @@ pub struct EnvironmentVariableOpt {
 }
 
 impl EnvironmentVariableOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_environment_variable.is_some() || self.remove_environment_variable.is_some()
     }
 }
 
 #[derive(Debug, Args)]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) name: String,
 
     #[command(flatten)]
     identity: IdentityOpt,
@@ -112,7 +112,7 @@ pub struct UpdateArgs {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -144,7 +144,7 @@ pub enum CommandError {
     Update(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

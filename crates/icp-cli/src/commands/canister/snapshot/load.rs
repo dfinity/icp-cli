@@ -4,7 +4,7 @@ use ic_management_canister_types::LoadCanisterSnapshotArgs;
 use crate::{
     commands::{
         Context, Mode,
-        canister::snapshot::{CommandError, SnapshotId},
+        canister::snapshot::{CommandError, SnapshotId, ensure_canister_stopped},
     },
     options::{EnvironmentOpt, IdentityOpt},
     store_id::Key,
@@ -72,6 +72,10 @@ pub async fn exec(ctx: &Context, args: &LoadArgs) -> Result<(), CommandError> {
 
             // Management Interface
             let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+
+            // Ensure canister is stopped
+            let (status,) = mgmt.canister_status(&cid).await?;
+            ensure_canister_stopped(status.status, &args.name)?;
 
             // Load snapshot
             mgmt.load_canister_snapshot(

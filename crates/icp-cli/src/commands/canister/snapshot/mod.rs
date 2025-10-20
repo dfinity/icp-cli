@@ -1,6 +1,6 @@
 use clap::Subcommand;
 use ic_agent::AgentError;
-use ic_management_canister_types::UploadCanisterSnapshotMetadataResult;
+use ic_management_canister_types::{CanisterStatusType, UploadCanisterSnapshotMetadataResult};
 use icp::{agent, identity, network, prelude::PathBuf};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -36,6 +36,18 @@ impl FromStr for SnapshotId {
 impl From<UploadCanisterSnapshotMetadataResult> for SnapshotId {
     fn from(canister_snapshot_id: UploadCanisterSnapshotMetadataResult) -> Self {
         SnapshotId(canister_snapshot_id.snapshot_id)
+    }
+}
+
+fn ensure_canister_stopped(status: CanisterStatusType, canister: &str) -> Result<(), CommandError> {
+    match status {
+        CanisterStatusType::Stopped => Ok(()),
+        CanisterStatusType::Running => Err(CommandError::CanisterNotStopped(format!(
+            "Canister {canister} is running. Run `dfx canister stop` to stop it first"
+        ))),
+        CanisterStatusType::Stopping => Err(CommandError::CanisterNotStopped(format!(
+            "Canister {canister} is stopping but is not yet stopped. Wait a few seconds and try again"
+        ))),
     }
 }
 
@@ -90,4 +102,7 @@ pub enum CommandError {
 
     #[error(transparent)]
     Status(#[from] AgentError),
+
+    #[error("{0}")]
+    CanisterNotStopped(String),
 }

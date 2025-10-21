@@ -5,7 +5,6 @@ use console::Term;
 use icp::{
     Directories,
     canister::{build::Build, sync::Synchronize},
-    prelude::*,
 };
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
@@ -20,12 +19,6 @@ pub(crate) mod network;
 pub(crate) mod project;
 pub(crate) mod sync;
 pub(crate) mod token;
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum Mode {
-    Global,
-    Project(PathBuf),
-}
 
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]

@@ -16,7 +16,7 @@ use icp_canister_interfaces::{
 };
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
 };
 

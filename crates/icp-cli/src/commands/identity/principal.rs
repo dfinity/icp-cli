@@ -1,10 +1,7 @@
 use clap::Args;
 use icp::identity;
 
-use crate::{
-    commands::{Context, Mode},
-    options::IdentityOpt,
-};
+use crate::{commands::Context, options::IdentityOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct PrincipalArgs {

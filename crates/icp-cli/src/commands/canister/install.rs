@@ -8,7 +8,7 @@ use icp::{agent, identity, network};
 use tracing::debug;
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
     store_artifact::LookupError as LookupArtifactError,

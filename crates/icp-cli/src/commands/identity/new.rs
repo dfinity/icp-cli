@@ -9,7 +9,7 @@ use icp::{
     prelude::*,
 };
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct NewArgs {

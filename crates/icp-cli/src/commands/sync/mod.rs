@@ -10,7 +10,7 @@ use icp::{
 };
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
     store_id::{Key, LookupError},

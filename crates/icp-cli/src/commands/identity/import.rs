@@ -17,7 +17,7 @@ use pkcs8::{
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]

@@ -8,7 +8,7 @@ use icp_canister_interfaces::cycles_ledger::{
 };
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError},
 };

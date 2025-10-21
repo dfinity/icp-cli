@@ -4,7 +4,7 @@ use icp::identity::manifest::{
 };
 use itertools::Itertools;
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs;

@@ -10,9 +10,7 @@ use icp::{
         self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
         script::Script, sync::Syncer,
     },
-    identity,
-    manifest::{self, Locate, LocateError},
-    network,
+    identity, manifest, network,
     prelude::*,
     project,
 };
@@ -24,7 +22,6 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    commands::Mode,
     logging::{TermWriter, debug_layer},
     store_artifact::ArtifactStore,
     store_id::IdStore,

@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 /// List networks in the project
 #[derive(Args, Debug)]

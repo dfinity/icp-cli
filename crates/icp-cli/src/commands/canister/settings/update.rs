@@ -7,7 +7,7 @@ use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, Lo
 use icp::{agent, identity, network};
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };

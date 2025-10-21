@@ -6,7 +6,7 @@ use icp::{agent, identity, network};
 use icrc_ledger_types::icrc1::account::Account;
 
 use crate::{
-    commands::{Context, Mode, token::TOKEN_LEDGER_CIDS},
+    commands::{Context, token::TOKEN_LEDGER_CIDS},
     options::{EnvironmentOpt, IdentityOpt},
 };
 

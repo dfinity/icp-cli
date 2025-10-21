@@ -10,7 +10,7 @@ use icp::{
 };
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     progress::{ProgressManager, ProgressManagerSettings},
 };
 

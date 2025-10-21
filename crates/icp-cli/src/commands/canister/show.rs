@@ -1,7 +1,7 @@
 use clap::Args;
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::EnvironmentOpt,
     store_id::{Key, LookupError as LookupIdError},
 };

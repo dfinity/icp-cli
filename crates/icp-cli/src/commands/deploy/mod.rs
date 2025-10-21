@@ -3,7 +3,7 @@ use ic_agent::export::Principal;
 
 use crate::{
     commands::{
-        Context, Mode, build,
+        Context, build,
         canister::{
             binding_env_vars,
             create::{self, CanisterSettings},

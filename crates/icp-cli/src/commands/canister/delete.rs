@@ -3,7 +3,7 @@ use ic_agent::AgentError;
 use icp::{agent, identity, network};
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };

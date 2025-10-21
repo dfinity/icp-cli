@@ -5,7 +5,7 @@ use icp::{agent, identity, network};
 use itertools::Itertools;
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     store_id::{Key, LookupError as LookupIdError},
 };

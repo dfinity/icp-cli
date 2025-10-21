@@ -9,7 +9,7 @@ use icrc_ledger_types::icrc1::{
 };
 
 use crate::{
-    commands::{Context, Mode, token::TOKEN_LEDGER_CIDS},
+    commands::{Context, token::TOKEN_LEDGER_CIDS},
     options::{EnvironmentOpt, IdentityOpt},
 };
 

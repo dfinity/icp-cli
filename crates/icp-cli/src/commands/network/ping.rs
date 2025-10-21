@@ -9,7 +9,7 @@ use icp::{
 };
 use tokio::time::sleep;
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]

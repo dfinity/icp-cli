@@ -1,7 +1,7 @@
 use indoc::formatdoc;
 use serde::Deserialize;
-use tracing::debug;
 use std::{str::FromStr, string::FromUtf8Error};
+use tracing::debug;
 
 use crate::{
     canister::{
@@ -172,12 +172,15 @@ impl Resolve for Handlebars {
         // Reject unset template variables
         reg.set_strict_mode(true);
 
-        debug!("{}", formatdoc! {r#"
+        debug!(
+            "{}",
+            formatdoc! {r#"
             Loaded template:
             ------
             {tmpl}
             ------
-        "#});
+        "#}
+        );
 
         // Render the template to YAML
         let out = reg

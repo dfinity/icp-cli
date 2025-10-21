@@ -21,23 +21,19 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global | Mode::Project(_) => {
-            // Load project directories
-            let dir = ctx.dirs.identity();
+    // Load project directories
+    let dir = ctx.dirs.identity();
 
-            match &args.name {
-                Some(name) => {
-                    let list = load_identity_list(&dir)?;
-                    change_default_identity(&dir, &list, name)?;
-                    println!("Set default identity to {name}");
-                }
+    match &args.name {
+        Some(name) => {
+            let list = load_identity_list(&dir)?;
+            change_default_identity(&dir, &list, name)?;
+            println!("Set default identity to {name}");
+        }
 
-                None => {
-                    let defaults = load_identity_defaults(&dir)?;
-                    println!("{}", defaults.default);
-                }
-            }
+        None => {
+            let defaults = load_identity_defaults(&dir)?;
+            println!("{}", defaults.default);
         }
     }
 

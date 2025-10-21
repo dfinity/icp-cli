@@ -51,39 +51,35 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global | Mode::Project(_) => {
-            // Load Project
-            let p = ctx.project.load().await?;
+    // Load Project
+    let p = ctx.project.load().await?;
 
-            // Identity
-            let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
+    // Identity
+    let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
-            // Network
-            let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
+    // Network
+    let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
 
-            // NetworkAccess
-            let access = ctx.network.access(network).await?;
+    // NetworkAccess
+    let access = ctx.network.access(network).await?;
 
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
 
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Query
-            let status = match args.wait_healthy {
-                // wait
-                true => ping_until_healthy(&agent).await?,
-
-                // dont wait
-                false => agent.status().await?,
-            };
-
-            println!("{status}");
-        }
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
     }
+
+    // Query
+    let status = match args.wait_healthy {
+        // wait
+        true => ping_until_healthy(&agent).await?,
+
+        // dont wait
+        false => agent.status().await?,
+    };
+
+    println!("{status}");
 
     Ok(())
 }

@@ -145,115 +145,108 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    // Load project
+    let p = ctx.project.load().await?;
 
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    // Load identity
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
-
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
+    // Load target environment
+    let env =
+        p.environments
+            .get(args.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: args.environment.name().to_owned(),
             })?;
 
-            // Management Interface
-            let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
 
-            let mut current_status: Option<CanisterStatusResult> = None;
-            if require_current_settings(args) {
-                current_status = Some(mgmt.canister_status(&cid).await?.0);
-            }
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
 
-            // TODO(VZ): Ask for consent
-            // - if the freezing threshold is too long or too short.
-            // - if trying to remove the caller itself from the controllers.
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
 
-            // Handle controllers.
-            let mut controllers: Option<Vec<Principal>> = None;
-            if let Some(controllers_opt) = &args.controllers {
-                controllers = get_controllers(controllers_opt, current_status.as_ref());
-            }
+    // Ensure canister is included in the environment
+    if !env.canisters.contains_key(&args.name) {
+        return Err(CommandError::EnvironmentCanister {
+            environment: env.name.to_owned(),
+            canister: args.name.to_owned(),
+        });
+    }
 
-            // Handle log visibility.
-            let mut log_visibility: Option<LogVisibility> = None;
-            if let Some(log_visibility_opt) = args.log_visibility.clone() {
-                log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
-            }
+    // Lookup the canister id
+    let cid = ctx.ids.lookup(&Key {
+        network: env.network.name.to_owned(),
+        environment: env.name.to_owned(),
+        canister: args.name.to_owned(),
+    })?;
 
-            // Handle environment variables.
-            let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
-            if let Some(environment_variables_opt) = &args.environment_variables {
-                environment_variables =
-                    get_environment_variables(environment_variables_opt, current_status.as_ref());
-            }
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-            // Update settings.
-            let mut update = mgmt.update_settings(&cid);
-            if let Some(controllers) = controllers {
-                for controller in controllers {
-                    update = update.with_controller(controller);
-                }
-            }
-            if let Some(compute_allocation) = args.compute_allocation {
-                update = update.with_compute_allocation(compute_allocation);
-            }
-            if let Some(memory_allocation) = args.memory_allocation {
-                update = update.with_memory_allocation(memory_allocation.as_u64());
-            }
-            if let Some(freezing_threshold) = args.freezing_threshold {
-                update = update.with_freezing_threshold(freezing_threshold);
-            }
-            if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
-                update = update.with_reserved_cycles_limit(reserved_cycles_limit);
-            }
-            if let Some(wasm_memory_limit) = args.wasm_memory_limit {
-                update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
-            }
-            if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
-                update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
-            }
-            if let Some(log_visibility) = log_visibility {
-                update = update.with_log_visibility(log_visibility);
-            }
-            if let Some(environment_variables) = environment_variables {
-                update = update.with_environment_variables(environment_variables);
-            }
-            update.await?;
+    let mut current_status: Option<CanisterStatusResult> = None;
+    if require_current_settings(args) {
+        current_status = Some(mgmt.canister_status(&cid).await?.0);
+    }
+
+    // TODO(VZ): Ask for consent
+    // - if the freezing threshold is too long or too short.
+    // - if trying to remove the caller itself from the controllers.
+
+    // Handle controllers.
+    let mut controllers: Option<Vec<Principal>> = None;
+    if let Some(controllers_opt) = &args.controllers {
+        controllers = get_controllers(controllers_opt, current_status.as_ref());
+    }
+
+    // Handle log visibility.
+    let mut log_visibility: Option<LogVisibility> = None;
+    if let Some(log_visibility_opt) = args.log_visibility.clone() {
+        log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
+    }
+
+    // Handle environment variables.
+    let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
+    if let Some(environment_variables_opt) = &args.environment_variables {
+        environment_variables =
+            get_environment_variables(environment_variables_opt, current_status.as_ref());
+    }
+
+    // Update settings.
+    let mut update = mgmt.update_settings(&cid);
+    if let Some(controllers) = controllers {
+        for controller in controllers {
+            update = update.with_controller(controller);
         }
     }
+    if let Some(compute_allocation) = args.compute_allocation {
+        update = update.with_compute_allocation(compute_allocation);
+    }
+    if let Some(memory_allocation) = args.memory_allocation {
+        update = update.with_memory_allocation(memory_allocation.as_u64());
+    }
+    if let Some(freezing_threshold) = args.freezing_threshold {
+        update = update.with_freezing_threshold(freezing_threshold);
+    }
+    if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
+        update = update.with_reserved_cycles_limit(reserved_cycles_limit);
+    }
+    if let Some(wasm_memory_limit) = args.wasm_memory_limit {
+        update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
+    }
+    if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
+        update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
+    }
+    if let Some(log_visibility) = log_visibility {
+        update = update.with_log_visibility(log_visibility);
+    }
+    if let Some(environment_variables) = environment_variables {
+        update = update.with_environment_variables(environment_variables);
+    }
+    update.await?;
 
     Ok(())
 }

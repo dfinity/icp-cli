@@ -152,17 +152,19 @@ async fn main() -> Result<(), Error> {
         cli.project_dir,            // dir
     ));
 
-    // Infer execution mode
-    let mode = match mloc.locate() {
-        // Project
-        Ok(dir) => Mode::Project(dir),
+    // Remove this for now
+    //
+    // // Infer execution mode
+    // let mode = match mloc.locate() {
+    //     // Project
+    //     Ok(dir) => Mode::Project(dir),
 
-        // Global
-        Err(LocateError::NotFound(_)) => Mode::Global,
+    //     // Global
+    //     Err(LocateError::NotFound(_)) => Mode::Global,
 
-        // Failure
-        Err(LocateError::Unexpected(err)) => panic!("{err}"),
-    };
+    //     // Failure
+    //     Err(LocateError::Unexpected(err)) => panic!("{err}"),
+    // };
 
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
@@ -218,7 +220,6 @@ async fn main() -> Result<(), Error> {
 
     // Setup environment
     let ctx = Context {
-        mode,
         term,
         dirs,
         ids,

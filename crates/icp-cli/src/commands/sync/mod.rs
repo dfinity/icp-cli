@@ -65,169 +65,160 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
+    // Load the project
+    let p = ctx.project.load().await?;
+
+    // Load identity
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+    // Load target environment
+    let env =
+        p.environments
+            .get(args.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: args.environment.name().to_owned(),
+            })?;
+
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
+
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
+
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
+
+    let cnames = match args.names.is_empty() {
+        // No canisters specified
+        true => env.canisters.keys().cloned().collect(),
+
+        // Individual canisters specified
+        false => args.names.clone(),
+    };
+
+    for name in &cnames {
+        if !p.canisters.contains_key(name) {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
         }
 
-        Mode::Project(_) => {
-            // Load the project
-            let p = ctx.project.load().await?;
+        if !env.canisters.contains_key(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let cs = env
+        .canisters
+        .iter()
+        .filter(|(k, _)| cnames.contains(k))
+        .collect::<HashMap<_, _>>();
 
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+    // Verify at least one canister is selected to sync
+    if cs.is_empty() {
+        return Err(CommandError::NoCanisters);
+    }
 
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
+    // Prepare a futures set for concurrent canister syncs
+    let mut futs = FuturesOrdered::new();
 
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
+    // Iterate through each resolved canister and trigger its sync process.
+    for (_, (canister_path, c)) in cs {
+        // Create progress bar with standard configuration
+        let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Sync");
 
-            let cnames = match args.names.is_empty() {
-                // No canisters specified
-                true => env.canisters.keys().cloned().collect(),
+        // Get canister principal ID
+        let cid = ctx.ids.lookup(&Key {
+            network: env.network.name.to_owned(),
+            environment: env.name.to_owned(),
+            canister: c.name.to_owned(),
+        })?;
 
-                // Individual canisters specified
-                false => args.names.clone(),
-            };
+        // Create an async closure that handles the sync process for this specific canister
+        let fut = {
+            let agent = agent.clone();
+            let c = c.clone();
 
-            for name in &cnames {
-                if !p.canisters.contains_key(name) {
-                    return Err(CommandError::CanisterNotFound {
-                        name: name.to_owned(),
-                    });
-                }
+            async move {
+                // Define the sync logic
+                let sync_result = async {
+                    let step_count = c.sync.steps.len();
+                    for (i, step) in c.sync.steps.iter().enumerate() {
+                        // Indicate to user the current step being executed
+                        let current_step = i + 1;
+                        let pb_hdr = format!("\nSyncing: {step} {current_step} of {step_count}");
 
-                if !env.canisters.contains_key(name) {
-                    return Err(CommandError::EnvironmentCanister {
-                        environment: env.name.to_owned(),
-                        canister: name.to_owned(),
-                    });
-                }
-            }
+                        let tx = pb.begin_step(pb_hdr);
 
-            let cs = env
-                .canisters
-                .iter()
-                .filter(|(k, _)| cnames.contains(k))
-                .collect::<HashMap<_, _>>();
+                        // Execute step
+                        let sync_result = ctx
+                            .syncer
+                            .sync(
+                                step, // step
+                                &Params {
+                                    path: canister_path.to_owned(),
+                                    cid: cid.to_owned(),
+                                },
+                                &agent,
+                                Some(tx),
+                            )
+                            .await;
 
-            // Verify at least one canister is selected to sync
-            if cs.is_empty() {
-                return Err(CommandError::NoCanisters);
-            }
+                        // Ensure background receiver drains all messages
+                        pb.end_step().await;
 
-            // Prepare a futures set for concurrent canister syncs
-            let mut futs = FuturesOrdered::new();
-
-            let progress_manager =
-                ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-
-            // Iterate through each resolved canister and trigger its sync process.
-            for (_, (canister_path, c)) in cs {
-                // Create progress bar with standard configuration
-                let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Sync");
-
-                // Get canister principal ID
-                let cid = ctx.ids.lookup(&Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                })?;
-
-                // Create an async closure that handles the sync process for this specific canister
-                let fut = {
-                    let agent = agent.clone();
-                    let c = c.clone();
-
-                    async move {
-                        // Define the sync logic
-                        let sync_result = async {
-                            let step_count = c.sync.steps.len();
-                            for (i, step) in c.sync.steps.iter().enumerate() {
-                                // Indicate to user the current step being executed
-                                let current_step = i + 1;
-                                let pb_hdr =
-                                    format!("\nSyncing: {step} {current_step} of {step_count}");
-
-                                let tx = pb.begin_step(pb_hdr);
-
-                                // Execute step
-                                let sync_result = ctx
-                                    .syncer
-                                    .sync(
-                                        step, // step
-                                        &Params {
-                                            path: canister_path.to_owned(),
-                                            cid: cid.to_owned(),
-                                        },
-                                        &agent,
-                                        Some(tx),
-                                    )
-                                    .await;
-
-                                // Ensure background receiver drains all messages
-                                pb.end_step().await;
-
-                                if let Err(e) = sync_result {
-                                    return Err(CommandError::Synchronize(e));
-                                }
-                            }
-
-                            Ok::<_, CommandError>(())
+                        if let Err(e) = sync_result {
+                            return Err(CommandError::Synchronize(e));
                         }
-                        .await;
-
-                        // Execute with progress tracking for final state
-                        let result = ProgressManager::execute_with_progress(
-                            &pb,
-                            async { sync_result },
-                            || format!("Synced successfully: {cid}"),
-                            print_sync_error,
-                        )
-                        .await;
-
-                        // After progress bar is finished, dump the output if sync failed
-                        if let Err(e) = &result {
-                            for line in pb.dump_output() {
-                                let _ = ctx.term.write_line(&line);
-                            }
-                            let _ = ctx.term.write_line(&print_sync_error(e));
-                            let _ = ctx.term.write_line("");
-                        }
-
-                        result
                     }
-                };
 
-                futs.push_back(fut);
-            }
-
-            // Consume the set of futures and collect errors
-            let mut found_error = false;
-            while let Some(res) = futs.next().await {
-                if res.is_err() {
-                    found_error = true;
+                    Ok::<_, CommandError>(())
                 }
-            }
+                .await;
 
-            if found_error {
-                return Err(CommandError::Synchronize(SynchronizeError::Unexpected(
-                    anyhow!("One or more canisters failed to sync"),
-                )));
+                // Execute with progress tracking for final state
+                let result = ProgressManager::execute_with_progress(
+                    &pb,
+                    async { sync_result },
+                    || format!("Synced successfully: {cid}"),
+                    print_sync_error,
+                )
+                .await;
+
+                // After progress bar is finished, dump the output if sync failed
+                if let Err(e) = &result {
+                    for line in pb.dump_output() {
+                        let _ = ctx.term.write_line(&line);
+                    }
+                    let _ = ctx.term.write_line(&print_sync_error(e));
+                    let _ = ctx.term.write_line("");
+                }
+
+                result
             }
+        };
+
+        futs.push_back(fut);
+    }
+
+    // Consume the set of futures and collect errors
+    let mut found_error = false;
+    while let Some(res) = futs.next().await {
+        if res.is_err() {
+            found_error = true;
         }
+    }
+
+    if found_error {
+        return Err(CommandError::Synchronize(SynchronizeError::Unexpected(
+            anyhow!("One or more canisters failed to sync"),
+        )));
     }
 
     Ok(())

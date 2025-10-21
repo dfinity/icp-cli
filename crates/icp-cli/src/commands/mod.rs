@@ -69,9 +69,6 @@ pub(crate) enum Command {
 }
 
 pub(crate) struct Context {
-    /// Command exection mode
-    pub(crate) mode: Mode,
-
     /// Terminal for printing messages for the user to see
     pub(crate) term: Term,
 

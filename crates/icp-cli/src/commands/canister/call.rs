@@ -69,63 +69,56 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    // Load project
+    let p = ctx.project.load().await?;
 
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    // Load identity
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
-
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
+    // Load target environment
+    let env =
+        p.environments
+            .get(args.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: args.environment.name().to_owned(),
             })?;
 
-            // Parse candid arguments
-            let cargs = candid_parser::parse_idl_args(&args.args)?;
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
 
-            let res = agent
-                .update(&cid, &args.method)
-                .with_arg(cargs.to_bytes()?)
-                .await?;
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
 
-            let ret = IDLArgs::from_bytes(&res[..])?;
-
-            print_candid_for_term(&mut Term::buffered_stdout(), &ret)?;
-        }
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
     }
+
+    // Ensure canister is included in the environment
+    if !env.canisters.contains_key(&args.name) {
+        return Err(CommandError::EnvironmentCanister {
+            environment: env.name.to_owned(),
+            canister: args.name.to_owned(),
+        });
+    }
+
+    // Lookup the canister id
+    let cid = ctx.ids.lookup(&Key {
+        network: env.network.name.to_owned(),
+        environment: env.name.to_owned(),
+        canister: args.name.to_owned(),
+    })?;
+
+    // Parse candid arguments
+    let cargs = candid_parser::parse_idl_args(&args.args)?;
+
+    let res = agent
+        .update(&cid, &args.method)
+        .with_arg(cargs.to_bytes()?)
+        .await?;
+
+    let ret = IDLArgs::from_bytes(&res[..])?;
+
+    print_candid_for_term(&mut Term::buffered_stdout(), &ret)?;
 
     Ok(())
 }

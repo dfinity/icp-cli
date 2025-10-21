@@ -1,12 +1,9 @@
 use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    transfer::{TransferArg, TransferError},
-};
+use icrc_ledger_types::icrc1::transfer::TransferError;
 
 use crate::{
     commands::{Context, Mode, args, token::TOKEN_LEDGER_CIDS},
@@ -72,6 +69,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Icrc1Symbol(#[from] operations::icrc::Icrc1SymbolError),
+
+    #[error(transparent)]
+    Icrc1Transfer(#[from] operations::icrc::Icrc1TransferError),
 
     #[error("transfer failed: {err}")]
     Transfer { err: String },
@@ -181,35 +181,11 @@ pub(crate) async fn exec(
     let ledger_amount = Nat::from(ledger_amount);
     let display_amount = BigDecimal::from_biguint(ledger_amount.0.clone(), decimals as i64);
 
-    // Prepare transfer
-    let receiver = Account {
-        owner: args.receiver,
-        subaccount: None,
-    };
-
-    let arg = TransferArg {
-        // Transfer amount
-        amount: ledger_amount.clone(),
-
-        // Transfer destination
-        to: receiver,
-
-        // Other
-        from_subaccount: None,
-        fee: None,
-        created_at_time: None,
-        memo: None,
-    };
-
     // Perform transfer
-    let resp = agent
-        .update(&cid, "icrc1_transfer")
-        .with_arg(Encode!(&arg)?)
-        .call_and_wait()
+    let receiver = args.receiver;
+    let resp = (ctx.ops.icrc.icrc1_transfer)(&agent, cid)
+        .icrc1_transfer(ledger_amount, receiver)
         .await?;
-
-    // Parse response
-    let resp = Decode!(&resp, Result<Nat, TransferError>)?;
 
     // Process response
     let idx = resp.map_err(|err| match err {

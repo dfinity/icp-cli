@@ -28,7 +28,7 @@ use crate::{
     logging::{TermWriter, debug_layer},
     operations::{
         canister::{Starter, Stopper},
-        icrc::{Icrc1Balancer, Icrc1Decimalser, Icrc1Feeer, Icrc1Symboler},
+        icrc::{Icrc1Balancer, Icrc1Decimalser, Icrc1Feeer, Icrc1Symboler, Icrc1Transferrer},
     },
     store_artifact::ArtifactStore,
     store_id::IdStore,
@@ -228,6 +228,7 @@ async fn main() -> Result<(), Error> {
             icrc1_decimals: Box::new(Icrc1Decimalser::arc),
             icrc1_fee: Box::new(Icrc1Feeer::arc),
             icrc1_symbol: Box::new(Icrc1Symboler::arc),
+            icrc1_transfer: Box::new(Icrc1Transferrer::arc),
         },
     };
 

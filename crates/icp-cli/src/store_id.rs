@@ -1,9 +1,11 @@
 use std::{io::ErrorKind, sync::Mutex};
 
 use ic_agent::export::Principal;
-use icp::{fs::json, prelude::*};
+use icp::{Environment, fs::json, prelude::*};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
+
+use crate::commands::args;
 
 /// An association-key, used for associating an existing canister to an ID on a network
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -47,6 +49,16 @@ pub(crate) enum LookupError {
         key.canister, key.environment, key.network
     ))]
     IdNotFound { key: Key },
+
+    #[snafu(display(
+        "could not find canister '{}' in environment '{}'",
+        canister,
+        environment
+    ))]
+    EnvironmentCanister {
+        canister: String,
+        environment: String,
+    },
 
     #[snafu(display("could not find canisters in environment '{}'", name))]
     EnvironmentNotFound { name: String },
@@ -99,6 +111,31 @@ impl IdStore {
         json::save(&self.path, &cs).context(RegisterSaveStoreSnafu)?;
 
         Ok(())
+    }
+
+    pub(crate) fn resolve(
+        &self,
+        canister: &args::Canister,
+        environment: &Environment,
+    ) -> Result<Principal, LookupError> {
+        match canister {
+            args::Canister::Name(name) => {
+                if environment.canisters.contains_key(name) {
+                    let key = Key {
+                        network: environment.network.name.to_owned(),
+                        environment: environment.name.to_owned(),
+                        canister: name.to_owned(),
+                    };
+                    self.lookup(&key)
+                } else {
+                    return Err(LookupError::EnvironmentCanister {
+                        environment: environment.name.to_owned(),
+                        canister: name.to_owned(),
+                    });
+                }
+            }
+            args::Canister::Principal(principal) => Ok(principal.to_owned()),
+        }
     }
 
     pub(crate) fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {

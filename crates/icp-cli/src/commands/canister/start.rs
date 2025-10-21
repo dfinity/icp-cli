@@ -108,11 +108,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandE
         }
 
         Mode::Project(pdir) => {
-            // Argument (Canister)
-            let args::Canister::Name(name) = &args.canister else {
-                return Err(CommandError::Args);
-            };
-
             // Argument (Environment)
             let args::Environment::Name(env) = args.environment.clone().unwrap_or_default();
 
@@ -138,20 +133,8 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), CommandE
                 agent.set_root_key(k);
             }
 
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            })?;
+            // Argument (Canister)
+            let cid = ctx.ids.resolve(&args.canister, env)?;
 
             (agent, cid)
         }

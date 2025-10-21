@@ -26,7 +26,10 @@ use tracing_subscriber::{
 use crate::{
     commands::{Mode, validation::Validate},
     logging::{TermWriter, debug_layer},
-    operations::canister::{Starter, Stopper},
+    operations::{
+        canister::{Starter, Stopper},
+        icrc::{Icrc1Balancer, Icrc1Decimalser, Icrc1Feeer, Icrc1Symboler},
+    },
     store_artifact::ArtifactStore,
     store_id::IdStore,
     telemetry::EventLayer,
@@ -219,6 +222,12 @@ async fn main() -> Result<(), Error> {
         canister: operations::canister::Initializers {
             start: Box::new(Starter::arc),
             stop: Box::new(Stopper::arc),
+        },
+        icrc: operations::icrc::Initializers {
+            icrc1_balance: Box::new(Icrc1Balancer::arc),
+            icrc1_decimals: Box::new(Icrc1Decimalser::arc),
+            icrc1_fee: Box::new(Icrc1Feeer::arc),
+            icrc1_symbol: Box::new(Icrc1Symboler::arc),
         },
     };
 

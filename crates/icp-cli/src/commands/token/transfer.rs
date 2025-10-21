@@ -10,6 +10,7 @@ use icrc_ledger_types::icrc1::{
 
 use crate::{
     commands::{Context, Mode, args, token::TOKEN_LEDGER_CIDS},
+    operations,
     options::IdentityOpt,
 };
 
@@ -62,6 +63,15 @@ pub(crate) enum CommandError {
 
     #[error("invalid amount")]
     Amount,
+
+    #[error(transparent)]
+    Icrc1Fee(#[from] operations::icrc::Icrc1FeeError),
+
+    #[error(transparent)]
+    Icrc1Decimals(#[from] operations::icrc::Icrc1DecimalsError),
+
+    #[error(transparent)]
+    Icrc1Symbol(#[from] operations::icrc::Icrc1SymbolError),
 
     #[error("transfer failed: {err}")]
     Transfer { err: String },
@@ -141,43 +151,13 @@ pub(crate) async fn exec(
     })?;
 
     // Perform the required ledger calls
+    let fee = (ctx.ops.icrc.icrc1_fee)(&agent, cid);
+    let decimals = (ctx.ops.icrc.icrc1_decimals)(&agent, cid);
+    let symbol = (ctx.ops.icrc.icrc1_symbol)(&agent, cid);
     let (fee, decimals, symbol) = tokio::join!(
-        //
-        // Obtain token transfer fee
-        async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_fee")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await?;
-
-            // Decode response
-            Ok::<_, CommandError>(Decode!(&resp, Nat)?)
-        },
-        //
-        // Obtain the number of decimals the token uses
-        async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_decimals")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await?;
-
-            // Decode response
-            Ok::<_, CommandError>(Decode!(&resp, u8)?)
-        },
-        //
-        // Obtain the symbol of the token
-        async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_symbol")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await?;
-
-            // Decode response
-            Ok::<_, CommandError>(Decode!(&resp, String)?)
-        },
+        fee.icrc1_fee(),
+        decimals.icrc1_decimals(),
+        symbol.icrc1_symbol(),
     );
 
     // Check for errors

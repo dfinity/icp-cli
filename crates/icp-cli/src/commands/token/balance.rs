@@ -1,12 +1,12 @@
 use bigdecimal::BigDecimal;
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
 use icp::{agent, identity, network};
-use icrc_ledger_types::icrc1::account::Account;
 
 use crate::{
     commands::{Context, Mode, args, token::TOKEN_LEDGER_CIDS},
+    operations,
     options::IdentityOpt,
 };
 
@@ -41,6 +41,15 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
+
+    #[error(transparent)]
+    Icrc1Balance(#[from] operations::icrc::Icrc1BalanceError),
+
+    #[error(transparent)]
+    Icrc1Decimals(#[from] operations::icrc::Icrc1DecimalsError),
+
+    #[error(transparent)]
+    Icrc1Symbol(#[from] operations::icrc::Icrc1SymbolError),
 
     #[error("failed to get identity principal: {err}")]
     Principal { err: String },
@@ -130,46 +139,13 @@ pub(crate) async fn exec(
     })?;
 
     // Perform the required ledger calls
+    let balance = (ctx.ops.icrc.icrc1_balance)(&agent, cid);
+    let decimals = (ctx.ops.icrc.icrc1_decimals)(&agent, cid);
+    let symbol = (ctx.ops.icrc.icrc1_symbol)(&agent, cid);
     let (balance, decimals, symbol) = tokio::join!(
-        //
-        // Obtain token balance
-        async {
-            // Specify sub-account
-            let subaccount = None;
-
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_balance_of")
-                .with_arg(Encode!(&Account { owner, subaccount }).expect("failed to encode arg"))
-                .await?;
-
-            // Decode response
-            Ok::<_, CommandError>(Decode!(&resp, Nat)?)
-        },
-        //
-        // Obtain the number of decimals the token uses
-        async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_decimals")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await?;
-
-            // Decode response
-            Ok::<_, CommandError>(Decode!(&resp, u8)?)
-        },
-        //
-        // Obtain the symbol of the token
-        async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_symbol")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await?;
-
-            // Decode response
-            Ok::<_, CommandError>(Decode!(&resp, String)?)
-        },
+        balance.icrc1_balance(owner, None),
+        decimals.icrc1_decimals(),
+        symbol.icrc1_symbol(),
     );
 
     // Check for errors

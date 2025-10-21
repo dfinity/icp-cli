@@ -32,5 +32,5 @@ jobs:
       issues: write
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/audit@v1
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions-rust-lang/audit@66172f762800e4befdf5c0765d24bd4c79891f47 # v1.2.5

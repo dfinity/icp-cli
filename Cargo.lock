@@ -2477,6 +2477,7 @@ dependencies = [
  "time",
  "tiny-bip39 2.0.0",
  "tokio",
+ "tracing",
  "url",
  "uuid",
  "zeroize",

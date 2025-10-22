@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use candid::Principal;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,12 +52,12 @@ impl From<&str> for Environment {
     }
 }
 
-impl ToString for Environment {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
             Environment::Name(name) => name.to_string(),
             Environment::Default(name) => name.to_string(),
-        }
+        })
     }
 }
 

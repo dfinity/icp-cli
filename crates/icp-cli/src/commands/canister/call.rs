@@ -44,6 +44,9 @@ pub(crate) enum CommandError {
     #[error("project does not contain an environment named '{name}'")]
     EnvironmentNotFound { name: String },
 
+    #[error("project does not contain a network named '{name}'")]
+    NetworkNotFound { name: String },
+
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
@@ -55,6 +58,12 @@ pub(crate) enum CommandError {
         environment: String,
         canister: String,
     },
+
+    #[error("You can't specify both an environment and a network")]
+    EnvironmentAndNetworkSpecified,
+
+    #[error("Specifying a network is not supported if you are targeting a canister by name, specify an environment instead")]
+    AmbiguousCanisterName,
 
     #[error(transparent)]
     Lookup(#[from] LookupError),
@@ -77,11 +86,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
     let (cid, agent) = match (args.canister.clone(), args.environment.clone(), args.network.clone()) {
         (_, args::Environment::Name(_), Some(_)) => {
             // Both an environment and a network are specified this is an error
-            todo!()
+            return Err(CommandError::EnvironmentAndNetworkSpecified);
         },
         (args::Canister::Name(_), args::Environment::Default(_), Some(_)) => {
             // This is not allowed, we should not use name with an environment not a network
-            todo!()
+            return Err(CommandError::AmbiguousCanisterName);
         },
         (args::Canister::Name(cname), _, None) => {
             // A canister name was specified so we must be in a project
@@ -132,10 +141,34 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
 
             (cid, agent)
         },
-        (args::Canister::Principal(principal), args::Environment::Name(env_name), None) => {
-           // Call by canister_id to a network referenced by name
-            todo!()
+        (args::Canister::Principal(principal), args::Environment::Name(ename), None) => {
+            // Call by canister_id to a network 
+ 
+            // Load project
+            let p = ctx.project.load().await?;
 
+            // Load target environment
+            let env =
+                p.environments
+                    .get(&ename)
+                    .ok_or(CommandError::EnvironmentNotFound {
+                        name: ename.to_owned(),
+                    })?;
+
+            // Load identity
+            let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Access network
+            let access = ctx.network.access(&env.network).await?;
+
+            // Agent
+            let agent = ctx.agent.create(id, &access.url).await?;
+
+            if let Some(k) = access.root_key {
+                agent.set_root_key(k);
+            }
+
+            (principal, agent)
         },
         (args::Canister::Principal(principal), args::Environment::Default(_), Some(args::Network::Url(url))) => {
             // Make the call a canister id on some network
@@ -148,9 +181,30 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
 
             (principal, agent)
         },
-        (args::Canister::Principal(principal), args::Environment::Default(_), Some(args::Network::Name(_))) => {
+        (args::Canister::Principal(principal), args::Environment::Default(_), Some(args::Network::Name(nname))) => {
             // Should handle known networks by name
-            todo!()
+
+            // Load project
+            let p = ctx.project.load().await?;
+
+            let network = p.networks.get(&nname).ok_or(
+                CommandError::NetworkNotFound { name: nname }
+                )?;
+
+            // Load identity
+            let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+            // Access network
+            let access = ctx.network.access(&network).await?;
+
+            // Agent
+            let agent = ctx.agent.create(id, &access.url).await?;
+
+            if let Some(k) = access.root_key {
+                agent.set_root_key(k);
+            }
+
+            (principal, agent)
         },
         (args::Canister::Principal(principal), args::Environment::Default(ename), None) => {
             // Load project

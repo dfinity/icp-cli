@@ -9,6 +9,7 @@ use icp::{
 
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
+pub(crate) mod args;
 pub(crate) mod build;
 pub(crate) mod canister;
 pub(crate) mod cycles;

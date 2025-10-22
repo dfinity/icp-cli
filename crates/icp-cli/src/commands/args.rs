@@ -3,7 +3,6 @@ use std::fmt::Display;
 use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
-use tracing::debug;
 
 use crate::{commands::Context, options::IdentityOpt};
 

@@ -3,6 +3,7 @@ use std::fmt::Display;
 use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
+use tracing::debug;
 
 use crate::{commands::Context, options::IdentityOpt};
 
@@ -46,14 +47,14 @@ pub(crate) enum ArgValidationError {
 
 #[derive(Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
-    /// Name of canister to call to
+    /// Name of canister to target
     pub(crate) canister: Canister,
 
     #[arg(long)]
     pub(crate) network: Option<Network>,
 
-    #[arg(long, default_value_t = Environment::default())]
-    pub(crate) environment: Environment,
+    #[arg(long)]
+    pub(crate) environment: Option<Environment>,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -65,7 +66,7 @@ impl CanisterCommandArgs {
         ctx: &Context,
     ) -> Result<(Principal, Agent), ArgValidationError> {
         let arg_canister = self.canister.clone();
-        let arg_environment = self.environment.clone();
+        let arg_environment = self.environment.clone().unwrap_or_default();
         let arg_network = self.network.clone();
         let arg_identity = self.identity.clone();
 

@@ -15,6 +15,7 @@ pub(crate) mod canister;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
 pub(crate) mod environment;
+pub(crate) mod helpers;
 pub(crate) mod identity;
 pub(crate) mod network;
 pub(crate) mod project;

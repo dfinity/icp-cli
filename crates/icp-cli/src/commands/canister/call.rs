@@ -6,15 +6,15 @@ use dialoguer::console::Term;
 use icp::{agent, identity, network};
 
 use crate::{
-    commands::{args::{self, ArgValidationError}, Context},
-    options::IdentityOpt,
-    store_id::{Key, LookupError},
+    commands::{args::{self, ArgValidationError}, helpers::{get_agent_for_env, get_agent_for_network, get_canister_id_for_env}, Context},
+    store_id::LookupError,
 };
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
-    /// Name of canister to call to
-    pub(crate) canister: args::Canister,
+
+    #[command(flatten)]
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// Name of canister method to call into
     pub(crate) method: String,
@@ -22,25 +22,10 @@ pub(crate) struct CallArgs {
     /// String representation of canister call arguments
     pub(crate) args: String,
 
-    #[arg(long)]
-    pub(crate) network: Option<args::Network>,
-
-    #[arg(long, default_value_t = args::Environment::default())]
-    pub(crate) environment: args::Environment,
-
-    #[command(flatten)]
-    pub(crate) identity: IdentityOpt,
-
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
-
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
 
     #[error("failed to parse candid arguments")]
     DecodeArgsError(#[from] candid_parser::Error),
@@ -55,23 +40,16 @@ pub(crate) enum CommandError {
     Call(#[from] ic_agent::AgentError),
 
     #[error(transparent)]
-    Lookup(#[from] LookupError),
-
-    #[error(transparent)]
     Shared(#[from] ArgValidationError),
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateError),
-
-
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
+    let arg_canister = args.cmd_args.canister.clone();
+    let arg_environment = args.cmd_args.environment.clone();
+    let arg_network = args.cmd_args.network.clone();
+    let arg_identity = args.cmd_args.identity.clone();
 
-    let (cid, agent) = match (args.canister.clone(), args.environment.clone(), args.network.clone()) {
+    let (cid, agent) = match (arg_canister, &arg_environment, arg_network) {
         (_, args::Environment::Name(_), Some(_)) => {
             // Both an environment and a network are specified this is an error
             return Err(ArgValidationError::EnvironmentAndNetworkSpecified.into());
@@ -83,143 +61,22 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
         (args::Canister::Name(cname), _, None) => {
             // A canister name was specified so we must be in a project
 
-            // Get the environment name
-            let ename = match &args.environment {
-                args::Environment::Name(name) => name.clone(),
-                args::Environment::Default(name) => name.clone(),
-            };
-            // Load project
-            let p = ctx.project.load().await?;
-
-            // Load target environment
-            let env =
-                p.environments
-                    .get(&ename)
-                    .ok_or(ArgValidationError::EnvironmentNotFound {
-                        name: ename.to_owned(),
-                    })?;
-
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&cname) {
-                return Err(ArgValidationError::CanisterNotInEnvironment {
-                    environment: env.name.to_owned(),
-                    canister: cname.to_owned(),
-                }.into());
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: cname.to_owned(),
-            })?;
+            let agent = get_agent_for_env(ctx, &arg_identity, &arg_environment).await?;
+            let cid = get_canister_id_for_env(ctx, &cname, &arg_environment).await?;
 
             (cid, agent)
         },
-        (args::Canister::Principal(principal), args::Environment::Name(ename), None) => {
-            // Call by canister_id to a network 
- 
-            // Load project
-            let p = ctx.project.load().await?;
+        (args::Canister::Principal(principal), _, None) => {
+            // Call by canister_id to the environment specified
 
-            // Load target environment
-            let env =
-                p.environments
-                    .get(&ename)
-                    .ok_or(ArgValidationError::EnvironmentNotFound {
-                        name: ename.to_owned(),
-                    })?;
-
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
+            let agent = get_agent_for_env(ctx, &arg_identity, &arg_environment).await?;
 
             (principal, agent)
         },
-        (args::Canister::Principal(principal), args::Environment::Default(_), Some(args::Network::Url(url))) => {
-            // Make the call a canister id on some network
-
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &url).await?;
-
-            (principal, agent)
-        },
-        (args::Canister::Principal(principal), args::Environment::Default(_), Some(args::Network::Name(nname))) => {
+        (args::Canister::Principal(principal), args::Environment::Default(_), Some(network)) => {
             // Should handle known networks by name
 
-            // Load project
-            let p = ctx.project.load().await?;
-
-            let network = p.networks.get(&nname).ok_or(
-                ArgValidationError::NetworkNotFound { name: nname }
-                )?;
-
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Access network
-            let access = ctx.network.access(network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            (principal, agent)
-        },
-        (args::Canister::Principal(principal), args::Environment::Default(ename), None) => {
-            // Load project
-            let p = ctx.project.load().await?;
-
-
-            // Load target environment
-            let env =
-                p.environments
-                    .get(&ename)
-                    .ok_or(ArgValidationError::EnvironmentNotFound {
-                        name: ename.to_owned(),
-                    })?;
-
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
+            let agent = get_agent_for_network(ctx, &arg_identity, &network).await?;
             (principal, agent)
         },
     };

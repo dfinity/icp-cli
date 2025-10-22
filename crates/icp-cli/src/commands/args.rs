@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
+use clap::Args;
 use candid::Principal;
+
+use crate::options::IdentityOpt;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ArgValidationError {
@@ -21,6 +24,37 @@ pub(crate) enum ArgValidationError {
 
     #[error("Specifying a network is not supported if you are targeting a canister by name, specify an environment instead")]
     AmbiguousCanisterName,
+
+    #[error(transparent)]
+    ProjectLoad(#[from] icp::LoadError),
+
+    #[error(transparent)]
+    Lookup(#[from] crate::store_id::LookupError),
+
+    #[error(transparent)]
+    Access(#[from] icp::network::AccessError),
+
+    #[error(transparent)]
+    Agent(#[from] icp::agent::CreateError),
+
+    #[error(transparent)]
+    Identity(#[from] icp::identity::LoadError),
+
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct CanisterCommandArgs {
+    /// Name of canister to call to
+    pub(crate) canister: Canister,
+
+    #[arg(long)]
+    pub(crate) network: Option<Network>,
+
+    #[arg(long, default_value_t = Environment::default())]
+    pub(crate) environment: Environment,
+
+    #[command(flatten)]
+    pub(crate) identity: IdentityOpt,
 
 }
 

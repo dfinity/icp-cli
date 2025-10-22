@@ -2,11 +2,20 @@ use candid::Principal;
 /// Some helper functions to reduce boilerplate
 use ic_agent::Agent;
 
-use crate::{commands::{args::{ArgValidationError, Environment, Network}, Context}, options::IdentityOpt, store_id::Key};
+use crate::{
+    commands::{
+        Context,
+        args::{ArgValidationError, Environment, Network},
+    },
+    options::IdentityOpt,
+    store_id::Key,
+};
 
-
-pub(crate) async fn get_agent_for_env(ctx: &Context, identity: &IdentityOpt, environment: &Environment) -> Result<Agent, ArgValidationError> {
-
+pub(crate) async fn get_agent_for_env(
+    ctx: &Context,
+    identity: &IdentityOpt,
+    environment: &Environment,
+) -> Result<Agent, ArgValidationError> {
     // Get the environment name
     let ename = match environment {
         Environment::Name(name) => name.clone(),
@@ -17,12 +26,12 @@ pub(crate) async fn get_agent_for_env(ctx: &Context, identity: &IdentityOpt, env
     let p = ctx.project.load().await?;
 
     // Load target environment
-    let env =
-        p.environments
-            .get(&ename)
-            .ok_or(ArgValidationError::EnvironmentNotFound {
-                name: ename.to_owned(),
-            })?;
+    let env = p
+        .environments
+        .get(&ename)
+        .ok_or(ArgValidationError::EnvironmentNotFound {
+            name: ename.to_owned(),
+        })?;
 
     // Load identity
     let id = ctx.identity.load(identity.clone().into()).await?;
@@ -38,18 +47,23 @@ pub(crate) async fn get_agent_for_env(ctx: &Context, identity: &IdentityOpt, env
     }
 
     Ok(agent)
-
 }
 
-pub(crate) async fn get_agent_for_network(ctx: &Context, identity: &IdentityOpt, network: &Network) -> Result<Agent, ArgValidationError> {
+pub(crate) async fn get_agent_for_network(
+    ctx: &Context,
+    identity: &IdentityOpt,
+    network: &Network,
+) -> Result<Agent, ArgValidationError> {
     match network {
         Network::Name(nname) => {
-
             let p = ctx.project.load().await?;
 
-            let network = p.networks.get(nname).ok_or(
-                ArgValidationError::NetworkNotFound { name: nname.to_string() }
-                )?;
+            let network = p
+                .networks
+                .get(nname)
+                .ok_or(ArgValidationError::NetworkNotFound {
+                    name: nname.to_string(),
+                })?;
 
             // Load identity
             let id = ctx.identity.load(identity.clone().into()).await?;
@@ -65,22 +79,23 @@ pub(crate) async fn get_agent_for_network(ctx: &Context, identity: &IdentityOpt,
             }
 
             Ok(agent)
-        },
+        }
         Network::Url(url) => {
-
             let id = ctx.identity.load(identity.clone().into()).await?;
 
             // Agent
             let agent = ctx.agent.create(id, url).await?;
 
             Ok(agent)
-        },
+        }
     }
-
 }
 
-pub(crate) async fn get_canister_id_for_env(ctx: &Context, cname: &String, environment: &Environment) -> Result<Principal, ArgValidationError> {
-
+pub(crate) async fn get_canister_id_for_env(
+    ctx: &Context,
+    cname: &String,
+    environment: &Environment,
+) -> Result<Principal, ArgValidationError> {
     // Get the environment name
     let ename = match environment {
         Environment::Name(name) => name.clone(),
@@ -91,12 +106,12 @@ pub(crate) async fn get_canister_id_for_env(ctx: &Context, cname: &String, envir
     let p = ctx.project.load().await?;
 
     // Load target environment
-    let env =
-        p.environments
-            .get(&ename)
-            .ok_or(ArgValidationError::EnvironmentNotFound {
-                name: ename.to_owned(),
-            })?;
+    let env = p
+        .environments
+        .get(&ename)
+        .ok_or(ArgValidationError::EnvironmentNotFound {
+            name: ename.to_owned(),
+        })?;
 
     if !env.canisters.contains_key(cname) {
         return Err(ArgValidationError::CanisterNotInEnvironment {

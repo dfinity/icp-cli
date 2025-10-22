@@ -3,16 +3,15 @@ use std::io::{self, Write};
 use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
-use icp::{agent, identity, network};
 
-use crate::{
-    commands::{args::{self, ArgValidationError}, helpers::{get_agent_for_env, get_agent_for_network, get_canister_id_for_env}, Context},
-    store_id::LookupError,
+use crate::commands::{
+    Context,
+    args::{self, ArgValidationError},
+    helpers::{get_agent_for_env, get_agent_for_network, get_canister_id_for_env},
 };
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
-
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
 
@@ -21,12 +20,10 @@ pub(crate) struct CallArgs {
 
     /// String representation of canister call arguments
     pub(crate) args: String,
-
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
-
     #[error("failed to parse candid arguments")]
     DecodeArgsError(#[from] candid_parser::Error),
 
@@ -53,11 +50,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
         (_, args::Environment::Name(_), Some(_)) => {
             // Both an environment and a network are specified this is an error
             return Err(ArgValidationError::EnvironmentAndNetworkSpecified.into());
-        },
+        }
         (args::Canister::Name(_), args::Environment::Default(_), Some(_)) => {
             // This is not allowed, we should not use name with an environment not a network
             return Err(ArgValidationError::AmbiguousCanisterName.into());
-        },
+        }
         (args::Canister::Name(cname), _, None) => {
             // A canister name was specified so we must be in a project
 
@@ -65,22 +62,21 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
             let cid = get_canister_id_for_env(ctx, &cname, &arg_environment).await?;
 
             (cid, agent)
-        },
+        }
         (args::Canister::Principal(principal), _, None) => {
             // Call by canister_id to the environment specified
 
             let agent = get_agent_for_env(ctx, &arg_identity, &arg_environment).await?;
 
             (principal, agent)
-        },
+        }
         (args::Canister::Principal(principal), args::Environment::Default(_), Some(network)) => {
             // Should handle known networks by name
 
             let agent = get_agent_for_network(ctx, &arg_identity, &network).await?;
             (principal, agent)
-        },
+        }
     };
-
 
     // Parse candid arguments
     let cargs = candid_parser::parse_idl_args(&args.args)?;

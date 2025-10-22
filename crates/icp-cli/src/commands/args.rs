@@ -2,6 +2,28 @@ use std::fmt::Display;
 
 use candid::Principal;
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ArgValidationError {
+    #[error("project does not contain an environment named '{name}'")]
+    EnvironmentNotFound { name: String },
+
+    #[error("project does not contain a network named '{name}'")]
+    NetworkNotFound { name: String },
+
+    #[error("environment '{environment}' does not include canister '{canister}'")]
+    CanisterNotInEnvironment {
+        environment: String,
+        canister: String,
+    },
+
+    #[error("You can't specify both an environment and a network")]
+    EnvironmentAndNetworkSpecified,
+
+    #[error("Specifying a network is not supported if you are targeting a canister by name, specify an environment instead")]
+    AmbiguousCanisterName,
+
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Canister {
     Name(String),

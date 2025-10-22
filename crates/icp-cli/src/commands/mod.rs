@@ -7,6 +7,14 @@ use icp::{
     canister::{build::Build, sync::Synchronize},
 };
 
+use candid::Principal;
+use ic_agent::Agent;
+
+use crate::{
+    commands::args::{ArgValidationError, Environment, Network},
+    options::IdentityOpt,
+    store_id::Key,
+};
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub(crate) mod args;
@@ -15,7 +23,6 @@ pub(crate) mod canister;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
 pub(crate) mod environment;
-pub(crate) mod helpers;
 pub(crate) mod identity;
 pub(crate) mod network;
 pub(crate) mod project;
@@ -96,4 +103,125 @@ pub(crate) struct Context {
 
     /// Whether debug is enabled
     pub(crate) debug: bool,
+}
+
+impl Context {
+    pub(crate) async fn get_agent_for_env(
+        &self,
+        identity: &IdentityOpt,
+        environment: &Environment,
+    ) -> Result<Agent, ArgValidationError> {
+        // Get the environment name
+        let ename = match environment {
+            Environment::Name(name) => name.clone(),
+            Environment::Default(name) => name.clone(),
+        };
+
+        // Load project
+        let p = self.project.load().await?;
+
+        // Load target environment
+        let env = p
+            .environments
+            .get(&ename)
+            .ok_or(ArgValidationError::EnvironmentNotFound {
+                name: ename.to_owned(),
+            })?;
+
+        // Load identity
+        let id = self.identity.load(identity.clone().into()).await?;
+
+        // Access network
+        let access = self.network.access(&env.network).await?;
+
+        // Agent
+        let agent = self.agent.create(id, &access.url).await?;
+
+        if let Some(k) = access.root_key {
+            agent.set_root_key(k);
+        }
+
+        Ok(agent)
+    }
+
+    pub(crate) async fn get_agent_for_network(
+        &self,
+        identity: &IdentityOpt,
+        network: &Network,
+    ) -> Result<Agent, ArgValidationError> {
+        match network {
+            Network::Name(nname) => {
+                let p = self.project.load().await?;
+
+                let network = p
+                    .networks
+                    .get(nname)
+                    .ok_or(ArgValidationError::NetworkNotFound {
+                        name: nname.to_string(),
+                    })?;
+
+                // Load identity
+                let id = self.identity.load(identity.clone().into()).await?;
+
+                // Access network
+                let access = self.network.access(network).await?;
+
+                // Agent
+                let agent = self.agent.create(id, &access.url).await?;
+
+                if let Some(k) = access.root_key {
+                    agent.set_root_key(k);
+                }
+
+                Ok(agent)
+            }
+            Network::Url(url) => {
+                let id = self.identity.load(identity.clone().into()).await?;
+
+                // Agent
+                let agent = self.agent.create(id, url).await?;
+
+                Ok(agent)
+            }
+        }
+    }
+
+    pub(crate) async fn get_canister_id_for_env(
+        &self,
+        cname: &String,
+        environment: &Environment,
+    ) -> Result<Principal, ArgValidationError> {
+        // Get the environment name
+        let ename = match environment {
+            Environment::Name(name) => name.clone(),
+            Environment::Default(name) => name.clone(),
+        };
+
+        // Load project
+        let p = self.project.load().await?;
+
+        // Load target environment
+        let env = p
+            .environments
+            .get(&ename)
+            .ok_or(ArgValidationError::EnvironmentNotFound {
+                name: ename.to_owned(),
+            })?;
+
+        if !env.canisters.contains_key(cname) {
+            return Err(ArgValidationError::CanisterNotInEnvironment {
+                environment: env.name.to_owned(),
+                canister: cname.to_owned(),
+            });
+        }
+
+        // Lookup the canister id
+        let cid = self.ids.lookup(&Key {
+            network: env.network.name.to_owned(),
+            environment: env.name.to_owned(),
+            canister: cname.to_owned(),
+        })?;
+
+        Ok(cid)
+    }
 }

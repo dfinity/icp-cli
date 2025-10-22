@@ -2,8 +2,9 @@ use std::fmt::Display;
 
 use candid::Principal;
 use clap::Args;
+use ic_agent::Agent;
 
-use crate::options::IdentityOpt;
+use crate::{commands::Context, options::IdentityOpt};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ArgValidationError {
@@ -56,6 +57,58 @@ pub(crate) struct CanisterCommandArgs {
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
+}
+
+impl CanisterCommandArgs {
+    pub async fn get_cid_and_agent(
+        &self,
+        ctx: &Context,
+    ) -> Result<(Principal, Agent), ArgValidationError> {
+        let arg_canister = self.canister.clone();
+        let arg_environment = self.environment.clone();
+        let arg_network = self.network.clone();
+        let arg_identity = self.identity.clone();
+
+        let (cid, agent) = match (arg_canister, &arg_environment, arg_network) {
+            (_, Environment::Name(_), Some(_)) => {
+                // Both an environment and a network are specified this is an error
+                return Err(ArgValidationError::EnvironmentAndNetworkSpecified);
+            }
+            (Canister::Name(_), Environment::Default(_), Some(_)) => {
+                // This is not allowed, we should not use name with an environment not a network
+                return Err(ArgValidationError::AmbiguousCanisterName);
+            }
+            (Canister::Name(cname), _, None) => {
+                // A canister name was specified so we must be in a project
+
+                let agent = ctx
+                    .get_agent_for_env(&arg_identity, &arg_environment)
+                    .await?;
+                let cid = ctx
+                    .get_canister_id_for_env(&cname, &arg_environment)
+                    .await?;
+
+                (cid, agent)
+            }
+            (Canister::Principal(principal), _, None) => {
+                // Call by canister_id to the environment specified
+
+                let agent = ctx
+                    .get_agent_for_env(&arg_identity, &arg_environment)
+                    .await?;
+
+                (principal, agent)
+            }
+            (Canister::Principal(principal), Environment::Default(_), Some(network)) => {
+                // Should handle known networks by name
+
+                let agent = ctx.get_agent_for_network(&arg_identity, &network).await?;
+                (principal, agent)
+            }
+        };
+
+        Ok((cid, agent))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

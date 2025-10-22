@@ -7,7 +7,6 @@ use dialoguer::console::Term;
 use crate::commands::{
     Context,
     args::{self, ArgValidationError},
-    helpers::{get_agent_for_env, get_agent_for_network, get_canister_id_for_env},
 };
 
 #[derive(Args, Debug)]
@@ -41,42 +40,7 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
-    let arg_canister = args.cmd_args.canister.clone();
-    let arg_environment = args.cmd_args.environment.clone();
-    let arg_network = args.cmd_args.network.clone();
-    let arg_identity = args.cmd_args.identity.clone();
-
-    let (cid, agent) = match (arg_canister, &arg_environment, arg_network) {
-        (_, args::Environment::Name(_), Some(_)) => {
-            // Both an environment and a network are specified this is an error
-            return Err(ArgValidationError::EnvironmentAndNetworkSpecified.into());
-        }
-        (args::Canister::Name(_), args::Environment::Default(_), Some(_)) => {
-            // This is not allowed, we should not use name with an environment not a network
-            return Err(ArgValidationError::AmbiguousCanisterName.into());
-        }
-        (args::Canister::Name(cname), _, None) => {
-            // A canister name was specified so we must be in a project
-
-            let agent = get_agent_for_env(ctx, &arg_identity, &arg_environment).await?;
-            let cid = get_canister_id_for_env(ctx, &cname, &arg_environment).await?;
-
-            (cid, agent)
-        }
-        (args::Canister::Principal(principal), _, None) => {
-            // Call by canister_id to the environment specified
-
-            let agent = get_agent_for_env(ctx, &arg_identity, &arg_environment).await?;
-
-            (principal, agent)
-        }
-        (args::Canister::Principal(principal), args::Environment::Default(_), Some(network)) => {
-            // Should handle known networks by name
-
-            let agent = get_agent_for_network(ctx, &arg_identity, &network).await?;
-            (principal, agent)
-        }
-    };
+    let (cid, agent) = args.cmd_args.get_cid_and_agent(ctx).await?;
 
     // Parse candid arguments
     let cargs = candid_parser::parse_idl_args(&args.args)?;

@@ -18,7 +18,6 @@ concurrency:
 env:
   # When getting Rust dependencies, retry on network error:
   CARGO_NET_RETRY: 10
-  PRETEND_TAG: release-0.0.0
 
 jobs:
   build_icp:
@@ -57,7 +56,7 @@ jobs:
           echo "RUSTFLAGS=--remap-path-prefix=${GITHUB_WORKSPACE}=/builds/dfinity" >> $GITHUB_ENV
 
       - name: Set names (tag only)
-        # if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag'
         run: |
           REF_NAME_SANITIZED=$(echo "$GITHUB_REF_NAME" | tr '/' '-')
           echo "TARBALL_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
@@ -88,14 +87,14 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
 
       - name: Create tarball of binaries and sha256 of tarball
-        # if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag'
         run: |
           ${{ matrix.tar }} -zcC ${{ matrix.binary_path }} -f ${{ env.TARBALL_FILENAME }} icp
           shasum -a 256 ${{ env.TARBALL_FILENAME }} > ${{ env.SHA256_FILENAME }}
           shasum -c ${{ env.SHA256_FILENAME }}
 
       - name: Upload Artifacts
-        # if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: icp-artifacts-${{ hashFiles('rust-toolchain.toml') }}-${{ matrix.name }}
@@ -115,7 +114,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
-    # if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag'
     needs: build_icp
     permissions:
       contents: write

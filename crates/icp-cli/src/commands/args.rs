@@ -3,6 +3,7 @@ use std::fmt::Display;
 use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
+use icp::identity::IdentitySelection;
 
 use crate::{commands::Context, options::IdentityOpt};
 
@@ -42,6 +43,9 @@ pub(crate) enum ArgValidationError {
 
     #[error(transparent)]
     Identity(#[from] icp::identity::LoadError),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
 
 #[derive(Args, Debug)]
@@ -67,7 +71,7 @@ impl CanisterCommandArgs {
         let arg_canister = self.canister.clone();
         let arg_environment = self.environment.clone().unwrap_or_default();
         let arg_network = self.network.clone();
-        let arg_identity = self.identity.clone();
+        let identity_selection: IdentitySelection = self.identity.clone().into();
 
         let (cid, agent) = match (arg_canister, &arg_environment, arg_network) {
             (_, Environment::Name(_), Some(_)) => {
@@ -82,7 +86,7 @@ impl CanisterCommandArgs {
                 // A canister name was specified so we must be in a project
 
                 let agent = ctx
-                    .get_agent_for_env(&arg_identity, &arg_environment)
+                    .get_agent_for_env(&identity_selection, &arg_environment)
                     .await?;
                 let cid = ctx
                     .get_canister_id_for_env(&cname, &arg_environment)
@@ -94,7 +98,7 @@ impl CanisterCommandArgs {
                 // Call by canister_id to the environment specified
 
                 let agent = ctx
-                    .get_agent_for_env(&arg_identity, &arg_environment)
+                    .get_agent_for_env(&identity_selection, &arg_environment)
                     .await?;
 
                 (principal, agent)
@@ -102,7 +106,9 @@ impl CanisterCommandArgs {
             (Canister::Principal(principal), Environment::Default(_), Some(network)) => {
                 // Should handle known networks by name
 
-                let agent = ctx.get_agent_for_network(&arg_identity, &network).await?;
+                let agent = ctx
+                    .get_agent_for_network(&identity_selection, &network)
+                    .await?;
                 (principal, agent)
             }
         };

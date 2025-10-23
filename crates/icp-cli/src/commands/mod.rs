@@ -5,14 +5,14 @@ use console::Term;
 use icp::{
     Directories,
     canister::{build::Build, sync::Synchronize},
+    identity::IdentitySelection,
 };
 
 use candid::Principal;
-use ic_agent::Agent;
+use ic_agent::{Agent, Identity};
 
 use crate::{
     commands::args::{ArgValidationError, Environment, Network},
-    options::IdentityOpt,
     store_id::Key,
 };
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
@@ -105,12 +105,23 @@ pub(crate) struct Context {
     pub(crate) debug: bool,
 }
 
+type ContextResult<T> = anyhow::Result<T>;
+
 impl Context {
+    /// Gets an identity based on the provided identity selection.
+    // TODO: refactor the whole codebase to use this method instead of directly accessing `ctx.identity.load()`
+    pub(crate) async fn get_identity(
+        &self,
+        identity: &IdentitySelection,
+    ) -> ContextResult<Arc<dyn Identity>> {
+        Ok(self.identity.load(identity.clone()).await?)
+    }
+
     pub(crate) async fn get_agent_for_env(
         &self,
-        identity: &IdentityOpt,
+        identity: &IdentitySelection,
         environment: &Environment,
-    ) -> Result<Agent, ArgValidationError> {
+    ) -> ContextResult<Agent> {
         // Get the environment name
         let ename = match environment {
             Environment::Name(name) => name.clone(),
@@ -129,7 +140,7 @@ impl Context {
             })?;
 
         // Load identity
-        let id = self.identity.load(identity.clone().into()).await?;
+        let id = self.get_identity(identity).await?;
 
         // Access network
         let access = self.network.access(&env.network).await?;
@@ -146,7 +157,7 @@ impl Context {
 
     pub(crate) async fn get_agent_for_network(
         &self,
-        identity: &IdentityOpt,
+        identity: &IdentitySelection,
         network: &Network,
     ) -> Result<Agent, ArgValidationError> {
         match network {
@@ -161,7 +172,7 @@ impl Context {
                     })?;
 
                 // Load identity
-                let id = self.identity.load(identity.clone().into()).await?;
+                let id = self.get_identity(identity).await?;
 
                 // Access network
                 let access = self.network.access(network).await?;
@@ -176,7 +187,7 @@ impl Context {
                 Ok(agent)
             }
             Network::Url(url) => {
-                let id = self.identity.load(identity.clone().into()).await?;
+                let id = self.get_identity(identity).await?;
 
                 // Agent
                 let agent = self.agent.create(id, url).await?;

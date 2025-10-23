@@ -11,6 +11,7 @@ use crate::commands::{
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
+
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
 

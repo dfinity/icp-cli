@@ -111,19 +111,19 @@ Perform canister operations against a network
 
 ## `icp-cli canister call`
 
-**Usage:** `icp-cli canister call [OPTIONS] <NAME> <METHOD> <ARGS>`
+**Usage:** `icp-cli canister call [OPTIONS] <CANISTER> <METHOD> <ARGS>`
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of canister to call to
+* `<CANISTER>` — Name of canister to target
 * `<METHOD>` — Name of canister method to call into
 * `<ARGS>` — String representation of canister call arguments
 
 ###### **Options:**
 
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 
 
 
@@ -155,17 +155,17 @@ Perform canister operations against a network
 
 ## `icp-cli canister delete`
 
-**Usage:** `icp-cli canister delete [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister delete [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>` — Name of canister to target
 
 ###### **Options:**
 
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 
 
 
@@ -309,17 +309,17 @@ Perform canister operations against a network
 
 ## `icp-cli canister status`
 
-**Usage:** `icp-cli canister status [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister status [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>` — Name of canister to target
 
 ###### **Options:**
 
+* `--network <NETWORK>`
+* `--environment <ENVIRONMENT>`
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 
 
 

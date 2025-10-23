@@ -6,6 +6,7 @@ use std::{
 use crate::prelude::*;
 
 pub mod json;
+pub mod lock;
 pub mod yaml;
 
 #[derive(Debug, thiserror::Error)]

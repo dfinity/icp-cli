@@ -131,7 +131,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [ 'x86_64-darwin', 'aarch64-darwin', 'x86_64-linux', 'aarch64-linux' ]
+        name: [ 'x86_64-darwin', 'aarch64-darwin', 'x86_64-linux']
+        # name: [ 'x86_64-darwin', 'aarch64-darwin', 'x86_64-linux', 'aarch64-linux' ]
     steps:
       - uses: actions/checkout@v4
 

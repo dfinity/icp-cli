@@ -12,12 +12,6 @@ pub(crate) enum ArgValidationError {
     #[error("project does not contain a network named '{name}'")]
     NetworkNotFound { name: String },
 
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    CanisterNotInEnvironment {
-        environment: String,
-        canister: String,
-    },
-
     #[error("You can't specify both an environment and a network")]
     EnvironmentAndNetworkSpecified,
 

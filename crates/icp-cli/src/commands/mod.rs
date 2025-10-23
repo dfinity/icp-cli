@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{Context as _, anyhow};
+use anyhow::{Context as _, anyhow, bail};
 use clap::Subcommand;
 use console::Term;
 use icp::{
@@ -109,8 +109,6 @@ pub(crate) struct Context {
 type ContextResult<T> = anyhow::Result<T>;
 
 impl Context {
-    // Basic getters ==========================================================
-
     /// Gets an identity based on the provided identity selection.
     // TODO: refactor the whole codebase to use this method instead of directly accessing `ctx.identity.load()`
     pub(crate) async fn get_identity(
@@ -142,7 +140,35 @@ impl Context {
         Ok(env.clone())
     }
 
-    // Basic getters END ======================================================
+    /// Gets the canister ID for a given canister name in a specified environment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be loaded or if the canister ID cannot be found.
+    pub(crate) async fn get_canister_id_for_env(
+        &self,
+        cname: &String,
+        env_name: &str,
+    ) -> ContextResult<Principal> {
+        let env = self.get_environment(env_name).await?;
+
+        if !env.canisters.contains_key(cname) {
+            bail!(
+                "canister '{}' not found in environment '{}'",
+                cname,
+                env.name
+            );
+        }
+
+        // Lookup the canister id
+        let cid = self.ids.lookup(&Key {
+            network: env.network.name.to_owned(),
+            environment: env.name.to_owned(),
+            canister: cname.to_owned(),
+        })?;
+
+        Ok(cid)
+    }
 
     pub(crate) async fn get_agent_for_env(
         &self,
@@ -208,29 +234,5 @@ impl Context {
                 Ok(agent)
             }
         }
-    }
-
-    pub(crate) async fn get_canister_id_for_env(
-        &self,
-        cname: &String,
-        env_name: &str,
-    ) -> Result<Principal, ArgValidationError> {
-        let env = self.get_environment(env_name).await?;
-
-        if !env.canisters.contains_key(cname) {
-            return Err(ArgValidationError::CanisterNotInEnvironment {
-                environment: env.name.to_owned(),
-                canister: cname.to_owned(),
-            });
-        }
-
-        // Lookup the canister id
-        let cid = self.ids.lookup(&Key {
-            network: env.network.name.to_owned(),
-            environment: env.name.to_owned(),
-            canister: cname.to_owned(),
-        })?;
-
-        Ok(cid)
     }
 }

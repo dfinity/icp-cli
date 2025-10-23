@@ -24,7 +24,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    commands::Mode,
+    commands::{Mode, UserOptions},
     logging::{TermWriter, debug_layer},
     store_artifact::ArtifactStore,
     store_id::IdStore,
@@ -230,6 +230,7 @@ async fn main() -> Result<(), Error> {
         builder,
         syncer,
         debug: cli.debug,
+        user: UserOptions::default(),
     };
 
     // Execute the command within a span that includes version and SHA context

@@ -43,6 +43,9 @@ pub(crate) enum CommandError {
         canister: String,
     },
 
+    #[error("{err}")]
+    Todo { err: String },
+
     #[error(transparent)]
     Lookup(#[from] LookupIdError),
 
@@ -51,59 +54,26 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    ctx.with_environment(args.environment.clone());
+    ctx.with_identity(args.identity.clone());
 
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    let agent = ctx
+        .get_agent()
+        .await
+        .map_err(|e| CommandError::Todo { err: e.to_string() })?;
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let canister = ctx
+        .get_canister_principal(&args.name)
+        .await
+        .map_err(|e| CommandError::Todo { err: e.to_string() })?;
 
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
+    // Instruct management canister to delete canister
+    mgmt.delete_canister(&canister).await?;
 
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
-            })?;
-
-            // Management Interface
-            let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
-            // Instruct management canister to delete canister
-            mgmt.delete_canister(&cid).await?;
-
-            // TODO(or.ricon): Remove the canister association with the network/environment
-        }
-    }
+    // TODO(or.ricon): Remove the canister association with the network/environment
 
     Ok(())
 }

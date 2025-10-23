@@ -9,9 +9,6 @@ use crate::{commands::Context, options::IdentityOpt};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ArgValidationError {
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error("project does not contain a network named '{name}'")]
     NetworkNotFound { name: String },
 
@@ -70,6 +67,7 @@ impl CanisterCommandArgs {
     ) -> Result<(Principal, Agent), ArgValidationError> {
         let arg_canister = self.canister.clone();
         let arg_environment = self.environment.clone().unwrap_or_default();
+        let env_name = arg_environment.name();
         let arg_network = self.network.clone();
         let identity_selection: IdentitySelection = self.identity.clone().into();
 
@@ -86,20 +84,16 @@ impl CanisterCommandArgs {
                 // A canister name was specified so we must be in a project
 
                 let agent = ctx
-                    .get_agent_for_env(&identity_selection, &arg_environment)
+                    .get_agent_for_env(&identity_selection, &env_name)
                     .await?;
-                let cid = ctx
-                    .get_canister_id_for_env(&cname, &arg_environment)
-                    .await?;
+                let cid = ctx.get_canister_id_for_env(&cname, env_name).await?;
 
                 (cid, agent)
             }
             (Canister::Principal(principal), _, None) => {
                 // Call by canister_id to the environment specified
 
-                let agent = ctx
-                    .get_agent_for_env(&identity_selection, &arg_environment)
-                    .await?;
+                let agent = ctx.get_agent_for_env(&identity_selection, env_name).await?;
 
                 (principal, agent)
             }
@@ -155,6 +149,15 @@ pub(crate) enum Environment {
     Default(String),
 }
 
+impl Environment {
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            Environment::Name(name) => name,
+            Environment::Default(name) => name,
+        }
+    }
+}
+
 impl Default for Environment {
     fn default() -> Self {
         Self::Default("local".to_string())
@@ -169,14 +172,7 @@ impl From<&str> for Environment {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Environment::Name(name) => name.to_string(),
-                Environment::Default(name) => name.to_string(),
-            }
-        )
+        write!(f, "{}", self.name())
     }
 }
 

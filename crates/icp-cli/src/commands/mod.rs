@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::{Context as _, anyhow};
 use clap::Subcommand;
 use console::Term;
 use icp::{
@@ -12,7 +13,7 @@ use candid::Principal;
 use ic_agent::{Agent, Identity};
 
 use crate::{
-    commands::args::{ArgValidationError, Environment, Network},
+    commands::args::{ArgValidationError, Network},
     store_id::Key,
 };
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
@@ -108,6 +109,8 @@ pub(crate) struct Context {
 type ContextResult<T> = anyhow::Result<T>;
 
 impl Context {
+    // Basic getters ==========================================================
+
     /// Gets an identity based on the provided identity selection.
     // TODO: refactor the whole codebase to use this method instead of directly accessing `ctx.identity.load()`
     pub(crate) async fn get_identity(
@@ -117,30 +120,40 @@ impl Context {
         Ok(self.identity.load(identity.clone()).await?)
     }
 
-    pub(crate) async fn get_agent_for_env(
-        &self,
-        identity: &IdentitySelection,
-        environment: &Environment,
-    ) -> ContextResult<Agent> {
-        // Get the environment name
-        let ename = match environment {
-            Environment::Name(name) => name.clone(),
-            Environment::Default(name) => name.clone(),
-        };
-
+    /// Gets an environment by name from the currently loaded project.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the project cannot be loaded or if the environment is not found.
+    pub(crate) async fn get_environment(&self, env_name: &str) -> ContextResult<icp::Environment> {
         // Load project
-        let p = self.project.load().await?;
+        let p = self
+            .project
+            .load()
+            .await
+            .context("failed to load project which is required to get environment")?;
 
         // Load target environment
         let env = p
             .environments
-            .get(&ename)
-            .ok_or(ArgValidationError::EnvironmentNotFound {
-                name: ename.to_owned(),
-            })?;
+            .get(env_name)
+            .ok_or(anyhow!("environment not found: {}", env_name))?;
 
+        Ok(env.clone())
+    }
+
+    // Basic getters END ======================================================
+
+    pub(crate) async fn get_agent_for_env(
+        &self,
+        identity: &IdentitySelection,
+        env_name: &str,
+    ) -> ContextResult<Agent> {
         // Load identity
         let id = self.get_identity(identity).await?;
+
+        // Load target environment
+        let env = self.get_environment(env_name).await?;
 
         // Access network
         let access = self.network.access(&env.network).await?;
@@ -200,24 +213,9 @@ impl Context {
     pub(crate) async fn get_canister_id_for_env(
         &self,
         cname: &String,
-        environment: &Environment,
+        env_name: &str,
     ) -> Result<Principal, ArgValidationError> {
-        // Get the environment name
-        let ename = match environment {
-            Environment::Name(name) => name.clone(),
-            Environment::Default(name) => name.clone(),
-        };
-
-        // Load project
-        let p = self.project.load().await?;
-
-        // Load target environment
-        let env = p
-            .environments
-            .get(&ename)
-            .ok_or(ArgValidationError::EnvironmentNotFound {
-                name: ename.to_owned(),
-            })?;
+        let env = self.get_environment(env_name).await?;
 
         if !env.canisters.contains_key(cname) {
             return Err(ArgValidationError::CanisterNotInEnvironment {

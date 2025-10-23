@@ -21,56 +21,34 @@ env:
   PRETEND_TAG: release-0.0.0
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        run: |
-          # Define the matrix configuration in one place
-          # To add aarch64-linux, add a new entry to the include array
-          echo 'matrix={
-            "include": [
-              {
-                "os": "macos-14-large",
-                "target": "x86_64-apple-darwin",
-                "binary_path": "target/x86_64-apple-darwin/release",
-                "name": "x86_64-darwin",
-                "tar": "gtar"
-              },
-              {
-                "os": "macos-14",
-                "target": "aarch64-apple-darwin",
-                "binary_path": "target/aarch64-apple-darwin/release",
-                "name": "aarch64-darwin",
-                "tar": "gtar"
-              },
-              {
-                "os": "ubuntu-22.04",
-                "target": "x86_64-unknown-linux-gnu",
-                "binary_path": "target/x86_64-unknown-linux-gnu/release",
-                "name": "x86_64-linux",
-                "tar": "tar"
-              }
-            ]
-          }' >> $GITHUB_OUTPUT
-
-        #   To add once repo is public
-        #   {
-        #     "os": "ubuntu-22.04-arm",
-        #     "target": "aarch64-unknown-linux-gnu",
-        #     "binary_path": "target/aarch64-unknown-linux-gnu/release",
-        #     "name": "aarch64-linux",
-        #     "tar": "tar"
-        #   }
-
   build_icp:
-    needs: setup
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+      matrix:
+        target: [ x86_64-apple-darwin, aarch64-apple-darwin, x86_64-unknown-linux-gnu ]
+        # target: [ x86_64-apple-darwin, aarch64-apple-darwin, x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu ] Waiting for repo to be public
+        include:
+          - os: macos-14-large
+            target: x86_64-apple-darwin
+            binary_path: target/x86_64-apple-darwin/release
+            name: x86_64-darwin
+            tar: gtar
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary_path: target/aarch64-apple-darwin/release
+            name: aarch64-darwin
+            tar: gtar
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            binary_path: target/x86_64-unknown-linux-gnu/release
+            name: x86_64-linux
+            tar: tar
+        #   - os: ubuntu-22.04-arm
+        #     target: aarch64-unknown-linux-gnu
+        #     binary_path: target/aarch64-unknown-linux-gnu/release
+        #     name: aarch64-linux
+        #     tar: tar
     steps:
       - uses: actions/checkout@v4
 
@@ -139,7 +117,7 @@ jobs:
   aggregate:
     name: publishable:required
     if: ${{ always() }}
-    needs: [setup, build_icp]
+    needs: [build_icp]
     runs-on: ubuntu-latest
     steps:
       - name: check build result
@@ -149,12 +127,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     # if: github.ref_type == 'tag'
-    needs: [setup, build_icp]
+    needs: build_icp
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+      matrix:
+        name: [ 'x86_64-darwin', 'aarch64-darwin', 'x86_64-linux']
+        # name: [ 'x86_64-darwin', 'aarch64-darwin', 'x86_64-linux', 'aarch64-linux' ]
     steps:
       - uses: actions/checkout@v4
 

@@ -60,10 +60,8 @@ jobs:
         # if: github.ref_type == 'tag'
         run: |
           REF_NAME_SANITIZED=$(echo "$GITHUB_REF_NAME" | tr '/' '-')
-          echo "TARBALL_1_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
-          echo "SHA256_1_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz.sha256" >> $GITHUB_ENV
-          echo "TARBALL_2_FILENAME=icp-cli-${{ matrix.target }}.tar.gz" >> $GITHUB_ENV
-          echo "SHA256_2_FILENAME=icp-cli-${{ matrix.target }}.tar.gz.sha256" >> $GITHUB_ENV
+          echo "TARBALL_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+          echo "SHA256_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz.sha256" >> $GITHUB_ENV
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -92,16 +90,9 @@ jobs:
       - name: Create tarball of binaries and sha256 of tarball
         # if: github.ref_type == 'tag'
         run: |
-          mkdir icp-${{ matrix.target }}
-          cp ${{ matrix.binary_path }}/icp icp-${{ matrix.target }}
-          cp LICENSE icp-${{ matrix.target }}
-          ${{ matrix.tar }} -zc -f ${{ env.TARBALL_2_FILENAME }} icp-${{ matrix.target }}
-          shasum -a 256 ${{ env.TARBALL_2_FILENAME }} > ${{ env.SHA256_2_FILENAME }}
-          shasum -c ${{ env.SHA256_2_FILENAME }}
-
-          ${{ matrix.tar }} -zcC ${{ matrix.binary_path }} -f ${{ env.TARBALL_1_FILENAME }} icp
-          shasum -a 256 ${{ env.TARBALL_1_FILENAME }} > ${{ env.SHA256_1_FILENAME }}
-          shasum -c ${{ env.SHA256_1_FILENAME }}
+          ${{ matrix.tar }} -zcC ${{ matrix.binary_path }} -f ${{ env.TARBALL_FILENAME }} icp
+          shasum -a 256 ${{ env.TARBALL_FILENAME }} > ${{ env.SHA256_FILENAME }}
+          shasum -c ${{ env.SHA256_FILENAME }}
 
       - name: Upload Artifacts
         # if: github.ref_type == 'tag'
@@ -109,10 +100,8 @@ jobs:
         with:
           name: icp-artifacts-${{ hashFiles('rust-toolchain.toml') }}-${{ matrix.name }}
           path: |
-            ${{ env.TARBALL_1_FILENAME }}
-            ${{ env.SHA256_1_FILENAME }}
-            ${{ env.TARBALL_2_FILENAME }}
-            ${{ env.SHA256_2_FILENAME }}
+            ${{ env.TARBALL_FILENAME }}
+            ${{ env.SHA256_FILENAME }}
 
   aggregate:
     name: publishable:required

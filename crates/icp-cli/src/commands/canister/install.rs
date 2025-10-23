@@ -165,7 +165,7 @@ pub async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError>
                         })?;
 
                         // Lookup the canister build artifact
-                        let wasm = ctx.artifacts.lookup(&c.name)?;
+                        let wasm = ctx.artifacts.lookup(&c.name).await?;
 
                         // Retrieve canister status
                         let (status,) = mgmt.canister_status(&cid).await?;

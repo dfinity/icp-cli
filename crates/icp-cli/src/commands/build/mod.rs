@@ -146,6 +146,7 @@ pub async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
                             // Save the wasm artifact
                             ctx.artifacts
                                 .save(&c.name, &wasm)
+                                .await
                                 .context(CommandError::ArtifactStore)?;
 
                             Ok::<_, CommandError>(())

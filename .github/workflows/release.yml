@@ -128,6 +128,8 @@ jobs:
     runs-on: ubuntu-latest
     # if: github.ref_type == 'tag'
     needs: build_icp
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:

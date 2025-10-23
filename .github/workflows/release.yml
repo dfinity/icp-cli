@@ -1,0 +1,150 @@
+name: Publish
+
+# We have to use gtar on macOS because apple's tar is literally broken.
+# Yes, I know how stupid that sounds. But it's true:
+# https://github.com/actions/virtual-environments/issues/2619
+
+on:
+  push:
+    tags:
+      - 'release-[0-9]+.[0-9]+.[0-9]+'
+      - 'release-[0-9]+.[0-9]+.[0-9]+-[A-Za-z]+.[0-9]+'
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # When getting Rust dependencies, retry on network error:
+  CARGO_NET_RETRY: 10
+
+jobs:
+  build_icp:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ x86_64-apple-darwin, aarch64-apple-darwin, x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu ]
+        include:
+          - os: macos-14-large
+            target: x86_64-apple-darwin
+            binary_path: target/x86_64-apple-darwin/release
+            name: x86_64-darwin
+            tar: gtar
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary_path: target/aarch64-apple-darwin/release
+            name: aarch64-darwin
+            tar: gtar
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            binary_path: target/x86_64-unknown-linux-gnu/release
+            name: x86_64-linux
+            tar: tar
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary_path: target/aarch64-unknown-linux-gnu/release
+            name: aarch64-linux
+            tar: tar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment variables
+        run: |
+          echo "RUSTFLAGS=--remap-path-prefix=${GITHUB_WORKSPACE}=/builds/dfinity" >> $GITHUB_ENV
+
+      - name: Set names (tag only)
+        if: github.ref_type == 'tag'
+        run: |
+          echo "TARBALL_1_FILENAME=icp-cli-$GITHUB_REF_NAME-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+          echo "SHA256_1_FILENAME=icp-cli-$GITHUB_REF_NAME-${{ matrix.name }}.tar.gz.sha256" >> $GITHUB_ENV
+          echo "TARBALL_2_FILENAME=icp-cli-${{ matrix.target }}.tar.gz" >> $GITHUB_ENV
+          echo "SHA256_2_FILENAME=icp-cli-${{ matrix.target }}.tar.gz.sha256" >> $GITHUB_ENV
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.rustup/
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}-publish-1
+
+      - name: Build
+        run: |
+          cargo clean --target ${{ matrix.target }} --release
+          cargo build --target ${{ matrix.target }} --locked --release
+
+      - name: Strip binaries
+        run: |
+          cd ${{ matrix.binary_path }}
+          sudo chown -R $(whoami) .
+          strip icp
+        if: contains(matrix.os, 'ubuntu')
+
+      - name: Create tarball of binaries and sha256 of tarball
+        if: github.ref_type == 'tag'
+        run: |
+          mkdir icp-${{ matrix.target }}
+          cp ${{ matrix.binary_path }}/icp icp-${{ matrix.target }}
+          cp LICENSE icp-${{ matrix.target }}
+          ${{ matrix.tar }} -zc -f ${{ env.TARBALL_2_FILENAME }} icp-${{ matrix.target }}
+          shasum -a 256 ${{ env.TARBALL_2_FILENAME }} > ${{ env.SHA256_2_FILENAME }}
+          shasum -c ${{ env.SHA256_2_FILENAME }}
+
+          ${{ matrix.tar }} -zcC ${{ matrix.binary_path }} -f ${{ env.TARBALL_1_FILENAME }} icp
+          shasum -a 256 ${{ env.TARBALL_1_FILENAME }} > ${{ env.SHA256_1_FILENAME }}
+          shasum -c ${{ env.SHA256_1_FILENAME }}
+
+      - name: Upload Artifacts
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: icp-artifacts-${{ hashFiles('rust-toolchain.toml') }}-${{ matrix.name }}
+          path: |
+            ${{ env.TARBALL_1_FILENAME }}
+            ${{ env.SHA256_1_FILENAME }}
+            ${{ env.TARBALL_2_FILENAME }}
+            ${{ env.SHA256_2_FILENAME }}
+
+  aggregate:
+    name: publishable:required
+    if: ${{ always() }}
+    needs: [build_icp]
+    runs-on: ubuntu-latest
+    steps:
+      - name: check build result
+        if: ${{ needs.build_icp.result != 'success' }}
+        run: exit 1
+
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    needs: build_icp
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [ 'x86_64-darwin', 'aarch64-darwin', 'x86_64-linux', 'aarch64-linux' ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment variables
+        run: echo "VERSION=$GITHUB_REF_NAME" >> $GITHUB_ENV
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: icp-artifacts-${{ hashFiles('rust-toolchain.toml') }}-${{ matrix.name }}
+
+      - name: Upload tarball and sha256
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: icp-*.tar.*
+          file_glob: true
+          tag: ${{ env.VERSION }}
+          prerelease: true
+          make_latest: false

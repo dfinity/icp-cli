@@ -59,8 +59,9 @@ jobs:
       - name: Set names (tag only)
         # if: github.ref_type == 'tag'
         run: |
-          echo "TARBALL_1_FILENAME=icp-cli-$GITHUB_REF_NAME-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
-          echo "SHA256_1_FILENAME=icp-cli-$GITHUB_REF_NAME-${{ matrix.name }}.tar.gz.sha256" >> $GITHUB_ENV
+          REF_NAME_SANITIZED=$(echo "$GITHUB_REF_NAME" | tr '/' '-')
+          echo "TARBALL_1_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+          echo "SHA256_1_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz.sha256" >> $GITHUB_ENV
           echo "TARBALL_2_FILENAME=icp-cli-${{ matrix.target }}.tar.gz" >> $GITHUB_ENV
           echo "SHA256_2_FILENAME=icp-cli-${{ matrix.target }}.tar.gz.sha256" >> $GITHUB_ENV
 
@@ -73,6 +74,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             ~/.rustup/
+            target/
           key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}-publish-1
 
       - name: Build

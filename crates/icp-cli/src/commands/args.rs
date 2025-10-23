@@ -75,7 +75,7 @@ impl CanisterCommandArgs {
                 // A canister name was specified so we must be in a project
 
                 let agent = ctx
-                    .get_agent_for_env(&identity_selection, &env_name)
+                    .get_agent_for_env(&identity_selection, env_name)
                     .await?;
                 let cid = ctx.get_canister_id_for_env(&cname, env_name).await?;
 

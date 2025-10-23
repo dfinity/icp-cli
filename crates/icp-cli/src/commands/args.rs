@@ -9,9 +9,6 @@ use crate::{commands::Context, options::IdentityOpt};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ArgValidationError {
-    #[error("project does not contain a network named '{name}'")]
-    NetworkNotFound { name: String },
-
     #[error("You can't specify both an environment and a network")]
     EnvironmentAndNetworkSpecified,
 
@@ -94,9 +91,13 @@ impl CanisterCommandArgs {
             (Canister::Principal(principal), Environment::Default(_), Some(network)) => {
                 // Should handle known networks by name
 
-                let agent = ctx
-                    .get_agent_for_network(&identity_selection, &network)
-                    .await?;
+                let agent = match network {
+                    Network::Name(net_name) => {
+                        ctx.get_agent_for_network(&identity_selection, &net_name)
+                            .await?
+                    }
+                    Network::Url(url) => ctx.get_agent_for_url(&identity_selection, &url).await?,
+                };
                 (principal, agent)
             }
         };

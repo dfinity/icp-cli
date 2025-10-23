@@ -7,15 +7,13 @@ use icp::{
     Directories,
     canister::{build::Build, sync::Synchronize},
     identity::IdentitySelection,
+    network::access::NetworkAccess,
 };
 
 use candid::Principal;
 use ic_agent::{Agent, Identity};
 
-use crate::{
-    commands::args::{ArgValidationError, Network},
-    store_id::Key,
-};
+use crate::store_id::Key;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub(crate) mod args;
@@ -123,7 +121,10 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the project cannot be loaded or if the environment is not found.
-    pub(crate) async fn get_environment(&self, env_name: &str) -> ContextResult<icp::Environment> {
+    pub(crate) async fn get_environment(
+        &self,
+        environment_name: &str,
+    ) -> ContextResult<icp::Environment> {
         // Load project
         let p = self
             .project
@@ -134,10 +135,32 @@ impl Context {
         // Load target environment
         let env = p
             .environments
-            .get(env_name)
-            .ok_or(anyhow!("environment not found: {}", env_name))?;
+            .get(environment_name)
+            .ok_or(anyhow!("environment not found: {}", environment_name))?;
 
         Ok(env.clone())
+    }
+
+    /// Gets an Network by name from the currently loaded project.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the project cannot be loaded or if the network is not found.
+    pub(crate) async fn get_network(&self, network_name: &str) -> ContextResult<icp::Network> {
+        // Load project
+        let p = self
+            .project
+            .load()
+            .await
+            .context("failed to load project which is required to get network")?;
+
+        // Load target network
+        let net = p
+            .networks
+            .get(network_name)
+            .ok_or(anyhow!("network not found: {}", network_name))?;
+
+        Ok(net.clone())
     }
 
     /// Gets the canister ID for a given canister name in a specified environment.
@@ -147,15 +170,15 @@ impl Context {
     /// Returns an error if the environment cannot be loaded or if the canister ID cannot be found.
     pub(crate) async fn get_canister_id_for_env(
         &self,
-        cname: &String,
-        env_name: &str,
+        canister_name: &str,
+        environment_name: &str,
     ) -> ContextResult<Principal> {
-        let env = self.get_environment(env_name).await?;
+        let env = self.get_environment(environment_name).await?;
 
-        if !env.canisters.contains_key(cname) {
+        if !env.canisters.contains_key(canister_name) {
             bail!(
                 "canister '{}' not found in environment '{}'",
-                cname,
+                canister_name,
                 env.name
             );
         }
@@ -164,75 +187,59 @@ impl Context {
         let cid = self.ids.lookup(&Key {
             network: env.network.name.to_owned(),
             environment: env.name.to_owned(),
-            canister: cname.to_owned(),
+            canister: canister_name.to_owned(),
         })?;
 
         Ok(cid)
     }
 
+    /// Creates an agent for a given identity and environment.
     pub(crate) async fn get_agent_for_env(
         &self,
         identity: &IdentitySelection,
-        env_name: &str,
+        environment_name: &str,
     ) -> ContextResult<Agent> {
-        // Load identity
         let id = self.get_identity(identity).await?;
-
-        // Load target environment
-        let env = self.get_environment(env_name).await?;
-
-        // Access network
+        let env = self.get_environment(environment_name).await?;
         let access = self.network.access(&env.network).await?;
-
-        // Agent
-        let agent = self.agent.create(id, &access.url).await?;
-
-        if let Some(k) = access.root_key {
-            agent.set_root_key(k);
-        }
-
-        Ok(agent)
+        self.create_agent(id, access).await
     }
 
+    /// Creates an agent for a given identity and network.
     pub(crate) async fn get_agent_for_network(
         &self,
         identity: &IdentitySelection,
-        network: &Network,
-    ) -> Result<Agent, ArgValidationError> {
-        match network {
-            Network::Name(nname) => {
-                let p = self.project.load().await?;
+        network_name: &str,
+    ) -> ContextResult<Agent> {
+        let id = self.get_identity(identity).await?;
+        let network = self.get_network(network_name).await?;
+        let access = self.network.access(&network).await?;
+        self.create_agent(id, access).await
+    }
 
-                let network = p
-                    .networks
-                    .get(nname)
-                    .ok_or(ArgValidationError::NetworkNotFound {
-                        name: nname.to_string(),
-                    })?;
-
-                // Load identity
-                let id = self.get_identity(identity).await?;
-
-                // Access network
-                let access = self.network.access(network).await?;
-
-                // Agent
-                let agent = self.agent.create(id, &access.url).await?;
-
-                if let Some(k) = access.root_key {
-                    agent.set_root_key(k);
-                }
-
-                Ok(agent)
-            }
-            Network::Url(url) => {
-                let id = self.get_identity(identity).await?;
-
-                // Agent
-                let agent = self.agent.create(id, url).await?;
-
-                Ok(agent)
-            }
+    /// Private helper to create an agent given identity and network access.
+    ///
+    /// Used by [`Self::get_agent_for_env`] and [`Self::get_agent_for_network`].
+    async fn create_agent(
+        &self,
+        id: Arc<dyn Identity>,
+        network_access: NetworkAccess,
+    ) -> ContextResult<Agent> {
+        let agent = self.agent.create(id, &network_access.url).await?;
+        if let Some(k) = network_access.root_key {
+            agent.set_root_key(k);
         }
+        Ok(agent)
+    }
+
+    /// Creates an agent for a given identity and url.
+    pub(crate) async fn get_agent_for_url(
+        &self,
+        identity: &IdentitySelection,
+        url: &str, // TODO: change to Url
+    ) -> ContextResult<Agent> {
+        let id = self.get_identity(identity).await?;
+        let agent = self.agent.create(id, url).await?;
+        Ok(agent)
     }
 }

@@ -11,14 +11,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@icp-sdk/canister-env": "*",
-    "@icp-sdk/core": "^4.0.5",
+    "@icp-sdk/core": "^4.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
-    "@icp-sdk/bindgen": "^0.1.0",
+    "@icp-sdk/bindgen": "^0.2.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",

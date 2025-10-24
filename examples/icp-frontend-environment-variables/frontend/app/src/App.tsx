@@ -1,18 +1,25 @@
 import { useState } from "react";
 import { createActor } from "./backend/api/hello_world";
-import { getCanisterEnv } from "@icp-sdk/canister-env";
+import { getCanisterEnv } from "@icp-sdk/core/agent/canister-env";
 import "./App.css";
 
+// Here we define the environment variables that the asset canister serves.
+// By default, the CLI sets all the canister IDs in the environment variables of the asset canister
+// using the `PUBLIC_CANISTER_ID:<canister-name>` format.
+// For this reason, we can expect the `PUBLIC_CANISTER_ID:backend` environment variable to be set.
 interface CanisterEnv {
   readonly "PUBLIC_CANISTER_ID:backend": string;
 }
 
+// We only want to access the environment variables when serving the frontend from the asset canister.
+// In development mode, we use a fixed canister ID for the backend canister.
 const canisterEnv = getCanisterEnv<CanisterEnv>();
 const canisterId = canisterEnv["PUBLIC_CANISTER_ID:backend"];
 
+// We want to fetch the root key from the replica when developing locally.
 const helloWorldActor = createActor(canisterId, {
   agentOptions: {
-    rootKey: !import.meta.env.DEV ? canisterEnv.IC_ROOT_KEY : undefined,
+    rootKey: !import.meta.env.DEV ? canisterEnv!.IC_ROOT_KEY : undefined,
     shouldFetchRootKey: import.meta.env.DEV,
   },
 });
@@ -26,9 +33,7 @@ function App() {
       "name"
     ) as HTMLInputElement;
 
-    helloWorldActor.greet(nameInput.value).then((greeting) => {
-      setGreeting(greeting);
-    });
+    helloWorldActor.greet(nameInput.value).then(setGreeting);
     return false;
   }
 

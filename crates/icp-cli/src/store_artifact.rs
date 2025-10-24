@@ -61,30 +61,31 @@ impl ArtifactStore {
 
 impl ArtifactStore {
     pub(crate) async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
-        // Lock Artifact Store
-        let lock = self.lock.write_ref().await?;
-
-        // Store artifact
-        write(&lock.artifact_by_name(name), wasm).context(SaveWriteFileSnafu)?;
-
-        Ok(())
+        self.lock
+            .with_write(async |store| {
+                // Save artifact
+                write(&store.artifact_by_name(name), wasm).context(SaveWriteFileSnafu)?;
+                Ok(())
+            })
+            .await?
     }
 
     pub(crate) async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
-        // Lock Artifact Store
-        let lock = self.lock.read_ref().await?;
+        self.lock
+            .with_read(async |store| {
+                let artifact = store.artifact_by_name(name);
+                // Not Found
+                if !artifact.exists() {
+                    return Err(LookupError::LookupArtifactNotFound {
+                        name: name.to_owned(),
+                    });
+                }
 
-        let artifact = lock.artifact_by_name(name);
-        // Not Found
-        if !artifact.exists() {
-            return Err(LookupError::LookupArtifactNotFound {
-                name: name.to_owned(),
-            });
-        }
+                // Load artifact
+                let wasm = read(&artifact).context(LookupReadFileSnafu)?;
 
-        // Load artifact
-        let wasm = read(&artifact).context(LookupReadFileSnafu)?;
-
-        Ok(wasm)
+                Ok(wasm)
+            })
+            .await?
     }
 }

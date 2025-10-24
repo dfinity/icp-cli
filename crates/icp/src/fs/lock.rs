@@ -1,10 +1,7 @@
 use crate::prelude::*;
 use snafu::{ResultExt, Snafu};
 use std::{fs::File, io, ops::Deref};
-use tokio::{
-    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
-    task::spawn_blocking,
-};
+use tokio::{sync::RwLock, task::spawn_blocking};
 
 pub struct DirectoryStructureLock<T: PathsAccess> {
     paths_access: T,
@@ -58,8 +55,7 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         .await
         .unwrap()
     }
-
-    pub async fn read_ref(&self) -> Result<DirectoryStructureGuardReadRef<'_, T>, LockError> {
+    pub async fn with_read<R>(&self, f: impl AsyncFnOnce(&T) -> R) -> Result<R, LockError> {
         let guard = self.lock_file.read().await;
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
             path: &self.lock_path,
@@ -70,14 +66,14 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
             .context(LockFailedSnafu {
                 lock_path: &self.lock_path,
             })?;
-
-        Ok(DirectoryStructureGuardReadRef {
-            paths_access: &self.paths_access,
-            guard,
-        })
+        let ret = f(&self.paths_access).await;
+        guard.unlock().context(LockFailedSnafu {
+            lock_path: &self.lock_path,
+        })?;
+        Ok(ret)
     }
 
-    pub async fn write_ref(&self) -> Result<DirectoryStructureGuardWriteRef<'_, T>, LockError> {
+    pub async fn with_write<R>(&self, f: impl AsyncFnOnce(&T) -> R) -> Result<R, LockError> {
         let guard = self.lock_file.write().await;
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
             path: &self.lock_path,
@@ -88,11 +84,11 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
             .context(LockFailedSnafu {
                 lock_path: &self.lock_path,
             })?;
-
-        Ok(DirectoryStructureGuardWriteRef {
-            paths_access: &self.paths_access,
-            guard,
-        })
+        let ret = f(&self.paths_access).await;
+        guard.unlock().context(LockFailedSnafu {
+            lock_path: &self.lock_path,
+        })?;
+        Ok(ret)
     }
 }
 
@@ -109,44 +105,6 @@ pub enum LockError {
     },
     #[snafu(display("failed to clone lock file handle '{path}'"))]
     HandleCloneFailed { source: io::Error, path: PathBuf },
-}
-
-pub struct DirectoryStructureGuardReadRef<'a, T> {
-    paths_access: &'a T,
-    guard: RwLockReadGuard<'a, File>,
-}
-
-impl<'a, T> Deref for DirectoryStructureGuardReadRef<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.paths_access
-    }
-}
-
-impl<'a, T> Drop for DirectoryStructureGuardReadRef<'a, T> {
-    fn drop(&mut self) {
-        _ = self.guard.unlock();
-    }
-}
-
-pub struct DirectoryStructureGuardWriteRef<'a, T> {
-    paths_access: &'a T,
-    guard: RwLockWriteGuard<'a, File>,
-}
-
-impl<'a, T> Deref for DirectoryStructureGuardWriteRef<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.paths_access
-    }
-}
-
-impl<'a, T> Drop for DirectoryStructureGuardWriteRef<'a, T> {
-    fn drop(&mut self) {
-        _ = self.guard.unlock();
-    }
 }
 
 pub struct DirectoryStructureGuardOwned<T> {

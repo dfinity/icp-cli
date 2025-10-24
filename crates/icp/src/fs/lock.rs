@@ -45,14 +45,14 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
     }
 
     /// Converts the lock structure into an owned read-lock.
-    pub async fn into_read(self) -> Result<DirectoryStructureGuardOwned<T>, LockError> {
+    pub async fn into_read(self) -> Result<DirectoryStructureGuardOwned<LRead<T>>, LockError> {
         spawn_blocking(move || {
             let lock_file = self.lock_file.into_inner();
             lock_file.lock_shared().context(LockFailedSnafu {
                 lock_path: self.lock_path,
             })?;
             Ok(DirectoryStructureGuardOwned {
-                paths_access: self.paths_access,
+                paths_access: LRead(self.paths_access),
                 guard: lock_file,
             })
         })
@@ -61,14 +61,14 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
     }
 
     /// Converts the lock structure into an owned write-lock.
-    pub async fn into_write(self) -> Result<DirectoryStructureGuardOwned<T>, LockError> {
+    pub async fn into_write(self) -> Result<DirectoryStructureGuardOwned<LWrite<T>>, LockError> {
         spawn_blocking(move || {
             let lock_file = self.lock_file.into_inner();
             lock_file.lock().context(LockFailedSnafu {
                 lock_path: self.lock_path,
             })?;
             Ok(DirectoryStructureGuardOwned {
-                paths_access: self.paths_access,
+                paths_access: LWrite(self.paths_access),
                 guard: lock_file,
             })
         })
@@ -77,7 +77,7 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
     }
 
     /// Accesses the directory structure under a read lock.
-    pub async fn with_read<R>(&self, f: impl AsyncFnOnce(&T) -> R) -> Result<R, LockError> {
+    pub async fn with_read<R>(&self, f: impl AsyncFnOnce(LRead<&T>) -> R) -> Result<R, LockError> {
         let guard = self.lock_file.read().await;
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
             path: &self.lock_path,
@@ -88,7 +88,7 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
             .context(LockFailedSnafu {
                 lock_path: &self.lock_path,
             })?;
-        let ret = f(&self.paths_access).await;
+        let ret = f(LRead(&self.paths_access)).await;
         guard.unlock().context(LockFailedSnafu {
             lock_path: &self.lock_path,
         })?;
@@ -96,7 +96,10 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
     }
 
     /// Accesses the directory structure under a write lock.
-    pub async fn with_write<R>(&self, f: impl AsyncFnOnce(&T) -> R) -> Result<R, LockError> {
+    pub async fn with_write<R>(
+        &self,
+        f: impl AsyncFnOnce(LWrite<&T>) -> R,
+    ) -> Result<R, LockError> {
         let guard = self.lock_file.write().await;
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
             path: &self.lock_path,
@@ -107,7 +110,7 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
             .context(LockFailedSnafu {
                 lock_path: &self.lock_path,
             })?;
-        let ret = f(&self.paths_access).await;
+        let ret = f(LWrite(&self.paths_access)).await;
         guard.unlock().context(LockFailedSnafu {
             lock_path: &self.lock_path,
         })?;
@@ -147,5 +150,42 @@ impl<T> Deref for DirectoryStructureGuardOwned<T> {
 impl<T> Drop for DirectoryStructureGuardOwned<T> {
     fn drop(&mut self) {
         _ = self.guard.unlock();
+    }
+}
+
+pub struct LRead<T>(T);
+pub struct LWrite<T>(T);
+
+impl<T> Deref for LRead<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> Deref for LWrite<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a, T> LWrite<&'a T> {
+    pub fn read(&self) -> LRead<&'a T> {
+        LRead(self.0)
+    }
+}
+
+impl<T> LWrite<T> {
+    pub fn as_ref(&self) -> LWrite<&T> {
+        LWrite(&self.0)
+    }
+}
+
+impl<T> LRead<T> {
+    pub fn as_ref(&self) -> LRead<&T> {
+        LRead(&self.0)
     }
 }

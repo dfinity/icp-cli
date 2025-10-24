@@ -1,10 +1,7 @@
 use clap::Args;
 use icp::identity;
 
-use crate::{
-    commands::{Context, Mode},
-    options::IdentityOpt,
-};
+use crate::{commands::Context, options::IdentityOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct PrincipalArgs {
@@ -22,17 +19,13 @@ pub(crate) enum PrincipalError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), PrincipalError> {
-    match &ctx.mode {
-        Mode::Global | Mode::Project(_) => {
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
-            let principal = id
-                .sender()
-                .map_err(|message| PrincipalError::Sender { message })?;
+    let principal = id
+        .sender()
+        .map_err(|message| PrincipalError::Sender { message })?;
 
-            println!("{principal}");
-        }
-    }
+    println!("{principal}");
 
     Ok(())
 }

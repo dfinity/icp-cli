@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 /// List networks in the project
 #[derive(Args, Debug)]
@@ -16,20 +16,12 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    // Load project
+    let p = ctx.project.load().await?;
 
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
-
-            // List networks
-            for (name, cfg) in &p.networks {
-                eprintln!("{name} => {cfg:?}");
-            }
-        }
+    // List networks
+    for (name, cfg) in &p.networks {
+        eprintln!("{name} => {cfg:?}");
     }
 
     Ok(())

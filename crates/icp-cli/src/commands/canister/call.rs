@@ -3,58 +3,26 @@ use std::io::{self, Write};
 use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
-use icp::{agent, identity, network};
 
-use crate::{
-    commands::{Context, Mode},
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError},
+use crate::commands::{
+    Context,
+    args::{self, ArgValidationError},
 };
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
-    /// Name of canister to call to
-    pub(crate) name: String,
+    #[command(flatten)]
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// Name of canister method to call into
     pub(crate) method: String,
 
     /// String representation of canister call arguments
     pub(crate) args: String,
-
-    #[command(flatten)]
-    identity: IdentityOpt,
-
-    #[command(flatten)]
-    environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[error(transparent)]
-    Lookup(#[from] LookupError),
-
     #[error("failed to parse candid arguments")]
     DecodeArgsError(#[from] candid_parser::Error),
 
@@ -66,66 +34,25 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Call(#[from] ic_agent::AgentError),
+
+    #[error(transparent)]
+    Shared(#[from] ArgValidationError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    let (cid, agent) = args.cmd_args.get_cid_and_agent(ctx).await?;
 
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    // Parse candid arguments
+    let cargs = candid_parser::parse_idl_args(&args.args)?;
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let res = agent
+        .update(&cid, &args.method)
+        .with_arg(cargs.to_bytes()?)
+        .await?;
 
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+    let ret = IDLArgs::from_bytes(&res[..])?;
 
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
-            })?;
-
-            // Parse candid arguments
-            let cargs = candid_parser::parse_idl_args(&args.args)?;
-
-            let res = agent
-                .update(&cid, &args.method)
-                .with_arg(cargs.to_bytes()?)
-                .await?;
-
-            let ret = IDLArgs::from_bytes(&res[..])?;
-
-            print_candid_for_term(&mut Term::buffered_stdout(), &ret)?;
-        }
-    }
+    print_candid_for_term(&mut Term::buffered_stdout(), &ret)?;
 
     Ok(())
 }

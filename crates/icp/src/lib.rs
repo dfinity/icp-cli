@@ -57,6 +57,7 @@ pub struct Environment {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
+    pub dir: PathBuf,
     pub canisters: HashMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,

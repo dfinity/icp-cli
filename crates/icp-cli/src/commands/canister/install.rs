@@ -8,7 +8,7 @@ use icp::{agent, identity, network};
 use tracing::debug;
 
 use crate::{
-    commands::{Context, Mode},
+    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
     store_artifact::LookupError as LookupArtifactError,
@@ -71,156 +71,148 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
+    // Load the project
+    let p = ctx.project.load().await?;
+
+    // Load identity
+    let id = ctx.identity.load(args.identity.clone().into()).await?;
+
+    // Load target environment
+    let env =
+        p.environments
+            .get(args.environment.name())
+            .ok_or(CommandError::EnvironmentNotFound {
+                name: args.environment.name().to_owned(),
+            })?;
+
+    // Access network
+    let access = ctx.network.access(&env.network).await?;
+
+    // Agent
+    let agent = ctx.agent.create(id, &access.url).await?;
+
+    if let Some(k) = access.root_key {
+        agent.set_root_key(k);
+    }
+
+    let cnames = match args.names.is_empty() {
+        // No canisters specified
+        true => env.canisters.keys().cloned().collect(),
+
+        // Individual canisters specified
+        false => args.names.clone(),
+    };
+
+    for name in &cnames {
+        if !p.canisters.contains_key(name) {
+            return Err(CommandError::CanisterNotFound {
+                name: name.to_owned(),
+            });
         }
 
-        Mode::Project(_) => {
-            // Load the project
-            let p = ctx.project.load().await?;
+        if !env.canisters.contains_key(name) {
+            return Err(CommandError::EnvironmentCanister {
+                environment: env.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+    }
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let cs = env
+        .canisters
+        .iter()
+        .filter(|(k, _)| cnames.contains(k))
+        .collect::<HashMap<_, _>>();
 
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+    // Ensure at least one canister has been selected
+    if cs.is_empty() {
+        return Err(CommandError::NoCanisters);
+    }
 
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
+    // Prepare a futures set for concurrent operations
+    let mut futs = FuturesOrdered::new();
 
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
-            let cnames = match args.names.is_empty() {
-                // No canisters specified
-                true => env.canisters.keys().cloned().collect(),
+    for (_, (_, c)) in cs {
+        // Create progress bar with standard configuration
+        let pb = progress_manager.create_progress_bar(&c.name);
 
-                // Individual canisters specified
-                false => args.names.clone(),
-            };
+        // Create an async closure that handles the operation for this specific canister
+        let install_fn = {
+            let cmd = args.clone();
+            let mgmt = mgmt.clone();
+            let pb = pb.clone();
 
-            for name in &cnames {
-                if !p.canisters.contains_key(name) {
-                    return Err(CommandError::CanisterNotFound {
-                        name: name.to_owned(),
-                    });
-                }
+            async move {
+                // Indicate to user that the canister is being installed
+                pb.set_message("Installing...");
 
-                if !env.canisters.contains_key(name) {
-                    return Err(CommandError::EnvironmentCanister {
-                        environment: env.name.to_owned(),
-                        canister: name.to_owned(),
-                    });
-                }
-            }
+                // Lookup the canister id
+                let cid = ctx.ids.lookup(&Key {
+                    network: env.network.name.to_owned(),
+                    environment: env.name.to_owned(),
+                    canister: c.name.to_owned(),
+                })?;
 
-            let cs = env
-                .canisters
-                .iter()
-                .filter(|(k, _)| cnames.contains(k))
-                .collect::<HashMap<_, _>>();
+                // Lookup the canister build artifact
+                let wasm = ctx.artifacts.lookup(&c.name)?;
 
-            // Ensure at least one canister has been selected
-            if cs.is_empty() {
-                return Err(CommandError::NoCanisters);
-            }
+                // Retrieve canister status
+                let (status,) = mgmt.canister_status(&cid).await?;
 
-            // Management Interface
-            let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+                let install_mode = match cmd.mode.as_ref() {
+                    // Auto
+                    "auto" => match status.module_hash {
+                        // Canister has had code installed to it.
+                        Some(_) => CanisterInstallMode::Upgrade(None),
 
-            // Prepare a futures set for concurrent operations
-            let mut futs = FuturesOrdered::new();
+                        // Canister has not had code installed to it.
+                        None => CanisterInstallMode::Install,
+                    },
 
-            let progress_manager =
-                ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+                    // Install
+                    "install" => CanisterInstallMode::Install,
 
-            for (_, (_, c)) in cs {
-                // Create progress bar with standard configuration
-                let pb = progress_manager.create_progress_bar(&c.name);
+                    // Reinstall
+                    "reinstall" => CanisterInstallMode::Reinstall,
 
-                // Create an async closure that handles the operation for this specific canister
-                let install_fn = {
-                    let cmd = args.clone();
-                    let mgmt = mgmt.clone();
-                    let pb = pb.clone();
+                    // Upgrade
+                    "upgrade" => CanisterInstallMode::Upgrade(None),
 
-                    async move {
-                        // Indicate to user that the canister is being installed
-                        pb.set_message("Installing...");
-
-                        // Lookup the canister id
-                        let cid = ctx.ids.lookup(&Key {
-                            network: env.network.name.to_owned(),
-                            environment: env.name.to_owned(),
-                            canister: c.name.to_owned(),
-                        })?;
-
-                        // Lookup the canister build artifact
-                        let wasm = ctx.artifacts.lookup(&c.name)?;
-
-                        // Retrieve canister status
-                        let (status,) = mgmt.canister_status(&cid).await?;
-
-                        let install_mode = match cmd.mode.as_ref() {
-                            // Auto
-                            "auto" => match status.module_hash {
-                                // Canister has had code installed to it.
-                                Some(_) => CanisterInstallMode::Upgrade(None),
-
-                                // Canister has not had code installed to it.
-                                None => CanisterInstallMode::Install,
-                            },
-
-                            // Install
-                            "install" => CanisterInstallMode::Install,
-
-                            // Reinstall
-                            "reinstall" => CanisterInstallMode::Reinstall,
-
-                            // Upgrade
-                            "upgrade" => CanisterInstallMode::Upgrade(None),
-
-                            // invalid
-                            _ => panic!("invalid install mode"),
-                        };
-
-                        // Install code to canister
-                        debug!("Install new canister code");
-                        mgmt.install_code(&cid, &wasm)
-                            .with_mode(install_mode)
-                            .await?;
-
-                        Ok::<_, CommandError>(())
-                    }
+                    // invalid
+                    _ => panic!("invalid install mode"),
                 };
 
-                futs.push_back(async move {
-                    // Execute the install function with progress tracking
-                    ProgressManager::execute_with_progress(
-                        &pb,
-                        install_fn,
-                        || "Installed successfully".to_string(),
-                        |err| format!("Failed to install canister: {err}"),
-                    )
-                    .await
-                });
-            }
+                // Install code to canister
+                debug!("Install new canister code");
+                mgmt.install_code(&cid, &wasm)
+                    .with_mode(install_mode)
+                    .await?;
 
-            // Consume the set of futures and abort if an error occurs
-            while let Some(res) = futs.next().await {
-                // TODO(or.ricon): Handle canister creation failures
-                res?;
+                Ok::<_, CommandError>(())
             }
-        }
+        };
+
+        futs.push_back(async move {
+            // Execute the install function with progress tracking
+            ProgressManager::execute_with_progress(
+                &pb,
+                install_fn,
+                || "Installed successfully".to_string(),
+                |err| format!("Failed to install canister: {err}"),
+            )
+            .await
+        });
+    }
+
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        // TODO(or.ricon): Handle canister creation failures
+        res?;
     }
 
     Ok(())

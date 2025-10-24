@@ -50,6 +50,7 @@ pub fn ensure_key_pem_path(dir: &Path, name: &str) -> Result<PathBuf, crate::fs:
     Ok(dir.join(format!("keys/{name}.pem")))
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum IdentitySelection {
     /// Current default
     Default,

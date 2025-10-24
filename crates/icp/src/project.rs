@@ -292,6 +292,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         }
 
         Ok(Project {
+            dir: pdir,
             canisters,
             networks,
             environments,

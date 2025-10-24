@@ -4,7 +4,7 @@ use clap::Parser;
 use icp::{fs::remove_file, manifest, network::NetworkDirectory};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 const TIMEOUT_SECS: u64 = 30;
 
@@ -38,52 +38,45 @@ pub enum CommandError {
 }
 
 pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    // Load project
+    let p = ctx.project.load().await?;
 
-        Mode::Project(pdir) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    // Check network exists
+    p.networks.get(&cmd.name).ok_or(CommandError::Network {
+        name: cmd.name.clone(),
+    })?;
 
-            // Check network exists
-            p.networks.get(&cmd.name).ok_or(CommandError::Network {
-                name: cmd.name.clone(),
-            })?;
+    // Network root
+    let pdir = &p.dir;
+    let nroot = pdir.join(".icp").join("networks").join(&cmd.name);
 
-            // Network root
-            let nroot = pdir.join(".icp").join("networks").join(&cmd.name);
+    // Network directory
+    let nd = NetworkDirectory::new(
+        &cmd.name,                   // name
+        &nroot,                      // network_root
+        &ctx.dirs.port_descriptor(), // port_descriptor_dir
+    );
 
-            // Network directory
-            let nd = NetworkDirectory::new(
-                &cmd.name,                   // name
-                &nroot,                      // network_root
-                &ctx.dirs.port_descriptor(), // port_descriptor_dir
-            );
+    // Load PID from file
+    let pid = nd
+        .load_background_network_runner_pid()?
+        .ok_or(CommandError::NotRunning {
+            name: cmd.name.clone(),
+        })?;
 
-            // Load PID from file
-            let pid = nd
-                .load_background_network_runner_pid()?
-                .ok_or(CommandError::NotRunning {
-                    name: cmd.name.clone(),
-                })?;
+    let _ = ctx
+        .term
+        .write_line(&format!("Stopping background network (PID: {})...", pid));
 
-            let _ = ctx
-                .term
-                .write_line(&format!("Stopping background network (PID: {})...", pid));
+    send_sigint(pid);
+    wait_for_process_exit(pid)?;
 
-            send_sigint(pid);
-            wait_for_process_exit(pid)?;
+    let pid_file = nd.structure.background_network_runner_pid_file();
+    let _ = remove_file(&pid_file); // Cleanup is nice, but optional
 
-            let pid_file = nd.structure.background_network_runner_pid_file();
-            let _ = remove_file(&pid_file); // Cleanup is nice, but optional
+    let _ = ctx.term.write_line("Network stopped successfully");
 
-            let _ = ctx.term.write_line("Network stopped successfully");
-
-            Ok(())
-        }
-    }
+    Ok(())
 }
 
 fn send_sigint(pid: Pid) {

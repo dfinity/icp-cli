@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 #[derive(Args, Debug)]
 pub(crate) struct ShowArgs;
@@ -15,19 +15,11 @@ pub(crate) enum CommandError {
 /// Loads the project's configuration and output the effective yaml config
 /// after resolving recipes
 pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    // Load the project manifest, which defines the canisters to be built.
+    let p = ctx.project.load().await.context("failed to load project")?;
 
-        Mode::Project(_) => {
-            // Load the project manifest, which defines the canisters to be built.
-            let p = ctx.project.load().await.context("failed to load project")?;
-
-            let yaml = serde_yaml::to_string(&p).expect("Serializing to yaml failed");
-            println!("{yaml}");
-        }
-    }
+    let yaml = serde_yaml::to_string(&p).expect("Serializing to yaml failed");
+    println!("{yaml}");
 
     Ok(())
 }

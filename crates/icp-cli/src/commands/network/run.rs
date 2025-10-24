@@ -19,7 +19,7 @@ use icp::{
 use sysinfo::Pid;
 use tracing::debug;
 
-use crate::commands::{Context, Mode};
+use crate::commands::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]
@@ -65,68 +65,61 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
+    // Load project
+    let p = ctx.project.load().await?;
 
-        Mode::Project(pdir) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    // Obtain network configuration
+    let network = p.networks.get(&args.name).ok_or(CommandError::Network {
+        name: args.name.to_owned(),
+    })?;
 
-            // Obtain network configuration
-            let network = p.networks.get(&args.name).ok_or(CommandError::Network {
+    let cfg = match &network.configuration {
+        // Locally-managed network
+        Configuration::Managed(cfg) => cfg,
+
+        // Non-managed networks cannot be started
+        Configuration::Connected(_) => {
+            return Err(CommandError::Unmanaged {
                 name: args.name.to_owned(),
-            })?;
-
-            let cfg = match &network.configuration {
-                // Locally-managed network
-                Configuration::Managed(cfg) => cfg,
-
-                // Non-managed networks cannot be started
-                Configuration::Connected(_) => {
-                    return Err(CommandError::Unmanaged {
-                        name: args.name.to_owned(),
-                    });
-                }
-            };
-
-            // Network root
-            let ndir = pdir.join(".icp").join("networks").join(&network.name);
-
-            // Network directory
-            let nd = NetworkDirectory::new(
-                &network.name,               // name
-                &ndir,                       // network_root
-                &ctx.dirs.port_descriptor(), // port_descriptor_dir
-            );
-            nd.ensure_exists()
-                .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
-
-            // Identities
-            let ids = load_identity_list(&ctx.dirs.identity())?;
-
-            // Determine ICP accounts to seed
-            let seed_accounts = ids.identities.values().map(|id| id.principal());
-
-            debug!("Project root: {pdir}");
-            debug!("Network root: {ndir}");
-
-            if args.background {
-                let mut child = run_in_background()?;
-                nd.save_background_network_runner_pid(Pid::from(child.id() as usize))?;
-                relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
-            } else {
-                run_network(
-                    cfg,           // config
-                    nd,            // nd
-                    pdir,          // project_root
-                    seed_accounts, // seed_accounts
-                )
-                .await?;
-            }
+            });
         }
     };
+
+    // Network root
+    let pdir = &p.dir;
+    let ndir = pdir.join(".icp").join("networks").join(&network.name);
+
+    // Network directory
+    let nd = NetworkDirectory::new(
+        &network.name,               // name
+        &ndir,                       // network_root
+        &ctx.dirs.port_descriptor(), // port_descriptor_dir
+    );
+    nd.ensure_exists()
+        .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
+
+    // Identities
+    let ids = load_identity_list(&ctx.dirs.identity())?;
+
+    // Determine ICP accounts to seed
+    let seed_accounts = ids.identities.values().map(|id| id.principal());
+
+    debug!("Project root: {pdir}");
+    debug!("Network root: {ndir}");
+
+    if args.background {
+        let mut child = run_in_background()?;
+        nd.save_background_network_runner_pid(Pid::from(child.id() as usize))?;
+        relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
+    } else {
+        run_network(
+            cfg,           // config
+            nd,            // nd
+            pdir,          // project_root
+            seed_accounts, // seed_accounts
+        )
+        .await?;
+    }
     Ok(())
 }
 

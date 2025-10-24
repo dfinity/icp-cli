@@ -23,15 +23,6 @@ impl From<IdentityOpt> for IdentitySelection {
     }
 }
 
-impl IdentityOpt {
-    #[cfg(test)]
-    pub(crate) fn with_identity(identity: impl Into<String>) -> Self {
-        Self {
-            identity: Some(identity.into()),
-        }
-    }
-}
-
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("environment-select").multiple(false)))]
 pub(crate) struct EnvironmentOpt {

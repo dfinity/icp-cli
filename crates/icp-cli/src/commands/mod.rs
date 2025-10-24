@@ -242,6 +242,7 @@ pub(crate) mod test_utils {
         Directories,
         canister::{build::Build, sync::Synchronize},
         network::Access,
+        prelude::*,
     };
 
     use super::Context;
@@ -254,10 +255,8 @@ pub(crate) mod test_utils {
     ///
     /// Tests should not rely on actual filesystem I/O.
     pub(crate) fn create_test_context(project: icp::Project) -> Context {
-        let fake_dir =
-            icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/test-dir")).unwrap();
-        let fake_artifacts =
-            icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/artifacts")).unwrap();
+        let fake_dir = PathBuf::from("/fake/test-dir");
+        let fake_artifacts = PathBuf::from("/fake/artifacts");
 
         Context {
             term: Term::stdout(),
@@ -311,48 +310,19 @@ pub(crate) mod test_utils {
             self
         }
 
-        pub fn with_identity(mut self, loader: Arc<dyn icp::identity::Load>) -> Self {
-            self.identity = loader;
-            self
-        }
-
-        pub fn with_network(mut self, accessor: Arc<dyn Access>) -> Self {
-            self.network = accessor;
-            self
-        }
-
-        pub fn with_agent(mut self, creator: Arc<dyn icp::agent::Create>) -> Self {
-            self.agent = creator;
-            self
-        }
-
-        pub fn with_builder(mut self, builder: Arc<dyn Build>) -> Self {
-            self.builder = builder;
-            self
-        }
-
-        pub fn with_syncer(mut self, syncer: Arc<dyn Synchronize>) -> Self {
-            self.syncer = syncer;
-            self
-        }
-
         pub fn with_ids(mut self, ids: Arc<dyn IdStore>) -> Self {
             self.ids = ids;
             self
         }
 
-        pub fn with_debug(mut self, debug: bool) -> Self {
-            self.debug = debug;
+        pub fn with_network(mut self, network: Arc<dyn Access>) -> Self {
+            self.network = network;
             self
         }
 
         pub fn build(self) -> Context {
-            let fake_dir =
-                icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/test-dir"))
-                    .unwrap();
-            let fake_artifacts =
-                icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/artifacts"))
-                    .unwrap();
+            let fake_dir = PathBuf::from("/fake/test-dir");
+            let fake_artifacts = PathBuf::from("/fake/artifacts");
 
             Context {
                 term: Term::stdout(),

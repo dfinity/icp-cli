@@ -242,7 +242,7 @@ pub mod test {
         networks.insert("local".to_string(), local_network);
 
         Project {
-            dir: PathBuf::try_from(std::path::PathBuf::from("/tmp/test-project")).unwrap(),
+            dir: PathBuf::from("/tmp/test-project"),
             canisters: HashMap::new(),
             networks,
             environments,
@@ -274,7 +274,7 @@ pub mod test {
     /// - Canister presence/absence in different environments
     /// - Network resolution for different environments
     pub fn create_complex_test_project() -> Project {
-        let project_dir = PathBuf::try_from(std::path::PathBuf::from("/tmp/test-project")).unwrap();
+        let project_dir = PathBuf::from("/tmp/test-project");
 
         // Define networks
         let local_network = Network {

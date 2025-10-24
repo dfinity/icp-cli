@@ -23,7 +23,7 @@ use crate::{
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError, RegisterError},
+    store_id::{LookupError, RegisterError},
 };
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -92,15 +92,6 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
 
     #[error("no canisters available to create")]
     NoCanisters,

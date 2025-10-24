@@ -16,7 +16,7 @@ use pocket_ic::{common::rest::InstanceConfig, nonblocking::PocketIc};
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork};
-pub struct TestContext {
+pub(crate) struct TestContext {
     home_dir: TempDir,
     bin_dir: PathBuf,
     asset_dir: PathBuf,
@@ -25,7 +25,7 @@ pub struct TestContext {
 }
 
 impl TestContext {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         // Home
         let home_dir = tempdir().expect("failed to create temp home dir");
 
@@ -51,11 +51,11 @@ impl TestContext {
         }
     }
 
-    pub fn home_path(&self) -> &Path {
+    pub(crate) fn home_path(&self) -> &Path {
         self.home_dir.path()
     }
 
-    pub fn icp(&self) -> Command {
+    pub(crate) fn icp(&self) -> Command {
         let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
 
         // Isolate the command
@@ -75,17 +75,17 @@ impl TestContext {
         new_path
     }
 
-    pub fn pkg_dir(&self) -> PathBuf {
+    pub(crate) fn pkg_dir(&self) -> PathBuf {
         env!("CARGO_MANIFEST_DIR").into()
     }
 
-    pub fn make_asset(&self, name: &str) -> PathBuf {
+    pub(crate) fn make_asset(&self, name: &str) -> PathBuf {
         let target = self.asset_dir.join(name);
         fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
             .expect("failed to copy asset");
         target
     }
-    pub fn create_project_dir(&self, name: &str) -> PathBuf {
+    pub(crate) fn create_project_dir(&self, name: &str) -> PathBuf {
         let project_dir = self.home_path().join(name);
         std::fs::create_dir_all(&project_dir).expect("Failed to create icp project directory");
         std::fs::write(project_dir.join("icp.yaml"), "").expect("Failed to write project file");
@@ -94,7 +94,7 @@ impl TestContext {
 
     /// Calling this method more than once will panic.
     /// Calling this method after calling [TestContext::start_network_with_config] will panic.
-    pub fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
+    pub(crate) fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir)
@@ -124,7 +124,7 @@ impl TestContext {
         child_guard
     }
 
-    pub fn state_dir(&self, project_dir: &Path) -> PathBuf {
+    pub(crate) fn state_dir(&self, project_dir: &Path) -> PathBuf {
         project_dir
             .join(".icp")
             .join("networks")
@@ -137,7 +137,7 @@ impl TestContext {
     /// This bypasses the CLI and directly spawns PocketIC with the specified configuration.
     /// Calling this method more than once will panic.
     /// Calling this method after calling [TestContext::start_network_in] will panic.
-    pub async fn start_network_with_config(
+    pub(crate) async fn start_network_with_config(
         &self,
         project_dir: &Path,
         configuration: InstanceConfig,
@@ -230,7 +230,7 @@ impl TestContext {
         ChildGuard { child }
     }
 
-    pub fn ping_until_healthy(&self, project_dir: &Path, name: &str) {
+    pub(crate) fn ping_until_healthy(&self, project_dir: &Path, name: &str) {
         self.wait_for_network_descriptor(project_dir, name);
         self.icp()
             .current_dir(project_dir)
@@ -240,11 +240,11 @@ impl TestContext {
     }
 
     // wait up for descriptor path to contain valid json
-    pub fn wait_for_local_network_descriptor(&self, project_dir: &Path) -> TestNetwork {
+    pub(crate) fn wait_for_local_network_descriptor(&self, project_dir: &Path) -> TestNetwork {
         self.wait_for_network_descriptor(project_dir, "local")
     }
 
-    pub fn wait_for_network_descriptor(
+    pub(crate) fn wait_for_network_descriptor(
         &self,
         project_dir: &Path,
         network_name: &str,
@@ -322,18 +322,23 @@ impl TestContext {
             .join("descriptor.json")
     }
 
-    pub fn read_network_descriptor(&self, project_dir: &Path, network: &str) -> Vec<u8> {
+    pub(crate) fn read_network_descriptor(&self, project_dir: &Path, network: &str) -> Vec<u8> {
         std::fs::read(self.network_descriptor_path(project_dir, network))
             .expect("Failed to read network descriptor file")
     }
 
-    pub fn write_network_descriptor(&self, project_dir: &Path, network: &str, contents: &[u8]) {
+    pub(crate) fn write_network_descriptor(
+        &self,
+        project_dir: &Path,
+        network: &str,
+        contents: &[u8],
+    ) {
         let descriptor_path = self.network_descriptor_path(project_dir, network);
         std::fs::write(&descriptor_path, contents)
             .expect("Failed to write network descriptor file");
     }
 
-    pub fn pocketic(&self) -> &PocketIc {
+    pub(crate) fn pocketic(&self) -> &PocketIc {
         self.pocketic
             .get()
             .expect("PocketIc instance not initialized")

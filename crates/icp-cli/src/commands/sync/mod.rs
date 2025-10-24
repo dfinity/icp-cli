@@ -17,19 +17,19 @@ use crate::{
 };
 
 #[derive(Args, Debug)]
-pub struct SyncArgs {
+pub(crate) struct SyncArgs {
     /// Canister names
-    pub names: Vec<String>,
+    pub(crate) names: Vec<String>,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -64,7 +64,7 @@ pub enum CommandError {
     Synchronize(#[from] SynchronizeError),
 }
 
-pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");
@@ -194,16 +194,17 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
                             &pb,
                             async { sync_result },
                             || format!("Synced successfully: {cid}"),
-                            |err| format!("Failed to sync canister: {err}"),
+                            print_sync_error,
                         )
                         .await;
 
                         // After progress bar is finished, dump the output if sync failed
                         if let Err(e) = &result {
-                            pb.dump_output(ctx);
-                            let _ = ctx
-                                .term
-                                .write_line(&format!("Failed to sync canister: {e}"));
+                            for line in pb.dump_output() {
+                                let _ = ctx.term.write_line(&line);
+                            }
+                            let _ = ctx.term.write_line(&print_sync_error(e));
+                            let _ = ctx.term.write_line("");
                         }
 
                         result
@@ -230,4 +231,8 @@ pub async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     }
 
     Ok(())
+}
+
+fn print_sync_error(err: &CommandError) -> String {
+    format!("Failed to sync canister: {err}")
 }

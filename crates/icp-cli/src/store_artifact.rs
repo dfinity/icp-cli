@@ -51,7 +51,7 @@ impl PathsAccess for ArtifactPaths {
 impl ArtifactStore {
     pub fn new(path: &Path) -> Self {
         Self {
-            lock: DirectoryStructureLock::get_or_create(ArtifactPaths {
+            lock: DirectoryStructureLock::open_or_create(ArtifactPaths {
                 dir: path.to_owned(),
             })
             .expect("failed to create artifact store lock"),

@@ -17,7 +17,7 @@ pub trait PathsAccess: Send + Sync + 'static {
 }
 
 impl<T: PathsAccess> DirectoryStructureLock<T> {
-    pub fn get_or_create(paths_access: T) -> Result<Self, LockError> {
+    pub fn open_or_create(paths_access: T) -> Result<Self, LockError> {
         let lock_path = paths_access.lock_file();
         crate::fs::create_dir_all(lock_path.parent().unwrap())?;
         let lock_file =

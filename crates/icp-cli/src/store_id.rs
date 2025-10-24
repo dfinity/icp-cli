@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
 /// An association-key, used for associating an existing canister to an ID on a network
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub(crate) struct Key {
     /// Network name
     pub(crate) network: String,
@@ -44,6 +44,18 @@ pub(crate) enum LookupError {
 
     #[snafu(display(
         "could not find ID for canister '{}' in environment '{}', associated with network '{}'",
+        canister,
+        environment,
+        network
+    ))]
+    NotFound {
+        canister: String,
+        environment: String,
+        network: String,
+    },
+
+    #[snafu(display(
+        "could not find ID for canister '{}' in environment '{}', associated with network '{}'",
         key.canister, key.environment, key.network
     ))]
     IdNotFound { key: Key },
@@ -52,12 +64,21 @@ pub(crate) enum LookupError {
     EnvironmentNotFound { name: String },
 }
 
-pub(crate) struct IdStore {
+pub(crate) trait IdStore: Send + Sync {
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError>;
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError>;
+    fn lookup_by_environment(
+        &self,
+        environment: &str,
+    ) -> Result<Vec<(String, Principal)>, LookupError>;
+}
+
+pub(crate) struct FileIdStore {
     path: PathBuf,
     lock: Mutex<()>,
 }
 
-impl IdStore {
+impl FileIdStore {
     pub(crate) fn new(path: &Path) -> Self {
         Self {
             path: path.to_owned(),
@@ -66,8 +87,8 @@ impl IdStore {
     }
 }
 
-impl IdStore {
-    pub(crate) fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
+impl IdStore for FileIdStore {
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -101,7 +122,7 @@ impl IdStore {
         Ok(())
     }
 
-    pub(crate) fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -129,7 +150,7 @@ impl IdStore {
         })
     }
 
-    pub(crate) fn lookup_by_environment(
+    fn lookup_by_environment(
         &self,
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {
@@ -160,5 +181,74 @@ impl IdStore {
         }
 
         Ok(filtered_associations)
+    }
+}
+
+// ============================================================================
+// Test utilities
+// ============================================================================
+
+#[cfg(test)]
+pub(crate) mod test {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    /// Mock ID store for testing.
+    ///
+    /// Stores canister IDs in memory instead of on disk.
+    pub(crate) struct MockIdStore {
+        ids: HashMap<Key, Principal>,
+    }
+
+    impl MockIdStore {
+        pub(crate) fn new() -> Self {
+            Self {
+                ids: HashMap::new(),
+            }
+        }
+
+        pub(crate) fn with_id(mut self, key: Key, id: Principal) -> Self {
+            self.ids.insert(key, id);
+            self
+        }
+    }
+
+    impl IdStore for MockIdStore {
+        fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+            self.ids
+                .get(key)
+                .cloned()
+                .ok_or_else(|| LookupError::NotFound {
+                    network: key.network.clone(),
+                    environment: key.environment.clone(),
+                    canister: key.canister.clone(),
+                })
+        }
+
+        fn register(&self, _key: &Key, _id: &Principal) -> Result<(), RegisterError> {
+            // Mock doesn't support registration after creation
+            Ok(())
+        }
+
+        fn lookup_by_environment(
+            &self,
+            environment: &str,
+        ) -> Result<Vec<(String, Principal)>, LookupError> {
+            let filtered: Vec<_> = self
+                .ids
+                .iter()
+                .filter(|(k, _)| k.environment == environment)
+                .map(|(k, v)| (k.canister.clone(), *v))
+                .collect();
+
+            if filtered.is_empty() {
+                Err(LookupError::EnvironmentNotFound {
+                    name: environment.to_string(),
+                })
+            } else {
+                Ok(filtered)
+            }
+        }
     }
 }

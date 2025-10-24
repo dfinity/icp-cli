@@ -107,3 +107,55 @@ impl Build for Builder {
         }
     }
 }
+
+// ============================================================================
+// Test utilities
+// ============================================================================
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test {
+    use async_trait::async_trait;
+    use tokio::sync::mpsc::Sender;
+
+    use super::*;
+
+    /// Mock builder for testing.
+    ///
+    /// Can be configured to return success or a specific error message.
+    pub struct MockBuilder {
+        error_msg: Option<String>,
+    }
+
+    impl MockBuilder {
+        pub fn new() -> Self {
+            Self { error_msg: None }
+        }
+
+        pub fn with_error(msg: impl Into<String>) -> Self {
+            Self {
+                error_msg: Some(msg.into()),
+            }
+        }
+    }
+
+    impl Default for MockBuilder {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    #[async_trait]
+    impl Build for MockBuilder {
+        async fn build(
+            &self,
+            _step: &build::Step,
+            _params: &Params,
+            _stdio: Option<Sender<String>>,
+        ) -> Result<(), BuildError> {
+            match &self.error_msg {
+                None => Ok(()),
+                Some(msg) => Err(BuildError::Unexpected(anyhow::anyhow!("{}", msg))),
+            }
+        }
+    }
+}

@@ -110,7 +110,7 @@ pub(crate) struct Context {
     pub(crate) dirs: Directories,
 
     /// Canisters ID Store for lookup and storage
-    pub(crate) ids: IdStore,
+    pub(crate) ids: Arc<dyn IdStore>,
 
     /// An artifact store for canister build artifacts
     pub(crate) artifacts: ArtifactStore,
@@ -230,5 +230,143 @@ impl Context {
             });
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_utils {
+    use std::sync::Arc;
+
+    use console::Term;
+    use icp::{
+        Directories,
+        canister::{build::Build, sync::Synchronize},
+        network::Access,
+    };
+
+    use super::Context;
+    use crate::{
+        store_artifact::ArtifactStore,
+        store_id::{IdStore, test::MockIdStore},
+    };
+
+    /// Helper to create a test context with a default setup.
+    ///
+    /// Tests should not rely on actual filesystem I/O.
+    pub(crate) fn create_test_context(project: icp::Project) -> Context {
+        let fake_dir =
+            icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/test-dir")).unwrap();
+        let fake_artifacts =
+            icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/artifacts")).unwrap();
+
+        Context {
+            term: Term::stdout(),
+            dirs: Directories::Overridden(fake_dir),
+            ids: Arc::new(MockIdStore::new()),
+            artifacts: ArtifactStore::new(&fake_artifacts),
+            project: Arc::new(icp::test::MockProjectLoader::new(project)),
+            identity: Arc::new(icp::identity::test::MockIdentityLoader::new(
+                icp::identity::test::create_mock_identity(),
+            )),
+            network: Arc::new(icp::network::test::MockNetworkAccessor::new()),
+            agent: Arc::new(icp::agent::test::MockAgentCreator::default()),
+            builder: Arc::new(icp::canister::build::test::MockBuilder::new()),
+            syncer: Arc::new(icp::canister::sync::test::MockSynchronizer::new()),
+            debug: false,
+        }
+    }
+
+    // Helper to create a test context with specific mocks
+    pub(crate) struct TestContextBuilder {
+        project: Arc<dyn icp::Load>,
+        identity: Arc<dyn icp::identity::Load>,
+        network: Arc<dyn Access>,
+        agent: Arc<dyn icp::agent::Create>,
+        builder: Arc<dyn Build>,
+        syncer: Arc<dyn Synchronize>,
+        ids: Arc<dyn IdStore>,
+        debug: bool,
+    }
+
+    impl TestContextBuilder {
+        pub fn new() -> Self {
+            Self {
+                project: Arc::new(icp::test::MockProjectLoader::new(
+                    icp::test::create_test_project(),
+                )),
+                identity: Arc::new(icp::identity::test::MockIdentityLoader::new(
+                    icp::identity::test::create_mock_identity(),
+                )),
+                network: Arc::new(icp::network::test::MockNetworkAccessor::new()),
+                agent: Arc::new(icp::agent::test::MockAgentCreator::default()),
+                builder: Arc::new(icp::canister::build::test::MockBuilder::new()),
+                syncer: Arc::new(icp::canister::sync::test::MockSynchronizer::new()),
+                ids: Arc::new(MockIdStore::new()),
+                debug: false,
+            }
+        }
+
+        pub fn with_project(mut self, loader: Arc<dyn icp::Load>) -> Self {
+            self.project = loader;
+            self
+        }
+
+        pub fn with_identity(mut self, loader: Arc<dyn icp::identity::Load>) -> Self {
+            self.identity = loader;
+            self
+        }
+
+        pub fn with_network(mut self, accessor: Arc<dyn Access>) -> Self {
+            self.network = accessor;
+            self
+        }
+
+        pub fn with_agent(mut self, creator: Arc<dyn icp::agent::Create>) -> Self {
+            self.agent = creator;
+            self
+        }
+
+        pub fn with_builder(mut self, builder: Arc<dyn Build>) -> Self {
+            self.builder = builder;
+            self
+        }
+
+        pub fn with_syncer(mut self, syncer: Arc<dyn Synchronize>) -> Self {
+            self.syncer = syncer;
+            self
+        }
+
+        pub fn with_ids(mut self, ids: Arc<dyn IdStore>) -> Self {
+            self.ids = ids;
+            self
+        }
+
+        pub fn with_debug(mut self, debug: bool) -> Self {
+            self.debug = debug;
+            self
+        }
+
+        pub fn build(self) -> Context {
+            let fake_dir =
+                icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/test-dir"))
+                    .unwrap();
+            let fake_artifacts =
+                icp::prelude::PathBuf::try_from(std::path::PathBuf::from("/fake/artifacts"))
+                    .unwrap();
+
+            Context {
+                term: Term::stdout(),
+                dirs: Directories::Overridden(fake_dir),
+                ids: self.ids,
+                artifacts: ArtifactStore::new(&fake_artifacts),
+                project: self.project,
+                identity: self.identity,
+                network: self.network,
+                agent: self.agent,
+                builder: self.builder,
+                syncer: self.syncer,
+                debug: self.debug,
+            }
+        }
     }
 }

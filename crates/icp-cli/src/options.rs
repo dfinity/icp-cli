@@ -23,6 +23,15 @@ impl From<IdentityOpt> for IdentitySelection {
     }
 }
 
+impl IdentityOpt {
+    #[cfg(test)]
+    pub(crate) fn with_identity(identity: impl Into<String>) -> Self {
+        Self {
+            identity: Some(identity.into()),
+        }
+    }
+}
+
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("environment-select").multiple(false)))]
 pub(crate) struct EnvironmentOpt {
@@ -53,5 +62,21 @@ impl EnvironmentOpt {
 
     pub(crate) fn is_explicit(&self) -> bool {
         self.environment.is_some() || self.ic
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_environment(environment: impl Into<String>) -> Self {
+        Self {
+            environment: Some(environment.into()),
+            ic: false,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_ic() -> Self {
+        Self {
+            environment: None,
+            ic: true,
+        }
     }
 }

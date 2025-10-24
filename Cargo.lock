@@ -2497,6 +2497,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-trait",
  "bigdecimal",
  "bip32 0.5.3",
  "byte-unit 5.1.6",

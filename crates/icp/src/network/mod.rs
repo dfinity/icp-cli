@@ -138,3 +138,70 @@ impl Access for Accessor {
         Ok(acceess)
     }
 }
+
+// ============================================================================
+// Test utilities
+// ============================================================================
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test {
+    use std::collections::HashMap;
+
+    use async_trait::async_trait;
+
+    use super::*;
+
+    /// Mock network accessor for testing.
+    ///
+    /// Can be configured to return specific network access configurations or errors.
+    pub struct MockNetworkAccessor {
+        access: HashMap<String, Result<NetworkAccess, String>>,
+    }
+
+    impl MockNetworkAccessor {
+        pub fn new() -> Self {
+            Self {
+                access: HashMap::new(),
+            }
+        }
+
+        pub fn with_network(mut self, network_name: String, access: NetworkAccess) -> Self {
+            self.access.insert(network_name, Ok(access));
+            self
+        }
+
+        pub fn with_error(mut self, network_name: String, error: impl Into<String>) -> Self {
+            self.access.insert(network_name, Err(error.into()));
+            self
+        }
+    }
+
+    impl Default for MockNetworkAccessor {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    #[async_trait]
+    impl Access for MockNetworkAccessor {
+        async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
+            if let Some(result) = self.access.get(&network.name) {
+                match result {
+                    Ok(access) => Ok(NetworkAccess {
+                        default_effective_canister_id: access.default_effective_canister_id,
+                        root_key: access.root_key.clone(),
+                        url: access.url.clone(),
+                    }),
+                    Err(msg) => Err(AccessError::Unexpected(anyhow::anyhow!("{}", msg))),
+                }
+            } else {
+                // Default network access for unmocked networks
+                Ok(NetworkAccess {
+                    default_effective_canister_id: None,
+                    root_key: Some(vec![1, 2, 3]),
+                    url: "http://localhost:8000".to_string(),
+                })
+            }
+        }
+    }
+}

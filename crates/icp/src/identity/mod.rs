@@ -111,3 +111,53 @@ impl Load for Loader {
         })
     }
 }
+
+// ============================================================================
+// Test utilities
+// ============================================================================
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use ic_agent::Identity;
+
+    use super::*;
+
+    /// Mock identity loader for testing.
+    ///
+    /// Can be configured to return either a successful identity or an error message.
+    pub struct MockIdentityLoader {
+        result: Result<Arc<dyn Identity>, String>,
+    }
+
+    impl MockIdentityLoader {
+        pub fn new(identity: Arc<dyn Identity>) -> Self {
+            Self {
+                result: Ok(identity),
+            }
+        }
+
+        pub fn with_error(msg: impl Into<String>) -> Self {
+            Self {
+                result: Err(msg.into()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Load for MockIdentityLoader {
+        async fn load(&self, _id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+            match &self.result {
+                Ok(i) => Ok(i.clone()),
+                Err(msg) => Err(LoadError::Unexpected(anyhow::anyhow!("{}", msg))),
+            }
+        }
+    }
+
+    /// Creates a mock anonymous identity for testing.
+    pub fn create_mock_identity() -> Arc<dyn Identity> {
+        Arc::new(ic_agent::identity::AnonymousIdentity)
+    }
+}

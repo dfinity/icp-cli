@@ -24,7 +24,6 @@ use tracing_subscriber::{
 use crate::{
     logging::{TermWriter, debug_layer},
     store_artifact::ArtifactStore,
-    store_id::IdStore,
     telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
@@ -132,7 +131,7 @@ async fn main() -> Result<(), Error> {
     let dirs = Directories::new()?;
 
     // Canister ID Store
-    let ids = IdStore::new(&cli.id_store);
+    let ids: Arc<dyn store_id::IdStore> = Arc::new(store_id::FileIdStore::new(&cli.id_store));
 
     // Canister Artifact Store (wasm)
     let artifacts = ArtifactStore::new(&cli.artifact_store);

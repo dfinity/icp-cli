@@ -166,3 +166,86 @@ impl<T: Load> Load for Lazy<T, Project> {
         Ok(v)
     }
 }
+
+// ============================================================================
+// Test utilities
+// ============================================================================
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test {
+    use std::collections::HashMap;
+
+    use async_trait::async_trait;
+
+    use super::*;
+
+    /// Mock project loader for testing.
+    ///
+    /// Can be configured to return either a successful project or an error.
+    pub struct MockProjectLoader {
+        result: Result<Project, LoadError>,
+    }
+
+    impl MockProjectLoader {
+        pub fn new(project: Project) -> Self {
+            Self {
+                result: Ok(project),
+            }
+        }
+
+        pub fn with_error(error: LoadError) -> Self {
+            Self { result: Err(error) }
+        }
+    }
+
+    #[async_trait]
+    impl Load for MockProjectLoader {
+        async fn load(&self) -> Result<Project, LoadError> {
+            // LoadError cannot implement Clone
+            match &self.result {
+                Ok(p) => Ok(p.clone()),
+                Err(LoadError::Locate) => Err(LoadError::Locate),
+                Err(LoadError::Path) => Err(LoadError::Path),
+                Err(LoadError::Manifest) => Err(LoadError::Manifest),
+                Err(LoadError::Unexpected(e)) => {
+                    Err(LoadError::Unexpected(anyhow::anyhow!("{}", e)))
+                }
+            }
+        }
+    }
+
+    /// Creates a default test project with a local environment.
+    ///
+    /// The project has:
+    /// - dir: /tmp/test-project
+    /// - One "local" environment
+    /// - One "local" network (managed)
+    /// - Empty canisters map
+    pub fn create_test_project() -> Project {
+        let mut environments = HashMap::new();
+
+        let local_network = Network {
+            name: "local".to_string(),
+            configuration: Configuration::Managed(Default::default()),
+        };
+
+        environments.insert(
+            "local".to_string(),
+            Environment {
+                name: "local".to_string(),
+                network: local_network.clone(),
+                canisters: HashMap::new(),
+            },
+        );
+
+        let mut networks = HashMap::new();
+        networks.insert("local".to_string(), local_network);
+
+        Project {
+            dir: PathBuf::try_from(std::path::PathBuf::from("/tmp/test-project")).unwrap(),
+            canisters: HashMap::new(),
+            networks,
+            environments,
+        }
+    }
+}

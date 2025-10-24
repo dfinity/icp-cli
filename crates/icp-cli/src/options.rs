@@ -8,6 +8,12 @@ pub(crate) struct IdentityOpt {
     identity: Option<String>,
 }
 
+impl IdentityOpt {
+    pub(crate) fn is_explicit(&self) -> bool {
+        self.identity.is_some()
+    }
+}
+
 impl From<IdentityOpt> for IdentitySelection {
     fn from(v: IdentityOpt) -> Self {
         match v.identity {
@@ -49,5 +55,9 @@ impl EnvironmentOpt {
 
         // Otherwise, default to `local`
         self.environment.as_deref().unwrap_or("local")
+    }
+
+    pub(crate) fn is_explicit(&self) -> bool {
+        self.environment.is_some() || self.ic
     }
 }

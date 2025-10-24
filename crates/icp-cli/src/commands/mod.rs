@@ -1,14 +1,21 @@
 use std::sync::Arc;
 
+use candid::Principal;
 use clap::Subcommand;
 use console::Term;
+use ic_agent::Agent;
 use icp::{
-    Directories,
+    Directories, Environment,
     canister::{build::Build, sync::Synchronize},
 };
 
-use crate::{store_artifact::ArtifactStore, store_id::IdStore};
+use crate::{
+    commands::args::ArgContext,
+    store_artifact::ArtifactStore,
+    store_id::{self, IdStore, Key},
+};
 
+pub(crate) mod args;
 pub(crate) mod build;
 pub(crate) mod canister;
 pub(crate) mod cycles;
@@ -61,6 +68,27 @@ pub(crate) enum Command {
     Token(token::Command),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ContextError {
+    #[error("Environment '{environment}' not found.")]
+    EnvironmentNotFound { environment: String },
+
+    #[error("Failed to load network info: {0}")]
+    AccessNetwork(#[from] icp::network::AccessError),
+
+    #[error("Failed to create agent: {0}")]
+    CreateAgent(#[from] icp::agent::CreateError),
+
+    #[error("Failed to load project: {0}")]
+    LoadProject(#[from] icp::LoadError),
+
+    #[error("Failed to load identity: {0}")]
+    LoadIdentity(#[from] icp::identity::LoadError),
+
+    #[error("Failed to lookup up canister id: {0}")]
+    LookupCanisterId(#[from] store_id::LookupError),
+}
+
 pub(crate) struct Context {
     /// Terminal for printing messages for the user to see
     pub(crate) term: Term,
@@ -94,4 +122,48 @@ pub(crate) struct Context {
 
     /// Whether debug is enabled
     pub(crate) debug: bool,
+}
+
+impl Context {
+    pub(crate) async fn get_environment(
+        &self,
+        args: &ArgContext,
+    ) -> Result<Environment, ContextError> {
+        let project = self.project.load().await?;
+        let environment = project.environments.get(args.environment()).ok_or(
+            ContextError::EnvironmentNotFound {
+                environment: args.environment().to_string(),
+            },
+        )?;
+        Ok(environment.clone())
+    }
+
+    pub(crate) async fn get_agent(&self, args: &ArgContext) -> Result<Agent, ContextError> {
+        let id = self.identity.load(args.identity().clone()).await?;
+        let environment = self.get_environment(args).await?;
+        let access = self.network.access(&environment.network).await?;
+        let agent = self.agent.create(id, &access.url).await?;
+        if let Some(k) = access.root_key {
+            agent.set_root_key(k);
+        }
+        Ok(agent)
+    }
+
+    pub(crate) async fn resolve_canister_id(
+        &self,
+        args: &ArgContext,
+        name: &str,
+    ) -> Result<Principal, ContextError> {
+        if let Ok(canister_id) = Principal::from_text(name) {
+            return Ok(canister_id);
+        }
+
+        let environment = self.get_environment(args).await?;
+        let canister_id = self.ids.lookup(&Key {
+            network: environment.network.name.to_owned(),
+            environment: environment.name.to_owned(),
+            canister: name.to_owned(),
+        })?;
+        Ok(canister_id)
+    }
 }

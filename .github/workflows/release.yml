@@ -140,6 +140,6 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: icp-*.tar.*
           file_glob: true
-          tag: ${{ env.PRETEND_TAG }}
+          tag: ${{ env.VERSION }}
           prerelease: true
           make_latest: false

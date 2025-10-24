@@ -8,7 +8,6 @@ use crate::{
         args::{ArgContext, ArgumentError},
     },
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
 };
 
 #[derive(Debug, Args)]
@@ -37,20 +36,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
 
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
     #[error(transparent)]
     Argument(#[from] ArgumentError),
 
     #[error(transparent)]
     Context(#[from] ContextError),
-
-    #[error(transparent)]
-    Lookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Delete(#[from] AgentError),

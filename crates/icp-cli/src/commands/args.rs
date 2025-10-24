@@ -58,38 +58,35 @@ impl ArgContext {
             return Err(ArgumentError::CanistersAndNetworkSpecified);
         }
 
-        if let Some(network) = &network {
-            if ctx.network.access(network).await.is_err() {
-                return Err(ArgumentError::NetworkNotFound {
-                    network: network.name.clone(),
-                });
-            }
+        if let Some(network) = &network
+            && ctx.network.access(network).await.is_err()
+        {
+            return Err(ArgumentError::NetworkNotFound {
+                network: network.name.clone(),
+            });
         }
 
-        if environment.is_explicit() {
-            if ctx
+        if environment.is_explicit()
+            && !ctx
                 .project
                 .load()
                 .await?
                 .environments
-                .get(environment.name())
-                .is_none()
-            {
-                return Err(ArgumentError::EnvironmentNotFound {
-                    environment: environment.name().to_string(),
-                });
-            }
+                .contains_key(environment.name())
+        {
+            return Err(ArgumentError::EnvironmentNotFound {
+                environment: environment.name().to_string(),
+            });
         }
 
-        let environment = environment;
-        let identity = identity.into();
         Ok(Self {
             environment,
             network,
-            identity,
+            identity: identity.into(),
         })
     }
 
+    #[allow(unused)]
     pub(crate) fn network(&self) -> Option<&Network> {
         self.network.as_ref()
     }

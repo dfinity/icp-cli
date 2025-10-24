@@ -1,22 +1,40 @@
-use crate::prelude::*;
+//! File locking abstractions to make directory locks easy and safe.
+//!
+//! Directory structures are typically represented by a struct containing the directory path,
+//! which then has methods for getting files or directories within it. This struct should implement
+//! `PathsAccess`, and then instead of passing it around directly, it should be stored in a
+//! [`DirectoryStructureLock`]. This ensures that paths cannot be accessed without holding the appropriate
+//! lock.
+//!
+//! Temporary locks can be acquired using the `with_read` and `with_write` methods, which take
+//! async closures. For locks that should be stored in a structure, `into_read` and `into_write` can be used
+//! to convert the lock into an owned guard.
+
+use crate::{fs, prelude::*};
 use snafu::{ResultExt, Snafu};
 use std::{fs::File, io, ops::Deref};
 use tokio::{sync::RwLock, task::spawn_blocking};
 
+/// Directory lock ensuring safe concurrency around filesystem operations.
 pub struct DirectoryStructureLock<T: PathsAccess> {
     paths_access: T,
     lock_file: RwLock<File>,
     lock_path: PathBuf,
 }
 
+/// A directory structure, typically with methods to access specific paths within it.
+///
+/// One file within it is selected as the file for advisory locks.
 pub trait PathsAccess: Send + Sync + 'static {
+    /// Path to the canonical file for locking the directory structure. Usually `$dir/.lock`.
     fn lock_file(&self) -> PathBuf;
 }
 
 impl<T: PathsAccess> DirectoryStructureLock<T> {
+    /// Creates a new lock, implicitly calling [`fs::create_dir_all`] on the parent.
     pub fn open_or_create(paths_access: T) -> Result<Self, LockError> {
         let lock_path = paths_access.lock_file();
-        crate::fs::create_dir_all(lock_path.parent().unwrap())?;
+        fs::create_dir_all(lock_path.parent().unwrap())?;
         let lock_file =
             File::create(&lock_path).context(OpenLockFileFailedSnafu { path: &lock_path })?;
         Ok(Self {
@@ -26,7 +44,8 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         })
     }
 
-    pub async fn read(self) -> Result<DirectoryStructureGuardOwned<T>, LockError> {
+    /// Converts the lock structure into an owned read-lock.
+    pub async fn into_read(self) -> Result<DirectoryStructureGuardOwned<T>, LockError> {
         spawn_blocking(move || {
             let lock_file = self.lock_file.into_inner();
             lock_file.lock_shared().context(LockFailedSnafu {
@@ -41,7 +60,8 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         .unwrap()
     }
 
-    pub async fn write(self) -> Result<DirectoryStructureGuardOwned<T>, LockError> {
+    /// Converts the lock structure into an owned write-lock.
+    pub async fn into_write(self) -> Result<DirectoryStructureGuardOwned<T>, LockError> {
         spawn_blocking(move || {
             let lock_file = self.lock_file.into_inner();
             lock_file.lock().context(LockFailedSnafu {
@@ -55,6 +75,8 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         .await
         .unwrap()
     }
+
+    /// Accesses the directory structure under a read lock.
     pub async fn with_read<R>(&self, f: impl AsyncFnOnce(&T) -> R) -> Result<R, LockError> {
         let guard = self.lock_file.read().await;
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
@@ -73,6 +95,7 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         Ok(ret)
     }
 
+    /// Accesses the directory structure under a write lock.
     pub async fn with_write<R>(&self, f: impl AsyncFnOnce(&T) -> R) -> Result<R, LockError> {
         let guard = self.lock_file.write().await;
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
@@ -107,6 +130,7 @@ pub enum LockError {
     HandleCloneFailed { source: io::Error, path: PathBuf },
 }
 
+/// File lock guard. Do not use as a temporary in an expression - if you are making a temporary lock, use `with_*`.
 pub struct DirectoryStructureGuardOwned<T> {
     paths_access: T,
     guard: File,

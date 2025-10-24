@@ -9,6 +9,10 @@
 //! Temporary locks can be acquired using the `with_read` and `with_write` methods, which take
 //! async closures. For locks that should be stored in a structure, `into_read` and `into_write` can be used
 //! to convert the lock into an owned guard.
+//!
+//! When making low-level functions that might be composed into higher-level operations, these functions should
+//! typically take `LRead<&T>` or `LWrite<&T>` parameters, rather than `&T`. This makes sure the composed function
+//! will demand the right kind of lock, when writes are hidden in what looks at first glance like a read operation.
 
 use crate::{fs, prelude::*};
 use snafu::{ResultExt, Snafu};

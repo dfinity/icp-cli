@@ -87,6 +87,19 @@ impl ArgContext {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_sync(
+        ctx: &Context,
+        environment: EnvironmentOpt,
+        network: Option<Network>,
+        identity: IdentityOpt,
+        canisters: Vec<&str>,
+    ) -> Result<Self, ArgumentError> {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let arg_ctx = rt.block_on(Self::new(ctx, environment, network, identity, canisters))?;
+        Ok(arg_ctx)
+    }
+
     #[allow(unused)]
     pub(crate) fn network(&self) -> Option<&Network> {
         self.network.as_ref()
@@ -108,7 +121,7 @@ mod tests {
     use icp::{
         LoadError,
         network::Configuration,
-        test::{MockProjectLoader, create_test_project},
+        test::{MockProjectLoader, create_complex_test_project, create_test_project},
     };
 
     use super::*;
@@ -320,26 +333,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_succeeds_when_ic_flag_maps_to_ic_environment() {
-        // Setup - need to add "ic" environment to the project
-        let mut project = create_test_project();
-
-        let ic_network = Network {
-            name: "ic".to_string(),
-            configuration: Configuration::Managed(Default::default()),
-        };
-
-        project
-            .networks
-            .insert("ic".to_string(), ic_network.clone());
-        project.environments.insert(
-            "ic".to_string(),
-            icp::Environment {
-                name: "ic".to_string(),
-                network: ic_network,
-                canisters: Default::default(),
-            },
-        );
-
+        // Setup: Use complex project which has "ic" environment
+        let project = create_complex_test_project();
         let ctx = create_test_context(project);
 
         // Use --ic flag shorthand

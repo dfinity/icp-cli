@@ -55,12 +55,24 @@ pub struct Environment {
     pub canisters: HashMap<String, (PathBuf, Canister)>,
 }
 
+impl Environment {
+    pub fn contains_canister(&self, name: &str) -> bool {
+        self.canisters.contains_key(name)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub dir: PathBuf,
     pub canisters: HashMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
+}
+
+impl Project {
+    pub fn contains_canister(&self, name: &str) -> bool {
+        self.canisters.contains_key(name)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

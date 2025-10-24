@@ -17,7 +17,10 @@ use icp_canister_interfaces::{
 use rand::seq::IndexedRandom;
 
 use crate::{
-    commands::Context,
+    commands::{
+        Context, ContextError,
+        args::{ArgContext, ArgumentError},
+    },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
     store_id::{Key, LookupError, RegisterError},
@@ -84,9 +87,6 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
@@ -124,6 +124,12 @@ pub(crate) enum CommandError {
     GetSubnet { err: String },
 
     #[error(transparent)]
+    Argument(#[from] ArgumentError),
+
+    #[error(transparent)]
+    Context(#[from] ContextError),
+
+    #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
 
@@ -131,19 +137,17 @@ pub(crate) enum CommandError {
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let arg_ctx = ArgContext::new(
+        ctx,
+        args.environment.clone(),
+        None,
+        args.identity.clone(),
+        args.names.iter().map(|name| name.as_str()).collect(),
+    )
+    .await?;
 
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+    let env = ctx.get_environment(&arg_ctx).await?;
 
     // Collect environment canisters
     let cnames = match args.names.is_empty() {
@@ -155,18 +159,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     };
 
     for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
+        ctx.ensure_canister_is_defined(&arg_ctx, name).await?;
     }
 
     let cs = env
@@ -195,15 +188,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         })
         .collect();
 
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx.get_agent(&arg_ctx).await?;
 
     // Select which subnet to deploy the canisters to
     //
@@ -240,6 +226,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
 
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
+    let arg_ctx_ref = &arg_ctx;
     for (_, c) in cs.values() {
         // Create progress bar with standard configuration
         let pb = progress_manager.create_progress_bar(&c.name);
@@ -254,21 +241,14 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                // Create canister-network association-key
-                let k = Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                };
-
-                match ctx.ids.lookup(&k) {
+                match ctx.resolve_canister_id(arg_ctx_ref, &c.name).await {
                     // Exists (skip)
                     Ok(principal) => {
                         return Err(CommandError::CanisterExists { principal });
                     }
 
                     // Doesn't exist (include)
-                    Err(LookupError::IdNotFound { .. }) => {}
+                    Err(ContextError::LookupCanisterId(LookupError::IdNotFound { .. })) => {}
 
                     // Lookup failed
                     Err(err) => panic!("{err}"),
@@ -338,7 +318,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 };
 
                 // Register the canister ID
-                ctx.ids.register(&k, &cid)?;
+                ctx.store_canister_id(arg_ctx_ref, &c.name, cid).await?;
 
                 Ok::<_, CommandError>(())
             }

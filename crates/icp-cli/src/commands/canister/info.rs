@@ -10,6 +10,7 @@ use crate::{
         args::{ArgContext, ArgumentError},
     },
     options::{EnvironmentOpt, IdentityOpt},
+    store_id::LookupError,
 };
 
 #[derive(Debug, Args)]
@@ -43,6 +44,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Context(#[from] ContextError),
+
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
 
     #[error(transparent)]
     Status(#[from] AgentError),

@@ -12,7 +12,7 @@ use icp::{
 use crate::{
     commands::args::ArgContext,
     store_artifact::ArtifactStore,
-    store_id::{self, IdStore, Key},
+    store_id::{self, IdStore, Key, RegisterError},
 };
 
 pub(crate) mod args;
@@ -87,6 +87,18 @@ pub(crate) enum ContextError {
 
     #[error("Failed to lookup up canister id: {0}")]
     LookupCanisterId(#[from] store_id::LookupError),
+
+    #[error("Failed to register canister id: {0}")]
+    RegisterCanisterId(#[from] store_id::RegisterError),
+
+    #[error("Network '{network}' does not contain canister '{canister}'")]
+    NetworkCanisterNotFound { network: String, canister: String },
+
+    #[error("Environment '{environment}' does not contain canister '{canister}'")]
+    EnvironmentCanisterNotFound {
+        environment: String,
+        canister: String,
+    },
 }
 
 pub(crate) struct Context {
@@ -165,5 +177,43 @@ impl Context {
             canister: name.to_owned(),
         })?;
         Ok(canister_id)
+    }
+
+    pub(crate) async fn store_canister_id(
+        &self,
+        args: &ArgContext,
+        name: &str,
+        canister_id: Principal,
+    ) -> Result<(), ContextError> {
+        let environment = self.get_environment(args).await?;
+        let key = Key {
+            network: environment.network.name.to_owned(),
+            environment: environment.name.to_owned(),
+            canister: name.to_owned(),
+        };
+        self.ids.register(&key, &canister_id)?;
+        Ok(())
+    }
+
+    pub(crate) async fn ensure_canister_is_defined(
+        &self,
+        args: &ArgContext,
+        name: &str,
+    ) -> Result<(), ContextError> {
+        let project = self.project.load().await?;
+        let environment = self.get_environment(args).await?;
+        if !project.contains_canister(name) {
+            return Err(ContextError::NetworkCanisterNotFound {
+                network: environment.network.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+        if !environment.contains_canister(name) {
+            return Err(ContextError::EnvironmentCanisterNotFound {
+                environment: environment.name.to_owned(),
+                canister: name.to_owned(),
+            });
+        }
+        Ok(())
     }
 }

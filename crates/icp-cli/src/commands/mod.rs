@@ -1,17 +1,16 @@
 use std::sync::Arc;
 
-use anyhow::{Context as _, anyhow, bail};
+use candid::Principal;
 use clap::Subcommand;
 use console::Term;
+use ic_agent::{Agent, Identity};
 use icp::{
     Directories,
     canister::{build::Build, sync::Synchronize},
     identity::IdentitySelection,
     network::access::NetworkAccess,
 };
-
-use candid::Principal;
-use ic_agent::{Agent, Identity};
+use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::store_id::Key;
 use crate::{store_artifact::ArtifactStore, store_id::IdStore};
@@ -104,16 +103,19 @@ pub(crate) struct Context {
     pub(crate) debug: bool,
 }
 
-type ContextResult<T> = anyhow::Result<T>;
-
 impl Context {
     /// Gets an identity based on the provided identity selection.
     // TODO: refactor the whole codebase to use this method instead of directly accessing `ctx.identity.load()`
     pub(crate) async fn get_identity(
         &self,
         identity: &IdentitySelection,
-    ) -> ContextResult<Arc<dyn Identity>> {
-        Ok(self.identity.load(identity.clone()).await?)
+    ) -> Result<Arc<dyn Identity>, GetIdentityError> {
+        self.identity
+            .load(identity.clone())
+            .await
+            .context(get_identity_error::IdentityLoadSnafu {
+                identity: identity.clone(),
+            })
     }
 
     /// Gets an environment by name from the currently loaded project.
@@ -124,19 +126,20 @@ impl Context {
     pub(crate) async fn get_environment(
         &self,
         environment_name: &str,
-    ) -> ContextResult<icp::Environment> {
+    ) -> Result<icp::Environment, GetEnvironmentError> {
         // Load project
         let p = self
             .project
             .load()
             .await
-            .context("failed to load project which is required to get environment")?;
+            .context(get_environment_error::ProjectLoadSnafu)?;
 
         // Load target environment
-        let env = p
-            .environments
-            .get(environment_name)
-            .ok_or(anyhow!("environment not found: {}", environment_name))?;
+        let env = p.environments.get(environment_name).context(
+            get_environment_error::EnvironmentNotFoundSnafu {
+                name: environment_name.to_owned(),
+            },
+        )?;
 
         Ok(env.clone())
     }
@@ -146,19 +149,24 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the project cannot be loaded or if the network is not found.
-    pub(crate) async fn get_network(&self, network_name: &str) -> ContextResult<icp::Network> {
+    pub(crate) async fn get_network(
+        &self,
+        network_name: &str,
+    ) -> Result<icp::Network, GetNetworkError> {
         // Load project
         let p = self
             .project
             .load()
             .await
-            .context("failed to load project which is required to get network")?;
+            .context(get_network_error::ProjectLoadSnafu)?;
 
         // Load target network
-        let net = p
-            .networks
-            .get(network_name)
-            .ok_or(anyhow!("network not found: {}", network_name))?;
+        let net =
+            p.networks
+                .get(network_name)
+                .context(get_network_error::NetworkNotFoundSnafu {
+                    name: network_name.to_owned(),
+                })?;
 
         Ok(net.clone())
     }
@@ -172,23 +180,32 @@ impl Context {
         &self,
         canister_name: &str,
         environment_name: &str,
-    ) -> ContextResult<Principal> {
-        let env = self.get_environment(environment_name).await?;
+    ) -> Result<Principal, GetCanisterIdForEnvError> {
+        let env = self.get_environment(environment_name).await.context(
+            get_canister_id_for_env_error::GetEnvironmentSnafu {
+                environment_name: environment_name.to_owned(),
+            },
+        )?;
 
         if !env.canisters.contains_key(canister_name) {
-            bail!(
-                "canister '{}' not found in environment '{}'",
-                canister_name,
-                env.name
-            );
+            return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment_name.to_owned(),
+            });
         }
 
         // Lookup the canister id
-        let cid = self.ids.lookup(&Key {
-            network: env.network.name.to_owned(),
-            environment: env.name.to_owned(),
-            canister: canister_name.to_owned(),
-        })?;
+        let cid = self
+            .ids
+            .lookup(&Key {
+                network: env.network.name.to_owned(),
+                environment: env.name.to_owned(),
+                canister: canister_name.to_owned(),
+            })
+            .context(get_canister_id_for_env_error::CanisterIdLookupSnafu {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment_name.to_owned(),
+            })?;
 
         Ok(cid)
     }
@@ -198,11 +215,25 @@ impl Context {
         &self,
         identity: &IdentitySelection,
         environment_name: &str,
-    ) -> ContextResult<Agent> {
-        let id = self.get_identity(identity).await?;
-        let env = self.get_environment(environment_name).await?;
-        let access = self.network.access(&env.network).await?;
-        self.create_agent(id, access).await
+    ) -> Result<Agent, GetAgentForEnvError> {
+        let id = self.get_identity(identity).await.context(
+            get_agent_for_env_error::GetIdentitySnafu {
+                identity: identity.to_owned(),
+            },
+        )?;
+        let env = self.get_environment(environment_name).await.context(
+            get_agent_for_env_error::GetEnvironmentSnafu {
+                environment_name: environment_name.to_owned(),
+            },
+        )?;
+        let access = self.network.access(&env.network).await.context(
+            get_agent_for_env_error::NetworkAccessSnafu {
+                network_name: env.network.name.to_owned(),
+            },
+        )?;
+        self.create_agent(id, access)
+            .await
+            .context(get_agent_for_env_error::AgentCreateSnafu)
     }
 
     /// Creates an agent for a given identity and network.
@@ -210,11 +241,25 @@ impl Context {
         &self,
         identity: &IdentitySelection,
         network_name: &str,
-    ) -> ContextResult<Agent> {
-        let id = self.get_identity(identity).await?;
-        let network = self.get_network(network_name).await?;
-        let access = self.network.access(&network).await?;
-        self.create_agent(id, access).await
+    ) -> Result<Agent, GetAgentForNetworkError> {
+        let id = self.get_identity(identity).await.context(
+            get_agent_for_network_error::GetIdentitySnafu {
+                identity: identity.to_owned(),
+            },
+        )?;
+        let network = self.get_network(network_name).await.context(
+            get_agent_for_network_error::GetNetworkSnafu {
+                network_name: network_name.to_owned(),
+            },
+        )?;
+        let access = self.network.access(&network).await.context(
+            get_agent_for_network_error::NetworkAccessSnafu {
+                network_name: network_name.to_owned(),
+            },
+        )?;
+        self.create_agent(id, access)
+            .await
+            .context(get_agent_for_network_error::AgentCreateSnafu)
     }
 
     /// Private helper to create an agent given identity and network access.
@@ -224,7 +269,7 @@ impl Context {
         &self,
         id: Arc<dyn Identity>,
         network_access: NetworkAccess,
-    ) -> ContextResult<Agent> {
+    ) -> Result<Agent, icp::agent::CreateError> {
         let agent = self.agent.create(id, &network_access.url).await?;
         if let Some(k) = network_access.root_key {
             agent.set_root_key(k);
@@ -237,9 +282,141 @@ impl Context {
         &self,
         identity: &IdentitySelection,
         url: &str, // TODO: change to Url
-    ) -> ContextResult<Agent> {
-        let id = self.get_identity(identity).await?;
-        let agent = self.agent.create(id, url).await?;
+    ) -> Result<Agent, GetAgentForUrlError> {
+        let id = self.get_identity(identity).await.context(
+            get_agent_for_url_error::GetIdentitySnafu {
+                identity: identity.to_owned(),
+            },
+        )?;
+        let agent = self
+            .agent
+            .create(id, url)
+            .await
+            .context(get_agent_for_url_error::AgentCreateSnafu)?;
         Ok(agent)
     }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetIdentityError {
+    #[snafu(display("failed to load identity"))]
+    IdentityLoad {
+        source: icp::identity::LoadError,
+        identity: IdentitySelection,
+    },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetEnvironmentError {
+    #[snafu(display("failed to load project"))]
+    ProjectLoad { source: icp::LoadError },
+
+    #[snafu(display("environment '{}' not found in project", name))]
+    EnvironmentNotFound { name: String },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetNetworkError {
+    #[snafu(display("failed to load project"))]
+    ProjectLoad { source: icp::LoadError },
+
+    #[snafu(display("network '{}' not found in project", name))]
+    NetworkNotFound { name: String },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetCanisterIdForEnvError {
+    #[snafu(display("failed to get environment: {}", environment_name))]
+    GetEnvironment {
+        source: GetEnvironmentError,
+        environment_name: String,
+    },
+
+    #[snafu(display(
+        "canister '{}' not found in environment '{}'",
+        canister_name,
+        environment_name
+    ))]
+    CanisterNotFoundInEnv {
+        canister_name: String,
+        environment_name: String,
+    },
+
+    #[snafu(display(
+        "failed to lookup canister ID for canister '{}' in environment '{}'",
+        canister_name,
+        environment_name
+    ))]
+    CanisterIdLookup {
+        source: crate::store_id::LookupError,
+        canister_name: String,
+        environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetAgentForEnvError {
+    #[snafu(display("failed to get identity"))]
+    GetIdentity {
+        source: GetIdentityError,
+        identity: IdentitySelection,
+    },
+
+    #[snafu(display("failed to get environment '{}'", environment_name))]
+    GetEnvironment {
+        source: GetEnvironmentError,
+        environment_name: String,
+    },
+
+    #[snafu(display("failed to access network: {}", network_name))]
+    NetworkAccess {
+        source: icp::network::AccessError,
+        network_name: String,
+    },
+
+    #[snafu(display("failed to create agent: {}", source))]
+    AgentCreate { source: icp::agent::CreateError },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetAgentForNetworkError {
+    #[snafu(display("failed to get identity"))]
+    GetIdentity {
+        source: GetIdentityError,
+        identity: IdentitySelection,
+    },
+
+    #[snafu(display("failed to get network '{}'", network_name))]
+    GetNetwork {
+        source: GetNetworkError,
+        network_name: String,
+    },
+
+    #[snafu(display("failed to access network: {}", network_name))]
+    NetworkAccess {
+        source: icp::network::AccessError,
+        network_name: String,
+    },
+
+    #[snafu(display("failed to create agent: {}", source))]
+    AgentCreate { source: icp::agent::CreateError },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub(crate) enum GetAgentForUrlError {
+    #[snafu(display("failed to get identity"))]
+    GetIdentity {
+        source: GetIdentityError,
+        identity: IdentitySelection,
+    },
+
+    #[snafu(display("failed to create agent: {}", source))]
+    AgentCreate { source: icp::agent::CreateError },
 }

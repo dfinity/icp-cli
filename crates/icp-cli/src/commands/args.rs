@@ -4,36 +4,39 @@ use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
 use icp::identity::IdentitySelection;
+use snafu::Snafu;
 
 use crate::{commands::Context, options::IdentityOpt};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub(crate) enum ArgValidationError {
-    #[error("You can't specify both an environment and a network")]
+    #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,
 
-    #[error(
+    #[snafu(display(
         "Specifying a network is not supported if you are targeting a canister by name, specify an environment instead"
-    )]
+    ))]
     AmbiguousCanisterName,
 
-    #[error(transparent)]
-    ProjectLoad(#[from] icp::LoadError),
+    #[snafu(transparent)]
+    GetAgentForEnv {
+        source: crate::commands::GetAgentForEnvError,
+    },
 
-    #[error(transparent)]
-    Lookup(#[from] crate::store_id::LookupError),
+    #[snafu(transparent)]
+    GetCanisterIdForEnv {
+        source: crate::commands::GetCanisterIdForEnvError,
+    },
 
-    #[error(transparent)]
-    Access(#[from] icp::network::AccessError),
+    #[snafu(transparent)]
+    GetAgentForNetwork {
+        source: crate::commands::GetAgentForNetworkError,
+    },
 
-    #[error(transparent)]
-    Agent(#[from] icp::agent::CreateError),
-
-    #[error(transparent)]
-    Identity(#[from] icp::identity::LoadError),
-
-    #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    GetAgentForUrl {
+        source: crate::commands::GetAgentForUrlError,
+    },
 }
 
 #[derive(Args, Debug)]

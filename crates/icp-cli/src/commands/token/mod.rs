@@ -18,16 +18,16 @@ static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_map! {
 };
 
 #[derive(Debug, Parser)]
-pub struct Command {
+pub(crate) struct Command {
     #[arg(default_value = "icp")]
-    pub token: String,
+    pub(crate) token: String,
 
     #[command(subcommand)]
-    pub command: Commands,
+    pub(crate) command: Commands,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum Commands {
+pub(crate) enum Commands {
     Balance(balance::BalanceArgs),
     Transfer(transfer::TransferArgs),
 }

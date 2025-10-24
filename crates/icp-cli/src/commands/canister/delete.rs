@@ -9,9 +9,9 @@ use crate::{
 };
 
 #[derive(Debug, Args)]
-pub struct DeleteArgs {
+pub(crate) struct DeleteArgs {
     /// The name of the canister within the current project
-    pub name: String,
+    pub(crate) name: String,
 
     #[command(flatten)]
     identity: IdentityOpt,
@@ -21,7 +21,7 @@ pub struct DeleteArgs {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -50,7 +50,7 @@ pub enum CommandError {
     Delete(#[from] AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

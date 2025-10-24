@@ -8,11 +8,11 @@ lazy_static! {
 /// Returns the version of icp-cli that was built.
 /// In debug, add a timestamp of the upstream compilation at the end of version to ensure all
 /// debug runs are unique.
-pub fn icp_cli_version_str() -> &'static str {
+pub(crate) fn icp_cli_version_str() -> &'static str {
     &VERSION_STR
 }
 
 /// Returns the git sha of the build.
-pub fn git_sha() -> &'static str {
+pub(crate) fn git_sha() -> &'static str {
     &GIT_SHA
 }

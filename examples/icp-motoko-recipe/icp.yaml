@@ -3,4 +3,5 @@ canister:
   recipe:
     type: "@dfinity/motoko" 
     configuration:
-      entry: src/main.mo
+      main: src/main.mo
+      args: --incremental-gc

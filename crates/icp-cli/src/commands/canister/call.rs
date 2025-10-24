@@ -12,15 +12,15 @@ use crate::{
 };
 
 #[derive(Args, Debug)]
-pub struct CallArgs {
+pub(crate) struct CallArgs {
     /// Name of canister to call to
-    pub name: String,
+    pub(crate) name: String,
 
     /// Name of canister method to call into
-    pub method: String,
+    pub(crate) method: String,
 
     /// String representation of canister call arguments
-    pub args: String,
+    pub(crate) args: String,
 
     #[command(flatten)]
     identity: IdentityOpt,
@@ -30,7 +30,7 @@ pub struct CallArgs {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -68,7 +68,7 @@ pub enum CommandError {
     Call(#[from] ic_agent::AgentError),
 }
 
-pub async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");
@@ -131,7 +131,7 @@ pub async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
 }
 
 /// Pretty-prints IDLArgs detecting the terminal's width to avoid the 80-column default.
-pub fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Result<()> {
+pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Result<()> {
     if term.is_term() {
         let width = term.size().1 as usize;
         let pp_args = candid_parser::pretty::candid::value::pp_args(args);

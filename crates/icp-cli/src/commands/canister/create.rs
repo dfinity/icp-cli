@@ -23,61 +23,61 @@ use crate::{
     store_id::{Key, LookupError, RegisterError},
 };
 
-pub const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
+pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct CanisterSettings {
+pub(crate) struct CanisterSettings {
     /// Optional compute allocation (0 to 100). Represents guaranteed compute capacity.
     #[arg(long)]
-    pub compute_allocation: Option<u64>,
+    pub(crate) compute_allocation: Option<u64>,
 
     /// Optional memory allocation in bytes. If unset, memory is allocated dynamically.
     #[arg(long)]
-    pub memory_allocation: Option<u64>,
+    pub(crate) memory_allocation: Option<u64>,
 
     /// Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     #[arg(long)]
-    pub freezing_threshold: Option<u64>,
+    pub(crate) freezing_threshold: Option<u64>,
 
     /// Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles.
     #[arg(long)]
-    pub reserved_cycles_limit: Option<u64>,
+    pub(crate) reserved_cycles_limit: Option<u64>,
 }
 
 #[derive(Clone, Debug, Args)]
-pub struct CreateArgs {
+pub(crate) struct CreateArgs {
     /// The names of the canister within the current project
-    pub names: Vec<String>,
+    pub(crate) names: Vec<String>,
 
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub environment: EnvironmentOpt,
+    pub(crate) environment: EnvironmentOpt,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[arg(long)]
-    pub controller: Vec<Principal>,
+    pub(crate) controller: Vec<Principal>,
 
     // Resource-related settings and thresholds for the new canister.
     #[command(flatten)]
-    pub settings: CanisterSettings,
+    pub(crate) settings: CanisterSettings,
 
     /// Suppress human-readable output; print only canister IDs, one per line, to stdout.
     #[arg(long, short = 'q')]
-    pub quiet: bool,
+    pub(crate) quiet: bool,
 
     /// Cycles to fund canister creation (in raw cycles).
     #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
-    pub cycles: u128,
+    pub(crate) cycles: u128,
 
     /// The subnet to create canisters on.
     #[arg(long)]
-    pub subnet: Option<Principal>,
+    pub(crate) subnet: Option<Principal>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -130,7 +130,7 @@ pub enum CommandError {
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
-pub async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

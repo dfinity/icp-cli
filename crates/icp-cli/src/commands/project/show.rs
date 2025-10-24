@@ -4,17 +4,17 @@ use clap::Args;
 use crate::commands::{Context, Mode};
 
 #[derive(Args, Debug)]
-pub struct ShowArgs;
+pub(crate) struct ShowArgs;
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
 
 /// Loads the project's configuration and output the effective yaml config
 /// after resolving recipes
-pub async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), CommandError> {
     match &ctx.mode {
         Mode::Global => {
             unimplemented!("global mode is not implemented yet");

@@ -147,7 +147,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     .await?;
 
     // Load target environment
-    let env = ctx.get_environment(&arg_ctx).await?;
+    let env = ctx.get_environment(&arg_ctx)?;
 
     // Collect environment canisters
     let cnames = match args.names.is_empty() {
@@ -159,7 +159,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     };
 
     for name in &cnames {
-        ctx.ensure_canister_is_defined(&arg_ctx, name).await?;
+        ctx.ensure_canister_is_defined(&arg_ctx, name)?;
     }
 
     let cs = env
@@ -177,15 +177,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     let cexist: Vec<_> = env
         .canisters
         .values()
-        .filter_map(|(_, c)| {
-            ctx.ids
-                .lookup(&Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                })
-                .ok()
-        })
+        .filter_map(|(_, c)| ctx.resolve_canister_id(&arg_ctx, &c.name).ok())
         .collect();
 
     // Agent
@@ -241,7 +233,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                match ctx.resolve_canister_id(arg_ctx_ref, &c.name).await {
+                match ctx.resolve_canister_id(arg_ctx_ref, &c.name) {
                     // Exists (skip)
                     Ok(principal) => {
                         return Err(CommandError::CanisterExists { principal });
@@ -318,7 +310,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 };
 
                 // Register the canister ID
-                ctx.store_canister_id(arg_ctx_ref, &c.name, cid).await?;
+                ctx.store_canister_id(arg_ctx_ref, &c.name, cid)?;
 
                 Ok::<_, CommandError>(())
             }

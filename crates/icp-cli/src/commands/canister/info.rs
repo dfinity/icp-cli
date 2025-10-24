@@ -63,7 +63,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandEr
     .await?;
 
     let agent = ctx.get_agent(&arg_ctx).await?;
-    let canister_id = ctx.resolve_canister_id(&arg_ctx, &args.name).await?;
+    let canister_id = ctx.resolve_canister_id(&arg_ctx, &args.name)?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);

@@ -5,14 +5,15 @@ use clap::Subcommand;
 use console::Term;
 use ic_agent::Agent;
 use icp::{
-    Directories, Environment,
+    Directories, Environment, Project,
     canister::{build::Build, sync::Synchronize},
 };
+use tokio::runtime::Handle;
 
 use crate::{
     commands::args::ArgContext,
     store_artifact::ArtifactStore,
-    store_id::{self, IdStore, Key, RegisterError},
+    store_id::{self, IdStore, Key},
 };
 
 pub(crate) mod args;
@@ -137,11 +138,25 @@ pub(crate) struct Context {
 }
 
 impl Context {
-    pub(crate) async fn get_environment(
-        &self,
-        args: &ArgContext,
-    ) -> Result<Environment, ContextError> {
-        let project = self.project.load().await?;
+    pub(crate) fn get_project(&self) -> Result<Project, ContextError> {
+        // Try to get the current runtime handle
+        match Handle::try_current() {
+            // Runtime exists, use it
+            Ok(handle) => {
+                let project = self.project.clone();
+                handle.block_on(async move { project.load().await })
+            }
+            // No runtime, create one and block
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async { self.project.load().await })
+            }
+        }
+        .map_err(ContextError::LoadProject)
+    }
+
+    pub(crate) fn get_environment(&self, args: &ArgContext) -> Result<Environment, ContextError> {
+        let project = self.get_project()?;
         let environment = project.environments.get(args.environment()).ok_or(
             ContextError::EnvironmentNotFound {
                 environment: args.environment().to_string(),
@@ -152,7 +167,7 @@ impl Context {
 
     pub(crate) async fn get_agent(&self, args: &ArgContext) -> Result<Agent, ContextError> {
         let id = self.identity.load(args.identity().clone()).await?;
-        let environment = self.get_environment(args).await?;
+        let environment = self.get_environment(args)?;
         let access = self.network.access(&environment.network).await?;
         let agent = self.agent.create(id, &access.url).await?;
         if let Some(k) = access.root_key {
@@ -161,7 +176,7 @@ impl Context {
         Ok(agent)
     }
 
-    pub(crate) async fn resolve_canister_id(
+    pub(crate) fn resolve_canister_id(
         &self,
         args: &ArgContext,
         name: &str,
@@ -170,7 +185,7 @@ impl Context {
             return Ok(canister_id);
         }
 
-        let environment = self.get_environment(args).await?;
+        let environment = self.get_environment(args)?;
         let canister_id = self.ids.lookup(&Key {
             network: environment.network.name.to_owned(),
             environment: environment.name.to_owned(),
@@ -179,13 +194,13 @@ impl Context {
         Ok(canister_id)
     }
 
-    pub(crate) async fn store_canister_id(
+    pub(crate) fn store_canister_id(
         &self,
         args: &ArgContext,
         name: &str,
         canister_id: Principal,
     ) -> Result<(), ContextError> {
-        let environment = self.get_environment(args).await?;
+        let environment = self.get_environment(args)?;
         let key = Key {
             network: environment.network.name.to_owned(),
             environment: environment.name.to_owned(),
@@ -195,13 +210,13 @@ impl Context {
         Ok(())
     }
 
-    pub(crate) async fn ensure_canister_is_defined(
+    pub(crate) fn ensure_canister_is_defined(
         &self,
         args: &ArgContext,
         name: &str,
     ) -> Result<(), ContextError> {
-        let project = self.project.load().await?;
-        let environment = self.get_environment(args).await?;
+        let project = self.get_project()?;
+        let environment = self.get_environment(args)?;
         if !project.contains_canister(name) {
             return Err(ContextError::NetworkCanisterNotFound {
                 network: environment.network.name.to_owned(),

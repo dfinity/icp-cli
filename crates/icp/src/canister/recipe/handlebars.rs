@@ -1,6 +1,7 @@
 use indoc::formatdoc;
 use serde::Deserialize;
 use std::{str::FromStr, string::FromUtf8Error};
+use tracing::debug;
 
 use crate::{
     canister::{
@@ -129,6 +130,8 @@ impl Resolve for Handlebars {
                     source: HandlebarsError::UrlParse { source: err },
                 })?;
 
+                debug!("Requesting template from: {u}");
+
                 let resp = self
                     .http_client
                     .execute(Request::new(Method::GET, u))
@@ -168,6 +171,16 @@ impl Resolve for Handlebars {
 
         // Reject unset template variables
         reg.set_strict_mode(true);
+
+        debug!(
+            "{}",
+            formatdoc! {r#"
+            Loaded template:
+            ------
+            {tmpl}
+            ------
+        "#}
+        );
 
         // Render the template to YAML
         let out = reg

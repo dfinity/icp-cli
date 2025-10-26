@@ -95,11 +95,24 @@ impl From<RecipeType> for String {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Recipe {
+    /// An identifier for a recipe, it can have one of the following formats:
+    ///
+    /// `file://<path_to_recipe>` - point to a local recipe template
+    ///
+    /// `http://<url_to_recipe>` - point to a remote recipe template
+    ///
+    /// `@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.
+    ///
+    /// For now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes
+    /// `version` is optional and defaults to `latest`
+    ///
+    /// It is always recommended to pin the version and provide a hash for it in the `sha256` field
     #[serde(rename = "type")]
+    #[schemars(with = "String")]
     pub recipe_type: RecipeType,
 
     #[serde(default)]
-    #[schemars(with = "HashMap<String, serde_json::Value>")]
+    #[schemars(with = "Option<HashMap<String, serde_json::Value>>")]
     pub configuration: HashMap<String, serde_yaml::Value>,
 
     /// Optional sha256 checksum for the recipe template.

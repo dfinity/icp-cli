@@ -7,6 +7,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[serde(untagged)]
 pub enum Instructions {
     Recipe {
         recipe: Recipe,
@@ -31,9 +32,9 @@ pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
-    /// The configuration specifying the various settings when
-    /// creating the canister.
+    /// The configuration specifying the various settings when creating the canister.
     #[serde(default)]
+    #[schemars(with = "Option<Settings>")]
     pub settings: Settings,
 
     #[serde(flatten)]

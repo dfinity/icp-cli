@@ -3,74 +3,59 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "CanisterManifest": {
-      "description": "Represents the manifest describing a single canister. This struct is typically loaded from a `canister.yaml` file and defines the canister's name and how it should be built into WebAssembly.",
-      "oneOf": [
+      "anyOf": [
         {
-          "additionalProperties": false,
           "properties": {
-            "Recipe": {
-              "properties": {
-                "recipe": {
-                  "$ref": "#/definitions/Recipe"
-                }
-              },
-              "required": [
-                "recipe"
-              ],
-              "type": "object"
+            "recipe": {
+              "$ref": "#/definitions/Recipe"
             }
           },
           "required": [
-            "Recipe"
+            "recipe"
           ],
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
-            "BuildSync": {
-              "properties": {
-                "build": {
-                  "allOf": [
-                    {
-                      "$ref": "#/definitions/Steps"
-                    }
-                  ],
-                  "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
-                },
-                "sync": {
-                  "allOf": [
-                    {
-                      "$ref": "#/definitions/Steps2"
-                    }
-                  ],
-                  "default": {
-                    "steps": []
-                  },
-                  "description": "The configuration specifying how to sync the canister"
+            "build": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Steps"
                 }
-              },
-              "required": [
-                "build"
               ],
-              "type": "object"
+              "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+            },
+            "sync": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Steps2"
+                }
+              ],
+              "default": {
+                "steps": []
+              },
+              "description": "The configuration specifying how to sync the canister"
             }
           },
           "required": [
-            "BuildSync"
+            "build"
           ],
           "type": "object"
         }
       ],
+      "description": "Represents the manifest describing a single canister. This struct is typically loaded from a `canister.yaml` file and defines the canister's name and how it should be built into WebAssembly.",
       "properties": {
         "name": {
           "description": "The unique name of the canister as defined in this manifest.",
           "type": "string"
         },
         "settings": {
-          "allOf": [
+          "anyOf": [
             {
               "$ref": "#/definitions/Settings"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": {
@@ -89,40 +74,6 @@
         "name"
       ],
       "type": "object"
-    },
-    "CanisterSelection": {
-      "oneOf": [
-        {
-          "description": "No canisters are selected.",
-          "enum": [
-            "None"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A specific list of canisters is selected by name. An empty list is allowed, but `None` is preferred to indicate no selection.",
-          "properties": {
-            "Named": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "Named"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "All canisters are selected. This is the default variant.",
-          "enum": [
-            "Everything"
-          ],
-          "type": "string"
-        }
-      ]
     },
     "Configuration": {
       "oneOf": [
@@ -177,18 +128,30 @@
     "EnvironmentManifest": {
       "properties": {
         "canisters": {
-          "$ref": "#/definitions/CanisterSelection"
+          "description": "An optional list of the canisters to be included in this environments. Defaults to all the canisters if not specified.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "name": {
           "type": "string"
         },
         "network": {
-          "type": "string"
+          "description": "The target network for canister deployment. Defaults to the `local` network if not specified",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "settings": {
           "additionalProperties": {
             "$ref": "#/definitions/Settings"
           },
+          "description": "Override the canister settings for this environment",
           "type": [
             "object",
             "null"
@@ -196,9 +159,7 @@
         }
       },
       "required": [
-        "canisters",
-        "name",
-        "network"
+        "name"
       ],
       "type": "object"
     },
@@ -250,16 +211,23 @@
       "type": "object"
     },
     "NetworkManifest": {
+      "description": "A network definition for the project",
       "properties": {
         "configuration": {
-          "$ref": "#/definitions/Configuration"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Configuration"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "type": "string"
         }
       },
       "required": [
-        "configuration",
         "name"
       ],
       "type": "object"
@@ -293,7 +261,10 @@
         "configuration": {
           "additionalProperties": true,
           "default": {},
-          "type": "object"
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "sha256": {
           "description": "Optional sha256 checksum for the recipe template. If provided, the integrity of the recipe will be verified against this hash",
@@ -303,76 +274,14 @@
           ]
         },
         "type": {
-          "$ref": "#/definitions/RecipeType"
+          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes `version` is optional and defaults to `latest`\n\nIt is always recommended to pin the version and provide a hash for it in the `sha256` field",
+          "type": "string"
         }
       },
       "required": [
         "type"
       ],
       "type": "object"
-    },
-    "RecipeType": {
-      "description": "Represents the accepted values for a recipe type in the canister manifest",
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "description": "path to a locally defined recipe",
-          "properties": {
-            "file": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "file"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "url to a remote recipe",
-          "properties": {
-            "url": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "url"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A recipe hosted in a known registry in yaml, the format is \"@<registry>/<recipe>@<version>\"",
-          "properties": {
-            "registry": {
-              "properties": {
-                "name": {
-                  "description": "the name of registry",
-                  "type": "string"
-                },
-                "recipe": {
-                  "description": "the name of the recipe",
-                  "type": "string"
-                },
-                "version": {
-                  "description": "the version of the recipe, deserializes to `latest` when not provided",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "name",
-                "recipe",
-                "version"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "registry"
-          ],
-          "type": "object"
-        }
-      ]
     },
     "RemoteSource": {
       "properties": {
@@ -676,31 +585,57 @@
     }
   },
   "description": "Schema for icp.yaml project configuration files used by the ICP CLI",
-  "properties": {
-    "canisters": {
-      "items": {
-        "$ref": "#/definitions/Item_for_CanisterManifest"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "canister": {
+          "$ref": "#/definitions/CanisterManifest"
+        }
       },
-      "type": "array"
+      "required": [
+        "canister"
+      ],
+      "type": "object"
     },
-    "environments": {
-      "items": {
-        "$ref": "#/definitions/EnvironmentManifest"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "canisters": {
+          "items": {
+            "$ref": "#/definitions/Item_for_CanisterManifest"
+          },
+          "type": "array"
+        }
       },
-      "type": "array"
+      "required": [
+        "canisters"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "environments": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/EnvironmentManifest"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "networks": {
-      "items": {
-        "$ref": "#/definitions/NetworkManifest"
-      },
-      "type": "array"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NetworkManifest"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
-  "required": [
-    "canisters",
-    "environments",
-    "networks"
-  ],
   "title": "ICP Project Configuration",
   "type": "object"
 }

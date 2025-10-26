@@ -18,7 +18,11 @@ pub mod project;
 pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
-pub use {canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest};
+pub use {
+    canister::CanisterManifest,
+    environment::EnvironmentManifest,
+    network::NetworkManifest,
+};
 
 pub const PROJECT_MANIFEST: &str = "icp.yaml";
 pub const CANISTER_MANIFEST: &str = "canister.yaml";
@@ -44,14 +48,18 @@ impl Default for Networks {
         Networks::Networks(vec![
             NetworkManifest {
                 name: "local".to_string(),
-                configuration: Configuration::Managed(Managed::default()),
+                configuration: Configuration::Managed {
+                    managed: Managed::default(),
+                },
             },
             NetworkManifest {
                 name: "mainnet".to_string(),
-                configuration: Configuration::Connected(Connected {
-                    url: IC_MAINNET_NETWORK_URL.to_string(),
-                    root_key: None,
-                }),
+                configuration: Configuration::Connected {
+                    connected: Connected {
+                        url: IC_MAINNET_NETWORK_URL.to_string(),
+                        root_key: None,
+                    },
+                },
             },
         ])
     }
@@ -149,19 +157,23 @@ mod tests {
             Networks::Networks(vec![
                 NetworkManifest {
                     name: "local".to_string(),
-                    configuration: Configuration::Managed(Managed {
-                        gateway: Gateway {
-                            host: "localhost".to_string(),
-                            port: Port::Fixed(8000),
-                        },
-                    }),
+                    configuration: Configuration::Managed {
+                        managed: Managed {
+                            gateway: Gateway {
+                                host: "localhost".to_string(),
+                                port: Port::Fixed(8000),
+                            },
+                        }
+                    },
                 },
                 NetworkManifest {
                     name: "mainnet".to_string(),
-                    configuration: Configuration::Connected(Connected {
-                        url: "https://icp-api.io".to_string(),
-                        root_key: None,
-                    }),
+                    configuration: Configuration::Connected {
+                        connected: Connected {
+                            url: "https://icp-api.io".to_string(),
+                            root_key: None,
+                        }
+                    },
                 },
             ])
         );

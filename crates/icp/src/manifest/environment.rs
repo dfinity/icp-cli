@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer};
 
 use crate::canister::Settings;
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 pub struct EnvironmentInner {
     pub name: String,
     pub network: Option<String>,
@@ -30,16 +30,20 @@ pub enum CanisterSelection {
 
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub struct EnvironmentManifest {
-    // environment name
+    // The environment name
     pub name: String,
 
-    // target network for canister deployment
+    /// The target network for canister deployment.
+    /// Defaults to the `local` network if not specified
+    #[schemars(with = "Option<String>")]
     pub network: String,
 
-    // canisters the environment should contain
+    /// An optional list of the canisters to be included in this environments.
+    /// Defaults to all the canisters if not specified.
+    #[schemars(with = "Option<Vec<String>>")]
     pub canisters: CanisterSelection,
 
-    // canister settings overrides
+    /// Override the canister settings for this environment
     pub settings: Option<HashMap<String, Settings>>,
 }
 

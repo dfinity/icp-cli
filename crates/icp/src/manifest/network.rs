@@ -11,9 +11,12 @@ pub struct NetworkInner {
     pub configuration: Option<Configuration>,
 }
 
+/// A network definition for the project
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub struct NetworkManifest {
     pub name: String,
+
+    #[schemars(with = "Option<Configuration>")]
     pub configuration: Configuration,
 }
 
@@ -82,12 +85,14 @@ mod tests {
             )?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
+                configuration: Configuration::Managed {
+                    managed: Managed {
+                        gateway: Gateway {
+                            host: "localhost".to_string(),
+                            port: Port::Fixed(8000),
+                        }
                     }
-                })
+                }
             },
         );
 
@@ -148,10 +153,12 @@ mod tests {
             )?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
-                    root_key: None,
-                })
+                configuration: Configuration::Connected {
+                    connected: Connected {
+                        url: "https://ic0.app".to_string(),
+                        root_key: None,
+                    }
+                }
             },
         );
 
@@ -171,10 +178,12 @@ mod tests {
             )?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
-                    root_key: Some("root-key".to_string()),
-                })
+                configuration: Configuration::Connected {
+                    connected: Connected {
+                        url: "https://ic0.app".to_string(),
+                        root_key: Some("root-key".to_string()),
+                    }
+                }
             },
         );
 
@@ -192,12 +201,14 @@ mod tests {
             )?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
+                configuration: Configuration::Managed {
+                    managed: Managed {
+                        gateway: Gateway {
+                            host: "localhost".to_string(),
+                            port: Port::Fixed(8000),
+                        }
                     }
-                })
+                }
             },
         );
 
@@ -218,12 +229,14 @@ mod tests {
             )?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "my-host".to_string(),
-                        port: Port::Fixed(1234),
+                configuration: Configuration::Managed {
+                    managed: Managed {
+                        gateway: Gateway {
+                            host: "my-host".to_string(),
+                            port: Port::Fixed(1234),
+                        }
                     }
-                })
+                }
             },
         );
 
@@ -243,12 +256,14 @@ mod tests {
             )?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Random,
+                configuration: Configuration::Managed {
+                    managed: Managed {
+                        gateway: Gateway {
+                            host: "localhost".to_string(),
+                            port: Port::Random,
+                        }
                     }
-                })
+                }
             },
         );
 

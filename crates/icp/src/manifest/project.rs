@@ -80,8 +80,14 @@ impl From<Environments> for Vec<EnvironmentManifest> {
 
 #[derive(Debug, PartialEq, JsonSchema)]
 pub struct ProjectManifest {
+    #[serde(flatten)]
+    #[schemars(with = "Option<Canisters>")]
     pub canisters: Vec<Item<CanisterManifest>>,
+
+    #[schemars(with = "Option<NetworkManifest>")]
     pub networks: Vec<NetworkManifest>,
+
+    #[schemars(with = "Option<EnvironmentManifest>")]
     pub environments: Vec<EnvironmentManifest>,
 }
 

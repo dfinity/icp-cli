@@ -7,6 +7,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[serde(untagged)]
 pub enum Instructions {
     Recipe {
         recipe: Recipe,
@@ -18,8 +19,7 @@ pub enum Instructions {
         build: build::Steps,
 
         /// The configuration specifying how to sync the canister
-        #[serde(default)]
-        sync: sync::Steps,
+        sync: Option<sync::Steps>
     },
 }
 
@@ -31,9 +31,9 @@ pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
-    /// The configuration specifying the various settings when
-    /// creating the canister.
+    /// The configuration specifying the various settings when creating the canister.
     #[serde(default)]
+    #[schemars(with = "Option<Settings>")]
     pub settings: Settings,
 
     #[serde(flatten)]
@@ -146,8 +146,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         #[derive(Deserialize)]
                         struct BuildSyncHelper {
                             build: build::Steps,
-                            #[serde(default)]
-                            sync: sync::Steps,
+                            sync: Option<sync::Steps>,
                         }
 
                         let helper: BuildSyncHelper = serde_yaml::from_value(
@@ -155,7 +154,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         )
                         .map_err(|e| {
                             Error::custom(format!(
-                                "Canister {name} failed to parse build/sync instructions: {}",
+                                "Canister {name} failed to parse build/sync instructions: {:#?}",
                                 e
                             ))
                         })?;
@@ -199,6 +198,26 @@ mod tests {
         "Canister my-canister cannot have both a `recipe` and a `build` section";
     const ARRAY_NOT_EMPTY: &str = "Array must not be empty";
 
+    /// Validates project yaml against the schema and deserializes it to a manifest
+    fn validate_canister_yaml(s: &str) -> Result<CanisterManifest, Error> {
+        let schema = serde_json::from_str::<serde_json::Value>(include_str!("../../../../docs/schemas/canister-yaml-schema.json"))?;
+        let project_yaml= serde_yaml::from_str::<serde_json::Value>(s)?;
+
+        // Build & reuse
+        let validator = jsonschema::options().build(&schema)?;
+
+        // Iterate over errors
+        for error in validator.iter_errors(&project_yaml) {
+            eprintln!("--------- Error ----------");
+            eprintln!("{error:#?}");
+            eprintln!("--------------------------");
+        }
+
+        assert!(validator.is_valid(&project_yaml));
+
+        Ok(serde_yaml::from_str::<CanisterManifest>(s)?)
+    }
+
     #[test]
     fn empty() -> Result<(), Error> {
         match serde_yaml::from_str::<CanisterManifest>(r#"name: my-canister"#) {
@@ -225,29 +244,29 @@ mod tests {
     }
 
     #[test]
-    fn invalid_recipe_bad_type() -> Result<(), Error> {
+    fn canister_with_recipe() -> Result<(), Error> {
         // This should now fail because "unknown_type" is not a valid recipe type
-        match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+        let _ =  validate_canister_yaml(indoc! {r#"
             name: my-canister
             recipe:
               type: unknown_type
               configuration:
                 field: value
 
-        "#})
-        {
-            Ok(_) => {
-                return Err(anyhow!("An invalid recipe type should result in an error"));
-            }
-            Err(err) => {
-                let err_msg = format!("{err}");
-                if !err_msg.contains("Invalid recipe type") {
-                    return Err(anyhow!(
-                        "expected 'Invalid recipe type' error but got: {err}"
-                    ));
-                }
-            }
-        }
+        "#});
+
+        Ok(())
+    }
+
+    #[test]
+    fn canister_with_build() -> Result<(), Error> {
+        validate_canister_yaml(indoc! {r#"
+            name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: dosomething.sh
+        "#})?;
 
         Ok(())
     }
@@ -345,7 +364,7 @@ mod tests {
     #[test]
     fn recipe() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+            validate_canister_yaml(indoc! {r#"
                 name: my-canister
                 recipe:
                   type: file://my-recipe
@@ -369,7 +388,7 @@ mod tests {
     #[test]
     fn recipe_with_configuration() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+            validate_canister_yaml(indoc! {r#"
                 name: my-canister
                 recipe:
                   type: http://my-recipe
@@ -399,7 +418,7 @@ mod tests {
     #[test]
     fn recipe_with_sha256() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+            validate_canister_yaml(indoc! {r#"
                 name: my-canister
                 recipe:
                   type: "@dfinity/dummy"
@@ -431,7 +450,7 @@ mod tests {
     #[test]
     fn recipe_with_settings() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+            validate_canister_yaml(indoc! {r#"
                 name: my-canister
                 settings:
                   compute_allocation: 3
@@ -462,7 +481,7 @@ mod tests {
     #[test]
     fn build_steps() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+            validate_canister_yaml(indoc! {r#"
                 name: my-canister
                 build:
                   steps:
@@ -485,7 +504,7 @@ mod tests {
                             )
                         }),]
                     },
-                    sync: sync::Steps { steps: vec![] },
+                    sync: None,
                 },
             },
         );
@@ -524,7 +543,7 @@ mod tests {
     #[test]
     fn sync_steps() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+            validate_canister_yaml(indoc! {r#"
                 name: my-canister
                 build:
                   steps:
@@ -541,14 +560,15 @@ mod tests {
                 instructions: Instructions::BuildSync {
                     build: build::Steps {
                         steps: vec![build::Step::Script(script::Adapter {
-                            command: script::CommandField::Command("dosomething.sh".to_string())
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                            optional: None,
                         })]
                     },
-                    sync: sync::Steps {
+                    sync: Some(sync::Steps {
                         steps: vec![sync::Step::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),
                         })]
-                    },
+                    }),
                 },
             },
         );

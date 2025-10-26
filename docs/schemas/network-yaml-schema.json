@@ -1,0 +1,88 @@
+{
+  "$id": "NetworkManifest",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Gateway": {
+      "properties": {
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "description": "Schema for NetworkManifest",
+  "oneOf": [
+    {
+      "properties": {
+        "gateway": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Gateway"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "enum": [
+            "managed"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "mode": {
+          "enum": [
+            "connected"
+          ],
+          "type": "string"
+        },
+        "root-key": {
+          "description": "The root key of this network",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The URL this network can be reached at.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "url"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "NetworkManifest",
+  "type": "object"
+}

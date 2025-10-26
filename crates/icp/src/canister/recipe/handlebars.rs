@@ -11,7 +11,6 @@ use crate::{
     },
     fs::read,
     manifest::{
-        canister::Instructions,
         recipe::{Recipe, RecipeType},
     },
     prelude::*,
@@ -203,10 +202,9 @@ impl Resolve for Handlebars {
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        let insts = match insts {
-            Ok(helper) => Instructions::BuildSync {
-                build: helper.build,
-                sync: helper.sync,
+        match insts {
+            Ok(helper) => {
+               Ok((helper.build, helper.sync))
             },
             Err(e) => panic!(
                 "{}",
@@ -219,19 +217,8 @@ impl Resolve for Handlebars {
                 ------
             "#, recipe.recipe_type}
             ),
-        };
+        }
 
-        let (build, sync) = match insts {
-            // Supported
-            Instructions::BuildSync { build, sync } => (build, sync),
-
-            // Unsupported
-            Instructions::Recipe { .. } => {
-                panic!("recipe within a recipe is not supported")
-            }
-        };
-
-        Ok((build, sync))
     }
 }
 

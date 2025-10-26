@@ -1,159 +1,105 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
-use crate::network::Configuration;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
-pub struct NetworkInner {
+/// A network definition for the project
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+pub struct NetworkManifest {
     pub name: String,
 
     #[serde(flatten)]
-    pub configuration: Option<Configuration>,
+    pub configuration: Mode,
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
-pub struct NetworkManifest {
-    pub name: String,
-    pub configuration: Configuration,
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "mode")]
+pub enum Mode {
+    Managed (Managed),
+    Connected (Connected),
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error("Overriding the local network is not supported.")]
-    OverrideLocal,
-
-    #[error("Overriding the mainnet network is not supported.")]
-    OverrideMainnet,
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
+pub struct Managed {
+    pub gateway: Option<Gateway>,
 }
 
-impl TryFrom<NetworkInner> for NetworkManifest {
-    type Error = ParseError;
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub struct Connected {
+    /// The URL this network can be reached at.
+    pub url: String,
 
-    fn try_from(v: NetworkInner) -> Result<Self, Self::Error> {
-        let NetworkInner {
-            name,
-            configuration,
-        } = v;
-
-        // Name
-        if name == "local" {
-            return Err(ParseError::OverrideLocal);
-        }
-
-        if name == "mainnet" {
-            return Err(ParseError::OverrideMainnet);
-        }
-
-        // Configuration
-        let configuration = configuration.unwrap_or_default();
-
-        Ok(NetworkManifest {
-            name,
-            configuration,
-        })
-    }
+    /// The root key of this network
+    pub root_key: Option<String>,
 }
 
-impl<'de> Deserialize<'de> for NetworkManifest {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let inner: NetworkInner = Deserialize::deserialize(d)?;
-        inner.try_into().map_err(serde::de::Error::custom)
-    }
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+pub struct Gateway {
+    pub host: Option<String>,
+    pub port: Option<u16>,
 }
 
 #[cfg(test)]
 mod tests {
     use anyhow::{Error, anyhow};
-
-    use crate::network::{Connected, Gateway, Managed, Port};
+    use indoc::indoc;
 
     use super::*;
 
-    #[test]
-    fn default_configuration() -> Result<(), Error> {
-        assert_eq!(
-            serde_yaml::from_str::<NetworkManifest>(
-                r#"
-                name: my-network
-                "#
-            )?,
-            NetworkManifest {
-                name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
-                    }
-                })
-            },
-        );
+    /// Validates network yaml against the schema and deserializes it to a manifest
+    fn validate_network_yaml(s: &str) -> Result<NetworkManifest, Error> {
+        let schema = serde_json::from_str::<serde_json::Value>(include_str!("../../../../docs/schemas/network-yaml-schema.json"))?;
+        let network_yaml= serde_yaml::from_str::<serde_json::Value>(s)?;
 
-        Ok(())
-    }
+        // Build & reuse
+        let validator = jsonschema::options().build(&schema)?;
 
-    #[test]
-    fn override_local() -> Result<(), Error> {
-        match serde_yaml::from_str::<NetworkManifest>(r#"name: local"#) {
-            // No Error
-            Ok(_) => {
-                return Err(anyhow!("a network named local should result in an error"));
-            }
+        // Iterate over errors
+        for error in validator.iter_errors(&network_yaml) {
+            eprintln!("Error: {error:#?}");
+        }
 
-            // Wrong Error
-            Err(err) => {
-                if !format!("{err}").starts_with("Overriding the local network") {
-                    return Err(anyhow!(
-                        "a network named local resulted in the wrong error: {err}"
-                    ));
-                };
-            }
-        };
+        assert!(validator.is_valid(&network_yaml));
 
-        Ok(())
-    }
-
-    #[test]
-    fn override_mainnet() -> Result<(), Error> {
-        match serde_yaml::from_str::<NetworkManifest>(r#"name: mainnet"#) {
-            // No Error
-            Ok(_) => {
-                return Err(anyhow!("a network named mainnet should result in an error"));
-            }
-
-            // Wrong Error
-            Err(err) => {
-                if !format!("{err}").starts_with("Overriding the mainnet network") {
-                    return Err(anyhow!(
-                        "a network named mainnet resulted in the wrong error: {err}"
-                    ));
-                };
-            }
-        };
-
-        Ok(())
+        Ok(serde_yaml::from_str::<NetworkManifest>(s)?)
     }
 
     #[test]
     fn connected_network() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<NetworkManifest>(
-                r#"
+            validate_network_yaml(indoc! {r#"
                 name: my-network
                 mode: connected
                 url: https://ic0.app
-                "#
-            )?,
+            "#})?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
-                    root_key: None,
-                })
+                configuration: Mode::Connected(
+                    Connected { url: "https://ic0.app".to_string(), root_key: None }
+                ),
             },
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn just_a_name_fails() -> Result<(), Error> {
+        match serde_yaml::from_str::<NetworkManifest>(r#"name: my-network"#) {
+            // No Error
+            Ok(_) => {
+                return Err(anyhow!("an incomplete network definition should result in an error"));
+            }
+
+            // Wrong Error
+            Err(err) => {
+                if !format!("{err}").starts_with("missing field `mode`") {
+                    return Err(anyhow!(
+                        "an incomplete network definition resulted in the wrong error: {err}"
+                    ));
+                };
+            }
+        };
 
         Ok(())
     }
@@ -161,20 +107,17 @@ mod tests {
     #[test]
     fn connected_network_with_key() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<NetworkManifest>(
-                r#"
+            validate_network_yaml(indoc! {r#"
                 name: my-network
                 mode: connected
                 url: https://ic0.app
-                root-key: root-key
-                "#
-            )?,
+                root-key: the-key
+            "#})?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
-                    root_key: Some("root-key".to_string()),
-                })
+                configuration: Mode::Connected(
+                    Connected { url: "https://ic0.app".to_string(), root_key: Some("the-key".to_string()) }
+                ),
             },
         );
 
@@ -184,20 +127,43 @@ mod tests {
     #[test]
     fn managed_network() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<NetworkManifest>(
-                r#"
+            validate_network_yaml(indoc! {r#"
                 name: my-network
                 mode: managed
-                "#
-            )?,
+            "#})?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
+                configuration: Mode::Managed (
+                     Managed {
+                        gateway: None
                     }
-                })
+                )
+            },
+        );
+
+        Ok(())
+    }
+
+
+    #[test]
+    fn managed_network_with_host() -> Result<(), Error> {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                name: my-network
+                mode: managed
+                gateway:
+                  host: localhost
+            "#})?,
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed (
+                     Managed {
+                        gateway: Some(Gateway {
+                            host: Some("localhost".to_string()),
+                            port: None,
+                        })
+                    }
+                )
             },
         );
 
@@ -205,50 +171,25 @@ mod tests {
     }
 
     #[test]
-    fn managed_network_with_host_port() -> Result<(), Error> {
+    fn managed_network_with_port() -> Result<(), Error> {
         assert_eq!(
-            serde_yaml::from_str::<NetworkManifest>(
-                r#"
+            validate_network_yaml(indoc! {r#"
                 name: my-network
                 mode: managed
                 gateway:
-                  host: my-host
-                  port: 1234
-                "#
-            )?,
+                  host: localhost
+                  port: 8000
+            "#})?,
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "my-host".to_string(),
-                        port: Port::Fixed(1234),
+                configuration: Mode::Managed (
+                     Managed {
+                        gateway: Some(Gateway {
+                            host: Some("localhost".to_string()),
+                            port: Some(8000)
+                        })
                     }
-                })
-            },
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn managed_network_with_random_port() -> Result<(), Error> {
-        assert_eq!(
-            serde_yaml::from_str::<NetworkManifest>(
-                r#"
-                name: my-network
-                mode: managed
-                gateway:
-                  port: 0
-                "#
-            )?,
-            NetworkManifest {
-                name: "my-network".to_string(),
-                configuration: Configuration::Managed(Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Random,
-                    }
-                })
+                )
             },
         );
 

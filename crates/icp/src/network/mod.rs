@@ -83,17 +83,27 @@ pub struct Connected {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
 pub enum Configuration {
+    // Note: we must use struct variants to be able to flatten
+    // and make schemars generate the proper schema
     /// A managed network is one which can be controlled and manipulated.
-    Managed(Managed),
+    Managed {
+        #[serde(flatten)]
+        managed: Managed,
+    },
 
     /// A connected network is one which can be interacted with
     /// but cannot be controlled or manipulated.
-    Connected(Connected),
+    Connected {
+        #[serde(flatten)]
+        connected: Connected,
+    },
 }
 
 impl Default for Configuration {
     fn default() -> Self {
-        Configuration::Managed(Managed::default())
+        Configuration::Managed {
+            managed: Managed::default(),
+        }
     }
 }
 

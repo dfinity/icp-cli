@@ -6,26 +6,21 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
+use serde::de::DeserializeOwned;
 
 use crate::{
-    Canister, Environment, LoadManifest, LoadPath, Network, Project,
-    canister::{self, recipe},
-    fs::read,
-    is_glob,
-    manifest::{
-        CANISTER_MANIFEST, CanisterManifest, Item, Locate, canister::Instructions,
-        environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType,
-    },
-    prelude::*,
+    canister::{self, recipe, sync::Steps}, fs::read, is_glob, manifest::{
+        canister::Instructions, environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType, CanisterManifest, Item, Locate, CANISTER_MANIFEST
+    }, network::Configuration, prelude::*, Canister, Environment, LoadManifest, LoadPath, Network, Project
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadPathError {
-    #[error("failed to read canister manifest")]
-    Read,
+    #[error("failed to read manifest at {0}")]
+    Read(String),
 
-    #[error("failed to deserialize canister manifest")]
-    Deserialize,
+    #[error("failed to deserialize manifest at {0}")]
+    Deserialize(String),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -34,14 +29,17 @@ pub enum LoadPathError {
 pub struct PathLoader;
 
 #[async_trait]
-impl LoadPath<ProjectManifest, LoadPathError> for PathLoader {
-    async fn load(&self, path: &Path) -> Result<ProjectManifest, LoadPathError> {
+impl<T> LoadPath<T, LoadPathError> for PathLoader
+where
+    T: DeserializeOwned + Send + 'static,
+{
+    async fn load(&self, path: &Path) -> Result<T, LoadPathError> {
         // Read file
-        let mbs = read(path).context(LoadPathError::Read)?;
+        let mbs = read(path).context(LoadPathError::Read(path.to_string()))?;
 
-        // Load YAML
-        let m =
-            serde_yaml::from_slice::<ProjectManifest>(&mbs).context(LoadPathError::Deserialize)?;
+        // Deserialize YAML into any T
+        let m = serde_yaml::from_slice::<T>(&mbs)
+            .context(LoadPathError::Deserialize(path.to_string()))?;
 
         Ok(m)
     }
@@ -73,11 +71,17 @@ pub enum LoadManifestError {
     #[error("failed to load canister manifest")]
     Canister,
 
+    #[error("failed to load {kind} manifest at: {path}")]
+    Failed { kind: String, path: String },
+
     #[error("failed to resolve canister recipe: {0}")]
     Recipe(RecipeType),
 
     #[error("project contains two similarly named {kind}s: '{name}'")]
     Duplicate { kind: String, name: String },
+
+    #[error("Could not locate a {kind} manifest at: '{path}'")]
+    NotFound { kind: String, path: String },
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
@@ -166,7 +170,12 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
             for (cdir, m) in ms {
                 let (build, sync) = match &m.instructions {
                     // Build/Sync
-                    Instructions::BuildSync { build, sync } => (build.to_owned(), sync.to_owned()),
+                    Instructions::BuildSync { build, sync } => 
+                    (build.to_owned(),
+                        match sync {
+                            Some(sync) => sync.to_owned(),
+                            None => Steps::default(),
+                        }),
 
                     // Recipe
                     Instructions::Recipe { recipe } => self
@@ -209,7 +218,28 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Networks
         let mut networks: HashMap<String, Network> = HashMap::new();
 
-        for m in &m.networks {
+        for i in &m.networks {
+            let m = match i {
+                Item::Path(path) => {
+                    let path = pdir.join(path);
+                    if !path.exists() || !path.is_file() {
+                        return Err(LoadManifestError::NotFound {
+                            kind: "network".to_string(),
+                            path: path.to_string(),
+                        });
+                    }
+                    let loader = PathLoader;
+                    loader
+                        .load(&path)
+                        .await
+                        .context(LoadManifestError::Failed {
+                            kind: "network".to_string(),
+                            path: path.to_string(),
+                        })?
+                }
+                Item::Manifest(ms) => ms.clone(),
+            };
+
             match networks.entry(m.name.to_owned()) {
                 // Duplicate
                 Entry::Occupied(e) => {
@@ -223,7 +253,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Entry::Vacant(e) => {
                     e.insert(Network {
                         name: m.name.to_owned(),
-                        configuration: m.configuration.to_owned(),
+                        configuration: Configuration::default(),
                     });
                 }
             }
@@ -232,7 +262,28 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Environments
         let mut environments: HashMap<String, Environment> = HashMap::new();
 
-        for m in &m.environments {
+        for i in &m.environments {
+            let m = match i {
+                Item::Path(path) => {
+                    let path = pdir.join(path);
+                    if !path.exists() || !path.is_file() {
+                        return Err(LoadManifestError::NotFound {
+                            kind: "environment".to_string(),
+                            path: path.to_string(),
+                        });
+                    }
+                    let loader = PathLoader;
+                    loader
+                        .load(&path)
+                        .await
+                        .context(LoadManifestError::Failed {
+                            kind: "environment".to_string(),
+                            path: path.to_string(),
+                        })?
+                }
+                Item::Manifest(ms) => ms.clone(),
+            };
+
             match environments.entry(m.name.to_owned()) {
                 // Duplicate
                 Entry::Occupied(e) => {

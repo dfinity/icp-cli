@@ -18,18 +18,18 @@ pub(crate) const PATH_SEPARATOR: &str = ";";
 
 /// A network manifest for a network using a random port
 pub(crate) const NETWORK_RANDOM_PORT: &str = r#"
-network:
-  name: my-network
-  mode: managed
-  gateway:
-    port: 0
+networks:
+  - name: my-network
+    mode: managed
+    gateway:
+      port: 0
 "#;
 
 /// An environment manifest utilizing the above network
 pub(crate) const ENVIRONMENT_RANDOM_PORT: &str = r#"
-environment:
-  name: my-environment
-  network: my-network
+environments:
+  - name: my-environment
+    network: my-network
 "#;
 
 /// This ID is dependent on the toplogy being served by pocket-ic

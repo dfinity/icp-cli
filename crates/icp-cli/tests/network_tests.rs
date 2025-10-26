@@ -31,11 +31,11 @@ fn network_same_port() {
 
     // Project manifest
     let pm = indoc! {r#"
-        network:
-          name: my-network
-          mode: managed
-          gateway:
-            port: 8080
+        networks:
+          - name: my-network
+            mode: managed
+            gateway:
+              port: 8080
     "#};
 
     // write manifest to project a
@@ -80,11 +80,11 @@ fn two_projects_different_fixed_ports() {
     write_string(
         &project_dir_a.join("icp.yaml"), // path
         indoc! {r#"
-            network:
-              name: my-network
-              mode: managed
-              gateway:
-                port: 8001
+            networks:
+              - name: my-network
+                mode: managed
+                gateway:
+                  port: 8001
         "#}, // contents
     )
     .expect("failed to write project manifest");
@@ -96,11 +96,11 @@ fn two_projects_different_fixed_ports() {
     write_string(
         &project_dir_b.join("icp.yaml"), // path
         indoc! {r#"
-            network:
-              name: my-network
-              mode: managed
-              gateway:
-                port: 8002
+            networks:
+              - name: my-network
+                mode: managed
+                gateway:
+                  port: 8002
         "#}, // contents
     )
     .expect("failed to write project manifest");
@@ -150,12 +150,12 @@ fn deploy_to_other_projects_network() {
 
     // Connect to Project A's network
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         networks:
           - name: network-a

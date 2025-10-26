@@ -1,4 +1,4 @@
-canister:
+canisters:
   name: my-canister
   build:
     steps:

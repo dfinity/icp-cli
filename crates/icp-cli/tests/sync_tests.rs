@@ -24,16 +24,16 @@ fn sync_adapter_script_single() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
-          sync:
-            steps:
-              - type: script
-                command: echo "syncing"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -89,18 +89,18 @@ fn sync_adapter_script_multiple() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
-          sync:
-            steps:
-              - type: script
-                command: echo "second"
-              - type: script
-                command: echo "first"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "second"
+                - type: script
+                  command: echo "first"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -160,19 +160,19 @@ async fn sync_adapter_static_assets() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
-                sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                  sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
 
-          sync:
-            steps:
-              - type: assets
-                dirs:
-                  - {assets_dir}
+            sync:
+              steps:
+                - type: assets
+                  dirs:
+                    - {assets_dir}
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

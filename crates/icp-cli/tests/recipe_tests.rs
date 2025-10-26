@@ -29,10 +29,10 @@ fn recipe_remote_url_without_checksum() {
 
     // Project manifest
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: http://{addr}/recipe.hbs
+        canisters:
+          - name: my-canister
+            recipe:
+              type: http://{addr}/recipe.hbs
     "};
 
     write_string(
@@ -69,11 +69,11 @@ fn recipe_remote_url_invalid_checksum() {
 
     // Project manifest with invalid checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: http://{addr}/recipe.hbs
-            sha256: invalid
+        canisters:
+          - name: my-canister
+            recipe:
+              type: http://{addr}/recipe.hbs
+              sha256: invalid
     "};
 
     write_string(
@@ -117,11 +117,11 @@ fn recipe_remote_url_wrong_checksum() {
 
     // Project manifest with wrong checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: http://{addr}/recipe.hbs
-            sha256: {expected}
+        canisters:
+          - name: my-canister
+            recipe:
+              type: http://{addr}/recipe.hbs
+              sha256: {expected}
     "};
 
     write_string(
@@ -156,11 +156,11 @@ fn recipe_remote_url_valid_checksum() {
 
     // Project manifest with valid checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: http://{addr}/recipe.hbs
-            sha256: {RECIPE_TEMPLATE_CHECKSUM}
+        canisters:
+          - name: my-canister
+            recipe:
+              type: http://{addr}/recipe.hbs
+              sha256: {RECIPE_TEMPLATE_CHECKSUM}
     "};
 
     write_string(
@@ -192,10 +192,10 @@ fn recipe_local_file_without_checksum() {
 
     // Project manifest without checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: file://./recipe.hbs
+        canisters:
+          - name: my-canister
+            recipe:
+              type: file://./recipe.hbs
     "};
 
     write_string(
@@ -227,11 +227,11 @@ fn recipe_local_file_invalid_checksum() {
 
     // Project manifest with invalid checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: file://./recipe.hbs
-            sha256: invalid
+        canisters:
+          - name: my-canister
+            recipe:
+              type: file://./recipe.hbs
+              sha256: invalid
     "};
 
     write_string(
@@ -271,11 +271,11 @@ fn recipe_local_file_wrong_checksum() {
 
     // Project manifest with wrong checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: file://./recipe.hbs
-            sha256: {expected}
+        canisters:
+          - name: my-canister
+            recipe:
+              type: file://./recipe.hbs
+              sha256: {expected}
     "};
 
     write_string(
@@ -312,11 +312,11 @@ fn recipe_local_file_valid_checksum() {
 
     // Project manifest with valid checksum
     let pm = formatdoc! {"
-        canister:
-          name: my-canister
-          recipe:
-            type: file://./recipe.hbs
-            sha256: {RECIPE_TEMPLATE_CHECKSUM}
+        canisters:
+          - name: my-canister
+            recipe:
+              type: file://./recipe.hbs
+              sha256: {RECIPE_TEMPLATE_CHECKSUM}
     "};
 
     write_string(

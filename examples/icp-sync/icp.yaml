@@ -1,15 +1,15 @@
-canister:
-  name: my-canister
+canisters:
+  - name: my-canister
 
-  build:
-    steps:
-      - type: script
-        commands:
-          - command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }
-          - moc src/main.mo
-          - mv main.wasm "$ICP_WASM_OUTPUT_PATH"
+    build:
+      steps:
+        - type: script
+          commands:
+            - command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }
+            - moc src/main.mo
+            - mv main.wasm "$ICP_WASM_OUTPUT_PATH"
 
-  sync:
-    steps:
-      - type: script
-        command: icp canister call my-canister set '(1)'
+    sync:
+      steps:
+        - type: script
+          command: icp canister call my-canister set '(1)'

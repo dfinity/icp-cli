@@ -21,8 +21,8 @@ use crate::{
 /// For example:
 ///
 /// ```yaml
-/// type: rust
-/// package: my_canister
+/// type: script
+/// command: do_something.sh
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]

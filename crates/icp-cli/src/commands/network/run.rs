@@ -75,10 +75,10 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
 
     let cfg = match &network.configuration {
         // Locally-managed network
-        Configuration::Managed(cfg) => cfg,
+        Configuration::Managed { managed: cfg } => cfg,
 
         // Non-managed networks cannot be started
-        Configuration::Connected(_) => {
+        Configuration::Connected { connected: _ } => {
             return Err(CommandError::Unmanaged {
                 name: args.name.to_owned(),
             });

@@ -70,7 +70,7 @@ pub fn get_network_access(
     let access = match &network.configuration {
         //
         // Managed
-        Configuration::Managed(_) => {
+        Configuration::Managed { managed: _ } => {
             // Load network descriptor
             let desc =
                 nd.load_network_descriptor()?
@@ -112,7 +112,7 @@ pub fn get_network_access(
 
         //
         // Connected
-        Configuration::Connected(cfg) => {
+        Configuration::Connected { connected: cfg } => {
             let root_key = cfg
                 .root_key
                 .as_ref()

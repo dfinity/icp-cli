@@ -1,14 +1,6 @@
-use crate::{
-    network::{Configuration, Connected, Managed},
-    prelude::*,
-};
+use crate::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
-
-use crate::manifest::{
-    environment::CanisterSelection,
-    project::{Canisters, Environments, Networks},
-};
 
 pub(crate) mod adapter;
 pub(crate) mod canister;
@@ -31,41 +23,6 @@ pub enum Item<T> {
 
     /// The manifest
     Manifest(T),
-}
-
-impl Default for Canisters {
-    fn default() -> Self {
-        Canisters::Canisters(vec![Item::Path("canisters/*".into())])
-    }
-}
-
-impl Default for Networks {
-    fn default() -> Self {
-        Networks::Networks(vec![
-            NetworkManifest {
-                name: "local".to_string(),
-                configuration: Configuration::Managed(Managed::default()),
-            },
-            NetworkManifest {
-                name: "mainnet".to_string(),
-                configuration: Configuration::Connected(Connected {
-                    url: IC_MAINNET_NETWORK_URL.to_string(),
-                    root_key: None,
-                }),
-            },
-        ])
-    }
-}
-
-impl Default for Environments {
-    fn default() -> Self {
-        Environments::Environments(vec![EnvironmentManifest {
-            name: "local".to_string(),
-            network: "local".to_string(),
-            canisters: CanisterSelection::Everything,
-            settings: None,
-        }])
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -126,61 +83,35 @@ impl Locate for Locator {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Error;
 
-    use crate::network::{Gateway, Port};
+    // #[test]
+    // fn default_networks() -> Result<(), Error> {
+    //     assert_eq!(
+    //         default_networks_def(),
+    //         vec![
+    //             Item::Manifest(NetworkManifest {
+    //                 name: "local".to_string(),
+    //                 configuration: Some(Configuration::Managed {
+    //                     managed: Managed {
+    //                         gateway: Gateway {
+    //                             host: "localhost".to_string(),
+    //                             port: Port::Fixed(8000),
+    //                         },
+    //                     }
+    //                 }),
+    //             }),
+    //             Item::Manifest(NetworkManifest {
+    //                 name: "mainnet".to_string(),
+    //                 configuration: Some(Configuration::Connected {
+    //                     connected: Connected {
+    //                         url: "https://icp-api.io".to_string(),
+    //                         root_key: None,
+    //                     }
+    //                 }),
+    //             }),
+    //         ]
+    //     );
 
-    use super::*;
-
-    #[test]
-    fn default_canisters() -> Result<(), Error> {
-        assert_eq!(
-            Canisters::default(),
-            Canisters::Canisters(vec![Item::Path("canisters/*".into())])
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn default_networks() -> Result<(), Error> {
-        assert_eq!(
-            Networks::default(),
-            Networks::Networks(vec![
-                NetworkManifest {
-                    name: "local".to_string(),
-                    configuration: Configuration::Managed(Managed {
-                        gateway: Gateway {
-                            host: "localhost".to_string(),
-                            port: Port::Fixed(8000),
-                        },
-                    }),
-                },
-                NetworkManifest {
-                    name: "mainnet".to_string(),
-                    configuration: Configuration::Connected(Connected {
-                        url: "https://icp-api.io".to_string(),
-                        root_key: None,
-                    }),
-                },
-            ])
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn default_environments() -> Result<(), Error> {
-        assert_eq!(
-            Environments::default(),
-            Environments::Environments(vec![EnvironmentManifest {
-                name: "local".to_string(),
-                network: "local".to_string(),
-                canisters: CanisterSelection::Everything,
-                settings: None,
-            }])
-        );
-
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }

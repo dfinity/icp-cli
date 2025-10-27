@@ -57,6 +57,7 @@ tracing.workspace = true
 assert_cmd = "2"
 camino-tempfile = "1"
 indoc.workspace = true
+icp = { workspace = true, features = ["test-features"] }
 nix = { version = "0.30.1", features = ["process", "signal"] }
 pocket-ic.workspace = true
 predicates = "3"

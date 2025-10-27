@@ -22,6 +22,7 @@ pub mod network;
 pub mod prelude;
 pub mod project;
 
+
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }

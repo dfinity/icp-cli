@@ -144,3 +144,23 @@ impl Access for Directories {
         self.cache().join("port-descriptors")
     }
 }
+
+#[cfg(feature = "test-features")]
+/// Unimplemented mock implementation of `Access` for testing purposes.
+///
+/// All methods panic with `unimplemented!()` when called.
+/// This is useful for tests that need to construct a `Context` but don't
+/// actually use the directory functionality.
+#[derive(Debug, Clone)]
+pub struct UnimplementedMockDirs;
+
+#[cfg(feature = "test-features")]
+impl Access for UnimplementedMockDirs {
+    fn identity(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::identity")
+    }
+
+    fn port_descriptor(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::port_descriptor")
+    }
+}

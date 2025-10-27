@@ -1,16 +1,89 @@
 use schemars::JsonSchema;
+use schemars::schema::{InstanceType, Schema, SchemaObject, SingleOrVec};
+use schemars::r#gen::SchemaGenerator;
 use serde::{Deserialize, Deserializer};
 
 use crate::manifest::{
     Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
 };
 
-#[derive(Debug, PartialEq, Deserialize, JsonSchema)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)]
 pub enum Canisters {
     Canister(CanisterManifest),
     Canisters(Vec<Item<CanisterManifest>>),
+}
+
+// This is necessary to generate a correct schema
+// If we don't do this custom generation the schema will be generated
+// with oneof(canister, canisters) with `additionalProperties=false` which
+// breaks envrinments and networks being on the same level.
+impl JsonSchema for Canisters {
+    fn schema_name() -> String {
+        "Canisters".to_string()
+    }
+
+    fn json_schema(schema_gen: &mut SchemaGenerator) -> Schema {
+        let canister_schema = SchemaObject {
+            instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Object))),
+            object: Some(Box::new(schemars::schema::ObjectValidation {
+                properties: {
+                    let mut props = schemars::Map::new();
+                    props.insert("canister".to_string(), schema_gen.subschema_for::<CanisterManifest>());
+                    props
+                },
+                required: {
+                    let mut required = schemars::Set::new();
+                    required.insert("canister".to_string());
+                    required
+                },
+                // Don't set additionalProperties to false
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+
+        let canisters_schema = SchemaObject {
+            instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Object))),
+            object: Some(Box::new(schemars::schema::ObjectValidation {
+                properties: {
+                    let mut props = schemars::Map::new();
+                    props.insert(
+                        "canisters".to_string(),
+                        Schema::Object(SchemaObject {
+                            instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Array))),
+                            array: Some(Box::new(schemars::schema::ArrayValidation {
+                                items: Some(SingleOrVec::Single(Box::new(schema_gen.subschema_for::<Item<CanisterManifest>>()))),
+                                ..Default::default()
+                            })),
+                            ..Default::default()
+                        }),
+                    );
+                    props
+                },
+                required: {
+                    let mut required = schemars::Set::new();
+                    required.insert("canisters".to_string());
+                    required
+                },
+                // Don't set additionalProperties to false
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+
+        Schema::Object(SchemaObject {
+            subschemas: Some(Box::new(schemars::schema::SubschemaValidation {
+                one_of: Some(vec![
+                    Schema::Object(canister_schema),
+                    Schema::Object(canisters_schema),
+                ]),
+                ..Default::default()
+            })),
+            ..Default::default()
+        })
+    }
 }
 
 impl From<Canisters> for Vec<Item<CanisterManifest>> {
@@ -84,10 +157,10 @@ pub struct ProjectManifest {
     #[schemars(with = "Option<Canisters>")]
     pub canisters: Vec<Item<CanisterManifest>>,
 
-    #[schemars(with = "Option<Networks>")]
+    #[schemars(with = "Option<Vec<Item<NetworkManifest>>>")]
     pub networks: Vec<Item<NetworkManifest>>,
 
-    #[schemars(with = "Option<Environments>")]
+    #[schemars(with = "Option<Vec<Item<EnvironmentManifest>>>")]
     pub environments: Vec<Item<EnvironmentManifest>>,
 }
 

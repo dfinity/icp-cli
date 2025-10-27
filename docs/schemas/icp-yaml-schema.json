@@ -163,37 +163,6 @@
       ],
       "type": "object"
     },
-    "Environments": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "environment": {
-              "$ref": "#/definitions/EnvironmentManifest"
-            }
-          },
-          "required": [
-            "environment"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "environments": {
-              "items": {
-                "$ref": "#/definitions/Item_for_EnvironmentManifest"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "environments"
-          ],
-          "type": "object"
-        }
-      ]
-    },
     "Gateway": {
       "properties": {
         "host": {
@@ -294,37 +263,6 @@
         "name"
       ],
       "type": "object"
-    },
-    "Networks": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "network": {
-              "$ref": "#/definitions/NetworkManifest"
-            }
-          },
-          "required": [
-            "network"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "networks": {
-              "items": {
-                "$ref": "#/definitions/Item_for_NetworkManifest"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "networks"
-          ],
-          "type": "object"
-        }
-      ]
     },
     "Port": {
       "oneOf": [
@@ -681,7 +619,6 @@
   "description": "Schema for ProjectManifest",
   "oneOf": [
     {
-      "additionalProperties": false,
       "properties": {
         "canister": {
           "$ref": "#/definitions/CanisterManifest"
@@ -693,7 +630,6 @@
       "type": "object"
     },
     {
-      "additionalProperties": false,
       "properties": {
         "canisters": {
           "items": {
@@ -710,23 +646,21 @@
   ],
   "properties": {
     "environments": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Environments"
-        },
-        {
-          "type": "null"
-        }
+      "items": {
+        "$ref": "#/definitions/Item_for_EnvironmentManifest"
+      },
+      "type": [
+        "array",
+        "null"
       ]
     },
     "networks": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Networks"
-        },
-        {
-          "type": "null"
-        }
+      "items": {
+        "$ref": "#/definitions/Item_for_NetworkManifest"
+      },
+      "type": [
+        "array",
+        "null"
       ]
     }
   },

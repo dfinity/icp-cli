@@ -131,10 +131,16 @@ impl Locate for Locator {
 #[cfg(test)]
 mod tests {
     use anyhow::Error;
+    use indoc::indoc;
+    use serde_json::Value;
 
     use crate::network::{Gateway, Port};
 
     use super::*;
+
+    fn load_icp_yaml_schema() -> Result<Value, Error> {
+        Ok(serde_json::from_str::<serde_json::Value>(include_str!("../../../../docs/schemas/icp-yaml-schema.json"))?)
+    }
 
     #[test]
     fn default_canisters() -> Result<(), Error> {
@@ -177,6 +183,7 @@ mod tests {
         Ok(())
     }
 
+
     #[test]
     fn default_environments() -> Result<(), Error> {
         assert_eq!(
@@ -188,6 +195,69 @@ mod tests {
                 settings: None,
             })])
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn validate_manifest_against_schema() -> Result<(), Error> {
+        let schema = load_icp_yaml_schema()?;
+        let icp_yaml= serde_yaml::from_str::<serde_json::Value>(indoc! {r#"
+            canister:
+              name: my-canister
+
+              build:
+                steps:
+                  - type: pre-built
+                    path: ../icp-pre-built/dist/hello_world.wasm
+                    sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+              settings:
+                environment_variables:
+                  var-1: value-1
+                  var-2: value-2
+                  var-3: value-3
+
+        "#})?;
+
+        assert!(jsonschema::is_valid(&schema, &icp_yaml));
+        Ok(())
+    }
+
+
+    #[test]
+    fn validate_canister_list_manifest() -> Result<(), Error> {
+        let schema = load_icp_yaml_schema()?;
+        let icp_yaml= serde_yaml::from_str::<serde_json::Value>(indoc! {r#"
+            canisters:
+              - name: my-canister
+                build:
+                  steps:
+                    - type: pre-built
+                      path: ../icp-pre-built/dist/hello_world.wasm
+                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+                settings:
+                  environment_variables:
+                    var-1: value-1
+                    var-2: value-2
+                    var-3: value-3
+              - path/to/directory/
+
+            environments:
+              - zoblamcouche
+
+        "#})?;
+
+        let validator = jsonschema::validator_for(&schema)?;
+        for error in validator.iter_errors(&icp_yaml) {
+            eprintln!("Error Kind: {:?}", error.kind);
+            eprintln!("Error path: {}", error.schema_path);
+            eprintln!("Error: {}", error);
+            eprintln!("Location: {}", error.instance_path);
+        }
+
+        assert!(validator.is_valid(&icp_yaml));
 
         Ok(())
     }

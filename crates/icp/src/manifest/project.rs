@@ -319,9 +319,10 @@ impl<'de> Deserialize<'de> for ProjectManifest {
 
                             for v in seq {
                                 // Can be a manifest or point to another file
-                                let network: Item<NetworkManifest> = serde_yaml::from_value(v).map_err(|e| {
-                                    Error::custom(format!("Failed to load network: {}", e))
-                                })?;
+                                let network: Item<NetworkManifest> = serde_yaml::from_value(v)
+                                    .map_err(|e| {
+                                        Error::custom(format!("Failed to load network: {}", e))
+                                    })?;
 
                                 networks.push(network);
                             }

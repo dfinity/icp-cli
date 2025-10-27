@@ -250,12 +250,13 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                                 Vec::with_capacity(seq.len());
 
                             for v in seq {
-                                let environment_manifest =
+                                // Can be a manifest or point to another file
+                                let environment: Item<EnvironmentManifest> =
                                     serde_yaml::from_value(v).map_err(|e| {
                                         Error::custom(format!("Failed to load environment: {}", e))
                                     })?;
 
-                                environments.push(Item::Manifest(environment_manifest));
+                                environments.push(environment);
                             }
 
                             [
@@ -317,11 +318,12 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                                 Vec::with_capacity(seq.len());
 
                             for v in seq {
-                                let network_manifest = serde_yaml::from_value(v).map_err(|e| {
+                                // Can be a manifest or point to another file
+                                let network: Item<NetworkManifest> = serde_yaml::from_value(v).map_err(|e| {
                                     Error::custom(format!("Failed to load network: {}", e))
                                 })?;
 
-                                networks.push(Item::Manifest(network_manifest));
+                                networks.push(network);
                             }
 
                             [

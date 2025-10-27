@@ -1,203 +1,47 @@
 {
-  "$id": "https://dfinity.org/schemas/icp-yaml/v1.0.0",
+  "$id": "CanisterManifest",
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "properties": {
+        "recipe": {
+          "$ref": "#/definitions/Recipe"
+        }
+      },
+      "required": [
+        "recipe"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "build": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Steps"
+            }
+          ],
+          "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+        },
+        "sync": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Steps2"
+            }
+          ],
+          "default": {
+            "steps": []
+          },
+          "description": "The configuration specifying how to sync the canister"
+        }
+      },
+      "required": [
+        "build"
+      ],
+      "type": "object"
+    }
+  ],
   "definitions": {
-    "CanisterManifest": {
-      "anyOf": [
-        {
-          "properties": {
-            "recipe": {
-              "$ref": "#/definitions/Recipe"
-            }
-          },
-          "required": [
-            "recipe"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "build": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Steps"
-                }
-              ],
-              "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
-            },
-            "sync": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Steps2"
-                }
-              ],
-              "default": {
-                "steps": []
-              },
-              "description": "The configuration specifying how to sync the canister"
-            }
-          },
-          "required": [
-            "build"
-          ],
-          "type": "object"
-        }
-      ],
-      "description": "Represents the manifest describing a single canister. This struct is typically loaded from a `canister.yaml` file and defines the canister's name and how it should be built into WebAssembly.",
-      "properties": {
-        "name": {
-          "description": "The unique name of the canister as defined in this manifest.",
-          "type": "string"
-        },
-        "settings": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Settings"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": {
-            "compute_allocation": null,
-            "environment_variables": null,
-            "freezing_threshold": null,
-            "memory_allocation": null,
-            "reserved_cycles_limit": null,
-            "wasm_memory_limit": null,
-            "wasm_memory_threshold": null
-          },
-          "description": "The configuration specifying the various settings when creating the canister."
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "Configuration": {
-      "oneOf": [
-        {
-          "description": "A managed network is one which can be controlled and manipulated.",
-          "properties": {
-            "gateway": {
-              "$ref": "#/definitions/Gateway"
-            },
-            "mode": {
-              "enum": [
-                "managed"
-              ],
-              "type": "string"
-            }
-          },
-          "required": [
-            "gateway",
-            "mode"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A connected network is one which can be interacted with but cannot be controlled or manipulated.",
-          "properties": {
-            "mode": {
-              "enum": [
-                "connected"
-              ],
-              "type": "string"
-            },
-            "root-key": {
-              "description": "The root key of this network",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "url": {
-              "description": "The URL this network can be reached at.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "mode",
-            "url"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "EnvironmentManifest": {
-      "properties": {
-        "canisters": {
-          "description": "An optional list of the canisters to be included in this environments. Defaults to all the canisters if not specified.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "network": {
-          "description": "The target network for canister deployment. Defaults to the `local` network if not specified",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "settings": {
-          "additionalProperties": {
-            "$ref": "#/definitions/Settings"
-          },
-          "description": "Override the canister settings for this environment",
-          "type": [
-            "object",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "Gateway": {
-      "properties": {
-        "host": {
-          "default": "localhost",
-          "type": "string"
-        },
-        "port": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/Port"
-            }
-          ],
-          "default": {
-            "Fixed": 8000
-          }
-        }
-      },
-      "type": "object"
-    },
-    "Item_for_CanisterManifest": {
-      "anyOf": [
-        {
-          "description": "Path to a manifest",
-          "type": "string"
-        },
-        {
-          "allOf": [
-            {
-              "$ref": "#/definitions/CanisterManifest"
-            }
-          ],
-          "description": "The manifest"
-        }
-      ]
-    },
     "LocalSource": {
       "properties": {
         "path": {
@@ -209,52 +53,6 @@
         "path"
       ],
       "type": "object"
-    },
-    "NetworkManifest": {
-      "description": "A network definition for the project",
-      "properties": {
-        "configuration": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Configuration"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "Port": {
-      "oneOf": [
-        {
-          "enum": [
-            "Random"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "Fixed": {
-              "format": "uint16",
-              "minimum": 0.0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "Fixed"
-          ],
-          "type": "object"
-        }
-      ]
     },
     "Recipe": {
       "properties": {
@@ -584,58 +382,36 @@
       "type": "object"
     }
   },
-  "description": "Schema for icp.yaml project configuration files used by the ICP CLI",
-  "oneOf": [
-    {
-      "additionalProperties": false,
-      "properties": {
-        "canister": {
-          "$ref": "#/definitions/CanisterManifest"
-        }
-      },
-      "required": [
-        "canister"
-      ],
-      "type": "object"
-    },
-    {
-      "additionalProperties": false,
-      "properties": {
-        "canisters": {
-          "items": {
-            "$ref": "#/definitions/Item_for_CanisterManifest"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "canisters"
-      ],
-      "type": "object"
-    }
-  ],
+  "description": "Schema for CanisterManifest",
   "properties": {
-    "environments": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/EnvironmentManifest"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "name": {
+      "description": "The unique name of the canister as defined in this manifest.",
+      "type": "string"
     },
-    "networks": {
+    "settings": {
       "anyOf": [
         {
-          "$ref": "#/definitions/NetworkManifest"
+          "$ref": "#/definitions/Settings"
         },
         {
           "type": "null"
         }
-      ]
+      ],
+      "default": {
+        "compute_allocation": null,
+        "environment_variables": null,
+        "freezing_threshold": null,
+        "memory_allocation": null,
+        "reserved_cycles_limit": null,
+        "wasm_memory_limit": null,
+        "wasm_memory_threshold": null
+      },
+      "description": "The configuration specifying the various settings when creating the canister."
     }
   },
-  "title": "ICP Project Configuration",
+  "required": [
+    "name"
+  ],
+  "title": "CanisterManifest",
   "type": "object"
 }

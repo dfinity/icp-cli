@@ -1,0 +1,120 @@
+{
+  "$id": "NetworkManifest",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Configuration": {
+      "oneOf": [
+        {
+          "description": "A managed network is one which can be controlled and manipulated.",
+          "properties": {
+            "gateway": {
+              "$ref": "#/definitions/Gateway"
+            },
+            "mode": {
+              "enum": [
+                "managed"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "gateway",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A connected network is one which can be interacted with but cannot be controlled or manipulated.",
+          "properties": {
+            "mode": {
+              "enum": [
+                "connected"
+              ],
+              "type": "string"
+            },
+            "root-key": {
+              "description": "The root key of this network",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "description": "The URL this network can be reached at.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "url"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Gateway": {
+      "properties": {
+        "host": {
+          "default": "localhost",
+          "type": "string"
+        },
+        "port": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Port"
+            }
+          ],
+          "default": {
+            "Fixed": 8000
+          }
+        }
+      },
+      "type": "object"
+    },
+    "Port": {
+      "oneOf": [
+        {
+          "enum": [
+            "Random"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Fixed": {
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Fixed"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "description": "Schema for NetworkManifest",
+  "properties": {
+    "configuration": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Configuration"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "NetworkManifest",
+  "type": "object"
+}

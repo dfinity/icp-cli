@@ -160,7 +160,7 @@ jobs:
       - name: Check for uncommitted changes
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
-            echo "❌ The icp.yaml schema is not up to date"
+            echo "❌ The schema docs are not up to date"
             echo ""
             echo " Run ./scripts/generate-config-schema.sh to update them"
             echo ""

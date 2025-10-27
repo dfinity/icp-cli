@@ -1,0 +1,735 @@
+{
+  "$id": "ProjectManifest",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "CanisterManifest": {
+      "anyOf": [
+        {
+          "properties": {
+            "recipe": {
+              "$ref": "#/definitions/Recipe"
+            }
+          },
+          "required": [
+            "recipe"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "build": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Steps"
+                }
+              ],
+              "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+            },
+            "sync": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Steps2"
+                }
+              ],
+              "default": {
+                "steps": []
+              },
+              "description": "The configuration specifying how to sync the canister"
+            }
+          },
+          "required": [
+            "build"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Represents the manifest describing a single canister. This struct is typically loaded from a `canister.yaml` file and defines the canister's name and how it should be built into WebAssembly.",
+      "properties": {
+        "name": {
+          "description": "The unique name of the canister as defined in this manifest.",
+          "type": "string"
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Settings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": {
+            "compute_allocation": null,
+            "environment_variables": null,
+            "freezing_threshold": null,
+            "memory_allocation": null,
+            "reserved_cycles_limit": null,
+            "wasm_memory_limit": null,
+            "wasm_memory_threshold": null
+          },
+          "description": "The configuration specifying the various settings when creating the canister."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Configuration": {
+      "oneOf": [
+        {
+          "description": "A managed network is one which can be controlled and manipulated.",
+          "properties": {
+            "gateway": {
+              "$ref": "#/definitions/Gateway"
+            },
+            "mode": {
+              "enum": [
+                "managed"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "gateway",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A connected network is one which can be interacted with but cannot be controlled or manipulated.",
+          "properties": {
+            "mode": {
+              "enum": [
+                "connected"
+              ],
+              "type": "string"
+            },
+            "root-key": {
+              "description": "The root key of this network",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "description": "The URL this network can be reached at.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "url"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EnvironmentManifest": {
+      "properties": {
+        "canisters": {
+          "description": "An optional list of the canisters to be included in this environments. Defaults to all the canisters if not specified.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "network": {
+          "description": "The target network for canister deployment. Defaults to the `local` network if not specified",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settings": {
+          "additionalProperties": {
+            "$ref": "#/definitions/Settings"
+          },
+          "description": "Override the canister settings for this environment",
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Environments": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "environment": {
+              "$ref": "#/definitions/EnvironmentManifest"
+            }
+          },
+          "required": [
+            "environment"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "environments": {
+              "items": {
+                "$ref": "#/definitions/Item_for_EnvironmentManifest"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "environments"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Gateway": {
+      "properties": {
+        "host": {
+          "default": "localhost",
+          "type": "string"
+        },
+        "port": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Port"
+            }
+          ],
+          "default": {
+            "Fixed": 8000
+          }
+        }
+      },
+      "type": "object"
+    },
+    "Item_for_CanisterManifest": {
+      "anyOf": [
+        {
+          "description": "Path to a manifest",
+          "type": "string"
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CanisterManifest"
+            }
+          ],
+          "description": "The manifest"
+        }
+      ]
+    },
+    "Item_for_EnvironmentManifest": {
+      "anyOf": [
+        {
+          "description": "Path to a manifest",
+          "type": "string"
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/definitions/EnvironmentManifest"
+            }
+          ],
+          "description": "The manifest"
+        }
+      ]
+    },
+    "Item_for_NetworkManifest": {
+      "anyOf": [
+        {
+          "description": "Path to a manifest",
+          "type": "string"
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/definitions/NetworkManifest"
+            }
+          ],
+          "description": "The manifest"
+        }
+      ]
+    },
+    "LocalSource": {
+      "properties": {
+        "path": {
+          "description": "Local path on-disk to read a WASM file from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "NetworkManifest": {
+      "description": "A network definition for the project",
+      "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Configuration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Networks": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "network": {
+              "$ref": "#/definitions/NetworkManifest"
+            }
+          },
+          "required": [
+            "network"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "networks": {
+              "items": {
+                "$ref": "#/definitions/Item_for_NetworkManifest"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "networks"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Port": {
+      "oneOf": [
+        {
+          "enum": [
+            "Random"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Fixed": {
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Fixed"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Recipe": {
+      "properties": {
+        "configuration": {
+          "additionalProperties": true,
+          "default": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "sha256": {
+          "description": "Optional sha256 checksum for the recipe template. If provided, the integrity of the recipe will be verified against this hash",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes `version` is optional and defaults to `latest`\n\nIt is always recommended to pin the version and provide a hash for it in the `sha256` field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "RemoteSource": {
+      "properties": {
+        "url": {
+          "description": "Url to fetch the remote WASM file from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "Settings": {
+      "description": "Canister settings, such as compute and memory allocation.",
+      "properties": {
+        "compute_allocation": {
+          "description": "Compute allocation (0 to 100). Represents guaranteed compute capacity.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "environment_variables": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables for the canister as key-value pairs. These variables are accessible within the canister and can be used to configure behavior without hardcoding values in the WASM module.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "freezing_threshold": {
+          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_allocation": {
+          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reserved_cycles_limit": {
+          "description": "Reserved cycles limit. If set, the canister cannot consume more than this many cycles.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wasm_memory_limit": {
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wasm_memory_threshold": {
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Step": {
+      "description": "Identifies the type of adapter used to build the canister, along with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file. For example:\n\n```yaml type: rust package: my_canister ```",
+      "oneOf": [
+        {
+          "description": "Represents a canister built using a custom script or command. This variant allows for flexible build processes defined by the user.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Command used to build a canister",
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Set of commands used to build a canister",
+              "properties": {
+                "commands": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "commands"
+              ],
+              "type": "object"
+            }
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "script"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "anyOf": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/LocalSource"
+                }
+              ],
+              "description": "Local path on-disk to read a WASM file from"
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/RemoteSource"
+                }
+              ],
+              "description": "Remote url to fetch a WASM file from"
+            }
+          ],
+          "description": "Represents a pre-built canister. This variant allows for retrieving a canister WASM from various sources.",
+          "properties": {
+            "sha256": {
+              "description": "Optional sha256 checksum of the WASM",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "pre-built"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Step2": {
+      "description": "Identifies the type of adapter used to sync the canister, along with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file. For example:\n\n```yaml type: script command: echo \"synchronizing canister\" ```",
+      "oneOf": [
+        {
+          "description": "Represents a canister synced using a custom script or command. This variant allows for flexible sync processes defined by the user.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Command used to build a canister",
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Set of commands used to build a canister",
+              "properties": {
+                "commands": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "commands"
+              ],
+              "type": "object"
+            }
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "script"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Represents syncing of an assets canister",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Directory used to synchronize an assets canister",
+              "properties": {
+                "dir": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "dir"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Set of directories used to synchronize an assets canister",
+              "properties": {
+                "dirs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "dirs"
+              ],
+              "type": "object"
+            }
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "assets"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Steps": {
+      "description": "Describes how the canister should be built into WebAssembly, including the adapters and build steps responsible for the build.",
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/Step"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "type": "object"
+    },
+    "Steps2": {
+      "description": "Describes how the canister should be built into WebAssembly, including the adapters and build steps responsible for the build.",
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/Step2"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "Schema for ProjectManifest",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "canister": {
+          "$ref": "#/definitions/CanisterManifest"
+        }
+      },
+      "required": [
+        "canister"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "canisters": {
+          "items": {
+            "$ref": "#/definitions/Item_for_CanisterManifest"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "canisters"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "environments": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Environments"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "networks": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Networks"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "ProjectManifest",
+  "type": "object"
+}

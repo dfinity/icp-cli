@@ -18,11 +18,7 @@ pub mod project;
 pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
-pub use {
-    canister::CanisterManifest,
-    environment::EnvironmentManifest,
-    network::NetworkManifest,
-};
+pub use {canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest};
 
 pub const PROJECT_MANIFEST: &str = "icp.yaml";
 pub const CANISTER_MANIFEST: &str = "canister.yaml";
@@ -46,13 +42,13 @@ impl Default for Canisters {
 impl Default for Networks {
     fn default() -> Self {
         Networks::Networks(vec![
-            NetworkManifest {
+            Item::Manifest(NetworkManifest {
                 name: "local".to_string(),
                 configuration: Configuration::Managed {
                     managed: Managed::default(),
                 },
-            },
-            NetworkManifest {
+            }),
+            Item::Manifest(NetworkManifest {
                 name: "mainnet".to_string(),
                 configuration: Configuration::Connected {
                     connected: Connected {
@@ -60,19 +56,19 @@ impl Default for Networks {
                         root_key: None,
                     },
                 },
-            },
+            }),
         ])
     }
 }
 
 impl Default for Environments {
     fn default() -> Self {
-        Environments::Environments(vec![EnvironmentManifest {
+        Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
             name: "local".to_string(),
             network: "local".to_string(),
             canisters: CanisterSelection::Everything,
             settings: None,
-        }])
+        })])
     }
 }
 
@@ -155,7 +151,7 @@ mod tests {
         assert_eq!(
             Networks::default(),
             Networks::Networks(vec![
-                NetworkManifest {
+                Item::Manifest(NetworkManifest {
                     name: "local".to_string(),
                     configuration: Configuration::Managed {
                         managed: Managed {
@@ -165,8 +161,8 @@ mod tests {
                             },
                         }
                     },
-                },
-                NetworkManifest {
+                }),
+                Item::Manifest(NetworkManifest {
                     name: "mainnet".to_string(),
                     configuration: Configuration::Connected {
                         connected: Connected {
@@ -174,7 +170,7 @@ mod tests {
                             root_key: None,
                         }
                     },
-                },
+                }),
             ])
         );
 
@@ -185,12 +181,12 @@ mod tests {
     fn default_environments() -> Result<(), Error> {
         assert_eq!(
             Environments::default(),
-            Environments::Environments(vec![EnvironmentManifest {
+            Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
                 name: "local".to_string(),
                 network: "local".to_string(),
                 canisters: CanisterSelection::Everything,
                 settings: None,
-            }])
+            })])
         );
 
         Ok(())

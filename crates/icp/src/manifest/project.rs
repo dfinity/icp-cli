@@ -259,7 +259,9 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             }
 
                             [
-                                Into::<Vec<Item<EnvironmentManifest>>>::into(Environments::default()),
+                                Into::<Vec<Item<EnvironmentManifest>>>::into(
+                                    Environments::default(),
+                                ),
                                 environments,
                             ]
                             .concat()
@@ -311,7 +313,8 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             .remove(&networks_key)
                             .ok_or_else(|| Error::custom("'networks' key does not exist"))?
                         {
-                            let mut networks: Vec<Item<NetworkManifest>> = Vec::with_capacity(seq.len());
+                            let mut networks: Vec<Item<NetworkManifest>> =
+                                Vec::with_capacity(seq.len());
 
                             for v in seq {
                                 let network_manifest = serde_yaml::from_value(v).map_err(|e| {
@@ -564,12 +567,14 @@ mod tests {
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
-                    name: "my-environment".to_string(),
-                    network: "my-network".to_string(),
-                    canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
-                    settings: None,
-                })])
+                environments: Environments::Environments(vec![Item::Manifest(
+                    EnvironmentManifest {
+                        name: "my-environment".to_string(),
+                        network: "my-network".to_string(),
+                        canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                        settings: None,
+                    }
+                )])
                 .with_defaults()
                 .into(),
             },
@@ -590,12 +595,14 @@ mod tests {
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
-                    name: "my-environment".to_string(),
-                    network: "my-network".to_string(),
-                    canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
-                    settings: None,
-                })])
+                environments: Environments::Environments(vec![Item::Manifest(
+                    EnvironmentManifest {
+                        name: "my-environment".to_string(),
+                        network: "my-network".to_string(),
+                        canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                        settings: None,
+                    }
+                )])
                 .with_defaults()
                 .into(),
             },
@@ -665,27 +672,29 @@ mod tests {
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
-                    name: "my-environment".to_string(),
-                    network: "local".to_string(),
-                    canisters: CanisterSelection::Everything,
-                    settings: Some(HashMap::from([
-                        (
-                            "canister-1".to_string(),
-                            Settings {
-                                compute_allocation: Some(1),
-                                ..Default::default()
-                            }
-                        ),
-                        (
-                            "canister-2".to_string(),
-                            Settings {
-                                compute_allocation: Some(2),
-                                ..Default::default()
-                            }
-                        )
-                    ])),
-                })])
+                environments: Environments::Environments(vec![Item::Manifest(
+                    EnvironmentManifest {
+                        name: "my-environment".to_string(),
+                        network: "local".to_string(),
+                        canisters: CanisterSelection::Everything,
+                        settings: Some(HashMap::from([
+                            (
+                                "canister-1".to_string(),
+                                Settings {
+                                    compute_allocation: Some(1),
+                                    ..Default::default()
+                                }
+                            ),
+                            (
+                                "canister-2".to_string(),
+                                Settings {
+                                    compute_allocation: Some(2),
+                                    ..Default::default()
+                                }
+                            )
+                        ])),
+                    }
+                )])
                 .with_defaults()
                 .into(),
             },

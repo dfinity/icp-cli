@@ -26,25 +26,25 @@ impl From<Canisters> for Vec<Item<CanisterManifest>> {
 #[serde(rename_all = "lowercase")]
 pub enum Networks {
     Network(NetworkManifest),
-    Networks(Vec<NetworkManifest>),
+    Networks(Vec<Item<NetworkManifest>>),
 }
 
 impl Networks {
     pub fn with_defaults(self) -> Self {
         Self::Networks(
             [
-                Into::<Vec<NetworkManifest>>::into(Self::default()),
-                Into::<Vec<NetworkManifest>>::into(self),
+                Into::<Vec<Item<NetworkManifest>>>::into(Self::default()),
+                Into::<Vec<Item<NetworkManifest>>>::into(self),
             ]
             .concat(),
         )
     }
 }
 
-impl From<Networks> for Vec<NetworkManifest> {
+impl From<Networks> for Vec<Item<NetworkManifest>> {
     fn from(value: Networks) -> Self {
         match value {
-            Networks::Network(v) => vec![v],
+            Networks::Network(v) => vec![Item::Manifest(v)],
             Networks::Networks(items) => items,
         }
     }
@@ -54,25 +54,25 @@ impl From<Networks> for Vec<NetworkManifest> {
 #[serde(rename_all = "lowercase")]
 pub enum Environments {
     Environment(EnvironmentManifest),
-    Environments(Vec<EnvironmentManifest>),
+    Environments(Vec<Item<EnvironmentManifest>>),
 }
 
 impl Environments {
     pub fn with_defaults(self) -> Self {
         Self::Environments(
             [
-                Into::<Vec<EnvironmentManifest>>::into(Self::default()),
-                Into::<Vec<EnvironmentManifest>>::into(self),
+                Into::<Vec<Item<EnvironmentManifest>>>::into(Self::default()),
+                Into::<Vec<Item<EnvironmentManifest>>>::into(self),
             ]
             .concat(),
         )
     }
 }
 
-impl From<Environments> for Vec<EnvironmentManifest> {
+impl From<Environments> for Vec<Item<EnvironmentManifest>> {
     fn from(value: Environments) -> Self {
         match value {
-            Environments::Environment(v) => vec![v],
+            Environments::Environment(v) => vec![Item::Manifest(v)],
             Environments::Environments(items) => items,
         }
     }
@@ -84,11 +84,11 @@ pub struct ProjectManifest {
     #[schemars(with = "Option<Canisters>")]
     pub canisters: Vec<Item<CanisterManifest>>,
 
-    #[schemars(with = "Option<NetworkManifest>")]
-    pub networks: Vec<NetworkManifest>,
+    #[schemars(with = "Option<Networks>")]
+    pub networks: Vec<Item<NetworkManifest>>,
 
-    #[schemars(with = "Option<EnvironmentManifest>")]
-    pub environments: Vec<EnvironmentManifest>,
+    #[schemars(with = "Option<Environments>")]
+    pub environments: Vec<Item<EnvironmentManifest>>,
 }
 
 impl<'de> Deserialize<'de> for ProjectManifest {
@@ -212,7 +212,7 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                 let has_environment = top_map.contains_key(&environment_key);
                 let has_environments = top_map.contains_key(&environments_key);
 
-                let environments: Vec<EnvironmentManifest> = match (
+                let environments: Vec<Item<EnvironmentManifest>> = match (
                     has_environment,
                     has_environments,
                 ) {
@@ -236,8 +236,8 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             })?;
 
                         [
-                            Into::<Vec<EnvironmentManifest>>::into(Environments::default()),
-                            vec![environment_manifest],
+                            Into::<Vec<Item<EnvironmentManifest>>>::into(Environments::default()),
+                            vec![Item::Manifest(environment_manifest)],
                         ]
                         .concat()
                     }
@@ -246,7 +246,7 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             .remove(&environments_key)
                             .ok_or_else(|| Error::custom("'environments' key does not exist"))?
                         {
-                            let mut environments: Vec<EnvironmentManifest> =
+                            let mut environments: Vec<Item<EnvironmentManifest>> =
                                 Vec::with_capacity(seq.len());
 
                             for v in seq {
@@ -255,11 +255,11 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                                         Error::custom(format!("Failed to load environment: {}", e))
                                     })?;
 
-                                environments.push(environment_manifest);
+                                environments.push(Item::Manifest(environment_manifest));
                             }
 
                             [
-                                Into::<Vec<EnvironmentManifest>>::into(Environments::default()),
+                                Into::<Vec<Item<EnvironmentManifest>>>::into(Environments::default()),
                                 environments,
                             ]
                             .concat()
@@ -280,7 +280,7 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                 let has_network = top_map.contains_key(&network_key);
                 let has_networks = top_map.contains_key(&networks_key);
 
-                let networks: Vec<NetworkManifest> = match (has_network, has_networks) {
+                let networks: Vec<Item<NetworkManifest>> = match (has_network, has_networks) {
                     (true, true) => {
                         // This is an invalid case
 
@@ -301,8 +301,8 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             })?;
 
                         [
-                            Into::<Vec<NetworkManifest>>::into(Networks::default()),
-                            vec![network_manifest],
+                            Into::<Vec<Item<NetworkManifest>>>::into(Networks::default()),
+                            vec![Item::Manifest(network_manifest)],
                         ]
                         .concat()
                     }
@@ -311,18 +311,18 @@ impl<'de> Deserialize<'de> for ProjectManifest {
                             .remove(&networks_key)
                             .ok_or_else(|| Error::custom("'networks' key does not exist"))?
                         {
-                            let mut networks: Vec<NetworkManifest> = Vec::with_capacity(seq.len());
+                            let mut networks: Vec<Item<NetworkManifest>> = Vec::with_capacity(seq.len());
 
                             for v in seq {
                                 let network_manifest = serde_yaml::from_value(v).map_err(|e| {
                                     Error::custom(format!("Failed to load network: {}", e))
                                 })?;
 
-                                networks.push(network_manifest);
+                                networks.push(Item::Manifest(network_manifest));
                             }
 
                             [
-                                Into::<Vec<NetworkManifest>>::into(Networks::default()),
+                                Into::<Vec<Item<NetworkManifest>>>::into(Networks::default()),
                                 networks,
                             ]
                             .concat()
@@ -517,10 +517,10 @@ mod tests {
             "#})?,
             ProjectManifest {
                 canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![NetworkManifest {
+                networks: Networks::Networks(vec![Item::Manifest(NetworkManifest {
                     name: "my-network".to_string(),
                     configuration: Configuration::default(),
-                }])
+                })])
                 .with_defaults()
                 .into(),
                 environments: Environments::default().into(),
@@ -539,10 +539,10 @@ mod tests {
             "#})?,
             ProjectManifest {
                 canisters: Canisters::default().into(),
-                networks: Networks::Networks(vec![NetworkManifest {
+                networks: Networks::Networks(vec![Item::Manifest(NetworkManifest {
                     name: "my-network".to_string(),
                     configuration: Configuration::default(),
-                }])
+                })])
                 .with_defaults()
                 .into(),
                 environments: Environments::default().into(),
@@ -564,12 +564,12 @@ mod tests {
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![EnvironmentManifest {
+                environments: Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                     settings: None,
-                }])
+                })])
                 .with_defaults()
                 .into(),
             },
@@ -590,12 +590,12 @@ mod tests {
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![EnvironmentManifest {
+                environments: Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                     settings: None,
-                }])
+                })])
                 .with_defaults()
                 .into(),
             },
@@ -621,24 +621,24 @@ mod tests {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
                 environments: Environments::Environments(vec![
-                    EnvironmentManifest {
+                    Item::Manifest(EnvironmentManifest {
                         name: "environment-1".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::None,
                         settings: None,
-                    },
-                    EnvironmentManifest {
+                    }),
+                    Item::Manifest(EnvironmentManifest {
                         name: "environment-2".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                         settings: None,
-                    },
-                    EnvironmentManifest {
+                    }),
+                    Item::Manifest(EnvironmentManifest {
                         name: "environment-3".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Everything,
                         settings: None,
-                    }
+                    }),
                 ])
                 .with_defaults()
                 .into(),
@@ -665,7 +665,7 @@ mod tests {
             ProjectManifest {
                 canisters: Canisters::default().into(),
                 networks: Networks::default().into(),
-                environments: Environments::Environments(vec![EnvironmentManifest {
+                environments: Environments::Environments(vec![Item::Manifest(EnvironmentManifest {
                     name: "my-environment".to_string(),
                     network: "local".to_string(),
                     canisters: CanisterSelection::Everything,
@@ -685,7 +685,7 @@ mod tests {
                             }
                         )
                     ])),
-                }])
+                })])
                 .with_defaults()
                 .into(),
             },

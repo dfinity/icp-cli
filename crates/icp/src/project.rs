@@ -73,11 +73,17 @@ pub enum LoadManifestError {
     #[error("failed to load canister manifest")]
     Canister,
 
+    #[error("failed to load {kind} manifest at: {path}")]
+    Failed { kind: String, path: String },
+
     #[error("failed to resolve canister recipe: {0}")]
     Recipe(RecipeType),
 
     #[error("project contains two similarly named {kind}s: '{name}'")]
     Duplicate { kind: String, name: String },
+
+    #[error("Could not locate a {kind} manifest at: '{path}'")]
+    NotFound { kind: String, path: String },
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
@@ -209,24 +215,38 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Networks
         let mut networks: HashMap<String, Network> = HashMap::new();
 
-        for m in &m.networks {
-            match networks.entry(m.name.to_owned()) {
-                // Duplicate
-                Entry::Occupied(e) => {
-                    return Err(LoadManifestError::Duplicate {
-                        kind: "network".to_string(),
-                        name: e.key().to_owned(),
-                    });
-                }
+        for i in &m.networks {
+            let ms = match i {
+                Item::Path(path) => {
+                    let path = pdir.join(path);
+                    if !path.exists() || !path.is_file() {
+                        return Err(LoadManifestError::NotFound {
+                            kind: "network".to_string(),
+                            path: path.to_string(),
+                        });
+                    }
+                    self.network.load(path).await.context(LoadManifestError::Failed { kind: "network".to_string(), path: path.to_string() })?
 
-                // Ok
-                Entry::Vacant(e) => {
-                    e.insert(Network {
-                        name: m.name.to_owned(),
-                        configuration: m.configuration.to_owned(),
-                    });
-                }
-            }
+                },
+                Item::Manifest(ms) => ms,
+            };
+            //match networks.entry(m.name.to_owned()) {
+            //    // Duplicate
+            //    Entry::Occupied(e) => {
+            //        return Err(LoadManifestError::Duplicate {
+            //            kind: "network".to_string(),
+            //            name: e.key().to_owned(),
+            //        });
+            //    }
+
+            //    // Ok
+            //    Entry::Vacant(e) => {
+            //        e.insert(Network {
+            //            name: m.name.to_owned(),
+            //            configuration: m.configuration.to_owned(),
+            //        });
+            //    }
+            //}
         }
 
         // Environments

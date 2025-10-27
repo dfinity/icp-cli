@@ -138,6 +138,7 @@ pub enum LockError {
 }
 
 /// File lock guard. Do not use as a temporary in an expression - if you are making a temporary lock, use `with_*`.
+#[clippy::has_significant_drop]
 pub struct DirectoryStructureGuardOwned<T> {
     paths_access: T,
     guard: File,

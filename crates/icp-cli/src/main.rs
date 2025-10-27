@@ -5,11 +5,12 @@ use clap::{CommandFactory, Parser};
 use commands::{Command, Context};
 use console::Term;
 use icp::{
-    Directories, agent,
+    agent,
     canister::{
         self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
         script::Script, sync::Syncer,
     },
+    directories::{Access as _, Directories},
     identity, manifest, network,
     prelude::*,
     project,
@@ -129,13 +130,13 @@ async fn main() -> Result<(), Error> {
     set_global_default(reg)?;
 
     // Setup project directory structure
-    let dirs = Directories::new()?;
+    let dirs = Arc::new(Directories::new()?);
 
     // Canister ID Store
-    let ids = IdStore::new(&cli.id_store);
+    let ids = Arc::new(IdStore::new(&cli.id_store));
 
     // Canister Artifact Store (wasm)
-    let artifacts = ArtifactStore::new(&cli.artifact_store);
+    let artifacts = Arc::new(ArtifactStore::new(&cli.artifact_store));
 
     // Prepare http client
     let http_client = reqwest::Client::new();

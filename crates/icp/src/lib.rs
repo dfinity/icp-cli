@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
 use async_trait::async_trait;
-pub use directories::{Directories, DirectoriesError};
 use serde::Serialize;
 use tokio::sync::Mutex;
 
@@ -15,7 +14,7 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
-mod directories;
+pub mod directories;
 pub mod fs;
 pub mod identity;
 pub mod manifest;

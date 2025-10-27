@@ -6,6 +6,15 @@ use icp::{
 };
 use snafu::{ResultExt, Snafu};
 
+/// Trait for accessing and managing canister build artifacts.
+pub(crate) trait Access: Sync + Send {
+    /// Save a canister artifact (WASM) to the store.
+    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
+
+    /// Lookup a canister artifact (WASM) from the store.
+    fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError>;
+}
+
 #[derive(Debug, Snafu)]
 pub(crate) enum SaveError {
     #[snafu(display("failed to create artifacts directory"))]
@@ -38,8 +47,8 @@ impl ArtifactStore {
     }
 }
 
-impl ArtifactStore {
-    pub(crate) fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+impl Access for ArtifactStore {
+    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
         // Lock Artifact Store
         let _g = self
             .lock
@@ -55,7 +64,7 @@ impl ArtifactStore {
         Ok(())
     }
 
-    pub(crate) fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
         // Lock Artifact Store
         let _g = self
             .lock

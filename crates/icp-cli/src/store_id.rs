@@ -5,6 +5,21 @@ use icp::{fs::json, prelude::*};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
+/// Trait for accessing and managing canister ID storage.
+pub(crate) trait Access: Sync + Send {
+    /// Register a canister ID for a given key.
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError>;
+
+    /// Lookup a canister ID for a given key.
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError>;
+
+    /// Lookup all canister IDs for a given environment.
+    fn lookup_by_environment(
+        &self,
+        environment: &str,
+    ) -> Result<Vec<(String, Principal)>, LookupError>;
+}
+
 /// An association-key, used for associating an existing canister to an ID on a network
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct Key {
@@ -66,8 +81,8 @@ impl IdStore {
     }
 }
 
-impl IdStore {
-    pub(crate) fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
+impl Access for IdStore {
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -101,7 +116,7 @@ impl IdStore {
         Ok(())
     }
 
-    pub(crate) fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -129,7 +144,7 @@ impl IdStore {
         })
     }
 
-    pub(crate) fn lookup_by_environment(
+    fn lookup_by_environment(
         &self,
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {

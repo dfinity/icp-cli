@@ -5,7 +5,6 @@ use clap::Subcommand;
 use console::Term;
 use ic_agent::{Agent, Identity};
 use icp::{
-    Directories,
     canister::{build::Build, sync::Synchronize},
     identity::IdentitySelection,
     network::access::NetworkAccess,
@@ -13,7 +12,6 @@ use icp::{
 use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::store_id::Key;
-use crate::{store_artifact::ArtifactStore, store_id::IdStore};
 
 pub(crate) mod args;
 pub(crate) mod build;
@@ -73,13 +71,13 @@ pub(crate) struct Context {
     pub(crate) term: Term,
 
     /// Various cli-related directories (cache, configuration, etc).
-    pub(crate) dirs: Directories,
+    pub(crate) dirs: Arc<dyn icp::directories::Access>,
 
     /// Canisters ID Store for lookup and storage
-    pub(crate) ids: IdStore,
+    pub(crate) ids: Arc<dyn crate::store_id::Access>,
 
     /// An artifact store for canister build artifacts
-    pub(crate) artifacts: ArtifactStore,
+    pub(crate) artifacts: Arc<dyn crate::store_artifact::Access>,
 
     /// Project loader
     pub(crate) project: Arc<dyn icp::Load>,

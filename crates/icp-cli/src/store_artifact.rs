@@ -1,5 +1,8 @@
 use std::sync::Mutex;
 
+#[cfg(test)]
+use std::collections::HashMap;
+
 use icp::{
     fs::{create_dir_all, read, write},
     prelude::*,
@@ -82,5 +85,52 @@ impl Access for ArtifactStore {
         let wasm = read(&self.path.join(name)).context(LookupReadFileSnafu)?;
 
         Ok(wasm)
+    }
+}
+
+#[cfg(test)]
+/// In-memory mock implementation of `Access` for testing purposes.
+///
+/// This mock stores artifacts (WASM bytes) in a HashMap instead of on disk,
+/// making it suitable for tests that need a working artifact store without
+/// file system interactions.
+pub(crate) struct MockInMemoryArtifactStore {
+    store: Mutex<HashMap<String, Vec<u8>>>,
+}
+
+#[cfg(test)]
+impl MockInMemoryArtifactStore {
+    /// Creates a new empty in-memory artifact store.
+    pub(crate) fn new() -> Self {
+        Self {
+            store: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Default for MockInMemoryArtifactStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+impl Access for MockInMemoryArtifactStore {
+    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+        let mut store = self.store.lock().unwrap();
+        store.insert(name.to_string(), wasm.to_vec());
+        Ok(())
+    }
+
+    fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+        let store = self.store.lock().unwrap();
+
+        match store.get(name) {
+            Some(wasm) => Ok(wasm.clone()),
+            None => Err(LookupError::LookupArtifactNotFound {
+                name: name.to_owned(),
+            }),
+        }
     }
 }

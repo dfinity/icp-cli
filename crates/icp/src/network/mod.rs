@@ -138,3 +138,59 @@ impl Access for Accessor {
         Ok(acceess)
     }
 }
+
+#[cfg(test)]
+use std::collections::HashMap;
+
+#[cfg(test)]
+/// Mock network access provider for testing.
+///
+/// Allows configuring network access details for specific networks.
+/// Supports a default fallback for networks not explicitly configured.
+pub struct MockNetworkAccessor {
+    /// Default network access to return for unconfigured networks
+    default: NetworkAccess,
+
+    /// Network-specific access configurations by network name
+    networks: HashMap<String, NetworkAccess>,
+}
+
+#[cfg(test)]
+impl MockNetworkAccessor {
+    /// Creates a new mock network accessor with the given default.
+    pub fn new(default: NetworkAccess) -> Self {
+        Self {
+            default,
+            networks: HashMap::new(),
+        }
+    }
+
+    /// Creates a mock with localhost:8000 as the default.
+    pub fn localhost() -> Self {
+        Self::new(NetworkAccess::new("http://localhost:8000"))
+    }
+
+    /// Adds a network-specific access configuration.
+    pub fn with_network(mut self, name: impl Into<String>, access: NetworkAccess) -> Self {
+        self.networks.insert(name.into(), access);
+        self
+    }
+
+    /// Sets the default network access.
+    pub fn with_default(mut self, access: NetworkAccess) -> Self {
+        self.default = access;
+        self
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl Access for MockNetworkAccessor {
+    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
+        Ok(self
+            .networks
+            .get(&network.name)
+            .cloned()
+            .unwrap_or_else(|| self.default.clone()))
+    }
+}

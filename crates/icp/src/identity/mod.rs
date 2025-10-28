@@ -111,3 +111,67 @@ impl Load for Loader {
         })
     }
 }
+
+#[cfg(test)]
+use std::collections::HashMap;
+
+#[cfg(test)]
+/// Mock identity loader for testing.
+///
+/// Allows configuring multiple identities that can be selected by name.
+/// Supports default, anonymous, and named identity selections.
+pub struct MockIdentityLoader {
+    /// The default identity to return when IdentitySelection::Default is used
+    default: Arc<dyn Identity>,
+
+    /// Named identities that can be selected
+    named: HashMap<String, Arc<dyn Identity>>,
+}
+
+#[cfg(test)]
+impl MockIdentityLoader {
+    /// Creates a new mock identity loader with the given default identity.
+    pub fn new(default: Arc<dyn Identity>) -> Self {
+        Self {
+            default,
+            named: HashMap::new(),
+        }
+    }
+
+    /// Creates a mock identity loader with anonymous as the default.
+    pub fn anonymous() -> Self {
+        Self::new(Arc::new(ic_agent::identity::AnonymousIdentity))
+    }
+
+    /// Adds a named identity to the loader.
+    pub fn with_identity(mut self, name: impl Into<String>, identity: Arc<dyn Identity>) -> Self {
+        self.named.insert(name.into(), identity);
+        self
+    }
+
+    /// Sets the default identity.
+    pub fn with_default(mut self, identity: Arc<dyn Identity>) -> Self {
+        self.default = identity;
+        self
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl Load for MockIdentityLoader {
+    async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+        Ok(match id {
+            IdentitySelection::Default => Arc::clone(&self.default),
+
+            IdentitySelection::Anonymous => Arc::new(ic_agent::identity::AnonymousIdentity),
+
+            IdentitySelection::Named(name) => {
+                self.named.get(&name).map(Arc::clone).ok_or_else(|| {
+                    LoadError::LoadIdentity(LoadIdentityError::NoSuchIdentity {
+                        name: name.clone(),
+                    })
+                })?
+            }
+        })
+    }
+}

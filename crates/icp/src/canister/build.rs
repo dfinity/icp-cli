@@ -107,3 +107,24 @@ impl Build for Builder {
         }
     }
 }
+
+#[cfg(test)]
+/// Unimplemented mock implementation of `Build` for testing purposes.
+///
+/// All methods panic with `unimplemented!()` when called.
+/// This is useful for tests that need to construct a context but don't
+/// actually use the build functionality.
+pub struct UnimplementedMockBuilder;
+
+#[cfg(test)]
+#[async_trait]
+impl Build for UnimplementedMockBuilder {
+    async fn build(
+        &self,
+        _step: &build::Step,
+        _params: &Params,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError> {
+        unimplemented!("UnimplementedMockBuilder::build")
+    }
+}

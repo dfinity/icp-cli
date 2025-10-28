@@ -7,7 +7,6 @@ on:
   pull_request:
 
 jobs:
-
   compile:
     name: compile:required
     runs-on: ubuntu-latest
@@ -33,7 +32,7 @@ jobs:
 
   lint:
     name: lint:required
-    needs: compile  # Run after compilation to use the cache
+    needs: compile # Run after compilation to use the cache
     runs-on: ubuntu-latest
 
     steps:
@@ -51,10 +50,9 @@ jobs:
           key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run Lint
-        run: cargo clippy --verbose --tests --benches -- -D warnings -D clippy::all
+        run: cargo clippy --verbose --tests --benches -- -D warnings
         env:
           RUST_BACKTRACE: 1
-
 
   format:
     name: fmt:required
@@ -80,7 +78,6 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
-
 
   #
   # Runs a series of checks to make sure that all the docs

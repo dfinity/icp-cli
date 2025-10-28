@@ -146,11 +146,8 @@ impl Access for Directories {
 }
 
 #[cfg(feature = "test-features")]
-/// Unimplemented mock implementation of `Access` for testing purposes.
-///
+/// Unimplemented mock implementation of `Access`.
 /// All methods panic with `unimplemented!()` when called.
-/// This is useful for tests that need to construct a `Context` but don't
-/// actually use the directory functionality.
 #[derive(Debug, Clone)]
 pub struct UnimplementedMockDirs;
 

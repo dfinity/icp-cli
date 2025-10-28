@@ -89,11 +89,7 @@ impl Access for ArtifactStore {
 }
 
 #[cfg(test)]
-/// In-memory mock implementation of `Access` for testing purposes.
-///
-/// This mock stores artifacts (WASM bytes) in a HashMap instead of on disk,
-/// making it suitable for tests that need a working artifact store without
-/// file system interactions.
+/// In-memory mock implementation of `Access`.
 pub(crate) struct MockInMemoryArtifactStore {
     store: Mutex<HashMap<String, Vec<u8>>>,
 }

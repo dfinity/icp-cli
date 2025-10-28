@@ -116,10 +116,6 @@ impl Load for Loader {
 use std::collections::HashMap;
 
 #[cfg(any(test, feature = "test-features"))]
-/// Mock identity loader for testing.
-///
-/// Allows configuring multiple identities that can be selected by name.
-/// Supports default, anonymous, and named identity selections.
 pub struct MockIdentityLoader {
     /// The default identity to return when IdentitySelection::Default is used
     default: Arc<dyn Identity>,

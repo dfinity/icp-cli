@@ -109,11 +109,8 @@ impl Build for Builder {
 }
 
 #[cfg(any(test, feature = "test-features"))]
-/// Unimplemented mock implementation of `Build` for testing purposes.
-///
+/// Unimplemented mock implementation of `Build`.
 /// All methods panic with `unimplemented!()` when called.
-/// This is useful for tests that need to construct a context but don't
-/// actually use the build functionality.
 pub struct UnimplementedMockBuilder;
 
 #[cfg(any(test, feature = "test-features"))]

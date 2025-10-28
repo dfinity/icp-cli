@@ -156,10 +156,7 @@ impl<T: Load> Load for Lazy<T, Project> {
 
 #[cfg(any(test, feature = "test-features"))]
 /// Mock project loader for testing.
-///
 /// Returns a pre-configured `Project` when `load()` is called.
-/// This is useful for tests that need a project but don't want to
-/// deal with file system interactions or project manifest parsing.
 pub struct MockProjectLoader {
     project: Project,
 }

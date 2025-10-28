@@ -254,7 +254,7 @@ impl Context {
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
             project: Arc::new(icp::MockProjectLoader::minimal()),
             identity: Arc::new(icp::identity::MockIdentityLoader::anonymous()),
-            network: Arc::new(icp::network::MockNetworkAccessor::localhost()),
+            network: Arc::new(icp::network::MockNetworkAccessor::new()),
             agent: Arc::new(icp::agent::Creator),
             builder: Arc::new(icp::canister::build::UnimplementedMockBuilder),
             syncer: Arc::new(icp::canister::sync::UnimplementedMockSyncer),
@@ -543,7 +543,7 @@ mod context_tests {
         let ctx = Context {
             project: Arc::new(MockProjectLoader::complex()),
             network: Arc::new(
-                MockNetworkAccessor::localhost()
+                MockNetworkAccessor::new()
                     .with_network(
                         "local",
                         NetworkAccess {
@@ -589,6 +589,27 @@ mod context_tests {
     }
 
     #[tokio::test]
+    async fn test_get_agent_for_env_network_not_configured() {
+        // Environment exists in project but its network not configured in MockNetworkAccessor
+        let ctx = Context {
+            project: Arc::new(MockProjectLoader::complex()),
+            // MockNetworkAccessor has no networks configured
+            ..Context::mocked()
+        };
+
+        let result = ctx
+            .get_agent_for_env(&IdentitySelection::Anonymous, "nonexistent")
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(GetAgentForEnvError::NetworkAccess {
+                source: icp::network::AccessError::Unexpected(_)
+            })
+        ));
+    }
+
+    #[tokio::test]
     async fn test_get_agent_for_network_success() {
         use icp::network::access::NetworkAccess;
 
@@ -596,7 +617,7 @@ mod context_tests {
 
         let ctx = Context {
             project: Arc::new(MockProjectLoader::complex()),
-            network: Arc::new(MockNetworkAccessor::localhost().with_network(
+            network: Arc::new(MockNetworkAccessor::new().with_network(
                 "local",
                 NetworkAccess {
                     default_effective_canister_id: None,
@@ -627,6 +648,27 @@ mod context_tests {
             result,
             Err(GetAgentForNetworkError::GetNetwork {
                 source: GetNetworkError::NetworkNotFound { .. }
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_get_agent_for_network_not_configured() {
+        // Network exists in project but not configured in MockNetworkAccessor
+        let ctx = Context {
+            project: Arc::new(MockProjectLoader::complex()),
+            // MockNetworkAccessor has no networks configured
+            ..Context::mocked()
+        };
+
+        let result = ctx
+            .get_agent_for_network(&IdentitySelection::Anonymous, "nonexistent")
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(GetAgentForNetworkError::NetworkAccess {
+                source: icp::network::AccessError::Unexpected(_)
             })
         ));
     }

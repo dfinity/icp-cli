@@ -182,11 +182,7 @@ impl Access for IdStore {
 }
 
 #[cfg(test)]
-/// In-memory mock implementation of `Access` for testing purposes.
-///
-/// This mock stores canister IDs in a HashMap instead of on disk,
-/// making it suitable for tests that need a working ID store without
-/// file system interactions.
+/// In-memory mock implementation of `Access`.
 pub(crate) struct MockInMemoryIdStore {
     store: Mutex<HashMap<Key, Principal>>,
 }

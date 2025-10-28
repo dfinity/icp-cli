@@ -154,7 +154,7 @@ impl<T: Load> Load for Lazy<T, Project> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-features"))]
 /// Mock project loader for testing.
 ///
 /// Returns a pre-configured `Project` when `load()` is called.
@@ -164,7 +164,7 @@ pub struct MockProjectLoader {
     project: Project,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-features"))]
 impl MockProjectLoader {
     /// Creates a new mock project loader with the given project.
     pub fn new(project: Project) -> Self {
@@ -423,7 +423,7 @@ impl MockProjectLoader {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-features"))]
 #[async_trait]
 impl Load for MockProjectLoader {
     async fn load(&self) -> Result<Project, LoadError> {

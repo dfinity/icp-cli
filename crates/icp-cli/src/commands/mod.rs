@@ -590,7 +590,8 @@ mod context_tests {
 
     #[tokio::test]
     async fn test_get_agent_for_env_network_not_configured() {
-        // Environment exists in project but its network not configured in MockNetworkAccessor
+        // Environment "dev" exists in project and uses "local" network,
+        // but "local" network is not configured in MockNetworkAccessor
         let ctx = Context {
             project: Arc::new(MockProjectLoader::complex()),
             // MockNetworkAccessor has no networks configured
@@ -598,7 +599,7 @@ mod context_tests {
         };
 
         let result = ctx
-            .get_agent_for_env(&IdentitySelection::Anonymous, "nonexistent")
+            .get_agent_for_env(&IdentitySelection::Anonymous, "dev")
             .await;
 
         assert!(matches!(
@@ -654,7 +655,7 @@ mod context_tests {
 
     #[tokio::test]
     async fn test_get_agent_for_network_not_configured() {
-        // Network exists in project but not configured in MockNetworkAccessor
+        // Network "local" exists in project but is not configured in MockNetworkAccessor
         let ctx = Context {
             project: Arc::new(MockProjectLoader::complex()),
             // MockNetworkAccessor has no networks configured
@@ -662,7 +663,7 @@ mod context_tests {
         };
 
         let result = ctx
-            .get_agent_for_network(&IdentitySelection::Anonymous, "nonexistent")
+            .get_agent_for_network(&IdentitySelection::Anonymous, "local")
             .await;
 
         assert!(matches!(

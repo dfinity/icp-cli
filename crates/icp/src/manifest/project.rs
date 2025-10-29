@@ -9,7 +9,7 @@ use crate::manifest::{
 #[serde(deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(flatten)]
-    #[schemars(with = "Option<Canisters>")]
+    #[schemars(flatten, with = "MaybeCanisters")]
     pub canisters: Canisters,
 
     #[serde(default)]
@@ -27,6 +27,13 @@ pub struct ProjectManifest {
 pub enum Canisters {
     Canister(CanisterManifest),
     Canisters(Vec<Item<CanisterManifest>>),
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum MaybeCanisters {
+    Some(Canisters),
+    None(Option<Canisters>), // this adds the null case to the schema
 }
 
 impl From<Canisters> for Vec<Item<CanisterManifest>> {

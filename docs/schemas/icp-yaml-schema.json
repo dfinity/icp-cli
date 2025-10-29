@@ -158,6 +158,37 @@
       ],
       "type": "object"
     },
+    "Canisters": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "canister": {
+              "$ref": "#/$defs/CanisterManifest"
+            }
+          },
+          "required": [
+            "canister"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "canisters": {
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "canisters"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Connected": {
       "properties": {
         "root-key": {
@@ -546,34 +577,22 @@
   },
   "$id": "ProjectManifest",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Schema for ProjectManifest",
-  "oneOf": [
+  "anyOf": [
     {
-      "properties": {
-        "canister": {
-          "$ref": "#/$defs/CanisterManifest"
-        }
-      },
-      "required": [
-        "canister"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/Canisters"
     },
     {
-      "properties": {
-        "canisters": {
-          "items": {
-            "$ref": "#/$defs/Item"
-          },
-          "type": "array"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Canisters"
+        },
+        {
+          "type": "null"
         }
-      },
-      "required": [
-        "canisters"
-      ],
-      "type": "object"
+      ]
     }
   ],
+  "description": "Schema for ProjectManifest",
   "properties": {
     "environments": {
       "items": {

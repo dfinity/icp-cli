@@ -561,7 +561,6 @@ mod tests {
                     build: build::Steps {
                         steps: vec![build::Step::Script(script::Adapter {
                             command: script::CommandField::Command("dosomething.sh".to_string()),
-                            optional: None,
                         })]
                     },
                     sync: Some(sync::Steps {

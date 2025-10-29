@@ -105,10 +105,15 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Canisters
         let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();
 
-        for i in &m.canisters {
+        let canister_manifests: Vec<Item<CanisterManifest>> = match &m.canisters {
+            Some(c) => c.into(),
+            None => vec![],
+        };
+
+        for i in canister_manifests {
             let ms = match i {
                 Item::Path(pattern) => {
-                    let paths = match is_glob(pattern) {
+                    let paths = match is_glob(&pattern) {
                         // Explicit path
                         false => vec![pdir.join(pattern)],
 

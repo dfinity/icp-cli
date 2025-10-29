@@ -105,10 +105,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Canisters
         let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();
 
-        let canister_manifests: Vec<Item<CanisterManifest>> = match &m.canisters {
-            Some(c) => c.clone().into(),
-            None => vec![],
-        };
+        let canister_manifests: Vec<Item<CanisterManifest>> = m.canisters.clone().into();
 
         for i in canister_manifests {
             let ms = match i {

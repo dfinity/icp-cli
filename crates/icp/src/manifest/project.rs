@@ -1,11 +1,11 @@
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::manifest::{
     Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
 };
 
-#[derive(Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Debug, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(flatten)]
@@ -49,6 +49,46 @@ pub enum Networks {
 pub enum Environments {
     Environment(EnvironmentManifest),
     Environments(Vec<EnvironmentManifest>),
+}
+
+
+impl<'de> Deserialize<'de> for ProjectManifest {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::{Error, MapAccess, Visitor};
+        use std::fmt;
+
+        struct ProjectManifestVisitor;
+
+        impl<'de> Visitor<'de> for ProjectManifestVisitor {
+            type Value = ProjectManifest;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("A project manifest, with canister, network and environment definitions")
+            }
+
+            // We're going to build the Project manifest manually
+            // to be able to give good error messages
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut temp_map = serde_yaml::Mapping::new();
+                while let Some((key, value)) =
+                    map.next_entry::<serde_yaml::Value, serde_yaml::Value>()?
+                {
+                    temp_map.insert(key, value);
+                }
+
+                Ok(ProjectManifest{
+                    canisters: Some(Canisters::Canisters(vec![])),
+                    environments: vec![],
+                    networks: vec![],
+                })
+            }
+        }
+
+        d.deserialize_map(ProjectManifestVisitor)
+    }
 }
 
 

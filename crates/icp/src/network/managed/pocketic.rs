@@ -36,8 +36,11 @@ pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
             // Same as above
             ii: Some(IcpFeaturesConfig::DefaultConfig),
 
-            // The rest of the features are disabled by default
-            ..Default::default()
+            // The rest of the features are disabled for now
+            nns_governance: None,
+            sns: None,
+            nns_ui: None,
+            // do not use ..default() here so we notice if new features are available
         }),
 
         subnet_config_set: (SubnetConfigSet {

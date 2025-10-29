@@ -546,18 +546,35 @@
   },
   "$id": "ProjectManifest",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
   "description": "Schema for ProjectManifest",
-  "properties": {
-    "canisters": {
-      "items": {
-        "$ref": "#/$defs/Item"
+  "oneOf": [
+    {
+      "properties": {
+        "canister": {
+          "$ref": "#/$defs/CanisterManifest"
+        }
       },
-      "type": [
-        "array",
-        "null"
-      ]
+      "required": [
+        "canister"
+      ],
+      "type": "object"
     },
+    {
+      "properties": {
+        "canisters": {
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "canisters"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
     "environments": {
       "items": {
         "$ref": "#/$defs/Item3"
@@ -578,5 +595,6 @@
     }
   },
   "title": "ProjectManifest",
-  "type": "object"
+  "type": "object",
+  "unevaluatedProperties": false
 }

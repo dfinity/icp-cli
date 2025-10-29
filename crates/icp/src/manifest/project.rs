@@ -20,8 +20,8 @@ pub struct ProjectManifest {
     pub environments: Vec<Item<EnvironmentManifest>>,
 }
 
-#[derive(Debug, PartialEq, JsonSchema, Deserialize)]
-#[serde()]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[serde(rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)]
 pub enum Canisters {
     Canister(CanisterManifest),
@@ -192,9 +192,9 @@ mod tests {
                   steps: []
         "#})
         {
-            Ok(_) => {
+            Ok(p) => {
                 return Err(anyhow!(
-                    "A project manifest with an invalid canister manifest should be invalid"
+                    "A project manifest with an invalid canister manifest should be invalid: {p:?}"
                 ));
             }
             Err(err) => {

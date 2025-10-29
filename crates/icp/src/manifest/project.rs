@@ -9,12 +9,15 @@ use crate::manifest::{
 #[serde(deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(default)]
+    #[schemars(with = "Option<Vec<Item<CanisterManifest>>>")]
     pub canisters: Vec<Item<CanisterManifest>>,
 
     #[serde(default)]
+    #[schemars(with = "Option<Vec<Item<NetworkManifest>>>")]
     pub networks: Vec<Item<NetworkManifest>>,
 
     #[serde(default)]
+    #[schemars(with = "Option<Vec<Item<EnvironmentManifest>>>")]
     pub environments: Vec<Item<EnvironmentManifest>>,
 }
 
@@ -103,7 +106,7 @@ mod tests {
     #[test]
     fn empty() -> Result<(), Error> {
         assert_eq!(
-            validate_project_yaml(r#""#)?,
+            serde_yaml::from_str::<ProjectManifest>(r#""#)?,
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![],

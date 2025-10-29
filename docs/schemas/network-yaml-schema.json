@@ -1,61 +1,7 @@
 {
-  "$id": "NetworkManifest",
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "Gateway": {
+  "$defs": {
+    "Connected": {
       "properties": {
-        "host": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "port": {
-          "format": "uint16",
-          "minimum": 0.0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    }
-  },
-  "description": "Schema for NetworkManifest",
-  "oneOf": [
-    {
-      "properties": {
-        "gateway": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Gateway"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "mode": {
-          "enum": [
-            "managed"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "mode"
-      ],
-      "type": "object"
-    },
-    {
-      "properties": {
-        "mode": {
-          "enum": [
-            "connected"
-          ],
-          "type": "string"
-        },
         "root-key": {
           "description": "The root key of this network",
           "type": [
@@ -69,8 +15,73 @@
         }
       },
       "required": [
-        "mode",
         "url"
+      ],
+      "type": "object"
+    },
+    "Gateway": {
+      "properties": {
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Managed": {
+      "properties": {
+        "gateway": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Gateway"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "NetworkManifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Schema for NetworkManifest",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Managed",
+      "properties": {
+        "mode": {
+          "const": "managed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Connected",
+      "properties": {
+        "mode": {
+          "const": "connected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
       ],
       "type": "object"
     }

@@ -1,47 +1,94 @@
 {
-  "$id": "CanisterManifest",
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "anyOf": [
-    {
-      "properties": {
-        "recipe": {
-          "$ref": "#/definitions/Recipe"
+  "$defs": {
+    "Adapter": {
+      "description": "Configuration for a custom canister build adapter.",
+      "oneOf": [
+        {
+          "description": "Command used to build a canister",
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Set of commands used to build a canister",
+          "properties": {
+            "commands": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "commands"
+          ],
+          "type": "object"
         }
-      },
-      "required": [
-        "recipe"
       ],
       "type": "object"
     },
-    {
-      "properties": {
-        "build": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/Steps"
-            }
-          ],
-          "description": "The build configuration specifying how to compile the canister's source code into a WebAssembly module, including the adapter to use."
+    "Adapter2": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LocalSource",
+          "description": "Local path on-disk to read a WASM file from"
         },
-        "sync": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Steps2"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The configuration specifying how to sync the canister"
+        {
+          "$ref": "#/$defs/RemoteSource",
+          "description": "Remote url to fetch a WASM file from"
+        }
+      ],
+      "description": "Configuration for a Pre-built canister build adapter.",
+      "properties": {
+        "sha256": {
+          "description": "Optional sha256 checksum of the WASM",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": [
-        "build"
+      "type": "object"
+    },
+    "Adapter3": {
+      "description": "Configuration for a custom canister build adapter.",
+      "oneOf": [
+        {
+          "description": "Directory used to synchronize an assets canister",
+          "properties": {
+            "dir": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "dir"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Set of directories used to synchronize an assets canister",
+          "properties": {
+            "dirs": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dirs"
+          ],
+          "type": "object"
+        }
       ],
       "type": "object"
-    }
-  ],
-  "definitions": {
+    },
     "LocalSource": {
       "properties": {
         "path": {
@@ -65,14 +112,14 @@
           ]
         },
         "sha256": {
-          "description": "Optional sha256 checksum for the recipe template. If provided, the integrity of the recipe will be verified against this hash",
+          "description": "Optional sha256 checksum for the recipe template.\nIf provided, the integrity of the recipe will be verified against this hash",
           "type": [
             "string",
             "null"
           ]
         },
         "type": {
-          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes `version` is optional and defaults to `latest`\n\nIt is always recommended to pin the version and provide a hash for it in the `sha256` field",
+          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes\n`version` is optional and defaults to `latest`\n\nIt is always recommended to pin the version and provide a hash for it in the `sha256` field",
           "type": "string"
         }
       },
@@ -99,7 +146,7 @@
         "compute_allocation": {
           "description": "Compute allocation (0 to 100). Represents guaranteed compute capacity.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -109,7 +156,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Environment variables for the canister as key-value pairs. These variables are accessible within the canister and can be used to configure behavior without hardcoding values in the WASM module.",
+          "description": "Environment variables for the canister as key-value pairs.\nThese variables are accessible within the canister and can be used to configure\nbehavior without hardcoding values in the WASM module.",
           "type": [
             "object",
             "null"
@@ -118,7 +165,7 @@
         "freezing_threshold": {
           "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -127,7 +174,7 @@
         "memory_allocation": {
           "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -136,7 +183,7 @@
         "reserved_cycles_limit": {
           "description": "Reserved cycles limit. If set, the canister cannot consume more than this many cycles.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -145,7 +192,7 @@
         "wasm_memory_limit": {
           "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -154,7 +201,7 @@
         "wasm_memory_threshold": {
           "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -164,46 +211,14 @@
       "type": "object"
     },
     "Step": {
-      "description": "Identifies the type of adapter used to build the canister, along with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file. For example:\n\n```yaml type: script command: do_something.sh ```",
+      "description": "Identifies the type of adapter used to build the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: do_something.sh\n```",
       "oneOf": [
         {
-          "description": "Represents a canister built using a custom script or command. This variant allows for flexible build processes defined by the user.",
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "description": "Command used to build a canister",
-              "properties": {
-                "command": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "command"
-              ],
-              "type": "object"
-            },
-            {
-              "additionalProperties": false,
-              "description": "Set of commands used to build a canister",
-              "properties": {
-                "commands": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "required": [
-                "commands"
-              ],
-              "type": "object"
-            }
-          ],
+          "$ref": "#/$defs/Adapter",
+          "description": "Represents a canister built using a custom script or command.\nThis variant allows for flexible build processes defined by the user.",
           "properties": {
             "type": {
-              "enum": [
-                "script"
-              ],
+              "const": "script",
               "type": "string"
             }
           },
@@ -213,37 +228,11 @@
           "type": "object"
         },
         {
-          "anyOf": [
-            {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/LocalSource"
-                }
-              ],
-              "description": "Local path on-disk to read a WASM file from"
-            },
-            {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/RemoteSource"
-                }
-              ],
-              "description": "Remote url to fetch a WASM file from"
-            }
-          ],
-          "description": "Represents a pre-built canister. This variant allows for retrieving a canister WASM from various sources.",
+          "$ref": "#/$defs/Adapter2",
+          "description": "Represents a pre-built canister.\nThis variant allows for retrieving a canister WASM from various sources.",
           "properties": {
-            "sha256": {
-              "description": "Optional sha256 checksum of the WASM",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "type": {
-              "enum": [
-                "pre-built"
-              ],
+              "const": "pre-built",
               "type": "string"
             }
           },
@@ -255,46 +244,14 @@
       ]
     },
     "Step2": {
-      "description": "Identifies the type of adapter used to sync the canister, along with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file. For example:\n\n```yaml type: script command: echo \"synchronizing canister\" ```",
+      "description": "Identifies the type of adapter used to sync the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: echo \"synchronizing canister\"\n```",
       "oneOf": [
         {
-          "description": "Represents a canister synced using a custom script or command. This variant allows for flexible sync processes defined by the user.",
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "description": "Command used to build a canister",
-              "properties": {
-                "command": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "command"
-              ],
-              "type": "object"
-            },
-            {
-              "additionalProperties": false,
-              "description": "Set of commands used to build a canister",
-              "properties": {
-                "commands": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "required": [
-                "commands"
-              ],
-              "type": "object"
-            }
-          ],
+          "$ref": "#/$defs/Adapter",
+          "description": "Represents a canister synced using a custom script or command.\nThis variant allows for flexible sync processes defined by the user.",
           "properties": {
             "type": {
-              "enum": [
-                "script"
-              ],
+              "const": "script",
               "type": "string"
             }
           },
@@ -304,43 +261,11 @@
           "type": "object"
         },
         {
+          "$ref": "#/$defs/Adapter3",
           "description": "Represents syncing of an assets canister",
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "description": "Directory used to synchronize an assets canister",
-              "properties": {
-                "dir": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "dir"
-              ],
-              "type": "object"
-            },
-            {
-              "additionalProperties": false,
-              "description": "Set of directories used to synchronize an assets canister",
-              "properties": {
-                "dirs": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "required": [
-                "dirs"
-              ],
-              "type": "object"
-            }
-          ],
           "properties": {
             "type": {
-              "enum": [
-                "assets"
-              ],
+              "const": "assets",
               "type": "string"
             }
           },
@@ -352,11 +277,11 @@
       ]
     },
     "Steps": {
-      "description": "Describes how the canister should be built into WebAssembly, including the adapters and build steps responsible for the build.",
+      "description": "Describes how the canister should be built into WebAssembly,\nincluding the adapters and build steps responsible for the build.",
       "properties": {
         "steps": {
           "items": {
-            "$ref": "#/definitions/Step"
+            "$ref": "#/$defs/Step"
           },
           "type": "array"
         }
@@ -371,7 +296,7 @@
       "properties": {
         "steps": {
           "items": {
-            "$ref": "#/definitions/Step2"
+            "$ref": "#/$defs/Step2"
           },
           "type": "array"
         }
@@ -382,6 +307,44 @@
       "type": "object"
     }
   },
+  "$id": "CanisterManifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "properties": {
+        "recipe": {
+          "$ref": "#/$defs/Recipe"
+        }
+      },
+      "required": [
+        "recipe"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/Steps",
+          "description": "The build configuration specifying how to compile the canister's source\ncode into a WebAssembly module, including the adapter to use."
+        },
+        "sync": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Steps2"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The configuration specifying how to sync the canister"
+        }
+      },
+      "required": [
+        "build"
+      ],
+      "type": "object"
+    }
+  ],
   "description": "Schema for CanisterManifest",
   "properties": {
     "name": {
@@ -391,7 +354,7 @@
     "settings": {
       "anyOf": [
         {
-          "$ref": "#/definitions/Settings"
+          "$ref": "#/$defs/Settings"
         },
         {
           "type": "null"

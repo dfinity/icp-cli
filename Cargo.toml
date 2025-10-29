@@ -86,7 +86,7 @@ default-features = false
 features = ["rustls-tls"]
 
 [workspace.dependencies.schemars]
-version = "0.8.19"
+version = "1.0.4"
 features = ["derive"]
 
 [workspace.lints.rust]

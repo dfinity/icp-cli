@@ -206,7 +206,9 @@ impl MockProjectLoader {
 
         let local_network = Network {
             name: "local".to_string(),
-            configuration: Configuration::Managed{ managed: Managed::default()},
+            configuration: Configuration::Managed {
+                managed: Managed::default(),
+            },
         };
 
         let mut canisters = HashMap::new();
@@ -309,30 +311,36 @@ impl MockProjectLoader {
         // Create networks
         let local_network = Network {
             name: "local".to_string(),
-            configuration: Configuration::Managed{ managed: Managed {
-                gateway: Gateway {
-                    host: "localhost".to_string(),
-                    port: Port::Fixed(8000),
+            configuration: Configuration::Managed {
+                managed: Managed {
+                    gateway: Gateway {
+                        host: "localhost".to_string(),
+                        port: Port::Fixed(8000),
+                    },
                 },
-            }},
+            },
         };
 
         let staging_network = Network {
             name: "staging".to_string(),
-            configuration: Configuration::Managed{ managed: Managed {
-                gateway: Gateway {
-                    host: "localhost".to_string(),
-                    port: Port::Fixed(8001),
+            configuration: Configuration::Managed {
+                managed: Managed {
+                    gateway: Gateway {
+                        host: "localhost".to_string(),
+                        port: Port::Fixed(8001),
+                    },
                 },
-            }},
+            },
         };
 
         let ic_network = Network {
             name: "ic".to_string(),
-            configuration: Configuration::Connected{ connected: Connected {
-                url: "https://ic0.app".to_string(),
-                root_key: None,
-            }},
+            configuration: Configuration::Connected {
+                connected: Connected {
+                    url: "https://ic0.app".to_string(),
+                    root_key: None,
+                },
+            },
         };
 
         // Setup canisters map

@@ -81,37 +81,3 @@ impl Locate for Locator {
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    // #[test]
-    // fn default_networks() -> Result<(), Error> {
-    //     assert_eq!(
-    //         default_networks_def(),
-    //         vec![
-    //             Item::Manifest(NetworkManifest {
-    //                 name: "local".to_string(),
-    //                 configuration: Some(Configuration::Managed {
-    //                     managed: Managed {
-    //                         gateway: Gateway {
-    //                             host: "localhost".to_string(),
-    //                             port: Port::Fixed(8000),
-    //                         },
-    //                     }
-    //                 }),
-    //             }),
-    //             Item::Manifest(NetworkManifest {
-    //                 name: "mainnet".to_string(),
-    //                 configuration: Some(Configuration::Connected {
-    //                     connected: Connected {
-    //                         url: "https://icp-api.io".to_string(),
-    //                         root_key: None,
-    //                     }
-    //                 }),
-    //             }),
-    //         ]
-    //     );
-
-    //     Ok(())
-    // }
-}

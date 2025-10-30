@@ -7,6 +7,15 @@
 use crate::prelude::*;
 use directories::ProjectDirs;
 
+/// Trait for accessing ICP CLI directories.
+pub trait Access: Sync + Send {
+    /// Returns the path to the identity directory.
+    fn identity(&self) -> PathBuf;
+
+    /// Returns the path to the port descriptors cache directory.
+    fn port_descriptor(&self) -> PathBuf;
+}
+
 /// Inner structure holding data and cache directory paths.
 ///
 /// This struct is used when the directories are determined using standard
@@ -117,18 +126,38 @@ impl Directories {
             Self::Overridden(path) => path.clone(),
         }
     }
+}
 
+/// Implementation of Access trait for Directories.
+impl Access for Directories {
     /// Returns the path to the identity directory.
     ///
     /// This directory stores user identity files, keys, and related data.
-    pub fn identity(&self) -> PathBuf {
+    fn identity(&self) -> PathBuf {
         self.data().join("identity")
     }
 
     /// Returns the path to the port descriptors cache directory.
     ///
     /// This directory caches information about network ports used by canisters.
-    pub fn port_descriptor(&self) -> PathBuf {
+    fn port_descriptor(&self) -> PathBuf {
         self.cache().join("port-descriptors")
+    }
+}
+
+#[cfg(feature = "test-features")]
+/// Unimplemented mock implementation of `Access`.
+/// All methods panic with `unimplemented!()` when called.
+#[derive(Debug, Clone)]
+pub struct UnimplementedMockDirs;
+
+#[cfg(feature = "test-features")]
+impl Access for UnimplementedMockDirs {
+    fn identity(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::identity")
+    }
+
+    fn port_descriptor(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::port_descriptor")
     }
 }

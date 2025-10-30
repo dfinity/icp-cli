@@ -8,6 +8,7 @@ use crate::{
     prelude::*,
 };
 
+#[derive(Clone)]
 pub struct NetworkAccess {
     /// Effective canister ID corresponding to a subnet
     pub default_effective_canister_id: Option<Principal>,

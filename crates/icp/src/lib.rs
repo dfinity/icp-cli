@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
 use async_trait::async_trait;
-pub use directories::{Directories, DirectoriesError};
 use serde::Serialize;
 use tokio::sync::Mutex;
 
@@ -15,7 +14,7 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
-mod directories;
+pub mod directories;
 pub mod fs;
 pub mod identity;
 pub mod manifest;
@@ -152,5 +151,279 @@ impl<T: Load> Load for Lazy<T, Project> {
         }
 
         Ok(v)
+    }
+}
+
+#[cfg(any(test, feature = "test-features"))]
+/// Mock project loader for testing.
+/// Returns a pre-configured `Project` when `load()` is called.
+pub struct MockProjectLoader {
+    project: Project,
+}
+
+#[cfg(any(test, feature = "test-features"))]
+impl MockProjectLoader {
+    /// Creates a new mock project loader with the given project.
+    pub fn new(project: Project) -> Self {
+        Self { project }
+    }
+
+    /// Creates a minimal project with one canister, one network, and one environment.
+    ///
+    /// Structure:
+    /// - Canister: "backend" (pre-built from local file "backend.wasm")
+    /// - Network: "local" (managed, localhost:8000)
+    /// - Environment: "default" (uses local network, includes backend canister)
+    pub fn minimal() -> Self {
+        use crate::{
+            canister::build::{Step as BuildStep, Steps as BuildSteps},
+            canister::sync::Steps as SyncSteps,
+            manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
+            network::{Configuration, Managed},
+        };
+
+        let backend_canister = Canister {
+            name: "backend".to_string(),
+            settings: Settings::default(),
+            build: BuildSteps {
+                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
+                    source: SourceField::Local(LocalSource {
+                        path: "backend.wasm".into(),
+                    }),
+                    sha256: None,
+                })],
+            },
+            sync: SyncSteps::default(),
+        };
+
+        let local_network = Network {
+            name: "local".to_string(),
+            configuration: Configuration::Managed(Managed::default()),
+        };
+
+        let mut canisters = HashMap::new();
+        canisters.insert(
+            "backend".to_string(),
+            ("/project".into(), backend_canister.clone()),
+        );
+
+        let mut networks = HashMap::new();
+        networks.insert("local".to_string(), local_network.clone());
+
+        let mut env_canisters = HashMap::new();
+        env_canisters.insert("backend".to_string(), ("/project".into(), backend_canister));
+
+        let default_env = Environment {
+            name: "default".to_string(),
+            network: local_network,
+            canisters: env_canisters,
+        };
+
+        let mut environments = HashMap::new();
+        environments.insert("default".to_string(), default_env);
+
+        let project = Project {
+            dir: "/project".into(),
+            canisters,
+            networks,
+            environments,
+        };
+
+        Self::new(project)
+    }
+
+    /// Creates a complex project with multiple canisters, networks, and environments.
+    ///
+    /// Structure:
+    /// - Canisters:
+    ///   - "backend" (pre-built from local "backend.wasm")
+    ///   - "frontend" (pre-built from local "frontend.wasm")
+    ///   - "database" (pre-built from local "database.wasm")
+    /// - Networks:
+    ///   - "local" (managed, localhost:8000)
+    ///   - "staging" (managed, localhost:8001)
+    ///   - "ic" (connected to mainnet)
+    /// - Environments:
+    ///   - "dev" (local network, all three canisters)
+    ///   - "test" (staging network, backend and frontend only)
+    ///   - "prod" (ic network, backend and frontend only)
+    pub fn complex() -> Self {
+        use crate::{
+            canister::build::{Step as BuildStep, Steps as BuildSteps},
+            canister::sync::Steps as SyncSteps,
+            manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
+            network::{Configuration, Connected, Gateway, Managed, Port},
+        };
+
+        // Create canisters
+        let backend_canister = Canister {
+            name: "backend".to_string(),
+            settings: Settings::default(),
+            build: BuildSteps {
+                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
+                    source: SourceField::Local(LocalSource {
+                        path: "backend.wasm".into(),
+                    }),
+                    sha256: None,
+                })],
+            },
+            sync: SyncSteps::default(),
+        };
+
+        let frontend_canister = Canister {
+            name: "frontend".to_string(),
+            settings: Settings::default(),
+            build: BuildSteps {
+                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
+                    source: SourceField::Local(LocalSource {
+                        path: "frontend.wasm".into(),
+                    }),
+                    sha256: None,
+                })],
+            },
+            sync: SyncSteps::default(),
+        };
+
+        let database_canister = Canister {
+            name: "database".to_string(),
+            settings: Settings::default(),
+            build: BuildSteps {
+                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
+                    source: SourceField::Local(LocalSource {
+                        path: "database.wasm".into(),
+                    }),
+                    sha256: None,
+                })],
+            },
+            sync: SyncSteps::default(),
+        };
+
+        // Create networks
+        let local_network = Network {
+            name: "local".to_string(),
+            configuration: Configuration::Managed(Managed {
+                gateway: Gateway {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(8000),
+                },
+            }),
+        };
+
+        let staging_network = Network {
+            name: "staging".to_string(),
+            configuration: Configuration::Managed(Managed {
+                gateway: Gateway {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(8001),
+                },
+            }),
+        };
+
+        let ic_network = Network {
+            name: "ic".to_string(),
+            configuration: Configuration::Connected(Connected {
+                url: "https://ic0.app".to_string(),
+                root_key: None,
+            }),
+        };
+
+        // Setup canisters map
+        let mut canisters = HashMap::new();
+        canisters.insert(
+            "backend".to_string(),
+            ("/project/backend".into(), backend_canister.clone()),
+        );
+        canisters.insert(
+            "frontend".to_string(),
+            ("/project/frontend".into(), frontend_canister.clone()),
+        );
+        canisters.insert(
+            "database".to_string(),
+            ("/project/database".into(), database_canister.clone()),
+        );
+
+        // Setup networks map
+        let mut networks = HashMap::new();
+        networks.insert("local".to_string(), local_network.clone());
+        networks.insert("staging".to_string(), staging_network.clone());
+        networks.insert("ic".to_string(), ic_network.clone());
+
+        // Create dev environment (all canisters on local)
+        let mut dev_canisters = HashMap::new();
+        dev_canisters.insert(
+            "backend".to_string(),
+            ("/project/backend".into(), backend_canister.clone()),
+        );
+        dev_canisters.insert(
+            "frontend".to_string(),
+            ("/project/frontend".into(), frontend_canister.clone()),
+        );
+        dev_canisters.insert(
+            "database".to_string(),
+            ("/project/database".into(), database_canister.clone()),
+        );
+
+        let dev_env = Environment {
+            name: "dev".to_string(),
+            network: local_network,
+            canisters: dev_canisters,
+        };
+
+        // Create test environment (backend and frontend on staging)
+        let mut test_canisters = HashMap::new();
+        test_canisters.insert(
+            "backend".to_string(),
+            ("/project/backend".into(), backend_canister.clone()),
+        );
+        test_canisters.insert(
+            "frontend".to_string(),
+            ("/project/frontend".into(), frontend_canister.clone()),
+        );
+
+        let test_env = Environment {
+            name: "test".to_string(),
+            network: staging_network,
+            canisters: test_canisters,
+        };
+
+        // Create prod environment (backend and frontend on ic)
+        let mut prod_canisters = HashMap::new();
+        prod_canisters.insert(
+            "backend".to_string(),
+            ("/project/backend".into(), backend_canister),
+        );
+        prod_canisters.insert(
+            "frontend".to_string(),
+            ("/project/frontend".into(), frontend_canister),
+        );
+
+        let prod_env = Environment {
+            name: "prod".to_string(),
+            network: ic_network,
+            canisters: prod_canisters,
+        };
+
+        // Setup environments map
+        let mut environments = HashMap::new();
+        environments.insert("dev".to_string(), dev_env);
+        environments.insert("test".to_string(), test_env);
+        environments.insert("prod".to_string(), prod_env);
+
+        let project = Project {
+            dir: "/project".into(),
+            canisters,
+            networks,
+            environments,
+        };
+
+        Self::new(project)
+    }
+}
+
+#[cfg(any(test, feature = "test-features"))]
+#[async_trait]
+impl Load for MockProjectLoader {
+    async fn load(&self) -> Result<Project, LoadError> {
+        Ok(self.project.clone())
     }
 }

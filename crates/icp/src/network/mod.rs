@@ -138,3 +138,48 @@ impl Access for Accessor {
         Ok(acceess)
     }
 }
+
+#[cfg(any(test, feature = "test-features"))]
+use std::collections::HashMap;
+
+#[cfg(any(test, feature = "test-features"))]
+pub struct MockNetworkAccessor {
+    /// Network-specific access configurations by network name
+    networks: HashMap<String, NetworkAccess>,
+}
+
+#[cfg(any(test, feature = "test-features"))]
+impl MockNetworkAccessor {
+    /// Creates a new empty mock network accessor.
+    pub fn new() -> Self {
+        Self {
+            networks: HashMap::new(),
+        }
+    }
+
+    /// Adds a network-specific access configuration.
+    pub fn with_network(mut self, name: impl Into<String>, access: NetworkAccess) -> Self {
+        self.networks.insert(name.into(), access);
+        self
+    }
+}
+
+#[cfg(any(test, feature = "test-features"))]
+impl Default for MockNetworkAccessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(any(test, feature = "test-features"))]
+#[async_trait]
+impl Access for MockNetworkAccessor {
+    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
+        self.networks.get(&network.name).cloned().ok_or_else(|| {
+            AccessError::Unexpected(anyhow::anyhow!(
+                "network '{}' not configured in mock",
+                network.name
+            ))
+        })
+    }
+}

@@ -1,3 +1,7 @@
+#[cfg(test)]
+use std::{collections::HashMap, sync::Mutex};
+
+use async_trait::async_trait;
 use icp::{
     fs::{
         lock::{DirectoryStructureLock, PathsAccess},
@@ -6,6 +10,16 @@ use icp::{
     prelude::*,
 };
 use snafu::{ResultExt, Snafu};
+
+#[async_trait]
+/// Trait for accessing and managing canister build artifacts.
+pub(crate) trait Access: Sync + Send {
+    /// Save a canister artifact (WASM) to the store.
+    async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
+
+    /// Lookup a canister artifact (WASM) from the store.
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError>;
+}
 
 #[derive(Debug, Snafu)]
 pub(crate) enum SaveError {
@@ -59,8 +73,9 @@ impl ArtifactStore {
     }
 }
 
-impl ArtifactStore {
-    pub(crate) async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+#[async_trait]
+impl Access for ArtifactStore {
+    async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
         self.lock
             .with_write(async |store| {
                 // Save artifact
@@ -70,7 +85,7 @@ impl ArtifactStore {
             .await?
     }
 
-    pub(crate) async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
         self.lock
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
@@ -87,5 +102,49 @@ impl ArtifactStore {
                 Ok(wasm)
             })
             .await?
+    }
+}
+
+#[cfg(test)]
+/// In-memory mock implementation of `Access`.
+pub(crate) struct MockInMemoryArtifactStore {
+    store: Mutex<HashMap<String, Vec<u8>>>,
+}
+
+#[cfg(test)]
+impl MockInMemoryArtifactStore {
+    /// Creates a new empty in-memory artifact store.
+    pub(crate) fn new() -> Self {
+        Self {
+            store: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Default for MockInMemoryArtifactStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl Access for MockInMemoryArtifactStore {
+    async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+        let mut store = self.store.lock().unwrap();
+        store.insert(name.to_string(), wasm.to_vec());
+        Ok(())
+    }
+
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+        let store = self.store.lock().unwrap();
+
+        match store.get(name) {
+            Some(wasm) => Ok(wasm.clone()),
+            None => Err(LookupError::LookupArtifactNotFound {
+                name: name.to_owned(),
+            }),
+        }
     }
 }

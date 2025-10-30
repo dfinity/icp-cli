@@ -1,12 +1,30 @@
 use std::{io::ErrorKind, sync::Mutex};
 
+#[cfg(test)]
+use std::collections::HashMap;
+
 use ic_agent::export::Principal;
 use icp::{fs::json, prelude::*};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
+/// Trait for accessing and managing canister ID storage.
+pub(crate) trait Access: Sync + Send {
+    /// Register a canister ID for a given key.
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError>;
+
+    /// Lookup a canister ID for a given key.
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError>;
+
+    /// Lookup all canister IDs for a given environment.
+    fn lookup_by_environment(
+        &self,
+        environment: &str,
+    ) -> Result<Vec<(String, Principal)>, LookupError>;
+}
+
 /// An association-key, used for associating an existing canister to an ID on a network
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct Key {
     /// Network name
     pub(crate) network: String,
@@ -66,8 +84,8 @@ impl IdStore {
     }
 }
 
-impl IdStore {
-    pub(crate) fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
+impl Access for IdStore {
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -101,7 +119,7 @@ impl IdStore {
         Ok(())
     }
 
-    pub(crate) fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -129,7 +147,7 @@ impl IdStore {
         })
     }
 
-    pub(crate) fn lookup_by_environment(
+    fn lookup_by_environment(
         &self,
         environment: &str,
     ) -> Result<Vec<(String, Principal)>, LookupError> {
@@ -160,5 +178,80 @@ impl IdStore {
         }
 
         Ok(filtered_associations)
+    }
+}
+
+#[cfg(test)]
+/// In-memory mock implementation of `Access`.
+pub(crate) struct MockInMemoryIdStore {
+    store: Mutex<HashMap<Key, Principal>>,
+}
+
+#[cfg(test)]
+impl MockInMemoryIdStore {
+    /// Creates a new empty in-memory ID store.
+    pub(crate) fn new() -> Self {
+        Self {
+            store: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Default for MockInMemoryIdStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+impl Access for MockInMemoryIdStore {
+    fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError> {
+        let mut store = self.store.lock().unwrap();
+
+        // Check if canister already registered
+        if let Some(existing_cid) = store.get(key) {
+            return Err(RegisterError::AlreadyRegistered {
+                key: key.to_owned(),
+                id: *existing_cid,
+            });
+        }
+
+        // Store the association
+        store.insert(key.clone(), *cid);
+
+        Ok(())
+    }
+
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+        let store = self.store.lock().unwrap();
+
+        match store.get(key) {
+            Some(cid) => Ok(*cid),
+            None => Err(LookupError::IdNotFound {
+                key: key.to_owned(),
+            }),
+        }
+    }
+
+    fn lookup_by_environment(
+        &self,
+        environment: &str,
+    ) -> Result<Vec<(String, Principal)>, LookupError> {
+        let store = self.store.lock().unwrap();
+
+        let filtered: Vec<(String, Principal)> = store
+            .iter()
+            .filter(|(k, _)| k.environment == environment)
+            .map(|(k, cid)| (k.canister.clone(), *cid))
+            .collect();
+
+        if filtered.is_empty() {
+            return Err(LookupError::EnvironmentNotFound {
+                name: environment.to_owned(),
+            });
+        }
+
+        Ok(filtered)
     }
 }

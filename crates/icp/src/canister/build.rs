@@ -107,3 +107,21 @@ impl Build for Builder {
         }
     }
 }
+
+#[cfg(any(test, feature = "test-features"))]
+/// Unimplemented mock implementation of `Build`.
+/// All methods panic with `unimplemented!()` when called.
+pub struct UnimplementedMockBuilder;
+
+#[cfg(any(test, feature = "test-features"))]
+#[async_trait]
+impl Build for UnimplementedMockBuilder {
+    async fn build(
+        &self,
+        _step: &build::Step,
+        _params: &Params,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError> {
+        unimplemented!("UnimplementedMockBuilder::build")
+    }
+}

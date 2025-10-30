@@ -99,3 +99,22 @@ impl Synchronize for Syncer {
         }
     }
 }
+
+#[cfg(any(test, feature = "test-features"))]
+/// Unimplemented mock implementation of `Synchronize`.
+/// All methods panic with `unimplemented!()` when called.
+pub struct UnimplementedMockSyncer;
+
+#[cfg(any(test, feature = "test-features"))]
+#[async_trait]
+impl Synchronize for UnimplementedMockSyncer {
+    async fn sync(
+        &self,
+        _step: &sync::Step,
+        _params: &Params,
+        _agent: &Agent,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
+        unimplemented!("UnimplementedMockSyncer::sync")
+    }
+}

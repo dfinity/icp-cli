@@ -11,7 +11,7 @@ The `icp.yaml` file describes the configuration of your ICP project. It supports
 - Network configuration
 - Canister settings and metadata
 
-See the schema reference in [./docs/schemas/canister-yaml-schema.json](./docs/schemas/canister-yaml-schema.json)
+See the schema reference in [./docs/schemas/icp-yaml-schema.json](./docs/schemas/icp-yaml-schema.json)
 
 ## Project Lifecycle
 

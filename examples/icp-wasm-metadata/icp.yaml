@@ -1,13 +1,13 @@
-canister:
-  name: my-canister
+canisters:
+  - name: my-canister
 
-  build:
-    steps:
-      - type: pre-built
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+    build:
+      steps:
+        - type: pre-built
+          path: ../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 
-      - type: script
-        commands:
-          - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
-          - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata user:name -d "Hank Azaria" --keep-name-section
+        - type: script
+          commands:
+            - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
+            - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata user:name -d "Hank Azaria" --keep-name-section

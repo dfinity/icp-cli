@@ -20,12 +20,12 @@ fn canister_create() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo hi
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -67,17 +67,17 @@ fn canister_create_with_settings() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-            canister:
-              name: my-canister
-              build:
-                steps:
-                  - type: script
-                    command: cp {path} "$ICP_WASM_OUTPUT_PATH"
-              settings:
-                compute_allocation: 1
-                memory_allocation: 4294967296
-                freezing_threshold: 2592000
-                reserved_cycles_limit: 1000000000000
+            canisters:
+              - name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                settings:
+                  compute_allocation: 1
+                  memory_allocation: 4294967296
+                  freezing_threshold: 2592000
+                  reserved_cycles_limit: 1000000000000
 
             {NETWORK_RANDOM_PORT}
             {ENVIRONMENT_RANDOM_PORT}
@@ -147,14 +147,14 @@ fn canister_create_with_settings_cmdline_override() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-            canister:
-              name: my-canister
-              build:
-                steps:
-                  - type: script
-                    command: cp {path} \"$ICP_WASM_OUTPUT_PATH\"
-              settings:
-                compute_allocation: 1
+            canisters:
+              - name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: cp {path} \"$ICP_WASM_OUTPUT_PATH\"
+                settings:
+                  compute_allocation: 1
 
             {NETWORK_RANDOM_PORT}
             {ENVIRONMENT_RANDOM_PORT}
@@ -217,12 +217,12 @@ fn canister_create_nonexistent_canister() {
 
     // Project manifest with canister named "a"
     let pm = indoc! {r#"
-        canister:
-          name: a
-          build:
-            steps:
-              - type: script
-                command: echo hi
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
     "#};
 
     write_string(

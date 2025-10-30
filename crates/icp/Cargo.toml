@@ -59,3 +59,6 @@ tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 zeroize = { workspace = true }
+
+[dev-dependencies]
+jsonschema = { workspace = true }

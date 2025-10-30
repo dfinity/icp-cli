@@ -1,7 +1,7 @@
 canister:
-  name: my-canister
-  recipe:
-    type: "@dfinity/motoko" 
-    configuration:
-      main: src/main.mo
-      args: --incremental-gc
+  - name: my-canister
+    recipe:
+      type: "@dfinity/motoko" 
+      configuration:
+        main: src/main.mo
+        args: --incremental-gc

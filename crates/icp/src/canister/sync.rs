@@ -47,8 +47,7 @@ impl fmt::Display for Step {
     }
 }
 
-/// Describes how the canister should be built into WebAssembly,
-/// including the adapters and build steps responsible for the build.
+/// Describes how to synchronize the canister state after deployment.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Steps {
     pub steps: Vec<Step>,

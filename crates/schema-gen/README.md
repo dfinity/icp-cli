@@ -18,7 +18,7 @@ cargo run --bin schema-gen
 ./scripts/generate-schema.sh
 ```
 
-This creates `icp-yaml-schema.json` in the workspace root.
+This generates the yaml schema files in the docs/schema folder.
 
 ### Adding New Configuration Types
 

@@ -4,6 +4,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use serde::Serialize;
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::{
     canister::{Settings, build, sync},
@@ -105,8 +106,11 @@ pub struct Loader {
 #[async_trait]
 impl Load for Loader {
     async fn load(&self) -> Result<Project, LoadError> {
+        debug!("Loading project");
         // Locate project root
         let pdir = self.locate.locate().context(LoadError::Locate)?;
+
+        debug!("Located icp project in {pdir}");
 
         // Load project manifest
         let m = self
@@ -116,6 +120,8 @@ impl Load for Loader {
             .await
             .context(LoadError::Path)?;
 
+        debug!("Loaded project manifest: {m:#?}");
+
         // Load project
         let p = self
             .project
@@ -123,6 +129,8 @@ impl Load for Loader {
             .load(&m)
             .await
             .context(LoadError::Manifest)?;
+
+        debug!("Rendered project definition: {p:#?}");
 
         Ok(p)
     }
@@ -198,7 +206,9 @@ impl MockProjectLoader {
 
         let local_network = Network {
             name: "local".to_string(),
-            configuration: Configuration::Managed(Managed::default()),
+            configuration: Configuration::Managed {
+                managed: Managed::default(),
+            },
         };
 
         let mut canisters = HashMap::new();
@@ -301,30 +311,36 @@ impl MockProjectLoader {
         // Create networks
         let local_network = Network {
             name: "local".to_string(),
-            configuration: Configuration::Managed(Managed {
-                gateway: Gateway {
-                    host: "localhost".to_string(),
-                    port: Port::Fixed(8000),
+            configuration: Configuration::Managed {
+                managed: Managed {
+                    gateway: Gateway {
+                        host: "localhost".to_string(),
+                        port: Port::Fixed(8000),
+                    },
                 },
-            }),
+            },
         };
 
         let staging_network = Network {
             name: "staging".to_string(),
-            configuration: Configuration::Managed(Managed {
-                gateway: Gateway {
-                    host: "localhost".to_string(),
-                    port: Port::Fixed(8001),
+            configuration: Configuration::Managed {
+                managed: Managed {
+                    gateway: Gateway {
+                        host: "localhost".to_string(),
+                        port: Port::Fixed(8001),
+                    },
                 },
-            }),
+            },
         };
 
         let ic_network = Network {
             name: "ic".to_string(),
-            configuration: Configuration::Connected(Connected {
-                url: "https://ic0.app".to_string(),
-                root_key: None,
-            }),
+            configuration: Configuration::Connected {
+                connected: Connected {
+                    url: "https://ic0.app".to_string(),
+                    root_key: None,
+                },
+            },
         };
 
         // Setup canisters map

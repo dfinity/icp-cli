@@ -19,12 +19,12 @@ async fn canister_top_up() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo hi
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

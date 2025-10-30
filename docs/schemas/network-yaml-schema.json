@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "Connected": {
+      "properties": {
+        "root-key": {
+          "description": "The root key of this network",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The URL this network can be reached at.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "Gateway": {
+      "properties": {
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Managed": {
+      "properties": {
+        "gateway": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Gateway"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "NetworkManifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Schema for NetworkManifest",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Managed",
+      "properties": {
+        "mode": {
+          "const": "managed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Connected",
+      "properties": {
+        "mode": {
+          "const": "connected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "NetworkManifest",
+  "type": "object"
+}

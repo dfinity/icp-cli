@@ -1,31 +1,33 @@
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::{HashMap, HashSet, hash_map::Entry},
     sync::Arc,
     vec,
 };
 
 use anyhow::Context;
 use async_trait::async_trait;
+use serde::de::DeserializeOwned;
 
 use crate::{
     Canister, Environment, LoadManifest, LoadPath, Network, Project,
-    canister::{self, recipe},
+    canister::{self, recipe, sync::Steps},
     fs::read,
     is_glob,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, Item, Locate, canister::Instructions,
         environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType,
     },
+    network::{Configuration, Connected, Gateway, Managed, Port},
     prelude::*,
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadPathError {
-    #[error("failed to read canister manifest")]
-    Read,
+    #[error("failed to read manifest at {0}")]
+    Read(String),
 
-    #[error("failed to deserialize canister manifest")]
-    Deserialize,
+    #[error("failed to deserialize manifest at {0}")]
+    Deserialize(String),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -34,14 +36,17 @@ pub enum LoadPathError {
 pub struct PathLoader;
 
 #[async_trait]
-impl LoadPath<ProjectManifest, LoadPathError> for PathLoader {
-    async fn load(&self, path: &Path) -> Result<ProjectManifest, LoadPathError> {
+impl<T> LoadPath<T, LoadPathError> for PathLoader
+where
+    T: DeserializeOwned + Send + 'static,
+{
+    async fn load(&self, path: &Path) -> Result<T, LoadPathError> {
         // Read file
-        let mbs = read(path).context(LoadPathError::Read)?;
+        let mbs = read(path).context(LoadPathError::Read(path.to_string()))?;
 
-        // Load YAML
-        let m =
-            serde_yaml::from_slice::<ProjectManifest>(&mbs).context(LoadPathError::Deserialize)?;
+        // Deserialize YAML into any T
+        let m = serde_yaml::from_slice::<T>(&mbs)
+            .context(LoadPathError::Deserialize(path.to_string()))?;
 
         Ok(m)
     }
@@ -73,11 +78,20 @@ pub enum LoadManifestError {
     #[error("failed to load canister manifest")]
     Canister,
 
+    #[error("failed to load {kind} manifest at: {path}")]
+    Failed { kind: String, path: String },
+
     #[error("failed to resolve canister recipe: {0}")]
     Recipe(RecipeType),
 
     #[error("project contains two similarly named {kind}s: '{name}'")]
     Duplicate { kind: String, name: String },
+
+    #[error("`{name}` is a reserved {kind} name.")]
+    Reserved { kind: String, name: String },
+
+    #[error("Could not locate a {kind} manifest at: '{path}'")]
+    NotFound { kind: String, path: String },
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
@@ -92,6 +106,45 @@ pub struct ManifestLoader {
     pub canister: Arc<dyn LoadPath<CanisterManifest, canister::LoadPathError>>,
 }
 
+/// The local and mainnet networks are included by default
+/// They are not overridable
+fn default_networks() -> Vec<Network> {
+    vec![
+        Network {
+            // The local network at localhost:8000
+            name: "local".to_string(),
+            configuration: Configuration::Managed {
+                managed: Managed {
+                    gateway: Gateway {
+                        host: "localhost".to_string(),
+                        port: Port::Fixed(8000),
+                    },
+                },
+            },
+        },
+        Network {
+            // Mainnet at https://icp-api.io
+            name: "mainnet".to_string(),
+            configuration: Configuration::Connected {
+                connected: Connected {
+                    url: "https://icp-api.io".to_string(),
+                    // Will use the IC Root key hard coded in agent-rs.
+                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
+                    root_key: None,
+                },
+            },
+        },
+    ]
+}
+
+/// Turns the ProjectManifest into a Project struct
+/// - Adds the default Networks
+/// - Adds the default Environment
+/// - Validates the manifest to make sure that:
+///     - There are no duplicates
+///     - All the environments have networks
+///     - All the referenced canisters exist
+///     - All the recipes have been resolved
 #[async_trait]
 impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoader {
     async fn load(&self, m: &ProjectManifest) -> Result<Project, LoadManifestError> {
@@ -166,7 +219,13 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
             for (cdir, m) in ms {
                 let (build, sync) = match &m.instructions {
                     // Build/Sync
-                    Instructions::BuildSync { build, sync } => (build.to_owned(), sync.to_owned()),
+                    Instructions::BuildSync { build, sync } => (
+                        build.to_owned(),
+                        match sync {
+                            Some(sync) => sync.to_owned(),
+                            None => Steps::default(),
+                        },
+                    ),
 
                     // Recipe
                     Instructions::Recipe { recipe } => self
@@ -209,10 +268,47 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Networks
         let mut networks: HashMap<String, Network> = HashMap::new();
 
-        for m in &m.networks {
+        // Add the default networks first
+        for n in default_networks() {
+            networks.insert(n.name.clone(), n);
+        }
+
+        let default_network_names: HashSet<String> =
+            default_networks().iter().map(|n| n.name.clone()).collect();
+
+        // Resolve NetworkManifests and add them
+        for i in &m.networks {
+            let m = match i {
+                Item::Path(path) => {
+                    let path = pdir.join(path);
+                    if !path.exists() || !path.is_file() {
+                        return Err(LoadManifestError::NotFound {
+                            kind: "network".to_string(),
+                            path: path.to_string(),
+                        });
+                    }
+                    let loader = PathLoader;
+                    loader
+                        .load(&path)
+                        .await
+                        .context(LoadManifestError::Failed {
+                            kind: "network".to_string(),
+                            path: path.to_string(),
+                        })?
+                }
+                Item::Manifest(ms) => ms.clone(),
+            };
+
             match networks.entry(m.name.to_owned()) {
                 // Duplicate
                 Entry::Occupied(e) => {
+                    if default_network_names.contains(&m.name) {
+                        return Err(LoadManifestError::Reserved {
+                            kind: "network".to_string(),
+                            name: m.name.to_string(),
+                        });
+                    }
+
                     return Err(LoadManifestError::Duplicate {
                         kind: "network".to_string(),
                         name: e.key().to_owned(),
@@ -223,7 +319,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Entry::Vacant(e) => {
                     e.insert(Network {
                         name: m.name.to_owned(),
-                        configuration: m.configuration.to_owned(),
+                        configuration: m.configuration.into(), // Convert manifest to config struct
                     });
                 }
             }
@@ -232,7 +328,28 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
         // Environments
         let mut environments: HashMap<String, Environment> = HashMap::new();
 
-        for m in &m.environments {
+        for i in &m.environments {
+            let m = match i {
+                Item::Path(path) => {
+                    let path = pdir.join(path);
+                    if !path.exists() || !path.is_file() {
+                        return Err(LoadManifestError::NotFound {
+                            kind: "environment".to_string(),
+                            path: path.to_string(),
+                        });
+                    }
+                    let loader = PathLoader;
+                    loader
+                        .load(&path)
+                        .await
+                        .context(LoadManifestError::Failed {
+                            kind: "environment".to_string(),
+                            path: path.to_string(),
+                        })?
+                }
+                Item::Manifest(ms) => ms.clone(),
+            };
+
             match environments.entry(m.name.to_owned()) {
                 // Duplicate
                 Entry::Occupied(e) => {
@@ -289,6 +406,22 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                     });
                 }
             }
+        }
+
+        // We're done adding all the user environments
+        // Now we add the default `local` environment if the user hasn't overriden it
+        if let Entry::Vacant(vacant_entry) = environments.entry("local".to_string()) {
+            vacant_entry.insert(Environment {
+                name: "local".to_string(),
+                network: networks
+                    .get("local")
+                    .ok_or(EnvironmentError::Network {
+                        environment: "local".to_owned(),
+                        network: "local".to_owned(),
+                    })?
+                    .to_owned(),
+                canisters: canisters.clone(),
+            });
         }
 
         Ok(Project {

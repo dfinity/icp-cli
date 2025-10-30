@@ -19,12 +19,12 @@ fn build_adapter_pre_built_path() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                path: {wasm}
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  path: {wasm}
     "#};
 
     write_string(
@@ -61,13 +61,13 @@ fn build_adapter_pre_built_path_invalid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                path: {wasm}
-                sha256: invalid
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  path: {wasm}
+                  sha256: invalid
     "#};
 
     write_string(
@@ -109,13 +109,13 @@ fn build_adapter_pre_built_path_valid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                path: {wasm}
-                sha256: {actual}
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  path: {wasm}
+                  sha256: {actual}
     "#};
 
     write_string(
@@ -149,12 +149,12 @@ fn build_adapter_pre_built_url() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: http://{addr}/canister.wasm
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: http://{addr}/canister.wasm
     "#};
 
     write_string(
@@ -195,13 +195,13 @@ fn build_adapter_pre_built_url_invalid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: http://{addr}/canister.wasm
-                sha256: invalid
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: http://{addr}/canister.wasm
+                  sha256: invalid
     "#};
 
     write_string(
@@ -247,13 +247,13 @@ fn build_adapter_pre_built_url_valid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: http://{addr}/canister.wasm
-                sha256: {actual}
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: http://{addr}/canister.wasm
+                  sha256: {actual}
     "#};
 
     write_string(

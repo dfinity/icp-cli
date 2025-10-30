@@ -22,12 +22,12 @@ fn build_adapter_script_single() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -57,16 +57,16 @@ fn build_adapter_script_multiple() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo "before"
-              - type: script
-                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
-              - type: script
-                command: echo "after"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "before"
+                - type: script
+                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                - type: script
+                  command: echo "after"
     "#};
 
     write_string(
@@ -313,12 +313,12 @@ fn build_adapter_script_with_explicit_sh_c() {
 
     // Project manifest with explicit sh -c
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
     "#};
 
     write_string(
@@ -350,15 +350,15 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Project manifest with multiple commands
     let pm = indoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                commands:
-                  - echo "command 1"
-                  - echo "command 2"
-                  - echo "command 3"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  commands:
+                    - echo "command 1"
+                    - echo "command 2"
+                    - echo "command 3"
     "#};
 
     write_string(

@@ -47,6 +47,7 @@ icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
 indoc = "2.0.6"
 itertools = "0.14.0"
+jsonschema = "0.33.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 lazy_static = "1.5.0"
 mockall = "0.13.1"
@@ -85,7 +86,7 @@ default-features = false
 features = ["rustls-tls"]
 
 [workspace.dependencies.schemars]
-version = "0.8.19"
+version = "1.0.4"
 features = ["derive"]
 
 [workspace.lints.rust]

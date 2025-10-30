@@ -19,12 +19,12 @@ fn single_canister_project() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(

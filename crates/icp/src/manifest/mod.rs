@@ -80,4 +80,3 @@ impl Locate for Locator {
         }
     }
 }
-

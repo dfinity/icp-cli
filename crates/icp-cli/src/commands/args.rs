@@ -19,6 +19,11 @@ pub(crate) enum ArgValidationError {
     AmbiguousCanisterName,
 
     #[snafu(transparent)]
+    EnvironmentError {
+        source: crate::commands::GetEnvironmentError,
+    },
+
+    #[snafu(transparent)]
     GetAgentForEnv {
         source: crate::commands::GetAgentForEnvError,
     },
@@ -40,18 +45,59 @@ pub(crate) enum ArgValidationError {
 }
 
 #[derive(Args, Debug)]
-pub(crate) struct CanisterCommandArgs {
-    /// Name of canister to target
+pub(crate) struct CanisterEnvironmentArgs {
+    /// Name or principal of canister to target
+    /// When using a name an environment must be specified
     pub(crate) canister: Canister,
 
+    /// Name of the target environment
+    #[arg(long)]
+    pub(crate) environment: Option<Environment>,
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct CanisterCommandArgs {
+    // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
+    /// Name or principal of canister to target
+    /// When using a name an environment must be specified
+    pub(crate) canister: Canister,
+
+    /// Name of the network to target
     #[arg(long)]
     pub(crate) network: Option<Network>,
 
+    /// Name of the target environment
     #[arg(long)]
     pub(crate) environment: Option<Environment>,
 
+    /// The identity to use for this request
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
+}
+
+impl CanisterEnvironmentArgs {
+    pub async fn get_cid_for_environment(
+        &self,
+        ctx: &Context,
+    ) -> Result<Principal, ArgValidationError> {
+        let arg_canister = self.canister.clone();
+        let arg_environment = self.environment.clone().unwrap_or_default();
+        let environment_name = arg_environment.name();
+
+        let principal = match arg_canister {
+            Canister::Name(canister_name) => {
+                ctx.get_canister_id_for_env(&canister_name, environment_name)
+                    .await?
+            }
+            Canister::Principal(principal) => {
+                // Make sure a valid environment was requested
+                let _ = ctx.get_environment(environment_name).await?;
+                principal
+            }
+        };
+
+        Ok(principal)
+    }
 }
 
 impl CanisterCommandArgs {
@@ -120,6 +166,15 @@ impl From<&str> for Canister {
         }
 
         Self::Name(v.to_string())
+    }
+}
+
+impl Display for Canister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Canister::Name(n) => f.write_str(n),
+            Canister::Principal(principal) => f.write_str(&principal.to_string()),
+        }
     }
 }
 

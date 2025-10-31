@@ -94,40 +94,44 @@ Perform canister operations against a network
 
 ###### **Subcommands:**
 
-* `call` — 
-* `create` — 
-* `delete` — 
-* `info` — 
-* `install` — 
-* `list` — 
+* `call` — Make a canister call
+* `create` — Create a canister on a network
+* `delete` — Delete a canister from a network
+* `info` — Display a canister's information
+* `install` — Install a built WASM to a canister on a network
+* `list` — List the canisters in an environment
 * `settings` — 
-* `show` — 
-* `start` — 
-* `status` — 
-* `stop` — 
-* `top-up` — 
+* `show` — Show a canister's details
+* `start` — Start a canister on a network
+* `status` — Show the status of a canister
+* `stop` — Stop a canister on a network
+* `top-up` — Top up a canister with cycles
 
 
 
 ## `icp-cli canister call`
 
+Make a canister call
+
 **Usage:** `icp-cli canister call [OPTIONS] <CANISTER> <METHOD> <ARGS>`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name of canister to target
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 * `<METHOD>` — Name of canister method to call into
 * `<ARGS>` — String representation of canister call arguments
 
 ###### **Options:**
 
-* `--network <NETWORK>`
-* `--environment <ENVIRONMENT>`
+* `--network <NETWORK>` — Name of the network to target
+* `--environment <ENVIRONMENT>` — Name of the target environment
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
 ## `icp-cli canister create`
+
+Create a canister on a network
 
 **Usage:** `icp-cli canister create [OPTIONS] [NAMES]...`
 
@@ -155,21 +159,25 @@ Perform canister operations against a network
 
 ## `icp-cli canister delete`
 
+Delete a canister from a network
+
 **Usage:** `icp-cli canister delete [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name of canister to target
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
-* `--network <NETWORK>`
-* `--environment <ENVIRONMENT>`
+* `--network <NETWORK>` — Name of the network to target
+* `--environment <ENVIRONMENT>` — Name of the target environment
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
 ## `icp-cli canister info`
+
+Display a canister's information
 
 **Usage:** `icp-cli canister info [OPTIONS] <NAME>`
 
@@ -186,6 +194,8 @@ Perform canister operations against a network
 
 
 ## `icp-cli canister install`
+
+Install a built WASM to a canister on a network
 
 **Usage:** `icp-cli canister install [OPTIONS] [NAMES]...`
 
@@ -208,6 +218,8 @@ Perform canister operations against a network
 
 
 ## `icp-cli canister list`
+
+List the canisters in an environment
 
 **Usage:** `icp-cli canister list [OPTIONS]`
 
@@ -278,20 +290,23 @@ Perform canister operations against a network
 
 ## `icp-cli canister show`
 
-**Usage:** `icp-cli canister show [OPTIONS] <NAME>`
+Show a canister's details
+
+**Usage:** `icp-cli canister show [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
+* `--environment <ENVIRONMENT>` — Name of the target environment
 
 
 
 ## `icp-cli canister start`
+
+Start a canister on a network
 
 **Usage:** `icp-cli canister start [OPTIONS] <NAME>`
 
@@ -309,21 +324,25 @@ Perform canister operations against a network
 
 ## `icp-cli canister status`
 
+Show the status of a canister
+
 **Usage:** `icp-cli canister status [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name of canister to target
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
-* `--network <NETWORK>`
-* `--environment <ENVIRONMENT>`
+* `--network <NETWORK>` — Name of the network to target
+* `--environment <ENVIRONMENT>` — Name of the target environment
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
 ## `icp-cli canister stop`
+
+Stop a canister on a network
 
 **Usage:** `icp-cli canister stop [OPTIONS] <NAME>`
 
@@ -340,6 +359,8 @@ Perform canister operations against a network
 
 
 ## `icp-cli canister top-up`
+
+Top up a canister with cycles
 
 **Usage:** `icp-cli canister top-up [OPTIONS] --amount <AMOUNT> <NAME>`
 

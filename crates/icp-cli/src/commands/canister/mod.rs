@@ -16,19 +16,39 @@ pub(crate) mod top_up;
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Make a canister call
     Call(call::CallArgs),
+
+    /// Create a canister on a network
     Create(create::CreateArgs),
+
+    /// Delete a canister from a network
     Delete(delete::DeleteArgs),
+
+    /// Display a canister's information
     Info(info::InfoArgs),
+
+    /// Install a built WASM to a canister on a network
     Install(install::InstallArgs),
+
+    /// List the canisters in an environment
     List(list::ListArgs),
 
     #[command(subcommand)]
     Settings(settings::Command),
 
+    /// Show a canister's details
     Show(show::ShowArgs),
+
+    /// Start a canister on a network
     Start(start::StartArgs),
+
+    /// Show the status of a canister
     Status(status::StatusArgs),
+
+    /// Stop a canister on a network
     Stop(stop::StopArgs),
+
+    /// Top up a canister with cycles
     TopUp(top_up::TopUpArgs),
 }

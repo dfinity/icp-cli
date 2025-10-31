@@ -19,6 +19,11 @@ pub(crate) enum ArgValidationError {
     AmbiguousCanisterName,
 
     #[snafu(transparent)]
+    EnvironmentError {
+        source: crate::commands::GetEnvironmentError,
+    },
+
+    #[snafu(transparent)]
     GetAgentForEnv {
         source: crate::commands::GetAgentForEnvError,
     },
@@ -40,18 +45,59 @@ pub(crate) enum ArgValidationError {
 }
 
 #[derive(Args, Debug)]
-pub(crate) struct CanisterCommandArgs {
-    /// Name of canister to target
+pub(crate) struct CanisterEnvironmentArgs {
+    /// Name or principal of canister to target
+    /// When using a name an environment must be specified
     pub(crate) canister: Canister,
 
+    /// Name of the target environment
+    #[arg(long)]
+    pub(crate) environment: Option<Environment>,
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct CanisterCommandArgs {
+    // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
+    /// Name or principal of canister to target
+    /// When using a name an environment must be specified
+    pub(crate) canister: Canister,
+
+    /// Name of the network to target
     #[arg(long)]
     pub(crate) network: Option<Network>,
 
+    /// Name of the target environment
     #[arg(long)]
     pub(crate) environment: Option<Environment>,
 
+    /// The identity to use for this request
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
+}
+
+impl CanisterEnvironmentArgs {
+    pub async fn get_cid_for_environment(
+        &self,
+        ctx: &Context,
+    ) -> Result<Principal, ArgValidationError> {
+        let arg_canister = self.canister.clone();
+        let arg_environment = self.environment.clone().unwrap_or_default();
+        let environment_name = arg_environment.name();
+
+        let principal = match arg_canister {
+            Canister::Name(canister_name) => {
+                ctx.get_canister_id_for_env(&canister_name, environment_name)
+                    .await?
+            }
+            Canister::Principal(principal) => {
+                // Make sure a valid environment was requested
+                let _ = ctx.get_environment(environment_name).await?;
+                principal
+            }
+        };
+
+        Ok(principal)
+    }
 }
 
 impl CanisterCommandArgs {
@@ -123,6 +169,15 @@ impl From<&str> for Canister {
     }
 }
 
+impl Display for Canister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Canister::Name(n) => f.write_str(n),
+            Canister::Principal(principal) => f.write_str(&principal.to_string()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Network {
     Name(String),
@@ -176,7 +231,11 @@ impl Display for Environment {
 mod tests {
     use candid::Principal;
 
-    use crate::commands::args::{Canister, Network};
+    use super::*;
+    use icp::MockProjectLoader;
+    use std::sync::Arc;
+
+    use crate::{commands::args::Environment, store_id::MockInMemoryIdStore};
 
     #[test]
     fn canister_by_name() {
@@ -211,6 +270,51 @@ mod tests {
         assert_eq!(
             Network::from(url),
             Network::Url("http://www.example.com".to_string()),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_cid_for_environment() {
+        use crate::store_id::{Access as IdAccess, Key};
+        use candid::Principal;
+
+        let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+        // Register a canister ID for the dev environment
+        let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+        ids_store
+            .register(
+                &Key {
+                    network: "local".to_string(),
+                    environment: "dev".to_string(),
+                    canister: "backend".to_string(),
+                },
+                &canister_id,
+            )
+            .unwrap();
+
+        let ctx = Context {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store,
+            ..Context::mocked()
+        };
+
+        let args = CanisterEnvironmentArgs {
+            canister: Canister::Name("backend".to_string()),
+            environment: Some(Environment::Name("dev".to_string())),
+        };
+
+        assert!(matches!(args.get_cid_for_environment(&ctx).await, Ok(id) if id == canister_id));
+
+        let args = CanisterEnvironmentArgs {
+            canister: Canister::Name("INVALID".to_string()),
+            environment: Some(Environment::Name("dev".to_string())),
+        };
+
+        let res = args.get_cid_for_environment(&ctx).await;
+        assert!(
+            res.is_err(),
+            "An invalid canister name should result in an error"
         );
     }
 }

@@ -3,7 +3,7 @@ use clap::Args;
 use crate::{
     commands::Context,
     options::EnvironmentOpt,
-    store_id::{Key, LookupError as LookupIdError},
+    store_id::{Key, LookupIdError},
 };
 
 #[derive(Debug, Args)]

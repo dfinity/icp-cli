@@ -15,8 +15,8 @@ use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_artifact::LookupError as LookupArtifactError,
-    store_id::{Key, LookupError as LookupIdError},
+    store_artifact::LookupArtifactError,
+    store_id::{Key, LookupIdError},
 };
 
 #[derive(Clone, Debug, Args)]

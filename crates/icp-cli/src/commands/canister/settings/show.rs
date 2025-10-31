@@ -6,7 +6,7 @@ use icp::{agent, identity, network};
 use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
+    store_id::{Key, LookupIdError},
 };
 
 #[derive(Debug, Args)]

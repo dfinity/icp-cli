@@ -10,7 +10,7 @@ use icp_canister_interfaces::cycles_ledger::{
 use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError},
+    store_id::{Key, LookupIdError},
 };
 
 #[derive(Debug, Args)]
@@ -53,7 +53,7 @@ pub(crate) enum CommandError {
     },
 
     #[error(transparent)]
-    Lookup(#[from] LookupError),
+    Lookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Update(#[from] AgentError),

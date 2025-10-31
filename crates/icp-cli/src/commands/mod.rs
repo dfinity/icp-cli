@@ -311,7 +311,7 @@ pub(crate) enum GetCanisterIdForEnvError {
         environment_name
     ))]
     CanisterIdLookup {
-        source: crate::store_id::LookupError,
+        source: crate::store_id::LookupIdError,
         canister_name: String,
         environment_name: String,
     },

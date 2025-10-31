@@ -55,6 +55,12 @@ pub struct Environment {
     pub canisters: HashMap<String, (PathBuf, Canister)>,
 }
 
+impl Environment {
+    pub fn get_canister_names(&self) -> Vec<String> {
+        self.canisters.keys().cloned().collect()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub dir: PathBuf,

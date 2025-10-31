@@ -13,7 +13,7 @@ use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError},
+    store_id::{Key, LookupIdError},
 };
 
 #[derive(Args, Debug)]
@@ -58,7 +58,7 @@ pub(crate) enum CommandError {
     NoCanisters,
 
     #[error(transparent)]
-    IdLookup(#[from] LookupError),
+    IdLookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Synchronize(#[from] SynchronizeError),

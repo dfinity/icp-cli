@@ -20,7 +20,7 @@ use crate::{
     commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError, RegisterError},
+    store_id::{Key, LookupIdError, RegisterError},
 };
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -268,7 +268,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                     }
 
                     // Doesn't exist (include)
-                    Err(LookupError::IdNotFound { .. }) => {}
+                    Err(LookupIdError::IdNotFound { .. }) => {}
 
                     // Lookup failed
                     Err(err) => panic!("{err}"),

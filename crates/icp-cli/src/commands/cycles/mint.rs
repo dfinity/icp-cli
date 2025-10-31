@@ -5,7 +5,7 @@ use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
-use icp::{agent, identity, network};
+use icp::{agent, context::Context, identity, network};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
@@ -15,10 +15,7 @@ use icp_canister_interfaces::{
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-};
+use crate::options::{EnvironmentOpt, IdentityOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {

@@ -3,11 +3,12 @@ use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use icp::{agent, identity, network};
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
+use icp::{
+    context::Context,
     store_id::{Key, LookupError as LookupIdError},
 };
+
+use crate::options::{EnvironmentOpt, IdentityOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {

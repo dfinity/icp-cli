@@ -1,19 +1,19 @@
 #[cfg(test)]
 use std::{collections::HashMap, sync::Mutex};
 
-use async_trait::async_trait;
-use icp::{
+use crate::{
     fs::{
         lock::{DirectoryStructureLock, PathsAccess},
         read, write,
     },
     prelude::*,
 };
+use async_trait::async_trait;
 use snafu::{ResultExt, Snafu};
 
 #[async_trait]
 /// Trait for accessing and managing canister build artifacts.
-pub(crate) trait Access: Sync + Send {
+pub trait Access: Sync + Send {
     /// Save a canister artifact (WASM) to the store.
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
 
@@ -22,27 +22,27 @@ pub(crate) trait Access: Sync + Send {
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum SaveError {
+pub enum SaveError {
     #[snafu(display("failed to write artifact file"))]
-    SaveWriteFileError { source: icp::fs::Error },
+    SaveWriteFileError { source: crate::fs::Error },
 
     #[snafu(transparent)]
-    LockError { source: icp::fs::lock::LockError },
+    LockError { source: crate::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum LookupError {
+pub enum LookupError {
     #[snafu(display("failed to read artifact file"))]
-    LookupReadFileError { source: icp::fs::Error },
+    LookupReadFileError { source: crate::fs::Error },
 
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },
 
     #[snafu(transparent)]
-    LockError { source: icp::fs::lock::LockError },
+    LockError { source: crate::fs::lock::LockError },
 }
 
-pub(crate) struct ArtifactStore {
+pub struct ArtifactStore {
     lock: DirectoryStructureLock<ArtifactPaths>,
 }
 
@@ -63,7 +63,7 @@ impl PathsAccess for ArtifactPaths {
 }
 
 impl ArtifactStore {
-    pub(crate) fn new(path: &Path) -> Self {
+    pub fn new(path: &Path) -> Self {
         Self {
             lock: DirectoryStructureLock::open_or_create(ArtifactPaths {
                 dir: path.to_owned(),
@@ -107,14 +107,14 @@ impl Access for ArtifactStore {
 
 #[cfg(test)]
 /// In-memory mock implementation of `Access`.
-pub(crate) struct MockInMemoryArtifactStore {
+pub struct MockInMemoryArtifactStore {
     store: Mutex<HashMap<String, Vec<u8>>>,
 }
 
 #[cfg(test)]
 impl MockInMemoryArtifactStore {
     /// Creates a new empty in-memory artifact store.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             store: Mutex::new(HashMap::new()),
         }

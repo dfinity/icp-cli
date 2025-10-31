@@ -12,14 +12,13 @@ use std::{
 use clap::Args;
 use ic_agent::{Agent, AgentError};
 use icp::{
+    context::Context,
     identity::manifest::{LoadIdentityManifestError, load_identity_list},
     manifest,
     network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
 };
 use sysinfo::Pid;
 use tracing::debug;
-
-use crate::commands::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]

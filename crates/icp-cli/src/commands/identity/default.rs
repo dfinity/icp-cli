@@ -1,10 +1,11 @@
 use clap::Args;
-use icp::identity::manifest::{
-    ChangeDefaultsError, LoadIdentityManifestError, change_default_identity,
-    load_identity_defaults, load_identity_list,
+use icp::{
+    context::Context,
+    identity::manifest::{
+        ChangeDefaultsError, LoadIdentityManifestError, change_default_identity,
+        load_identity_defaults, load_identity_list,
+    },
 };
-
-use crate::commands::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {

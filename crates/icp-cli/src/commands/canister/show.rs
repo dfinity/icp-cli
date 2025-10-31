@@ -1,10 +1,11 @@
 use clap::Args;
 
-use crate::{
-    commands::Context,
-    options::EnvironmentOpt,
+use icp::{
+    context::Context,
     store_id::{Key, LookupError as LookupIdError},
 };
+
+use crate::options::EnvironmentOpt;
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {

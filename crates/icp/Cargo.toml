@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = { workspace = true }
 license = { workspace = true }
 
-[features]
-test-features = []
-
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -15,6 +12,7 @@ camino = { workspace = true }
 camino-tempfile = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true, optional = true }
+console = { workspace = true }
 directories = { workspace = true }
 dunce = { workspace = true }
 ed25519-consensus = { workspace = true }

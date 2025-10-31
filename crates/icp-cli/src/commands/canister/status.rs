@@ -2,10 +2,8 @@ use clap::Args;
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 
-use crate::commands::{
-    Context,
-    args::{self, ArgValidationError},
-};
+use crate::commands::args::{self, ArgValidationError};
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {

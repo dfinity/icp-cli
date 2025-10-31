@@ -9,11 +9,14 @@ use icp::{
     identity, network,
 };
 
+use icp::{
+    context::Context,
+    store_id::{Key, LookupError},
+};
+
 use crate::{
-    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError},
 };
 
 #[derive(Args, Debug)]

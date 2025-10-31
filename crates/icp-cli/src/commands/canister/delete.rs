@@ -1,10 +1,8 @@
 use clap::Args;
 use ic_agent::AgentError;
 
-use crate::commands::{
-    Context,
-    args::{self, ArgValidationError},
-};
+use crate::commands::args::{self, ArgValidationError};
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {

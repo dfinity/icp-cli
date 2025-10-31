@@ -4,10 +4,8 @@ use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
 
-use crate::commands::{
-    Context,
-    args::{self, ArgValidationError},
-};
+use crate::commands::args::{self, ArgValidationError};
+use icp::context::Context;
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {

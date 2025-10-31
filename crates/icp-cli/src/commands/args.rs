@@ -6,7 +6,12 @@ use ic_agent::Agent;
 use icp::identity::IdentitySelection;
 use snafu::Snafu;
 
-use crate::{commands::Context, options::IdentityOpt};
+use icp::context::{
+    Context, GetAgentForEnvError, GetAgentForNetworkError, GetAgentForUrlError,
+    GetCanisterIdForEnvError,
+};
+
+use crate::options::IdentityOpt;
 
 #[derive(Debug, Snafu)]
 pub(crate) enum ArgValidationError {
@@ -19,24 +24,16 @@ pub(crate) enum ArgValidationError {
     AmbiguousCanisterName,
 
     #[snafu(transparent)]
-    GetAgentForEnv {
-        source: crate::commands::GetAgentForEnvError,
-    },
+    GetAgentForEnv { source: GetAgentForEnvError },
 
     #[snafu(transparent)]
-    GetCanisterIdForEnv {
-        source: crate::commands::GetCanisterIdForEnvError,
-    },
+    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
 
     #[snafu(transparent)]
-    GetAgentForNetwork {
-        source: crate::commands::GetAgentForNetworkError,
-    },
+    GetAgentForNetwork { source: GetAgentForNetworkError },
 
     #[snafu(transparent)]
-    GetAgentForUrl {
-        source: crate::commands::GetAgentForUrlError,
-    },
+    GetAgentForUrl { source: GetAgentForUrlError },
 }
 
 #[derive(Args, Debug)]

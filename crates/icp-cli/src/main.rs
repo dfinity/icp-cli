@@ -2,7 +2,7 @@ use std::{env::current_dir, sync::Arc};
 
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::{Command, Context};
+use commands::Command;
 use console::Term;
 use icp::{
     agent,
@@ -10,10 +10,13 @@ use icp::{
         self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
         script::Script, sync::Syncer,
     },
+    context::Context,
     directories::{Access as _, Directories},
     identity, manifest, network,
     prelude::*,
     project,
+    store_artifact::ArtifactStore,
+    store_id::IdStore,
 };
 use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
@@ -24,8 +27,6 @@ use tracing_subscriber::{
 
 use crate::{
     logging::{TermWriter, debug_layer},
-    store_artifact::ArtifactStore,
-    store_id::IdStore,
     telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
@@ -34,8 +35,6 @@ mod commands;
 mod logging;
 mod options;
 mod progress;
-mod store_artifact;
-mod store_id;
 mod telemetry;
 mod version;
 

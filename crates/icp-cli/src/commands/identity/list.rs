@@ -1,10 +1,9 @@
 use clap::Args;
-use icp::identity::manifest::{
-    LoadIdentityManifestError, load_identity_defaults, load_identity_list,
+use icp::{
+    context::Context,
+    identity::manifest::{LoadIdentityManifestError, load_identity_defaults, load_identity_list},
 };
 use itertools::Itertools;
-
-use crate::commands::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs;

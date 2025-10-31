@@ -1,6 +1,7 @@
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Args;
 use icp::{
+    context::Context,
     fs::write_string,
     identity::{
         key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
@@ -8,8 +9,6 @@ use icp::{
     },
     prelude::*,
 };
-
-use crate::commands::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct NewArgs {

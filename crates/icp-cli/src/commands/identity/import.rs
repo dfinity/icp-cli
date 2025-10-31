@@ -6,7 +6,7 @@ use icp::identity::{
     manifest::IdentityKeyAlgorithm,
     seed::derive_default_key_from_seed,
 };
-use icp::{fs::read_to_string, prelude::*};
+use icp::{context::Context, fs::read_to_string, prelude::*};
 use itertools::Itertools;
 use k256::{Secp256k1, SecretKey};
 use pem::Pem;
@@ -16,8 +16,6 @@ use pkcs8::{
 };
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu};
-
-use crate::commands::Context;
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]

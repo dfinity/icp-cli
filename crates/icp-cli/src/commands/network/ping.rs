@@ -4,12 +4,11 @@ use clap::Args;
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
     agent,
+    context::Context,
     identity::{self, IdentitySelection},
     network::{self},
 };
 use tokio::time::sleep;
-
-use crate::commands::Context;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]

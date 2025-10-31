@@ -11,12 +11,15 @@ use ic_utils::interfaces::management_canister::builders::EnvironmentVariable;
 use icp::{agent, identity, network};
 use tracing::debug;
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-    progress::{ProgressManager, ProgressManagerSettings},
+use icp::{
+    context::Context,
     store_artifact::LookupError as LookupArtifactError,
     store_id::{Key, LookupError as LookupIdError},
+};
+
+use crate::{
+    options::{EnvironmentOpt, IdentityOpt},
+    progress::{ProgressManager, ProgressManagerSettings},
 };
 
 #[derive(Clone, Debug, Args)]

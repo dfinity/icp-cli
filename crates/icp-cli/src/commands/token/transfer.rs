@@ -2,14 +2,14 @@ use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{agent, identity, network};
+use icp::{agent, context::Context, identity, network};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
 
 use crate::{
-    commands::{Context, token::TOKEN_LEDGER_CIDS},
+    commands::token::TOKEN_LEDGER_CIDS,
     options::{EnvironmentOpt, IdentityOpt},
 };
 

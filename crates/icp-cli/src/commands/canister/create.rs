@@ -16,11 +16,14 @@ use icp_canister_interfaces::{
 };
 use rand::seq::IndexedRandom;
 
+use icp::{
+    context::Context,
+    store_id::{Key, LookupError, RegisterError},
+};
+
 use crate::{
-    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError, RegisterError},
 };
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;

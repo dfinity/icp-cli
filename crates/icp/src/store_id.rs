@@ -3,13 +3,13 @@ use std::{io::ErrorKind, sync::Mutex};
 #[cfg(test)]
 use std::collections::HashMap;
 
+use crate::{fs::json, prelude::*};
 use ic_agent::export::Principal;
-use icp::{fs::json, prelude::*};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
 /// Trait for accessing and managing canister ID storage.
-pub(crate) trait Access: Sync + Send {
+pub trait Access: Sync + Send {
     /// Register a canister ID for a given key.
     fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError>;
 
@@ -25,15 +25,15 @@ pub(crate) trait Access: Sync + Send {
 
 /// An association-key, used for associating an existing canister to an ID on a network
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) struct Key {
+pub struct Key {
     /// Network name
-    pub(crate) network: String,
+    pub network: String,
 
     /// Environment name
-    pub(crate) environment: String,
+    pub environment: String,
 
     /// Canister name
-    pub(crate) canister: String,
+    pub canister: String,
 }
 
 /// Association of a canister name and an ID
@@ -41,7 +41,7 @@ pub(crate) struct Key {
 struct Association(Key, Principal);
 
 #[derive(Debug, Snafu)]
-pub(crate) enum RegisterError {
+pub enum RegisterError {
     #[snafu(display("failed to load canister id store"))]
     RegisterLoadStore { source: json::Error },
 
@@ -56,7 +56,7 @@ pub(crate) enum RegisterError {
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum LookupError {
+pub enum LookupError {
     #[snafu(display("failed to load canister id store"))]
     LookupLoadStore { source: json::Error },
 
@@ -70,13 +70,13 @@ pub(crate) enum LookupError {
     EnvironmentNotFound { name: String },
 }
 
-pub(crate) struct IdStore {
+pub struct IdStore {
     path: PathBuf,
     lock: Mutex<()>,
 }
 
 impl IdStore {
-    pub(crate) fn new(path: &Path) -> Self {
+    pub fn new(path: &Path) -> Self {
         Self {
             path: path.to_owned(),
             lock: Mutex::new(()),
@@ -183,14 +183,14 @@ impl Access for IdStore {
 
 #[cfg(test)]
 /// In-memory mock implementation of `Access`.
-pub(crate) struct MockInMemoryIdStore {
+pub struct MockInMemoryIdStore {
     store: Mutex<HashMap<Key, Principal>>,
 }
 
 #[cfg(test)]
 impl MockInMemoryIdStore {
     /// Creates a new empty in-memory ID store.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             store: Mutex::new(HashMap::new()),
         }

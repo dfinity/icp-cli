@@ -191,16 +191,16 @@ impl Access for Accessor {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 use std::collections::HashMap;
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 pub struct MockNetworkAccessor {
     /// Network-specific access configurations by network name
     networks: HashMap<String, NetworkAccess>,
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 impl MockNetworkAccessor {
     /// Creates a new empty mock network accessor.
     pub fn new() -> Self {
@@ -216,14 +216,14 @@ impl MockNetworkAccessor {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 impl Default for MockNetworkAccessor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 #[async_trait]
 impl Access for MockNetworkAccessor {
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {

@@ -15,6 +15,7 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
+pub mod context;
 pub mod directories;
 pub mod fs;
 pub mod identity;
@@ -22,6 +23,8 @@ pub mod manifest;
 pub mod network;
 pub mod prelude;
 pub mod project;
+pub mod store_artifact;
+pub mod store_id;
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -162,14 +165,14 @@ impl<T: Load> Load for Lazy<T, Project> {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 /// Mock project loader for testing.
 /// Returns a pre-configured `Project` when `load()` is called.
 pub struct MockProjectLoader {
     project: Project,
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 impl MockProjectLoader {
     /// Creates a new mock project loader with the given project.
     pub fn new(project: Project) -> Self {
@@ -436,7 +439,7 @@ impl MockProjectLoader {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 #[async_trait]
 impl Load for MockProjectLoader {
     async fn load(&self) -> Result<Project, LoadError> {

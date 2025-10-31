@@ -1,6 +1,7 @@
 use clap::Args;
 
-use crate::{commands::Context, options::EnvironmentOpt};
+use crate::options::EnvironmentOpt;
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {

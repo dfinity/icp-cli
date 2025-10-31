@@ -140,7 +140,9 @@ impl CanisterCommandArgs {
                         ctx.get_agent_for_network(&identity, &net_name).await?
                     }
                     NetworkSelection::Url(url) => ctx.get_agent_for_url(&identity, &url).await?,
-                    NetworkSelection::Default => unreachable!(),
+                    NetworkSelection::Default(_) => {
+                        unreachable!("network is explicit but also default")
+                    }
                 };
                 (principal, agent)
             }
@@ -178,23 +180,22 @@ impl Display for Canister {
 #[derive(Args, Debug, Clone)]
 pub(crate) struct NetworkOpt {
     /// Name or URL of the network to target
-    #[arg(long)]
-    pub(crate) network: Option<String>,
+    #[arg(value_name = "NETWORK", long, default_value = "local")]
+    pub(crate) network: String,
 }
 
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
-        match v.network {
-            Some(network) => NetworkSelection::from(network.as_str()),
-            None => NetworkSelection::default(),
+        match v.network.as_str() {
+            "local" => NetworkSelection::Default("local".to_string()),
+            network => NetworkSelection::from(network),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum NetworkSelection {
-    #[default]
-    Default,
+    Default(String),
     Name(String),
     Url(String),
 }

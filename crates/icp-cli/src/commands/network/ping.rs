@@ -9,14 +9,16 @@ use icp::{
 };
 use tokio::time::sleep;
 
-use crate::commands::Context;
+use crate::commands::{
+    Context,
+    args::{NetworkOpt, NetworkSelection},
+};
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]
 pub(crate) struct PingArgs {
-    /// The compute network to connect to. By default, ping the local network.
-    #[arg(value_name = "NETWORK", default_value = "local")]
-    network: String,
+    #[command(flatten)]
+    network: NetworkOpt,
 
     /// Repeatedly ping until the replica is healthy or 1 minute has passed.
     #[arg(long)]
@@ -58,7 +60,13 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandEr
     let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
     // Network
-    let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
+    let network_selection: NetworkSelection = args.network.clone().into();
+    let network = match network_selection {
+        NetworkSelection::Name(name) | NetworkSelection::Default(name) => {
+            p.networks.get(&name).ok_or(CommandError::Network)?
+        }
+        NetworkSelection::Url(_) => unimplemented!("pinging by url is not supported"),
+    };
 
     // NetworkAccess
     let access = ctx.network.access(network).await?;

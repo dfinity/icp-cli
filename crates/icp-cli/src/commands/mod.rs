@@ -11,7 +11,7 @@ use icp::{
 };
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::store_id::Key;
+use crate::{commands::args::EnvironmentSelection, store_id::Key};
 
 pub(crate) mod args;
 pub(crate) mod build;
@@ -123,18 +123,18 @@ impl Context {
     /// Returns an error if the project cannot be loaded or if the environment is not found.
     pub(crate) async fn get_environment(
         &self,
-        environment_name: &str,
+        environment_selection: &EnvironmentSelection,
     ) -> Result<icp::Environment, GetEnvironmentError> {
         // Load project
         let p = self.project.load().await?;
 
         // Load target environment
-        let env = p
-            .environments
-            .get(environment_name)
-            .context(EnvironmentNotFoundSnafu {
-                name: environment_name.to_owned(),
-            })?;
+        let env =
+            p.environments
+                .get(environment_selection.name())
+                .context(EnvironmentNotFoundSnafu {
+                    name: environment_selection.name().to_owned(),
+                })?;
 
         Ok(env.clone())
     }
@@ -167,14 +167,14 @@ impl Context {
     pub(crate) async fn get_canister_id_for_env(
         &self,
         canister_name: &str,
-        environment_name: &str,
+        environment_selection: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdForEnvError> {
-        let env = self.get_environment(environment_name).await?;
+        let env = self.get_environment(environment_selection).await?;
 
         if !env.canisters.contains_key(canister_name) {
             return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
                 canister_name: canister_name.to_owned(),
-                environment_name: environment_name.to_owned(),
+                environment_name: environment_selection.name().to_owned(),
             });
         }
 
@@ -188,7 +188,7 @@ impl Context {
             })
             .context(CanisterIdLookupSnafu {
                 canister_name: canister_name.to_owned(),
-                environment_name: environment_name.to_owned(),
+                environment_name: environment_selection.name().to_owned(),
             })?;
 
         Ok(cid)
@@ -198,10 +198,10 @@ impl Context {
     pub(crate) async fn get_agent_for_env(
         &self,
         identity: &IdentitySelection,
-        environment_name: &str,
+        environment_selection: &EnvironmentSelection,
     ) -> Result<Agent, GetAgentForEnvError> {
         let id = self.get_identity(identity).await?;
-        let env = self.get_environment(environment_name).await?;
+        let env = self.get_environment(environment_selection).await?;
         let access = self.network.access(&env.network).await?;
         Ok(self.create_agent(id, access).await?)
     }
@@ -422,7 +422,7 @@ mod context_tests {
             ..Context::mocked()
         };
 
-        let env = ctx.get_environment("dev").await.unwrap();
+        let env = ctx.get_environment(&"dev".into()).await.unwrap();
 
         assert_eq!(env.name, "dev");
     }
@@ -431,7 +431,7 @@ mod context_tests {
     async fn test_get_environment_not_found() {
         let ctx = Context::mocked();
 
-        let result = ctx.get_environment("nonexistent").await;
+        let result = ctx.get_environment(&"nonexistent".into()).await;
 
         assert!(matches!(
             result,
@@ -489,7 +489,10 @@ mod context_tests {
             ..Context::mocked()
         };
 
-        let cid = ctx.get_canister_id_for_env("backend", "dev").await.unwrap();
+        let cid = ctx
+            .get_canister_id_for_env("backend", &"dev".into())
+            .await
+            .unwrap();
 
         assert_eq!(cid, canister_id);
     }
@@ -502,7 +505,9 @@ mod context_tests {
         };
 
         // "database" is only in "dev" environment, not in "test"
-        let result = ctx.get_canister_id_for_env("database", "test").await;
+        let result = ctx
+            .get_canister_id_for_env("database", &"test".into())
+            .await;
 
         assert!(matches!(
             result,
@@ -521,7 +526,7 @@ mod context_tests {
         };
 
         // Environment exists and canister is in it, but ID not registered
-        let result = ctx.get_canister_id_for_env("backend", "dev").await;
+        let result = ctx.get_canister_id_for_env("backend", &"dev".into()).await;
 
         assert!(matches!(
             result,
@@ -565,7 +570,7 @@ mod context_tests {
         };
 
         let agent = ctx
-            .get_agent_for_env(&IdentitySelection::Anonymous, "test")
+            .get_agent_for_env(&IdentitySelection::Anonymous, &"test".into())
             .await
             .unwrap();
 
@@ -577,7 +582,7 @@ mod context_tests {
         let ctx = Context::mocked();
 
         let result = ctx
-            .get_agent_for_env(&IdentitySelection::Anonymous, "nonexistent")
+            .get_agent_for_env(&IdentitySelection::Anonymous, &"nonexistent".into())
             .await;
 
         assert!(matches!(
@@ -599,7 +604,7 @@ mod context_tests {
         };
 
         let result = ctx
-            .get_agent_for_env(&IdentitySelection::Anonymous, "dev")
+            .get_agent_for_env(&IdentitySelection::Anonymous, &"dev".into())
             .await;
 
         assert!(matches!(

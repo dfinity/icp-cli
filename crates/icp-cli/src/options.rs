@@ -1,6 +1,8 @@
 use clap::{ArgGroup, Args};
 use icp::identity::IdentitySelection;
 
+use crate::commands::args::EnvironmentSelection;
+
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct IdentityOpt {
     /// The user identity to run this command as.
@@ -49,5 +51,25 @@ impl EnvironmentOpt {
 
         // Otherwise, default to `local`
         self.environment.as_deref().unwrap_or("local")
+    }
+
+    pub fn with_explicit_name(name: &str) -> Self {
+        Self {
+            environment: Some(name.to_string()),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<EnvironmentOpt> for EnvironmentSelection {
+    fn from(v: EnvironmentOpt) -> Self {
+        if v.ic {
+            return EnvironmentSelection::Name("ic".to_string());
+        }
+
+        match v.environment {
+            Some(env) => EnvironmentSelection::Name(env),
+            None => EnvironmentSelection::default(),
+        }
     }
 }

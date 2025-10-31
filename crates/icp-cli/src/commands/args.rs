@@ -231,7 +231,11 @@ impl Display for Environment {
 mod tests {
     use candid::Principal;
 
-    use crate::commands::args::{Canister, Network};
+    use super::*;
+    use icp::MockProjectLoader;
+    use std::sync::Arc;
+
+    use crate::{commands::args::Environment, store_id::MockInMemoryIdStore};
 
     #[test]
     fn canister_by_name() {
@@ -266,6 +270,51 @@ mod tests {
         assert_eq!(
             Network::from(url),
             Network::Url("http://www.example.com".to_string()),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_cid_for_environment() {
+        use crate::store_id::{Access as IdAccess, Key};
+        use candid::Principal;
+
+        let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+        // Register a canister ID for the dev environment
+        let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+        ids_store
+            .register(
+                &Key {
+                    network: "local".to_string(),
+                    environment: "dev".to_string(),
+                    canister: "backend".to_string(),
+                },
+                &canister_id,
+            )
+            .unwrap();
+
+        let ctx = Context {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store,
+            ..Context::mocked()
+        };
+
+        let args = CanisterEnvironmentArgs {
+            canister: Canister::Name("backend".to_string()),
+            environment: Some(Environment::Name("dev".to_string())),
+        };
+
+        assert!(matches!(args.get_cid_for_environment(&ctx).await, Ok(id) if id == canister_id));
+
+        let args = CanisterEnvironmentArgs {
+            canister: Canister::Name("INVALID".to_string()),
+            environment: Some(Environment::Name("dev".to_string())),
+        };
+
+        let res = args.get_cid_for_environment(&ctx).await;
+        assert!(
+            res.is_err(),
+            "An invalid canister name should result in an error"
         );
     }
 }

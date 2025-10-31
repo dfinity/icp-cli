@@ -16,13 +16,15 @@ use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use zeroize::Zeroizing;
 
 use crate::{
-    fs,
+    fs::{
+        self,
+        lock::{LRead, LWrite},
+    },
     identity::{
-        ensure_key_pem_path, key_pem_path,
+        IdentityPaths,
         manifest::{
-            IdentityKeyAlgorithm, IdentityList, IdentitySpec, LoadIdentityManifestError, PemFormat,
-            WriteIdentityManifestError, load_identity_defaults, load_identity_list,
-            write_identity_list,
+            IdentityDefaults, IdentityKeyAlgorithm, IdentityList, IdentitySpec,
+            LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
         },
     },
     prelude::*,
@@ -59,11 +61,14 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to read password: {message}"))]
     GetPasswordError { message: String },
+
+    #[snafu(transparent)]
+    LockError { source: crate::fs::lock::LockError },
 }
 
 // TODO(adam.spofford): Support p256, ed25519
 pub fn load_identity(
-    dir: &Path,
+    dirs: LRead<&IdentityPaths>,
     list: &IdentityList,
     name: &str,
     password_func: impl FnOnce() -> Result<String, String>,
@@ -76,26 +81,28 @@ pub fn load_identity(
     match identity {
         IdentitySpec::Pem {
             format, algorithm, ..
-        } => load_pem_identity(
-            dir,           // dir
-            name,          // name
-            format,        // format
-            algorithm,     // algorithm
-            password_func, // password_func
-        ),
+        } => {
+            load_pem_identity(
+                dirs,          // dir
+                name,          // name
+                format,        // format
+                algorithm,     // algorithm
+                password_func, // password_func
+            )
+        }
 
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
 }
 
 fn load_pem_identity(
-    dir: &Path,
+    dirs: LRead<&IdentityPaths>,
     name: &str,
     format: &PemFormat,
     algorithm: &IdentityKeyAlgorithm,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
-    let pem_path = key_pem_path(dir, name);
+    let pem_path = dirs.key_pem_path(name);
 
     let doc = fs::read_to_string(&pem_path)?
         .parse::<Pem>()
@@ -174,15 +181,15 @@ pub enum LoadIdentityInContextError {
     LoadIdentityManifest { source: LoadIdentityManifestError },
 }
 
-pub fn load_identity_in_context(
-    dir: &Path,
+pub async fn load_identity_in_context(
+    dirs: LRead<&IdentityPaths>,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
     let identity = load_identity(
-        dir,                                     // dir
-        &load_identity_list(dir)?,               // list
-        &(load_identity_defaults(dir)?).default, // name
-        password_func,                           // password_func
+        dirs,                                          // dir
+        &IdentityList::load_from(dirs)?,               // list
+        &(IdentityDefaults::load_from(dirs)?).default, // name
+        password_func,                                 // password_func
     )?;
 
     Ok(identity)
@@ -207,7 +214,7 @@ pub enum CreateIdentityError {
 }
 
 pub fn create_identity(
-    dir: &Path,
+    dirs: LWrite<&IdentityPaths>,
     name: &str,
     key: IdentityKey,
     format: CreateFormat,
@@ -231,7 +238,7 @@ pub fn create_identity(
         },
     };
 
-    let mut identity_list = load_identity_list(dir)?;
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
         !identity_list.identities.contains_key(name),
         IdentityAlreadyExistsSnafu { name }
@@ -249,9 +256,9 @@ pub fn create_identity(
         CreateFormat::Pbes2 { password } => make_pkcs5_encrypted_pem(&doc, &password),
     };
 
-    write_identity(dir, name, &pem)?;
+    write_identity(dirs, name, &pem)?;
     identity_list.identities.insert(name.to_string(), spec);
-    write_identity_list(dir, &identity_list)?;
+    identity_list.write_to(dirs)?;
 
     Ok(())
 }
@@ -263,10 +270,17 @@ pub enum WriteIdentityError {
 
     #[snafu(display("failed to create directory"))]
     CreateDirectoryError { source: crate::fs::Error },
+
+    #[snafu(transparent)]
+    LockError { source: crate::fs::lock::LockError },
 }
 
-fn write_identity(dir: &Path, name: &str, pem: &str) -> Result<(), WriteIdentityError> {
-    let pem_path = ensure_key_pem_path(dir, name).context(WriteFileSnafu)?;
+fn write_identity(
+    dirs: LWrite<&IdentityPaths>,
+    name: &str,
+    pem: &str,
+) -> Result<(), WriteIdentityError> {
+    let pem_path = dirs.ensure_key_pem_path(name).context(WriteFileSnafu)?;
     fs::write_string(&pem_path, pem).context(WriteFileSnafu)?;
 
     Ok(())

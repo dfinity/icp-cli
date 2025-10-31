@@ -204,7 +204,7 @@ async fn main() -> Result<(), Error> {
 
     // Identity loader
     let idload = Arc::new(identity::Loader {
-        dir: dirs.identity(),
+        dir: dirs.identity()?,
     });
 
     // Network accessor

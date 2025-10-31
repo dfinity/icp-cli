@@ -12,7 +12,8 @@ use std::{
 use clap::Args;
 use ic_agent::{Agent, AgentError};
 use icp::{
-    identity::manifest::{LoadIdentityManifestError, load_identity_list},
+    fs::lock::LockError,
+    identity::manifest::{IdentityList, LoadIdentityManifestError},
     manifest,
     network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
 };
@@ -62,6 +63,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     SavePid(#[from] icp::network::SavePidError),
+
+    #[error(transparent)]
+    LoadLock(#[from] LockError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
@@ -99,7 +103,11 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
         .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
 
     // Identities
-    let ids = load_identity_list(&ctx.dirs.identity())?;
+    let ids = ctx
+        .dirs
+        .identity()?
+        .with_read(async |dirs| IdentityList::load_from(dirs))
+        .await??;
 
     // Determine ICP accounts to seed
     let seed_accounts = ids.identities.values().map(|id| id.principal());

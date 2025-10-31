@@ -1,6 +1,7 @@
 use clap::Args;
-use icp::identity::manifest::{
-    LoadIdentityManifestError, load_identity_defaults, load_identity_list,
+use icp::{
+    fs::lock::LockError,
+    identity::manifest::{IdentityDefaults, IdentityList, LoadIdentityManifestError},
 };
 use itertools::Itertools;
 
@@ -13,13 +14,15 @@ pub(crate) struct ListArgs;
 pub(crate) enum ListKeysError {
     #[error(transparent)]
     LoadIdentity(#[from] LoadIdentityManifestError),
+    #[error(transparent)]
+    LoadLock(#[from] LockError),
 }
 
 pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), ListKeysError> {
-    let dir = ctx.dirs.identity();
+    let dirs = ctx.dirs.identity()?.into_read().await?;
 
-    let list = load_identity_list(&dir)?;
-    let defaults = load_identity_defaults(&dir)?;
+    let list = IdentityList::load_from(dirs.as_ref())?;
+    let defaults = IdentityDefaults::load_from(dirs.as_ref())?;
 
     // sorted alphabetically by name
     let sorted_identities = list

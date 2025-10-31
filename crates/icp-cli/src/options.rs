@@ -53,6 +53,7 @@ impl EnvironmentOpt {
         self.environment.as_deref().unwrap_or("local")
     }
 
+    #[cfg(test)]
     pub fn with_explicit_name(name: &str) -> Self {
         Self {
             environment: Some(name.to_string()),

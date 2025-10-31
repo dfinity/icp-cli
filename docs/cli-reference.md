@@ -123,8 +123,11 @@ Make a canister call
 
 ###### **Options:**
 
-* `--network <NETWORK>` — Name of the network to target
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--network <NETWORK>` — Name or URL of the network to target
+
+  Default value: `local`
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -169,8 +172,11 @@ Delete a canister from a network
 
 ###### **Options:**
 
-* `--network <NETWORK>` — Name of the network to target
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--network <NETWORK>` — Name or URL of the network to target
+
+  Default value: `local`
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -300,7 +306,8 @@ Show a canister's details
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 
 
 
@@ -334,8 +341,11 @@ Show the status of a canister
 
 ###### **Options:**
 
-* `--network <NETWORK>` — Name of the network to target
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--network <NETWORK>` — Name or URL of the network to target
+
+  Default value: `local`
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 

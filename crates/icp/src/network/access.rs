@@ -3,8 +3,10 @@ use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::{
     Network,
-    fs::json,
-    network::{Configuration, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey},
+    network::{
+        Configuration, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey,
+        directory::LoadNetworkFileError,
+    },
     prelude::*,
 };
 
@@ -41,11 +43,11 @@ pub enum GetNetworkAccessError {
     #[snafu(display("failed to decode root key"))]
     DecodeRootKey { source: hex::FromHexError },
 
-    #[snafu(transparent)]
-    LoadJsonWithLock { source: json::Error },
-
     #[snafu(display("failed to load port {port} descriptor"))]
-    LoadPortDescriptor { port: u16, source: json::Error },
+    LoadPortDescriptor {
+        port: u16,
+        source: LoadNetworkFileError,
+    },
 
     #[snafu(display("the {network} network for this project is not running"))]
     NetworkNotRunning { network: String },
@@ -61,9 +63,12 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("no descriptor found for port {port}"))]
     NoPortDescriptor { port: u16 },
+
+    #[snafu(display("failed to load network descriptor"))]
+    LoadNetworkDescriptor { source: LoadNetworkFileError },
 }
 
-pub fn get_network_access(
+pub async fn get_network_access(
     nd: NetworkDirectory,
     network: &Network,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
@@ -72,11 +77,13 @@ pub fn get_network_access(
         // Managed
         Configuration::Managed { managed: _ } => {
             // Load network descriptor
-            let desc =
-                nd.load_network_descriptor()?
-                    .ok_or(GetNetworkAccessError::NetworkNotRunning {
-                        network: nd.network_name.to_owned(),
-                    })?;
+            let desc = nd
+                .load_network_descriptor()
+                .await
+                .context(LoadNetworkDescriptorSnafu)?
+                .ok_or(GetNetworkAccessError::NetworkNotRunning {
+                    network: nd.network_name.to_owned(),
+                })?;
 
             // Specify port
             let port = desc.gateway.port;
@@ -85,6 +92,7 @@ pub fn get_network_access(
             if desc.gateway.fixed {
                 let pdesc = nd
                     .load_port_descriptor(port)
+                    .await
                     .context(LoadPortDescriptorSnafu { port })?
                     .context(NoPortDescriptorSnafu { port })?;
 

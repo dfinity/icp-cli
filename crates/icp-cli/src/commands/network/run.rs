@@ -109,7 +109,8 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
 
     if args.background {
         let mut child = run_in_background()?;
-        nd.save_background_network_runner_pid(Pid::from(child.id() as usize))?;
+        nd.save_background_network_runner_pid(Pid::from(child.id() as usize))
+            .await?;
         relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
     } else {
         run_network(
@@ -221,7 +222,7 @@ async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandEr
 
     // Wait for network descriptor to be written
     let network = retry_with_timeout(
-        || async move { nd.load_network_descriptor().unwrap_or(None) },
+        || async move { nd.load_network_descriptor().await.unwrap_or(None) },
         max_retries,
         delay_ms,
     )

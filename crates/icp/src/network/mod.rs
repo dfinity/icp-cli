@@ -21,9 +21,8 @@ use crate::{
 pub mod access;
 pub mod config;
 mod directory;
-mod lock;
+// mod lock;
 pub mod managed;
-pub mod structure;
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {
@@ -185,9 +184,11 @@ impl Access for Accessor {
         );
 
         // NetworkAccess
-        let acceess = get_network_access(nd, network).context("failed to load network access")?;
+        let access = get_network_access(nd, network)
+            .await
+            .context("failed to load network access")?;
 
-        Ok(acceess)
+        Ok(access)
     }
 }
 

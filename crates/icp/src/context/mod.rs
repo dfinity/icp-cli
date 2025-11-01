@@ -15,7 +15,7 @@ mod init;
 
 use crate::store_id::Key;
 
-pub use init::init;
+pub use init::initialize;
 
 pub struct Context {
     /// Terminal for printing messages for the user to see

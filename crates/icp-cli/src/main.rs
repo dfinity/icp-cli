@@ -127,7 +127,7 @@ async fn main() -> Result<(), Error> {
         "Starting icp-cli"
     );
 
-    let ctx = icp::context::init(
+    let ctx = icp::context::initialize(
         cli.project_dir,
         cli.id_store,
         cli.artifact_store,

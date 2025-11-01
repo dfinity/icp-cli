@@ -17,7 +17,7 @@ use crate::context::Context;
 use crate::store_artifact::ArtifactStore;
 use crate::store_id::IdStore;
 
-pub fn init(
+pub fn initialize(
     project_dir: Option<PathBuf>,
     id_store_path: PathBuf,
     artifact_store_path: PathBuf,

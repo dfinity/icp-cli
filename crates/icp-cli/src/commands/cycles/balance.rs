@@ -1,4 +1,6 @@
-use crate::{commands::Context, commands::token};
+use icp::context::Context;
+
+use crate::commands::token;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {

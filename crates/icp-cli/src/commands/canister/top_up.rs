@@ -7,11 +7,10 @@ use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_DECIMALS, CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawError, WithdrawResponse,
 };
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError},
-};
+use icp::context::Context;
+
+use crate::options::{EnvironmentOpt, IdentityOpt};
+use icp::store_id::{Key, LookupError};
 
 #[derive(Debug, Args)]
 pub(crate) struct TopUpArgs {

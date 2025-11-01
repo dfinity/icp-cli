@@ -6,13 +6,11 @@ use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     canister::build::{BuildError, Params},
+    context::Context,
     fs::read,
 };
 
-use crate::{
-    commands::Context,
-    progress::{ProgressManager, ProgressManagerSettings},
-};
+use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 #[derive(Args, Debug)]
 pub(crate) struct BuildArgs {

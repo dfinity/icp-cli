@@ -4,7 +4,7 @@ use icp::identity::manifest::{
     load_identity_defaults, load_identity_list,
 };
 
-use crate::commands::Context;
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {

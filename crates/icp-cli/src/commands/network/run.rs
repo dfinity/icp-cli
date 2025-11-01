@@ -19,7 +19,7 @@ use icp::{
 use sysinfo::Pid;
 use tracing::debug;
 
-use crate::commands::Context;
+use icp::context::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]
@@ -113,7 +113,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
         relay_child_output_until_healthy(ctx, &mut child, &nd).await?;
     } else {
         run_network(
-            cfg,           // config
+            &cfg,          // config
             nd,            // nd
             pdir,          // project_root
             seed_accounts, // seed_accounts

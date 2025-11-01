@@ -1,9 +1,8 @@
 use clap::Args;
 
-use crate::commands::{
-    Context,
-    args::{ArgValidationError, CanisterEnvironmentArgs},
-};
+use icp::context::Context;
+
+use crate::commands::args::{ArgValidationError, CanisterEnvironmentArgs};
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {

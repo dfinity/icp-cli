@@ -5,8 +5,10 @@ use ic_agent::AgentError;
 use icp::{agent, identity, network};
 use icrc_ledger_types::icrc1::account::Account;
 
+use icp::context::Context;
+
 use crate::{
-    commands::{Context, token::TOKEN_LEDGER_CIDS},
+    commands::token::TOKEN_LEDGER_CIDS,
     options::{EnvironmentOpt, IdentityOpt},
 };
 

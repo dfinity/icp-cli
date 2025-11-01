@@ -15,6 +15,7 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
+pub mod context;
 pub mod directories;
 pub mod fs;
 pub mod identity;
@@ -22,6 +23,8 @@ pub mod manifest;
 pub mod network;
 pub mod prelude;
 pub mod project;
+pub mod store_artifact;
+pub mod store_id;
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')

@@ -2507,6 +2507,7 @@ dependencies = [
  "camino-tempfile",
  "candid",
  "clap",
+ "console 0.16.1",
  "directories",
  "dunce",
  "ed25519-consensus",

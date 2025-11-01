@@ -9,12 +9,13 @@ use icp::{
     identity, network,
 };
 
+use icp::context::Context;
+
 use crate::{
-    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError},
 };
+use icp::store_id::{Key, LookupError};
 
 #[derive(Args, Debug)]
 pub(crate) struct SyncArgs {

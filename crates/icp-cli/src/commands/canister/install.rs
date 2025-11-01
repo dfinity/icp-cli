@@ -7,13 +7,14 @@ use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp::{agent, identity, network};
 use tracing::debug;
 
+use icp::context::Context;
+
 use crate::{
-    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_artifact::LookupError as LookupArtifactError,
-    store_id::{Key, LookupError as LookupIdError},
 };
+use icp::store_artifact::LookupError as LookupArtifactError;
+use icp::store_id::{Key, LookupError as LookupIdError};
 
 #[derive(Clone, Debug, Args)]
 pub(crate) struct InstallArgs {

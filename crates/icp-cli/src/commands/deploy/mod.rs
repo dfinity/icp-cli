@@ -1,9 +1,11 @@
 use clap::Args;
 use ic_agent::export::Principal;
 
+use icp::context::Context;
+
 use crate::{
     commands::{
-        Context, build,
+        build,
         canister::{
             binding_env_vars,
             create::{self, CanisterSettings},

@@ -325,3 +325,47 @@ async fn test_get_agent_for_url_success() {
     assert!(result.is_ok());
 }
 
+#[tokio::test]
+async fn test_get_canister_id() {
+    use crate::store_id::{Access as IdAccess, Key};
+    use candid::Principal;
+
+    let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+    // Register a canister ID for the dev environment
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    ids_store
+        .register(
+            &Key {
+                network: "local".to_string(),
+                environment: "dev".to_string(),
+                canister: "backend".to_string(),
+            },
+            &canister_id,
+        )
+        .unwrap();
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ids: ids_store,
+        ..Context::mocked()
+    };
+
+    let canister_selection = CanisterSelection::Named("backend".to_string());
+    let environment_selection = EnvironmentSelection::Named("dev".to_string());
+
+    assert!(
+        matches!(ctx.get_canister_id(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
+    );
+
+    let canister_selection = CanisterSelection::Named("INVALID".to_string());
+    let environment_selection = EnvironmentSelection::Named("dev".to_string());
+
+    let res = ctx
+        .get_canister_id(&canister_selection, &environment_selection)
+        .await;
+    assert!(
+        res.is_err(),
+        "An invalid canister name should result in an error"
+    );
+}

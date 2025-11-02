@@ -1,9 +1,10 @@
 use clap::Args;
 use ic_agent::AgentError;
 
-use icp::context::Context;
+use icp::context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection};
+use icp::identity::IdentitySelection;
 
-use crate::commands::args::{self, ArgValidationError};
+use crate::commands::args;
 
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
@@ -17,11 +18,27 @@ pub(crate) enum CommandError {
     Delete(#[from] AgentError),
 
     #[error(transparent)]
-    Shared(#[from] ArgValidationError),
+    GetCanisterIdAndAgent(#[from] icp::context::GetCanisterIdAndAgentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), CommandError> {
-    let (cid, agent) = args.cmd_args.get_cid_and_agent(ctx).await?;
+    let canister_selection: CanisterSelection = args.cmd_args.canister.clone().into();
+    let environment_selection: EnvironmentSelection =
+        args.cmd_args.environment.clone().unwrap_or_default().into();
+    let network_selection: NetworkSelection = match args.cmd_args.network.clone() {
+        Some(network) => network.into_selection(),
+        None => NetworkSelection::FromEnvironment,
+    };
+    let identity_selection: IdentitySelection = args.cmd_args.identity.clone().into();
+
+    let (cid, agent) = ctx
+        .get_canister_id_and_agent(
+            &canister_selection,
+            &environment_selection,
+            &network_selection,
+            &identity_selection,
+        )
+        .await?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);

@@ -2,48 +2,9 @@ use std::fmt::Display;
 
 use candid::Principal;
 use clap::Args;
-use ic_agent::Agent;
-use icp::identity::IdentitySelection;
-use snafu::Snafu;
+use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 
 use crate::options::IdentityOpt;
-use icp::context::Context;
-
-#[derive(Debug, Snafu)]
-pub(crate) enum ArgValidationError {
-    #[snafu(display("You can't specify both an environment and a network"))]
-    EnvironmentAndNetworkSpecified,
-
-    #[snafu(display(
-        "Specifying a network is not supported if you are targeting a canister by name, specify an environment instead"
-    ))]
-    AmbiguousCanisterName,
-
-    #[snafu(transparent)]
-    EnvironmentError {
-        source: icp::context::GetEnvironmentError,
-    },
-
-    #[snafu(transparent)]
-    GetAgentForEnv {
-        source: icp::context::GetAgentForEnvError,
-    },
-
-    #[snafu(transparent)]
-    GetCanisterIdForEnv {
-        source: icp::context::GetCanisterIdForEnvError,
-    },
-
-    #[snafu(transparent)]
-    GetAgentForNetwork {
-        source: icp::context::GetAgentForNetworkError,
-    },
-
-    #[snafu(transparent)]
-    GetAgentForUrl {
-        source: icp::context::GetAgentForUrlError,
-    },
-}
 
 #[derive(Args, Debug)]
 pub(crate) struct CanisterEnvironmentArgs {
@@ -76,84 +37,6 @@ pub(crate) struct CanisterCommandArgs {
     pub(crate) identity: IdentityOpt,
 }
 
-impl CanisterEnvironmentArgs {
-    pub async fn get_cid_for_environment(
-        &self,
-        ctx: &Context,
-    ) -> Result<Principal, ArgValidationError> {
-        let arg_canister = self.canister.clone();
-        let arg_environment = self.environment.clone().unwrap_or_default();
-        let environment_name = arg_environment.name();
-
-        let principal = match arg_canister {
-            Canister::Name(canister_name) => {
-                ctx.get_canister_id_for_env(&canister_name, environment_name)
-                    .await?
-            }
-            Canister::Principal(principal) => {
-                // Make sure a valid environment was requested
-                let _ = ctx.get_environment(environment_name).await?;
-                principal
-            }
-        };
-
-        Ok(principal)
-    }
-}
-
-impl CanisterCommandArgs {
-    pub async fn get_cid_and_agent(
-        &self,
-        ctx: &Context,
-    ) -> Result<(Principal, Agent), ArgValidationError> {
-        let arg_canister = self.canister.clone();
-        let arg_environment = self.environment.clone().unwrap_or_default();
-        let env_name = arg_environment.name();
-        let arg_network = self.network.clone();
-        let identity_selection: IdentitySelection = self.identity.clone().into();
-
-        let (cid, agent) = match (arg_canister, &arg_environment, arg_network) {
-            (_, Environment::Name(_), Some(_)) => {
-                // Both an environment and a network are specified this is an error
-                return Err(ArgValidationError::EnvironmentAndNetworkSpecified);
-            }
-            (Canister::Name(_), Environment::Default(_), Some(_)) => {
-                // This is not allowed, we should not use name with an environment not a network
-                return Err(ArgValidationError::AmbiguousCanisterName);
-            }
-            (Canister::Name(cname), _, None) => {
-                // A canister name was specified so we must be in a project
-
-                let agent = ctx.get_agent_for_env(&identity_selection, env_name).await?;
-                let cid = ctx.get_canister_id_for_env(&cname, env_name).await?;
-
-                (cid, agent)
-            }
-            (Canister::Principal(principal), _, None) => {
-                // Call by canister_id to the environment specified
-
-                let agent = ctx.get_agent_for_env(&identity_selection, env_name).await?;
-
-                (principal, agent)
-            }
-            (Canister::Principal(principal), Environment::Default(_), Some(network)) => {
-                // Should handle known networks by name
-
-                let agent = match network {
-                    Network::Name(net_name) => {
-                        ctx.get_agent_for_network(&identity_selection, &net_name)
-                            .await?
-                    }
-                    Network::Url(url) => ctx.get_agent_for_url(&identity_selection, &url).await?,
-                };
-                (principal, agent)
-            }
-        };
-
-        Ok((cid, agent))
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Canister {
     Name(String),
@@ -167,6 +50,15 @@ impl From<&str> for Canister {
         }
 
         Self::Name(v.to_string())
+    }
+}
+
+impl From<Canister> for CanisterSelection {
+    fn from(v: Canister) -> Self {
+        match v {
+            Canister::Name(name) => CanisterSelection::Named(name),
+            Canister::Principal(principal) => CanisterSelection::Principal(principal),
+        }
     }
 }
 
@@ -195,6 +87,15 @@ impl From<&str> for Network {
     }
 }
 
+impl Network {
+    pub(crate) fn into_selection(self) -> NetworkSelection {
+        match self {
+            Network::Name(name) => NetworkSelection::Named(name),
+            Network::Url(url) => NetworkSelection::Url(url),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Environment {
     Name(String),
@@ -219,6 +120,15 @@ impl Default for Environment {
 impl From<&str> for Environment {
     fn from(v: &str) -> Self {
         Self::Name(v.to_string())
+    }
+}
+
+impl From<Environment> for EnvironmentSelection {
+    fn from(v: Environment) -> Self {
+        match v {
+            Environment::Name(name) => EnvironmentSelection::Named(name),
+            Environment::Default(_) => EnvironmentSelection::Default,
+        }
     }
 }
 
@@ -269,49 +179,4 @@ mod tests {
             Network::Url("http://www.example.com".to_string()),
         );
     }
-
-    // #[tokio::test]
-    // async fn test_get_cid_for_environment() {
-    //     use icp::store_id::{Access as IdAccess, Key};
-    //     use candid::Principal;
-
-    //     let ids_store = Arc::new(MockInMemoryIdStore::new());
-
-    //     // Register a canister ID for the dev environment
-    //     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    //     ids_store
-    //         .register(
-    //             &Key {
-    //                 network: "local".to_string(),
-    //                 environment: "dev".to_string(),
-    //                 canister: "backend".to_string(),
-    //             },
-    //             &canister_id,
-    //         )
-    //         .unwrap();
-
-    //     let ctx = Context {
-    //         project: Arc::new(MockProjectLoader::complex()),
-    //         ids: ids_store,
-    //         ..Context::mocked()
-    //     };
-
-    //     let args = CanisterEnvironmentArgs {
-    //         canister: Canister::Name("backend".to_string()),
-    //         environment: Some(Environment::Name("dev".to_string())),
-    //     };
-
-    //     assert!(matches!(args.get_cid_for_environment(&ctx).await, Ok(id) if id == canister_id));
-
-    //     let args = CanisterEnvironmentArgs {
-    //         canister: Canister::Name("INVALID".to_string()),
-    //         environment: Some(Environment::Name("dev".to_string())),
-    //     };
-
-    //     let res = args.get_cid_for_environment(&ctx).await;
-    //     assert!(
-    //         res.is_err(),
-    //         "An invalid canister name should result in an error"
-    //     );
-    // }
 }

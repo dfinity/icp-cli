@@ -128,6 +128,7 @@ pub(crate) enum CommandError {
     Unexpected(#[from] anyhow::Error),
 }
 
+// TODO: Needs to take a single canister arg and change to call an operation
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.

@@ -83,7 +83,12 @@ async fn canister_top_up() {
             &format!("{}", 10 * TRILLION),
         ])
         .assert()
-        .stdout(eq("Topped up canister my-canister with 10.000000000000T cycles").trim())
+        .stdout(
+            eq(format!(
+                "Topped up canister my-canister:{canister_id} with 10.000000000000T cycles"
+            ))
+            .trim(),
+        )
         .success();
 
     let new_canister_balance = ctx.pocketic().cycle_balance(canister_id).await;

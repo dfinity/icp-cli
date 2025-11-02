@@ -71,6 +71,7 @@ pub(crate) enum CommandError {
     InstallAgent(#[from] AgentError),
 }
 
+// TODO: Needs to take a single canister arg and change to call an operation
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
     // Load the project
     let p = ctx.project.load().await?;

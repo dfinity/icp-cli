@@ -4,8 +4,7 @@ use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
 
-use icp::context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection};
-use icp::identity::IdentitySelection;
+use icp::context::Context;
 
 use crate::commands::args;
 
@@ -40,21 +39,14 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
-    let canister_selection: CanisterSelection = args.cmd_args.canister.clone().into();
-    let environment_selection: EnvironmentSelection =
-        args.cmd_args.environment.clone().unwrap_or_default().into();
-    let network_selection: NetworkSelection = match args.cmd_args.network.clone() {
-        Some(network) => network.into_selection(),
-        None => NetworkSelection::FromEnvironment,
-    };
-    let identity_selection: IdentitySelection = args.cmd_args.identity.clone().into();
+    let selections = args.cmd_args.selections();
 
     let (cid, agent) = ctx
         .get_canister_id_and_agent(
-            &canister_selection,
-            &environment_selection,
-            &network_selection,
-            &identity_selection,
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
+            &selections.identity,
         )
         .await?;
 

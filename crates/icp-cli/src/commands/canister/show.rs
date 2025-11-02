@@ -1,6 +1,6 @@
 use clap::Args;
 
-use icp::context::{CanisterSelection, Context, EnvironmentSelection};
+use icp::context::Context;
 
 use crate::commands::args::CanisterEnvironmentArgs;
 
@@ -17,9 +17,7 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
-    let canister_selection: CanisterSelection = args.cmd_args.canister.clone().into();
-    let environment_selection: EnvironmentSelection =
-        args.cmd_args.environment.clone().unwrap_or_default().into();
+    let (canister_selection, environment_selection) = args.cmd_args.selections();
 
     let cid = ctx
         .get_canister_id(&canister_selection, &environment_selection)

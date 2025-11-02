@@ -3,6 +3,7 @@ use std::fmt::Display;
 use candid::Principal;
 use clap::Args;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
+use icp::identity::IdentitySelection;
 
 use crate::options::IdentityOpt;
 
@@ -17,6 +18,16 @@ pub(crate) struct CanisterEnvironmentArgs {
     pub(crate) environment: Option<Environment>,
 }
 
+impl CanisterEnvironmentArgs {
+    /// Convert arguments into selection enums for canister and environment
+    pub(crate) fn selections(&self) -> (CanisterSelection, EnvironmentSelection) {
+        let canister_selection: CanisterSelection = self.canister.clone().into();
+        let environment_selection: EnvironmentSelection =
+            self.environment.clone().unwrap_or_default().into();
+        (canister_selection, environment_selection)
+    }
+}
+
 #[derive(Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
@@ -24,8 +35,8 @@ pub(crate) struct CanisterCommandArgs {
     /// When using a name an environment must be specified
     pub(crate) canister: Canister,
 
-    /// Name of the network to target
-    #[arg(long)]
+    /// Name of the network to target, conflicts with environment argument
+    #[arg(long, conflicts_with = "environment")]
     pub(crate) network: Option<Network>,
 
     /// Name of the target environment
@@ -35,6 +46,35 @@ pub(crate) struct CanisterCommandArgs {
     /// The identity to use for this request
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
+}
+
+/// Selections derived from CanisterCommandArgs
+pub(crate) struct CommandSelections {
+    pub(crate) canister: CanisterSelection,
+    pub(crate) environment: EnvironmentSelection,
+    pub(crate) network: NetworkSelection,
+    pub(crate) identity: IdentitySelection,
+}
+
+impl CanisterCommandArgs {
+    /// Convert command arguments into selection enums
+    pub(crate) fn selections(&self) -> CommandSelections {
+        let canister_selection: CanisterSelection = self.canister.clone().into();
+        let environment_selection: EnvironmentSelection =
+            self.environment.clone().unwrap_or_default().into();
+        let network_selection: NetworkSelection = match self.network.clone() {
+            Some(network) => network.into_selection(),
+            None => NetworkSelection::FromEnvironment,
+        };
+        let identity_selection: IdentitySelection = self.identity.clone().into();
+
+        CommandSelections {
+            canister: canister_selection,
+            environment: environment_selection,
+            network: network_selection,
+            identity: identity_selection,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

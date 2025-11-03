@@ -1,4 +1,6 @@
-canister:
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/heads/main/docs/schemas/icp-yaml-schema.json
+
+canisters:
   - name: my-canister
     recipe:
       type: "@dfinity/motoko" 

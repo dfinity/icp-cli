@@ -216,7 +216,7 @@ where
 }
 
 async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandError> {
-    let max_retries = 30;
+    let max_retries = 45;
     let delay_ms = 1000;
 
     // Wait for network descriptor to be written

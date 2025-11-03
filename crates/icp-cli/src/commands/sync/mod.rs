@@ -132,7 +132,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
 
         // Get canister principal ID
         let cid = ctx.ids.lookup(&Key {
-            network: env.network.name.to_owned(),
             environment: env.name.to_owned(),
             canister: c.name.to_owned(),
         })?;

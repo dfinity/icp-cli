@@ -26,9 +26,6 @@ pub trait Access: Sync + Send {
 /// An association-key, used for associating an existing canister to an ID on a network
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Key {
-    /// Network name
-    pub network: String,
-
     /// Environment name
     pub environment: String,
 
@@ -46,8 +43,8 @@ pub enum RegisterError {
     RegisterLoadStore { source: json::Error },
 
     #[snafu(display(
-        "canister '{}' in environment '{}', associated with network '{}' is already registered with id '{id}'",
-        key.canister, key.environment, key.network,
+        "canister '{}' in environment '{}' is already registered with id '{id}'",
+        key.canister, key.environment,
     ))]
     AlreadyRegistered { key: Key, id: Principal },
 
@@ -61,8 +58,8 @@ pub enum LookupIdError {
     LookupLoadStore { source: json::Error },
 
     #[snafu(display(
-        "could not find ID for canister '{}' in environment '{}', associated with network '{}'",
-        key.canister, key.environment, key.network
+        "could not find ID for canister '{}' in environment '{}'",
+        key.canister, key.environment
     ))]
     IdNotFound { key: Key },
 

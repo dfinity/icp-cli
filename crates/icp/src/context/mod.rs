@@ -72,7 +72,7 @@ pub struct Context {
     pub project: Arc<dyn crate::Load>,
 
     /// Identity loader
-    pub identity: Arc<dyn crate::identity::Load>,
+    identity: Arc<dyn crate::identity::Load>,
 
     /// NetworkAccess loader
     pub network: Arc<dyn crate::network::Access>,

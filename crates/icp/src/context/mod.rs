@@ -78,7 +78,7 @@ pub struct Context {
     pub network: Arc<dyn crate::network::Access>,
 
     /// Agent creator
-    pub agent: Arc<dyn crate::agent::Create>,
+    agent: Arc<dyn crate::agent::Create>,
 
     /// Canister builder
     pub builder: Arc<dyn Build>,

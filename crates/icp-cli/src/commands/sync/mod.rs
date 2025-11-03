@@ -6,6 +6,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     agent,
     canister::sync::{Params, SynchronizeError},
+    context::GetAgentForEnvError,
     identity, network,
 };
 
@@ -63,14 +64,14 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Synchronize(#[from] SynchronizeError),
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     // Load the project
     let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
 
     // Load target environment
     let env =
@@ -80,15 +81,10 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
                 name: args.environment.name().to_owned(),
             })?;
 
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .await?;
 
     let cnames = match args.names.is_empty() {
         // No canisters specified

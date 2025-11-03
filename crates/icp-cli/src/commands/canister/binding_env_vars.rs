@@ -8,7 +8,11 @@ use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::EnvironmentVariable;
-use icp::{agent, identity, network};
+use icp::{
+    agent,
+    context::{GetAgentForEnvError, GetEnvironmentError},
+    identity, network,
+};
 use tracing::debug;
 
 use icp::context::Context;
@@ -75,32 +79,25 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     InstallAgent(#[from] AgentError),
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
+
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), CommandError> {
     // Load the project
     let p = ctx.project.load().await?;
 
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+    let env = ctx.get_environment(args.environment.name()).await?;
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .await?;
 
     let cnames = match args.names.is_empty() {
         // No canisters specified

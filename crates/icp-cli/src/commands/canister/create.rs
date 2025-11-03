@@ -5,7 +5,12 @@ use candid::{Decode, Encode, Nat};
 use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
-use icp::{agent, identity, network, prelude::*};
+use icp::{
+    agent,
+    context::{GetAgentForEnvError, GetEnvironmentError},
+    identity, network,
+    prelude::*,
+};
 use icp_canister_interfaces::{
     cycles_ledger::{
         CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
@@ -126,6 +131,12 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
+
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentError),
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
@@ -135,16 +146,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     // Load project
     let p = ctx.project.load().await?;
 
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+    let env = ctx.get_environment(args.environment.name()).await?;
 
     // Collect environment canisters
     let cnames = match args.names.is_empty() {
@@ -196,15 +199,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         })
         .collect();
 
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .await?;
 
     // Select which subnet to deploy the canisters to
     //

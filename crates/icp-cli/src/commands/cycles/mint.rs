@@ -5,7 +5,7 @@ use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
-use icp::{agent, identity, network};
+use icp::{agent, context::GetAgentForEnvError, identity, network};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
@@ -79,36 +79,20 @@ pub(crate) enum CommandError {
 
     #[error("Failed to notify mint cycles: {src:?}")]
     NotifyMintError { src: NotifyMintErr },
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
     // Agent
-    let agent = ctx.agent.create(id.clone(), &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .await?;
 
     // Prepare deposit
-    let user_principal = id
-        .sender()
+    let user_principal = agent
+        .get_principal()
         .map_err(|e| CommandError::Principal { message: e })?;
 
     let icp_e8s_to_deposit = if let Some(icp_amount) = &args.icp {

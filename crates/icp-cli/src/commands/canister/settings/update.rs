@@ -9,8 +9,7 @@ use icp::{agent, identity, network};
 use icp::context::{Context, GetCanisterIdAndAgentError};
 
 use crate::commands::args;
-use crate::options::{EnvironmentOpt, IdentityOpt};
-use icp::store_id::{Key, LookupError as LookupIdError};
+use icp::store_id::LookupError as LookupIdError;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -113,20 +112,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
 
     #[error("invalid environment variable '{variable}'")]
     InvalidEnvironmentVariable { variable: String },
@@ -260,6 +250,7 @@ fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> 
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, CommandError> {
     let (name, value) =
         env_var

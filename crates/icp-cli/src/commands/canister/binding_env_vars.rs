@@ -44,26 +44,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("no canisters available to install")]
-    NoCanisters,
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
 
     #[error("Could not find canister id(s) for '{}' in environment '{environment}' make sure they are created first", canister_names.join(", "))]
     CanisterNotCreated {

@@ -90,9 +90,6 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
@@ -107,9 +104,6 @@ pub(crate) enum CommandError {
         environment: String,
         canister: String,
     },
-
-    #[error("no canisters available to create")]
-    NoCanisters,
 
     #[error("canister exists already: {principal}")]
     CanisterExists { principal: Principal },
@@ -233,7 +227,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     let env_ref = &env;
     for (name, (_path, info)) in canister_infos.iter() {
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&name);
+        let pb = progress_manager.create_progress_bar(name);
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {

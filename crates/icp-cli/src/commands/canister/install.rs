@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::AgentError;
@@ -18,7 +16,7 @@ use crate::{
     progress::{ProgressManager, ProgressManagerSettings},
 };
 use icp::store_artifact::LookupError as LookupArtifactError;
-use icp::store_id::{Key, LookupError as LookupIdError};
+use icp::store_id::LookupError as LookupIdError;
 
 #[derive(Clone, Debug, Args)]
 pub(crate) struct InstallArgs {

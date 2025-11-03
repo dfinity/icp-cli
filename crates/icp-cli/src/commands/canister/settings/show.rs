@@ -3,7 +3,7 @@ use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
 use icp::{agent, identity, network};
 
-use icp::context::{Context, GetAgentForEnvError, GetCanisterIdAndAgentError, GetEnvironmentError};
+use icp::context::{Context, GetAgentForEnvError, GetCanisterIdAndAgentError};
 
 use crate::commands::args;
 use icp::store_id::LookupError as LookupIdError;
@@ -22,20 +22,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
 
     #[error(transparent)]
     Lookup(#[from] LookupIdError),

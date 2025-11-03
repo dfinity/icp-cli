@@ -9,11 +9,8 @@ use icp_canister_interfaces::cycles_ledger::{
 
 use icp::context::Context;
 
-use crate::{
-    commands::args,
-    options::{EnvironmentOpt, IdentityOpt},
-};
-use icp::store_id::{Key, LookupError};
+use crate::commands::args;
+use icp::store_id::LookupError;
 
 #[derive(Debug, Args)]
 pub(crate) struct TopUpArgs {
@@ -33,20 +30,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
 
     #[error(transparent)]
     Lookup(#[from] LookupError),

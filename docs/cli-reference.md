@@ -259,17 +259,17 @@ List the canisters in an environment
 
 ## `icp-cli canister settings update`
 
-**Usage:** `icp-cli canister settings update [OPTIONS] <NAME>`
+**Usage:** `icp-cli canister settings update [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>` — The name of the canister within the current project
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
+* `--network <NETWORK>` — Name of the network to target
+* `--environment <ENVIRONMENT>` — Name of the target environment
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
 * `--add-controller <ADD_CONTROLLER>`
 * `--remove-controller <REMOVE_CONTROLLER>`
 * `--set-controller <SET_CONTROLLER>`

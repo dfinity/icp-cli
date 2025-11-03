@@ -8,8 +8,10 @@ use icrc_ledger_types::icrc1::{
     transfer::{TransferArg, TransferError},
 };
 
+use icp::context::Context;
+
 use crate::{
-    commands::{Context, token::TOKEN_LEDGER_CIDS},
+    commands::token::TOKEN_LEDGER_CIDS,
     options::{EnvironmentOpt, IdentityOpt},
 };
 

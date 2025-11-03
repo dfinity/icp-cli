@@ -4,7 +4,7 @@ use clap::Parser;
 use icp::{fs::remove_file, manifest, network::NetworkDirectory};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
-use crate::commands::Context;
+use icp::context::Context;
 
 const TIMEOUT_SECS: u64 = 30;
 

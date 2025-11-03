@@ -4,12 +4,17 @@ use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
-use icp::{agent, identity, network};
-
-use crate::{
-    commands::{Context, GetAgentForEnvError, GetCanisterIdForEnvError, GetEnvironmentError, args},
+use icp::{
+    agent,
+    context::{
+        Context, GetAgentForEnvError, GetCanisterIdAndAgentError, GetCanisterIdForEnvError,
+        GetEnvironmentError,
+    },
+    identity, network,
     store_id::LookupError as LookupIdError,
 };
+
+use crate::commands::args;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -137,11 +142,19 @@ pub(crate) enum CommandError {
     GetCanisterIdForEnv(#[from] GetCanisterIdForEnvError),
 
     #[error(transparent)]
-    Shared(#[from] args::ArgValidationError),
+    GetCanisterIdAndAgent(#[from] GetCanisterIdAndAgentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
-    let (cid, agent) = args.cmd_args.get_cid_and_agent(ctx).await?;
+    let selections = args.cmd_args.selections();
+    let (cid, agent) = ctx
+        .get_canister_id_and_agent(
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
+            &selections.identity,
+        )
+        .await?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);

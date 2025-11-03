@@ -4,11 +4,10 @@ use ic_utils::interfaces::management_canister::CanisterStatusResult;
 use icp::{agent, identity, network};
 use itertools::Itertools;
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
-};
+use icp::context::Context;
+
+use crate::options::{EnvironmentOpt, IdentityOpt};
+use icp::store_id::{Key, LookupError as LookupIdError};
 
 #[derive(Debug, Args)]
 pub(crate) struct InfoArgs {

@@ -2,15 +2,15 @@
 // For now it's only used to set environment variables
 // Eventually we will add support for canister settings operation
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use clap::Args;
-use futures::{StreamExt, stream::FuturesOrdered};
+use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::EnvironmentVariable;
 use icp::{
     agent,
-    context::{GetAgentForEnvError, GetEnvironmentError},
+    context::{GetAgentForEnvError, GetCanisterIdForEnvError, GetEnvironmentError},
     identity, network,
 };
 use tracing::debug;
@@ -22,7 +22,7 @@ use crate::{
     progress::{ProgressManager, ProgressManagerSettings},
 };
 use icp::store_artifact::LookupError as LookupArtifactError;
-use icp::store_id::{Key, LookupError as LookupIdError};
+use icp::store_id::LookupError as LookupIdError;
 
 #[derive(Clone, Debug, Args)]
 pub(crate) struct BindingArgs {
@@ -85,12 +85,12 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     GetEnvironment(#[from] GetEnvironmentError),
+
+    #[error(transparent)]
+    GetCanisterIdForEnv(#[from] GetCanisterIdForEnvError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), CommandError> {
-    // Load the project
-    let p = ctx.project.load().await?;
-
     // Load target environment
     let env = ctx.get_environment(args.environment.name()).await?;
 
@@ -99,39 +99,23 @@ pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), Comman
         .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
         .await?;
 
-    let cnames = match args.names.is_empty() {
-        // No canisters specified
-        true => env.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
+    let target_canisters = match args.names.is_empty() {
+        true => env.get_canister_names(),
         false => args.names.clone(),
     };
 
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+    let env_canisters = &env.canisters;
+    let canisters = try_join_all(target_canisters.into_iter().map(|name| {
+        let env_name = args.environment.name();
+        async move {
+            let cid = ctx.get_canister_id_for_env(&name, env_name).await?;
+            let (_, info) = env_canisters
+                .get(&name)
+                .expect("Canister id exists but no canister info");
+            Ok::<_, CommandError>((name, cid, info))
         }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
-
-    let cs = env
-        .canisters
-        .iter()
-        .filter(|(k, _)| cnames.contains(k))
-        .collect::<HashMap<_, _>>();
-
-    // Ensure at least one canister has been selected
-    if cs.is_empty() {
-        return Err(CommandError::NoCanisters);
-    }
+    }))
+    .await?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
@@ -176,9 +160,9 @@ pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), Comman
         .map(|(n, p)| (format!("PUBLIC_CANISTER_ID:{n}"), p.to_text()))
         .collect::<Vec<(_, _)>>();
 
-    for (_, (_, c)) in cs {
+    for (name, cid, info) in canisters {
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let pb = progress_manager.create_progress_bar(&name);
 
         // Create an async closure that handles the operation for this specific canister
         let settings_fn = {
@@ -190,15 +174,8 @@ pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), Comman
                 // Indicate to user that the canister's environment variables are being set
                 pb.set_message("Updating environment variables...");
 
-                // Lookup the canister id
-                let cid = ctx.ids.lookup(&Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                })?;
-
                 // Load the variables from the config files
-                let mut environment_variables = c
+                let mut environment_variables = info
                     .settings
                     .environment_variables
                     .to_owned()

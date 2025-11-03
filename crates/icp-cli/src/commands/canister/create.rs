@@ -149,16 +149,12 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     // Load target environment
     let env = ctx.get_environment(args.environment.name()).await?;
 
-    // Collect environment canisters
-    let cnames = match args.names.is_empty() {
-        // No canisters specified
-        true => env.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
+    let target_canisters = match args.names.is_empty() {
+        true => env.get_canister_names(),
         false => args.names.clone(),
     };
 
-    for name in &cnames {
+    for name in &target_canisters {
         if !p.canisters.contains_key(name) {
             return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
@@ -173,16 +169,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         }
     }
 
-    let cs = env
+    let canister_infos = env
         .canisters
         .iter()
-        .filter(|(k, _)| cnames.contains(k))
+        .filter(|(k, _)| target_canisters.contains(k))
         .collect::<HashMap<_, _>>();
-
-    // Ensure at least one canister has been selected
-    if cs.is_empty() {
-        return Err(CommandError::NoCanisters);
-    }
 
     // Do we have any already existing canisters?
     let cexist: Vec<_> = env
@@ -239,9 +230,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
 
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
-    for (_, c) in cs.values() {
+    let env_ref = &env;
+    for (name, (_path, info)) in canister_infos.iter() {
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let pb = progress_manager.create_progress_bar(&name);
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
@@ -255,9 +247,9 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
 
                 // Create canister-network association-key
                 let k = Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
+                    network: env_ref.network.name.to_owned(),
+                    environment: env_ref.name.to_owned(),
+                    canister: name.to_string(),
                 };
 
                 match ctx.ids.lookup(&k) {
@@ -278,7 +270,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                     freezing_threshold: cmd
                         .settings
                         .freezing_threshold
-                        .or(c.settings.freezing_threshold)
+                        .or(info.settings.freezing_threshold)
                         .map(Nat::from),
 
                     controllers: if cmd.controller.is_empty() {
@@ -290,19 +282,19 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                     reserved_cycles_limit: cmd
                         .settings
                         .reserved_cycles_limit
-                        .or(c.settings.reserved_cycles_limit)
+                        .or(info.settings.reserved_cycles_limit)
                         .map(Nat::from),
 
                     memory_allocation: cmd
                         .settings
                         .memory_allocation
-                        .or(c.settings.memory_allocation)
+                        .or(info.settings.memory_allocation)
                         .map(Nat::from),
 
                     compute_allocation: cmd
                         .settings
                         .compute_allocation
-                        .or(c.settings.compute_allocation)
+                        .or(info.settings.compute_allocation)
                         .map(Nat::from),
                 };
 

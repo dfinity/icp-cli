@@ -176,7 +176,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
-    let out = install::exec(
+    install::exec(
         ctx,
         &install::InstallArgs {
             names: cnames.to_owned(),
@@ -185,13 +185,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
             environment: args.environment.clone(),
         },
     )
-    .await;
-
-    if let Err(err) = out
-        && !matches!(err, install::CommandError::NoCanisters)
-    {
-        return Err(err.into());
-    }
+    .await?;
 
     // Sync the selected canisters
     let _ = ctx.term.write_line("\n\nSyncing canisters:");

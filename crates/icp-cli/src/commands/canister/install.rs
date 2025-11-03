@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use clap::Args;
-use futures::{StreamExt, stream::FuturesOrdered};
+use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp::{
     agent,
-    context::{GetAgentForEnvError, GetEnvironmentError},
+    context::{GetAgentForEnvError, GetCanisterIdForEnvError, GetEnvironmentError},
     identity, network,
 };
 use tracing::debug;
@@ -44,26 +44,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
     Agent(#[from] agent::CreateError),
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[error("no canisters available to install")]
-    NoCanisters,
 
     #[error(transparent)]
     LookupCanisterId(#[from] LookupIdError),
@@ -79,12 +64,12 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     GetAgentForEnv(#[from] GetAgentForEnvError),
+
+    #[error(transparent)]
+    GetCanisterIdForEnv(#[from] GetCanisterIdForEnvError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
-    // Load the project
-    let p = ctx.project.load().await?;
-
     // Load target environment
     let env = ctx.get_environment(args.environment.name()).await?;
 
@@ -93,39 +78,19 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
         .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
         .await?;
 
-    let cnames = match args.names.is_empty() {
-        // No canisters specified
-        true => env.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
+    let target_canisters = match args.names.is_empty() {
+        true => env.get_canister_names(),
         false => args.names.clone(),
     };
 
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
+    let canisters = try_join_all(target_canisters.into_iter().map(|name| {
+        let env_name = args.environment.name();
+        async move {
+            let cid = ctx.get_canister_id_for_env(&name, env_name).await?;
+            Ok::<_, CommandError>((name, cid))
         }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
-
-    let cs = env
-        .canisters
-        .iter()
-        .filter(|(k, _)| cnames.contains(k))
-        .collect::<HashMap<_, _>>();
-
-    // Ensure at least one canister has been selected
-    if cs.is_empty() {
-        return Err(CommandError::NoCanisters);
-    }
+    }))
+    .await?;
 
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
@@ -135,9 +100,9 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
 
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
-    for (_, (_, c)) in cs {
+    for (name, cid) in canisters {
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let pb = progress_manager.create_progress_bar(&name);
 
         // Create an async closure that handles the operation for this specific canister
         let install_fn = {
@@ -149,15 +114,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
                 // Indicate to user that the canister is being installed
                 pb.set_message("Installing...");
 
-                // Lookup the canister id
-                let cid = ctx.ids.lookup(&Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                })?;
-
                 // Lookup the canister build artifact
-                let wasm = ctx.artifacts.lookup(&c.name).await?;
+                let wasm = ctx.artifacts.lookup(&name).await?;
 
                 // Retrieve canister status
                 let (status,) = mgmt.canister_status(&cid).await?;

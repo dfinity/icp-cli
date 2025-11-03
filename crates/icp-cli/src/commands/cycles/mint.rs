@@ -71,7 +71,7 @@ pub(crate) enum CommandError {
         available: BigDecimal,
     },
 
-    #[error("No amount specified. Use --icp-amount or --cycles-amount.")]
+    #[error("No amount specified. Use --icp or --cycles.")]
     NoAmountSpecified,
 
     #[error("Failed to notify mint cycles: {src:?}")]

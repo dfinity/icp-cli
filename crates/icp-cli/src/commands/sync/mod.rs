@@ -16,7 +16,7 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
-use icp::store_id::{Key, LookupError};
+use icp::store_id::{Key, LookupIdError};
 
 #[derive(Args, Debug)]
 pub(crate) struct SyncArgs {
@@ -60,7 +60,7 @@ pub(crate) enum CommandError {
     NoCanisters,
 
     #[error(transparent)]
-    IdLookup(#[from] LookupError),
+    IdLookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Synchronize(#[from] SynchronizeError),

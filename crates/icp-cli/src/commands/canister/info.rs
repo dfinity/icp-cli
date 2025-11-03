@@ -7,7 +7,7 @@ use itertools::Itertools;
 use icp::context::Context;
 
 use crate::commands::args;
-use icp::store_id::LookupError as LookupIdError;
+use icp::store_id::LookupIdError;
 
 #[derive(Debug, Args)]
 pub(crate) struct InfoArgs {

@@ -9,7 +9,7 @@ use icp::{agent, identity, network};
 use icp::context::{Context, GetCanisterIdAndAgentError};
 
 use crate::commands::args;
-use icp::store_id::LookupError as LookupIdError;
+use icp::store_id::LookupIdError;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {

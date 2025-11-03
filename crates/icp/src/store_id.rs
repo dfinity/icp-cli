@@ -14,13 +14,13 @@ pub trait Access: Sync + Send {
     fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError>;
 
     /// Lookup a canister ID for a given key.
-    fn lookup(&self, key: &Key) -> Result<Principal, LookupError>;
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupIdError>;
 
     /// Lookup all canister IDs for a given environment.
     fn lookup_by_environment(
         &self,
         environment: &str,
-    ) -> Result<Vec<(String, Principal)>, LookupError>;
+    ) -> Result<Vec<(String, Principal)>, LookupIdError>;
 }
 
 /// An association-key, used for associating an existing canister to an ID on a network
@@ -56,7 +56,7 @@ pub enum RegisterError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LookupError {
+pub enum LookupIdError {
     #[snafu(display("failed to load canister id store"))]
     LookupLoadStore { source: json::Error },
 
@@ -119,7 +119,7 @@ impl Access for IdStore {
         Ok(())
     }
 
-    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupIdError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -142,7 +142,7 @@ impl Access for IdStore {
         }
 
         // Not Found
-        Err(LookupError::IdNotFound {
+        Err(LookupIdError::IdNotFound {
             key: key.to_owned(),
         })
     }
@@ -150,7 +150,7 @@ impl Access for IdStore {
     fn lookup_by_environment(
         &self,
         environment: &str,
-    ) -> Result<Vec<(String, Principal)>, LookupError> {
+    ) -> Result<Vec<(String, Principal)>, LookupIdError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -172,7 +172,7 @@ impl Access for IdStore {
             .collect();
 
         if filtered_associations.is_empty() {
-            return Err(LookupError::EnvironmentNotFound {
+            return Err(LookupIdError::EnvironmentNotFound {
                 name: environment.to_owned(),
             });
         }
@@ -223,12 +223,12 @@ impl Access for MockInMemoryIdStore {
         Ok(())
     }
 
-    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupIdError> {
         let store = self.store.lock().unwrap();
 
         match store.get(key) {
             Some(cid) => Ok(*cid),
-            None => Err(LookupError::IdNotFound {
+            None => Err(LookupIdError::IdNotFound {
                 key: key.to_owned(),
             }),
         }
@@ -237,7 +237,7 @@ impl Access for MockInMemoryIdStore {
     fn lookup_by_environment(
         &self,
         environment: &str,
-    ) -> Result<Vec<(String, Principal)>, LookupError> {
+    ) -> Result<Vec<(String, Principal)>, LookupIdError> {
         let store = self.store.lock().unwrap();
 
         let filtered: Vec<(String, Principal)> = store
@@ -247,7 +247,7 @@ impl Access for MockInMemoryIdStore {
             .collect();
 
         if filtered.is_empty() {
-            return Err(LookupError::EnvironmentNotFound {
+            return Err(LookupIdError::EnvironmentNotFound {
                 name: environment.to_owned(),
             });
         }

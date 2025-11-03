@@ -21,8 +21,8 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
-use icp::store_artifact::LookupError as LookupArtifactError;
-use icp::store_id::LookupError as LookupIdError;
+use icp::store_artifact::LookupArtifactError;
+use icp::store_id::LookupIdError;
 
 #[derive(Clone, Debug, Args)]
 pub(crate) struct BindingArgs {

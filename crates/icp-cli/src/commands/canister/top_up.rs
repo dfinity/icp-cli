@@ -10,7 +10,7 @@ use icp_canister_interfaces::cycles_ledger::{
 use icp::context::Context;
 
 use crate::commands::args;
-use icp::store_id::LookupError;
+use icp::store_id::LookupIdError;
 
 #[derive(Debug, Args)]
 pub(crate) struct TopUpArgs {
@@ -37,7 +37,7 @@ pub(crate) enum CommandError {
     Agent(#[from] agent::CreateError),
 
     #[error(transparent)]
-    Lookup(#[from] LookupError),
+    Lookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Update(#[from] AgentError),

@@ -267,7 +267,7 @@ List the canisters in an environment
 
 ###### **Options:**
 
-* `--network <NETWORK>` — Name of the network to target
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--environment <ENVIRONMENT>` — Name of the target environment
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--add-controller <ADD_CONTROLLER>`

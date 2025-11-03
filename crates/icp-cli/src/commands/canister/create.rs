@@ -176,7 +176,6 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         .filter_map(|(_, c)| {
             ctx.ids
                 .lookup(&Key {
-                    network: env.network.name.to_owned(),
                     environment: env.name.to_owned(),
                     canister: c.name.to_owned(),
                 })
@@ -239,9 +238,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                // Create canister-network association-key
+                // Create canister-environment association-key
                 let k = Key {
-                    network: env_ref.network.name.to_owned(),
                     environment: env_ref.name.to_owned(),
                     canister: name.to_string(),
                 };

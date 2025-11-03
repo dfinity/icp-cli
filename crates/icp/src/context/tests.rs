@@ -115,7 +115,6 @@ async fn test_get_canister_id_for_env_success() {
     ids_store
         .register(
             &Key {
-                network: "local".to_string(),
                 environment: "dev".to_string(),
                 canister: "backend".to_string(),
             },
@@ -337,7 +336,6 @@ async fn test_get_canister_id() {
     ids_store
         .register(
             &Key {
-                network: "local".to_string(),
                 environment: "dev".to_string(),
                 canister: "backend".to_string(),
             },

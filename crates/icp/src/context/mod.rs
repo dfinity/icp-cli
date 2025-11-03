@@ -168,7 +168,6 @@ impl Context {
         let cid = self
             .ids
             .lookup(&Key {
-                network: env.network.name.to_owned(),
                 environment: env.name.to_owned(),
                 canister: canister_name.to_owned(),
             })

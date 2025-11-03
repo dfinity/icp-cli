@@ -18,7 +18,7 @@ pub trait Access: Sync + Send {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
 
     /// Lookup a canister artifact (WASM) from the store.
-    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError>;
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError>;
 }
 
 #[derive(Debug, Snafu)]
@@ -31,7 +31,7 @@ pub enum SaveError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LookupError {
+pub enum LookupArtifactError {
     #[snafu(display("failed to read artifact file"))]
     LookupReadFileError { source: crate::fs::Error },
 
@@ -85,13 +85,13 @@ impl Access for ArtifactStore {
             .await?
     }
 
-    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
         self.lock
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
                 // Not Found
                 if !artifact.exists() {
-                    return Err(LookupError::LookupArtifactNotFound {
+                    return Err(LookupArtifactError::LookupArtifactNotFound {
                         name: name.to_owned(),
                     });
                 }
@@ -137,12 +137,12 @@ impl Access for MockInMemoryArtifactStore {
         Ok(())
     }
 
-    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
         let store = self.store.lock().unwrap();
 
         match store.get(name) {
             Some(wasm) => Ok(wasm.clone()),
-            None => Err(LookupError::LookupArtifactNotFound {
+            None => Err(LookupArtifactError::LookupArtifactNotFound {
                 name: name.to_owned(),
             }),
         }

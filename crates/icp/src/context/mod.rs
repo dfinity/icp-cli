@@ -72,13 +72,13 @@ pub struct Context {
     pub project: Arc<dyn crate::Load>,
 
     /// Identity loader
-    pub identity: Arc<dyn crate::identity::Load>,
+    identity: Arc<dyn crate::identity::Load>,
 
     /// NetworkAccess loader
     pub network: Arc<dyn crate::network::Access>,
 
     /// Agent creator
-    pub agent: Arc<dyn crate::agent::Create>,
+    agent: Arc<dyn crate::agent::Create>,
 
     /// Canister builder
     pub builder: Arc<dyn Build>,
@@ -394,7 +394,7 @@ pub enum GetCanisterIdForEnvError {
         environment_name
     ))]
     CanisterIdLookup {
-        source: crate::store_id::LookupError,
+        source: crate::store_id::LookupIdError,
         canister_name: String,
         environment_name: String,
     },

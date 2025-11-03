@@ -6,11 +6,10 @@ use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::{agent, identity, network};
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
-};
+use icp::context::Context;
+
+use crate::options::{EnvironmentOpt, IdentityOpt};
+use icp::store_id::{Key, LookupError as LookupIdError};
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {

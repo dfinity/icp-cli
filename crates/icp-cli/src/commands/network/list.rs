@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::commands::Context;
+use icp::context::Context;
 
 /// List networks in the project
 #[derive(Args, Debug)]

@@ -15,10 +15,9 @@ use icp_canister_interfaces::{
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-};
+use icp::context::Context;
+
+use crate::options::{EnvironmentOpt, IdentityOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {

@@ -19,7 +19,7 @@ use icp::{
 use sysinfo::Pid;
 use tracing::debug;
 
-use crate::commands::Context;
+use icp::context::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]

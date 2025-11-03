@@ -4,10 +4,9 @@ use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
 
-use crate::commands::{
-    Context,
-    args::{self, ArgValidationError},
-};
+use icp::context::Context;
+
+use crate::commands::args;
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
@@ -36,11 +35,20 @@ pub(crate) enum CommandError {
     Call(#[from] ic_agent::AgentError),
 
     #[error(transparent)]
-    Shared(#[from] ArgValidationError),
+    GetCanisterIdAndAgent(#[from] icp::context::GetCanisterIdAndAgentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
-    let (cid, agent) = args.cmd_args.get_cid_and_agent(ctx).await?;
+    let selections = args.cmd_args.selections();
+
+    let (cid, agent) = ctx
+        .get_canister_id_and_agent(
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
+            &selections.identity,
+        )
+        .await?;
 
     // Parse candid arguments
     let cargs = candid_parser::parse_idl_args(&args.args)?;

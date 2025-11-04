@@ -1,6 +1,9 @@
-use std::io::ErrorKind;
+use std::{
+    fs::{File, TryLockError},
+    io::ErrorKind,
+};
 
-use snafu::prelude::*;
+use snafu::{ResultExt, prelude::*};
 use sysinfo::Pid;
 
 use crate::{
@@ -80,6 +83,12 @@ impl NetworkDirectory {
                     _ => Err(err.into()),
                 })
             })
+            .await?
+    }
+
+    pub async fn claim_port(&self, port: u16) -> Result<File, ClaimPortError> {
+        self.port(port)?
+            .with_write(async |paths| paths.claim_port())
             .await?
     }
 
@@ -206,13 +215,45 @@ pub struct PortPaths {
 
 impl PathsAccess for PortPaths {
     fn lock_file(&self) -> PathBuf {
-        self.port_descriptor_dir.join(format!("{}.lock", self.port))
+        self.port_descriptor_dir.join(format!("{}.json", self.port))
     }
 }
 
 impl PortPaths {
     pub fn descriptor_path(&self) -> PathBuf {
-        self.port_descriptor_dir.join(format!("{}.json", self.port))
+        self.port_descriptor_dir.join(format!("{}.lock", self.port))
+    }
+
+    pub fn claim_port(&self) -> Result<File, ClaimPortError> {
+        let claim_path = self.descriptor_path().with_extension("claim");
+        let f = File::create(&claim_path).context(OpenClaimFileSnafu { path: claim_path })?;
+        if let Err(e) = f.try_lock() {
+            match e {
+                TryLockError::WouldBlock => {
+                    if let Ok(descriptor) =
+                        json::load::<NetworkDescriptorModel>(&self.descriptor_path())
+                    {
+                        Err(ClaimPortError::PortAlreadyClaimed {
+                            port: self.port,
+                            network: Some(descriptor.network),
+                            owner: Some(descriptor.project_dir),
+                        })
+                    } else {
+                        Err(ClaimPortError::PortAlreadyClaimed {
+                            port: self.port,
+                            network: None,
+                            owner: None,
+                        })
+                    }
+                }
+                TryLockError::Error(err) => Err(ClaimPortError::LockErrorOther {
+                    port: self.port,
+                    source: err,
+                }),
+            }
+        } else {
+            Ok(f)
+        }
     }
 }
 
@@ -250,4 +291,29 @@ pub enum LoadPidError {
     },
     #[snafu(transparent)]
     LockFileError { source: LockError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum ClaimPortError {
+    #[snafu(transparent)]
+    OpenPortLockError { source: LockError },
+
+    #[snafu(display("failed to open port claim file {path}"))]
+    OpenClaimFileError {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[snafu(display("port {port} is in use by the {} network of the project at '{}'",
+        network.as_ref().map_or_else(|| "<unknown>", |n| n.as_str()),
+        owner.as_ref().map_or_else(|| "<unknown>", |p| p.as_str()),
+    ))]
+    PortAlreadyClaimed {
+        port: u16,
+        network: Option<String>,
+        owner: Option<PathBuf>,
+    },
+
+    #[snafu(display("failed to claim port {port}"))]
+    LockErrorOther { port: u16, source: std::io::Error },
 }

@@ -27,7 +27,7 @@ use crate::{
         Managed, NetworkDirectory, Port,
         RunNetworkError::NoPocketIcPath,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
-        directory::{SaveNetworkDescriptorError, save_network_descriptors},
+        directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::pocketic::{
             CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
             default_instance_config, spawn_pocketic,
@@ -77,6 +77,15 @@ async fn run_pocketic(
     let mut c_child = None;
     let result = network_root
         .with_write(async |root| -> Result<_, RunPocketIcError> {
+            let port_lock = if let Port::Fixed(port) = &config.gateway.port {
+                Some(nd.port(*port)?.into_write().await?)
+            } else {
+                None
+            };
+            let port_claim = port_lock
+                .as_ref()
+                .map(|lock| lock.claim_port())
+                .transpose()?;
             eprintln!("PocketIC path: {pocketic_path}");
 
             create_dir_all(&root.pocketic_dir()).context(CreateDirAllSnafu)?;
@@ -121,18 +130,14 @@ async fn run_pocketic(
                 pid: Some(child.id().unwrap()),
                 root_key: instance.root_key,
             };
-            let port_lock = if let Some(port) = descriptor.gateway_port() {
-                Some(nd.port(port)?.into_write().await?)
-            } else {
-                None
-            };
+
             save_network_descriptors(
                 root,
                 port_lock.as_ref().map(|lock| lock.as_ref()),
                 &descriptor,
             )
             .await?;
-            Ok(())
+            Ok(port_claim)
         })
         .await?;
     eprintln!("Press Ctrl-C to exit.");
@@ -148,7 +153,7 @@ async fn run_pocketic(
         let _ = nd.cleanup_port_descriptor(Some(port)).await;
     }
 
-    result
+    result.map(|_| ())
 }
 
 #[derive(Debug, Snafu)]
@@ -173,6 +178,9 @@ pub enum RunPocketIcError {
 
     #[snafu(transparent)]
     LockFile { source: LockError },
+
+    #[snafu(transparent)]
+    ClaimPort { source: ClaimPortError },
 }
 
 #[derive(Debug)]

@@ -5,7 +5,7 @@ use clap::Args;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 
-use crate::options::IdentityOpt;
+use crate::options::{EnvironmentOpt, IdentityOpt};
 
 #[derive(Args, Debug)]
 pub(crate) struct CanisterEnvironmentArgs {
@@ -13,17 +13,15 @@ pub(crate) struct CanisterEnvironmentArgs {
     /// When using a name an environment must be specified
     pub(crate) canister: Canister,
 
-    /// Name of the target environment
-    #[arg(long)]
-    pub(crate) environment: Option<Environment>,
+    #[command(flatten)]
+    pub(crate) environment: EnvironmentOpt,
 }
 
 impl CanisterEnvironmentArgs {
     /// Convert arguments into selection enums for canister and environment
     pub(crate) fn selections(&self) -> (CanisterSelection, EnvironmentSelection) {
         let canister_selection: CanisterSelection = self.canister.clone().into();
-        let environment_selection: EnvironmentSelection =
-            self.environment.clone().unwrap_or_default().into();
+        let environment_selection: EnvironmentSelection = self.environment.clone().into();
         (canister_selection, environment_selection)
     }
 }
@@ -39,9 +37,8 @@ pub(crate) struct CanisterCommandArgs {
     #[arg(long, conflicts_with = "environment")]
     pub(crate) network: Option<Network>,
 
-    /// Name of the target environment
-    #[arg(long)]
-    pub(crate) environment: Option<Environment>,
+    #[command(flatten)]
+    pub(crate) environment: EnvironmentOpt,
 
     /// The identity to use for this request
     #[command(flatten)]
@@ -60,8 +57,7 @@ impl CanisterCommandArgs {
     /// Convert command arguments into selection enums
     pub(crate) fn selections(&self) -> CommandSelections {
         let canister_selection: CanisterSelection = self.canister.clone().into();
-        let environment_selection: EnvironmentSelection =
-            self.environment.clone().unwrap_or_default().into();
+        let environment_selection: EnvironmentSelection = self.environment.clone().into();
         let network_selection: NetworkSelection = match self.network.clone() {
             Some(network) => network.into_selection(),
             None => NetworkSelection::FromEnvironment,
@@ -133,48 +129,6 @@ impl Network {
             Network::Name(name) => NetworkSelection::Named(name),
             Network::Url(url) => NetworkSelection::Url(url),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Environment {
-    Name(String),
-    Default(String),
-}
-
-impl Environment {
-    pub(crate) fn name(&self) -> &str {
-        match self {
-            Environment::Name(name) => name,
-            Environment::Default(name) => name,
-        }
-    }
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        Self::Default("local".to_string())
-    }
-}
-
-impl From<&str> for Environment {
-    fn from(v: &str) -> Self {
-        Self::Name(v.to_string())
-    }
-}
-
-impl From<Environment> for EnvironmentSelection {
-    fn from(v: Environment) -> Self {
-        match v {
-            Environment::Name(name) => EnvironmentSelection::Named(name),
-            Environment::Default(_) => EnvironmentSelection::Default,
-        }
-    }
-}
-
-impl Display for Environment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name())
     }
 }
 

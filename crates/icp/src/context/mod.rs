@@ -135,16 +135,21 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the project cannot be loaded or if the network is not found.
-    pub async fn get_network(&self, network_name: &str) -> Result<crate::Network, GetNetworkError> {
-        // Load project
-        let p = self.project.load().await?;
-
-        // Load target network
-        let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
-            name: network_name.to_owned(),
-        })?;
-
-        Ok(net.clone())
+    pub async fn get_network(
+        &self,
+        network_selection: &NetworkSelection,
+    ) -> Result<crate::Network, GetNetworkError> {
+        match network_selection {
+            NetworkSelection::Named(network_name) => {
+                let p = self.project.load().await?;
+                let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
+                    name: network_name.to_owned(),
+                })?;
+                Ok(net.clone())
+            }
+            NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
+            NetworkSelection::Url(_) => Err(GetNetworkError::UrlSpecifiedNetwork),
+        }
     }
 
     /// Gets the canister ID for a given canister name in a specified environment.
@@ -197,10 +202,10 @@ impl Context {
     pub async fn get_agent_for_network(
         &self,
         identity: &IdentitySelection,
-        network_name: &str,
+        network_selection: &NetworkSelection,
     ) -> Result<Agent, GetAgentForNetworkError> {
         let id = self.get_identity(identity).await?;
-        let network = self.get_network(network_name).await?;
+        let network = self.get_network(network_selection).await?;
         let access = self.network.access(&network).await?;
         Ok(self.create_agent(id, access).await?)
     }
@@ -304,9 +309,9 @@ impl Context {
             (
                 CanisterSelection::Principal(principal),
                 EnvironmentSelection::Default,
-                NetworkSelection::Named(net_name),
+                NetworkSelection::Named(_),
             ) => {
-                let agent = self.get_agent_for_network(identity, net_name).await?;
+                let agent = self.get_agent_for_network(identity, network).await?;
                 (*principal, agent)
             }
 
@@ -368,6 +373,12 @@ pub enum GetNetworkError {
 
     #[snafu(display("network '{}' not found in project", name))]
     NetworkNotFound { name: String },
+
+    #[snafu(display("cannot load URL-specified network"))]
+    UrlSpecifiedNetwork,
+
+    #[snafu(display("cannot load default network"))]
+    DefaultNetwork,
 }
 
 #[derive(Debug, Snafu)]

@@ -91,7 +91,10 @@ async fn test_get_network_success() {
         ..Context::mocked()
     };
 
-    let network = ctx.get_network("local").await.unwrap();
+    let network = ctx
+        .get_network(&NetworkSelection::Named("local".to_string()))
+        .await
+        .unwrap();
 
     assert_eq!(network.name, "local");
 }
@@ -100,7 +103,9 @@ async fn test_get_network_success() {
 async fn test_get_network_not_found() {
     let ctx = Context::mocked();
 
-    let result = ctx.get_network("nonexistent").await;
+    let result = ctx
+        .get_network(&NetworkSelection::Named("nonexistent".to_string()))
+        .await;
 
     assert!(matches!(
         result,
@@ -290,7 +295,10 @@ async fn test_get_agent_for_network_success() {
     };
 
     let agent = ctx
-        .get_agent_for_network(&IdentitySelection::Anonymous, "local")
+        .get_agent_for_network(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Named("local".to_string()),
+        )
         .await
         .unwrap();
 
@@ -302,7 +310,10 @@ async fn test_get_agent_for_network_network_not_found() {
     let ctx = Context::mocked();
 
     let result = ctx
-        .get_agent_for_network(&IdentitySelection::Anonymous, "nonexistent")
+        .get_agent_for_network(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Named("nonexistent".to_string()),
+        )
         .await;
 
     assert!(matches!(
@@ -323,7 +334,10 @@ async fn test_get_agent_for_network_not_configured() {
     };
 
     let result = ctx
-        .get_agent_for_network(&IdentitySelection::Anonymous, "local")
+        .get_agent_for_network(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Named("local".to_string()),
+        )
         .await;
 
     assert!(matches!(

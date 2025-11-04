@@ -116,7 +116,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("invalid environment variable '{variable}'")]
     InvalidEnvironmentVariable { variable: String },

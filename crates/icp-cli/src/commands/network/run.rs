@@ -15,6 +15,7 @@ use icp::{
     identity::manifest::{LoadIdentityManifestError, load_identity_list},
     manifest,
     network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use sysinfo::Pid;
 use tracing::debug;
@@ -25,7 +26,7 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 pub(crate) struct RunArgs {
     /// Name of the network to run
-    #[arg(default_value = "local")]
+    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
 
     /// Starts the network in a background process. This command will exit once the network is running.

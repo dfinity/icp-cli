@@ -4,7 +4,9 @@ use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp::{
     agent,
-    context::{GetAgentForEnvError, GetCanisterIdForEnvError, GetEnvironmentError},
+    context::{
+        EnvironmentSelection, GetAgentForEnvError, GetCanisterIdForEnvError, GetEnvironmentError,
+    },
     identity, network,
 };
 use tracing::debug;
@@ -46,7 +48,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error(transparent)]
     LookupCanisterId(#[from] LookupIdError),
@@ -68,12 +70,14 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Load target environment
-    let env = ctx.get_environment(args.environment.name()).await?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
         .await?;
 
     let target_canisters = match args.names.is_empty() {
@@ -82,9 +86,11 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
     };
 
     let canisters = try_join_all(target_canisters.into_iter().map(|name| {
-        let env_name = args.environment.name();
+        let environment_selection = environment_selection.clone();
         async move {
-            let cid = ctx.get_canister_id_for_env(&name, env_name).await?;
+            let cid = ctx
+                .get_canister_id_for_env(&name, &environment_selection)
+                .await?;
             Ok::<_, CommandError>((name, cid))
         }
     }))

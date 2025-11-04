@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use clap::Parser;
-use icp::{fs::remove_file, manifest, network::NetworkDirectory};
+use icp::{
+    fs::remove_file, manifest, network::NetworkDirectory, project::DEFAULT_LOCAL_NETWORK_NAME,
+};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
 use icp::context::Context;
@@ -12,7 +14,7 @@ const TIMEOUT_SECS: u64 = 30;
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to stop
-    #[arg(default_value = "local")]
+    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
 }
 

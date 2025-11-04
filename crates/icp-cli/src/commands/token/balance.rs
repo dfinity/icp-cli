@@ -2,7 +2,11 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{agent, context::GetAgentForEnvError, identity, network};
+use icp::{
+    agent,
+    context::{EnvironmentSelection, GetAgentForEnvError},
+    identity, network,
+};
 use icrc_ledger_types::icrc1::account::Account;
 
 use icp::context::Context;
@@ -58,9 +62,11 @@ pub(crate) async fn exec(
     token: &str,
     args: &BalanceArgs,
 ) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
         .await?;
 
     // Obtain ledger address

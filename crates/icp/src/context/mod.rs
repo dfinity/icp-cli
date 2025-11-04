@@ -112,7 +112,7 @@ impl Context {
     /// Returns an error if the project cannot be loaded or if the environment is not found.
     pub async fn get_environment(
         &self,
-        environment_name: &str,
+        environment: &EnvironmentSelection,
     ) -> Result<crate::Environment, GetEnvironmentError> {
         // Load project
         let p = self.project.load().await?;
@@ -120,9 +120,9 @@ impl Context {
         // Load target environment
         let env = p
             .environments
-            .get(environment_name)
+            .get(environment.name())
             .context(EnvironmentNotFoundSnafu {
-                name: environment_name.to_owned(),
+                name: environment.name().to_owned(),
             })?;
 
         Ok(env.clone())
@@ -153,14 +153,14 @@ impl Context {
     pub async fn get_canister_id_for_env(
         &self,
         canister_name: &str,
-        environment_name: &str,
+        environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdForEnvError> {
-        let env = self.get_environment(environment_name).await?;
+        let env = self.get_environment(environment).await?;
 
         if !env.canisters.contains_key(canister_name) {
             return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
                 canister_name: canister_name.to_owned(),
-                environment_name: environment_name.to_owned(),
+                environment_name: environment.name().to_owned(),
             });
         }
 
@@ -173,7 +173,7 @@ impl Context {
             })
             .context(CanisterIdLookupSnafu {
                 canister_name: canister_name.to_owned(),
-                environment_name: environment_name.to_owned(),
+                environment_name: environment.name().to_owned(),
             })?;
 
         Ok(cid)
@@ -183,10 +183,10 @@ impl Context {
     pub async fn get_agent_for_env(
         &self,
         identity: &IdentitySelection,
-        environment_name: &str,
+        environment: &EnvironmentSelection,
     ) -> Result<Agent, GetAgentForEnvError> {
         let id = self.get_identity(identity).await?;
-        let env = self.get_environment(environment_name).await?;
+        let env = self.get_environment(environment).await?;
         let access = self.network.access(&env.network).await?;
         Ok(self.create_agent(id, access).await?)
     }
@@ -238,16 +238,14 @@ impl Context {
         canister: &CanisterSelection,
         environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdError> {
-        let environment_name = environment.name();
-
         let principal = match canister {
             CanisterSelection::Named(canister_name) => {
-                self.get_canister_id_for_env(canister_name, environment_name)
+                self.get_canister_id_for_env(canister_name, environment)
                     .await?
             }
             CanisterSelection::Principal(principal) => {
                 // Make sure a valid environment was requested
-                let _ = self.get_environment(environment_name).await?;
+                let _ = self.get_environment(environment).await?;
                 *principal
             }
         };
@@ -266,8 +264,6 @@ impl Context {
         network: &NetworkSelection,
         identity: &IdentitySelection,
     ) -> Result<(Principal, Agent), GetCanisterIdAndAgentError> {
-        let env_name = environment.name();
-
         let (cid, agent) = match (canister, environment, network) {
             // Error: Both environment and network specified
             (_, EnvironmentSelection::Named(_), NetworkSelection::Named(_))
@@ -291,14 +287,14 @@ impl Context {
 
             // Canister by name, use environment
             (CanisterSelection::Named(cname), _, NetworkSelection::FromEnvironment) => {
-                let agent = self.get_agent_for_env(identity, env_name).await?;
-                let cid = self.get_canister_id_for_env(cname, env_name).await?;
+                let agent = self.get_agent_for_env(identity, environment).await?;
+                let cid = self.get_canister_id_for_env(cname, environment).await?;
                 (cid, agent)
             }
 
             // Canister by principal, use environment
             (CanisterSelection::Principal(principal), _, NetworkSelection::FromEnvironment) => {
-                let agent = self.get_agent_for_env(identity, env_name).await?;
+                let agent = self.get_agent_for_env(identity, environment).await?;
                 (*principal, agent)
             }
 

@@ -5,7 +5,11 @@ use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
-use icp::{agent, context::GetAgentForEnvError, identity, network};
+use icp::{
+    agent,
+    context::{EnvironmentSelection, GetAgentForEnvError},
+    identity, network,
+};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
@@ -82,9 +86,11 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
         .await?;
 
     // Prepare deposit

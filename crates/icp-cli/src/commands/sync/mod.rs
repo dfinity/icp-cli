@@ -6,7 +6,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     agent,
     canister::sync::{Params, SynchronizeError},
-    context::GetAgentForEnvError,
+    context::{EnvironmentSelection, GetAgentForEnvError, GetEnvironmentError},
     identity, network,
 };
 
@@ -38,9 +38,6 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
@@ -67,23 +64,23 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     GetAgentForEnv(#[from] GetAgentForEnvError),
+
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Load the project
     let p = ctx.project.load().await?;
 
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
         .await?;
 
     let cnames = match args.names.is_empty() {

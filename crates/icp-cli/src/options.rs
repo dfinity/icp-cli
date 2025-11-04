@@ -1,4 +1,5 @@
 use clap::{ArgGroup, Args};
+use icp::context::EnvironmentSelection;
 use icp::identity::IdentitySelection;
 
 #[derive(Args, Clone, Debug, Default)]
@@ -49,5 +50,17 @@ impl EnvironmentOpt {
 
         // Otherwise, default to `local`
         self.environment.as_deref().unwrap_or("local")
+    }
+}
+
+impl From<EnvironmentOpt> for EnvironmentSelection {
+    fn from(v: EnvironmentOpt) -> Self {
+        if v.ic {
+            return EnvironmentSelection::Named("ic".to_string());
+        }
+        match v.environment {
+            Some(name) => EnvironmentSelection::Named(name),
+            None => EnvironmentSelection::Default,
+        }
     }
 }

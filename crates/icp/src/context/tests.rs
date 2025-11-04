@@ -62,7 +62,10 @@ async fn test_get_environment_success() {
         ..Context::mocked()
     };
 
-    let env = ctx.get_environment("dev").await.unwrap();
+    let env = ctx
+        .get_environment(&EnvironmentSelection::Named("dev".to_string()))
+        .await
+        .unwrap();
 
     assert_eq!(env.name, "dev");
 }
@@ -71,7 +74,9 @@ async fn test_get_environment_success() {
 async fn test_get_environment_not_found() {
     let ctx = Context::mocked();
 
-    let result = ctx.get_environment("nonexistent").await;
+    let result = ctx
+        .get_environment(&EnvironmentSelection::Named("nonexistent".to_string()))
+        .await;
 
     assert!(matches!(
         result,
@@ -128,7 +133,10 @@ async fn test_get_canister_id_for_env_success() {
         ..Context::mocked()
     };
 
-    let cid = ctx.get_canister_id_for_env("backend", "dev").await.unwrap();
+    let cid = ctx
+        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .await
+        .unwrap();
 
     assert_eq!(cid, canister_id);
 }
@@ -141,7 +149,9 @@ async fn test_get_canister_id_for_env_canister_not_in_env() {
     };
 
     // "database" is only in "dev" environment, not in "test"
-    let result = ctx.get_canister_id_for_env("database", "test").await;
+    let result = ctx
+        .get_canister_id_for_env("database", &EnvironmentSelection::Named("test".to_string()))
+        .await;
 
     assert!(matches!(
         result,
@@ -160,7 +170,9 @@ async fn test_get_canister_id_for_env_id_not_registered() {
     };
 
     // Environment exists and canister is in it, but ID not registered
-    let result = ctx.get_canister_id_for_env("backend", "dev").await;
+    let result = ctx
+        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .await;
 
     assert!(matches!(
         result,
@@ -204,7 +216,10 @@ async fn test_get_agent_for_env_uses_environment_network() {
     };
 
     let agent = ctx
-        .get_agent_for_env(&IdentitySelection::Anonymous, "test")
+        .get_agent_for_env(
+            &IdentitySelection::Anonymous,
+            &EnvironmentSelection::Named("test".to_string()),
+        )
         .await
         .unwrap();
 
@@ -216,7 +231,10 @@ async fn test_get_agent_for_env_environment_not_found() {
     let ctx = Context::mocked();
 
     let result = ctx
-        .get_agent_for_env(&IdentitySelection::Anonymous, "nonexistent")
+        .get_agent_for_env(
+            &IdentitySelection::Anonymous,
+            &EnvironmentSelection::Named("nonexistent".to_string()),
+        )
         .await;
 
     assert!(matches!(
@@ -238,7 +256,10 @@ async fn test_get_agent_for_env_network_not_configured() {
     };
 
     let result = ctx
-        .get_agent_for_env(&IdentitySelection::Anonymous, "dev")
+        .get_agent_for_env(
+            &IdentitySelection::Anonymous,
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
         .await;
 
     assert!(matches!(

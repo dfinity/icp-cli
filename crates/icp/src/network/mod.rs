@@ -113,6 +113,7 @@ impl From<ManifestGateway> for Gateway {
     fn from(value: ManifestGateway) -> Self {
         let host = value.host.unwrap_or("localhost".to_string());
         let port = match value.port {
+            Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };

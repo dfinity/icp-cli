@@ -33,12 +33,18 @@ pub(crate) struct EnvironmentOpt {
         long,
         env = "ICP_ENVIRONMENT",
         global(true),
-        group = "environment-select"
+        group = "environment-select",
+        group = "network-select"
     )]
     environment: Option<String>,
 
     /// Shorthand for --environment=ic.
-    #[arg(long, global(true), group = "environment-select")]
+    #[arg(
+        long,
+        global(true),
+        group = "environment-select",
+        group = "network-select"
+    )]
     ic: bool,
 }
 
@@ -67,9 +73,10 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
 }
 
 #[derive(Args, Clone, Debug, Default)]
+#[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOpt {
     /// Name of the network to target, conflicts with environment argument
-    #[arg(long)]
+    #[arg(long, group = "network-select")]
     network: Option<String>,
 }
 

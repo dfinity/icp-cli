@@ -149,13 +149,13 @@ impl Access for Directories {
     }
 }
 
-#[cfg(feature = "test-features")]
+#[cfg(test)]
 /// Unimplemented mock implementation of `Access`.
 /// All methods panic with `unimplemented!()` when called.
 #[derive(Debug, Clone)]
 pub struct UnimplementedMockDirs;
 
-#[cfg(feature = "test-features")]
+#[cfg(test)]
 impl Access for UnimplementedMockDirs {
     fn identity(&self) -> Result<IdentityDirectories, LockError> {
         unimplemented!("UnimplementedMockDirs::identity")

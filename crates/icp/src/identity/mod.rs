@@ -146,10 +146,10 @@ impl Load for Loader {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 use std::collections::HashMap;
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 pub struct MockIdentityLoader {
     /// The default identity to return when IdentitySelection::Default is used
     default: Arc<dyn Identity>,
@@ -158,7 +158,7 @@ pub struct MockIdentityLoader {
     named: HashMap<String, Arc<dyn Identity>>,
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 impl MockIdentityLoader {
     /// Creates a new mock identity loader with the given default identity.
     pub fn new(default: Arc<dyn Identity>) -> Self {
@@ -186,7 +186,7 @@ impl MockIdentityLoader {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 #[async_trait]
 impl Load for MockIdentityLoader {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {

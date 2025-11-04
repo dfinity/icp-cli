@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
 
-use crate::commands::Context;
+use icp::context::Context;
 
 #[derive(Args, Debug)]
 pub(crate) struct ShowArgs;

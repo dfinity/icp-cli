@@ -16,17 +16,18 @@ use icp::{
     identity::manifest::{IdentityList, LoadIdentityManifestError},
     manifest,
     network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use sysinfo::Pid;
 use tracing::debug;
 
-use crate::commands::Context;
+use icp::context::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]
 pub(crate) struct RunArgs {
     /// Name of the network to run
-    #[arg(default_value = "local")]
+    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
 
     /// Starts the network in a background process. This command will exit once the network is running.
@@ -224,7 +225,7 @@ where
 }
 
 async fn wait_for_healthy_network(nd: &NetworkDirectory) -> Result<(), CommandError> {
-    let max_retries = 30;
+    let max_retries = 45;
     let delay_ms = 1000;
 
     // Wait for network descriptor to be written

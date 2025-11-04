@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
-use crate::canister::Settings;
+use crate::{
+    canister::Settings,
+    project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_LOCAL_NETWORK_NAME},
+};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 pub struct EnvironmentInner {
@@ -68,12 +71,12 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
         } = v;
 
         // Name
-        if name == "local" {
+        if name == DEFAULT_LOCAL_ENVIRONMENT_NAME {
             return Err(ParseError::OverrideLocal);
         }
 
         // Network
-        let network = network.unwrap_or("local".to_string());
+        let network = network.unwrap_or(DEFAULT_LOCAL_NETWORK_NAME.to_string());
 
         // Canisters
         let canisters = match canisters {

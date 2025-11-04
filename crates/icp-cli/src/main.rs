@@ -1,20 +1,8 @@
-use std::{env::current_dir, sync::Arc};
-
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::{Command, Context};
+use commands::Command;
 use console::Term;
-use icp::{
-    agent,
-    canister::{
-        self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
-        script::Script, sync::Syncer,
-    },
-    directories::{Access as _, Directories},
-    identity, manifest, network,
-    prelude::*,
-    project,
-};
+use icp::prelude::*;
 use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
@@ -24,8 +12,6 @@ use tracing_subscriber::{
 
 use crate::{
     logging::{TermWriter, debug_layer},
-    store_artifact::ArtifactStore,
-    store_id::IdStore,
     telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
@@ -34,8 +20,6 @@ mod commands;
 mod logging;
 mod options;
 mod progress;
-mod store_artifact;
-mod store_id;
 mod telemetry;
 mod version;
 
@@ -129,108 +113,6 @@ async fn main() -> Result<(), Error> {
     // This enables the logging and telemetry layers we configured above
     set_global_default(reg)?;
 
-    // Setup project directory structure
-    let dirs = Arc::new(Directories::new()?);
-
-    // Canister ID Store
-    let ids = Arc::new(IdStore::new(&cli.id_store));
-
-    // Canister Artifact Store (wasm)
-    let artifacts = Arc::new(ArtifactStore::new(&cli.artifact_store));
-
-    // Prepare http client
-    let http_client = reqwest::Client::new();
-
-    // Recipes
-    let recipe = Arc::new(Handlebars { http_client });
-
-    // Project Manifest Locator
-    let mloc = Arc::new(manifest::Locator::new(
-        current_dir()?.try_into()?, // cwd
-        cli.project_dir,            // dir
-    ));
-
-    // Remove this for now
-    //
-    // // Infer execution mode
-    // let mode = match mloc.locate() {
-    //     // Project
-    //     Ok(dir) => Mode::Project(dir),
-
-    //     // Global
-    //     Err(LocateError::NotFound(_)) => Mode::Global,
-
-    //     // Failure
-    //     Err(LocateError::Unexpected(err)) => panic!("{err}"),
-    // };
-
-    // Canister loader
-    let cload = Arc::new(canister::PathLoader);
-
-    // Builders/Syncers
-    let cprebuilt = Arc::new(Prebuilt);
-    let cassets = Arc::new(Assets);
-    let cscript = Arc::new(Script);
-
-    // Canister builder
-    let builder = Arc::new(Builder {
-        prebuilt: cprebuilt.to_owned(),
-        script: cscript.to_owned(),
-    });
-
-    // Canister syncer
-    let syncer = Arc::new(Syncer {
-        assets: cassets.to_owned(),
-        script: cscript.to_owned(),
-    });
-
-    // Project Loaders
-    let ploaders = icp::ProjectLoaders {
-        path: Arc::new(project::PathLoader),
-        manifest: Arc::new(project::ManifestLoader {
-            locate: mloc.clone(),
-            recipe,
-            canister: cload,
-        }),
-    };
-
-    let pload = icp::Loader {
-        locate: mloc.clone(),
-        project: ploaders,
-    };
-
-    let pload = icp::Lazy::new(pload);
-    let pload = Arc::new(pload);
-
-    // Identity loader
-    let idload = Arc::new(identity::Loader {
-        dir: dirs.identity()?,
-    });
-
-    // Network accessor
-    let netaccess = Arc::new(network::Accessor {
-        project: mloc.clone(),
-        descriptors: dirs.port_descriptor(),
-    });
-
-    // Agent creator
-    let agent_creator = Arc::new(agent::Creator);
-
-    // Setup environment
-    let ctx = Context {
-        term,
-        dirs,
-        ids,
-        artifacts,
-        project: pload,
-        identity: idload,
-        network: netaccess,
-        agent: agent_creator,
-        builder,
-        syncer,
-        debug: cli.debug,
-    };
-
     // Execute the command within a span that includes version and SHA context
     let trace_span = trace_span!(
         "icp-cli",
@@ -244,6 +126,14 @@ async fn main() -> Result<(), Error> {
         command = ?command,
         "Starting icp-cli"
     );
+
+    let ctx = icp::context::initialize(
+        cli.project_dir,
+        cli.id_store,
+        cli.artifact_store,
+        term,
+        cli.debug,
+    )?;
 
     match command {
         // Build

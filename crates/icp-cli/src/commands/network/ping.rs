@@ -4,18 +4,20 @@ use clap::Args;
 use ic_agent::{Agent, AgentError, agent::status::Status};
 use icp::{
     agent,
+    context::GetAgentForUrlError,
     identity::{self, IdentitySelection},
     network::{self},
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use tokio::time::sleep;
 
-use crate::commands::Context;
+use icp::context::Context;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]
 pub(crate) struct PingArgs {
     /// The compute network to connect to. By default, ping the local network.
-    #[arg(value_name = "NETWORK", default_value = "local")]
+    #[arg(value_name = "NETWORK", default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     network: String,
 
     /// Repeatedly ping until the replica is healthy or 1 minute has passed.
@@ -38,7 +40,7 @@ pub(crate) enum CommandError {
     NetworkAccess(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error(transparent)]
     Status(#[from] AgentError),
@@ -48,14 +50,14 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    GetAgentForUrl(#[from] GetAgentForUrlError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
     // Load Project
     let p = ctx.project.load().await?;
-
-    // Identity
-    let id = ctx.identity.load(IdentitySelection::Anonymous).await?;
 
     // Network
     let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
@@ -64,7 +66,9 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandEr
     let access = ctx.network.access(network).await?;
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
+    let agent = ctx
+        .get_agent_for_url(&IdentitySelection::Anonymous, &access.url)
+        .await?;
 
     if let Some(k) = access.root_key {
         agent.set_root_key(k);

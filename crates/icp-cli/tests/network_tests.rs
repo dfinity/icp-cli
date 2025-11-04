@@ -181,7 +181,7 @@ fn deploy_to_other_projects_network() {
         .current_dir(&projb)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "environment-1",
@@ -194,7 +194,7 @@ fn deploy_to_other_projects_network() {
         .current_dir(&projb)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "environment-1",

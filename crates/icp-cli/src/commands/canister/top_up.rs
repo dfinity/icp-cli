@@ -2,31 +2,24 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{agent, identity, network};
+use icp::{agent, context::GetCanisterIdAndAgentError, identity, network};
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_DECIMALS, CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawError, WithdrawResponse,
 };
 
-use crate::{
-    commands::Context,
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError},
-};
+use icp::context::Context;
+
+use crate::commands::args;
+use icp::store_id::LookupIdError;
 
 #[derive(Debug, Args)]
 pub(crate) struct TopUpArgs {
-    /// The name of the canister within the current project
-    pub(crate) name: String,
-
     /// Amount of cycles to top up
     #[arg(long)]
     pub(crate) amount: u128,
 
     #[command(flatten)]
-    identity: IdentityOpt,
-
-    #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -37,23 +30,14 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
+    Agent(#[from] agent::CreateAgentError),
 
     #[error(transparent)]
-    Lookup(#[from] LookupError),
+    Lookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Update(#[from] AgentError),
@@ -63,47 +47,21 @@ pub(crate) enum CommandError {
 
     #[error("Failed to top up: {}", err.format_error(*amount))]
     Withdraw { err: WithdrawError, amount: u128 },
+
+    #[error(transparent)]
+    GetCanisterIdAndAgent(#[from] GetCanisterIdAndAgentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
-    // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
-
-    // Ensure canister is included in the environment
-    if !env.canisters.contains_key(&args.name) {
-        return Err(CommandError::EnvironmentCanister {
-            environment: env.name.to_owned(),
-            canister: args.name.to_owned(),
-        });
-    }
-
-    // Lookup the canister id
-    let cid = ctx.ids.lookup(&Key {
-        network: env.network.name.to_owned(),
-        environment: env.name.to_owned(),
-        canister: args.name.to_owned(),
-    })?;
+    let selections = args.cmd_args.selections();
+    let (cid, agent) = ctx
+        .get_canister_id_and_agent(
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
+            &selections.identity,
+        )
+        .await?;
 
     let cargs = WithdrawArgs {
         amount: Nat::from(args.amount),
@@ -125,7 +83,7 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), CommandE
 
     let _ = ctx.term.write_line(&format!(
         "Topped up canister {} with {}T cycles",
-        args.name,
+        args.cmd_args.canister,
         BigDecimal::new(args.amount.into(), CYCLES_LEDGER_DECIMALS)
     ));
 

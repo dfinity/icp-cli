@@ -7,7 +7,7 @@ use icp::{
     },
 };
 
-use crate::commands::Context;
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {

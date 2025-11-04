@@ -2,11 +2,17 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{agent, identity, network};
+use icp::{
+    agent,
+    context::{EnvironmentSelection, GetAgentForEnvError},
+    identity, network,
+};
 use icrc_ledger_types::icrc1::account::Account;
 
+use icp::context::Context;
+
 use crate::{
-    commands::{Context, token::TOKEN_LEDGER_CIDS},
+    commands::token::TOKEN_LEDGER_CIDS,
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -27,14 +33,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("failed to get identity principal: {err}")]
     Principal { err: String },
@@ -44,6 +47,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Candid(#[from] candid::Error),
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
 }
 
 /// Check the token balance of a given identity
@@ -56,29 +62,12 @@ pub(crate) async fn exec(
     token: &str,
     args: &BalanceArgs,
 ) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
 
     // Agent
-    let agent = ctx.agent.create(id.clone(), &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .await?;
 
     // Obtain ledger address
     let cid = match TOKEN_LEDGER_CIDS.get(token) {
@@ -101,7 +90,9 @@ pub(crate) async fn exec(
         // Obtain token balance
         async {
             // Convert identity to sender principal
-            let owner = id.sender().map_err(|err| CommandError::Principal { err })?;
+            let owner = agent
+                .get_principal()
+                .map_err(|err| CommandError::Principal { err })?;
 
             // Specify sub-account
             let subaccount = None;

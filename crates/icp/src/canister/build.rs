@@ -108,12 +108,12 @@ impl Build for Builder {
     }
 }
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 /// Unimplemented mock implementation of `Build`.
 /// All methods panic with `unimplemented!()` when called.
 pub struct UnimplementedMockBuilder;
 
-#[cfg(any(test, feature = "test-features"))]
+#[cfg(test)]
 #[async_trait]
 impl Build for UnimplementedMockBuilder {
     async fn build(

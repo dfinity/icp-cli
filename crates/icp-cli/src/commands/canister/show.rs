@@ -1,9 +1,8 @@
 use clap::Args;
 
-use crate::commands::{
-    Context,
-    args::{ArgValidationError, CanisterEnvironmentArgs},
-};
+use icp::context::Context;
+
+use crate::commands::args::CanisterEnvironmentArgs;
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
@@ -14,11 +13,15 @@ pub(crate) struct ShowArgs {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
     #[error(transparent)]
-    Shared(#[from] ArgValidationError),
+    GetCanisterId(#[from] icp::context::GetCanisterIdError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
-    let cid = args.cmd_args.get_cid_for_environment(ctx).await?;
+    let (canister_selection, environment_selection) = args.cmd_args.selections();
+
+    let cid = ctx
+        .get_canister_id(&canister_selection, &environment_selection)
+        .await?;
 
     println!("{cid} => {}", args.cmd_args.canister);
 

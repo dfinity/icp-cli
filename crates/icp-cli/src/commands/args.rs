@@ -5,7 +5,7 @@ use clap::Args;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 
-use crate::options::{EnvironmentOpt, IdentityOpt};
+use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
 #[derive(Args, Debug)]
 pub(crate) struct CanisterEnvironmentArgs {
@@ -33,14 +33,12 @@ pub(crate) struct CanisterCommandArgs {
     /// When using a name an environment must be specified
     pub(crate) canister: Canister,
 
-    /// Name of the network to target, conflicts with environment argument
-    #[arg(long, conflicts_with = "environment")]
-    pub(crate) network: Option<Network>,
+    #[command(flatten)]
+    pub(crate) network: NetworkOpt,
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
 
-    /// The identity to use for this request
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 }
@@ -58,10 +56,7 @@ impl CanisterCommandArgs {
     pub(crate) fn selections(&self) -> CommandSelections {
         let canister_selection: CanisterSelection = self.canister.clone().into();
         let environment_selection: EnvironmentSelection = self.environment.clone().into();
-        let network_selection: NetworkSelection = match self.network.clone() {
-            Some(network) => network.into_selection(),
-            None => NetworkSelection::FromEnvironment,
-        };
+        let network_selection: NetworkSelection = self.network.clone().into();
         let identity_selection: IdentitySelection = self.identity.clone().into();
 
         CommandSelections {
@@ -107,31 +102,6 @@ impl Display for Canister {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Network {
-    Name(String),
-    Url(String),
-}
-
-impl From<&str> for Network {
-    fn from(v: &str) -> Self {
-        if v.starts_with("http://") || v.starts_with("https://") {
-            return Self::Url(v.to_string());
-        }
-
-        Self::Name(v.to_string())
-    }
-}
-
-impl Network {
-    pub(crate) fn into_selection(self) -> NetworkSelection {
-        match self {
-            Network::Name(name) => NetworkSelection::Named(name),
-            Network::Url(url) => NetworkSelection::Url(url),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use candid::Principal;
@@ -153,24 +123,6 @@ mod tests {
         assert_eq!(
             Canister::from(cid),
             Canister::Principal(Principal::from_text(cid).expect("failed to parse principal")),
-        );
-    }
-
-    #[test]
-    fn network_by_name() {
-        assert_eq!(
-            Network::from("my-network"),
-            Network::Name("my-network".to_string()),
-        );
-    }
-
-    #[test]
-    fn network_by_url_http() {
-        let url = "http://www.example.com";
-
-        assert_eq!(
-            Network::from(url),
-            Network::Url("http://www.example.com".to_string()),
         );
     }
 }

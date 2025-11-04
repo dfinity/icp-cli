@@ -42,7 +42,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },

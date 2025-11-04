@@ -1,6 +1,7 @@
 use clap::{ArgGroup, Args};
-use icp::context::EnvironmentSelection;
+use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
+use url::Url;
 
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct IdentityOpt {
@@ -61,6 +62,25 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
         match v.environment {
             Some(name) => EnvironmentSelection::Named(name),
             None => EnvironmentSelection::Default,
+        }
+    }
+}
+
+#[derive(Args, Clone, Debug, Default)]
+pub(crate) struct NetworkOpt {
+    /// Name of the network to target, conflicts with environment argument
+    #[arg(long)]
+    network: Option<String>,
+}
+
+impl From<NetworkOpt> for NetworkSelection {
+    fn from(v: NetworkOpt) -> Self {
+        match v.network {
+            Some(network) => match Url::parse(&network) {
+                Ok(url) => NetworkSelection::Url(url),
+                Err(_) => NetworkSelection::Named(network),
+            },
+            None => NetworkSelection::Default,
         }
     }
 }

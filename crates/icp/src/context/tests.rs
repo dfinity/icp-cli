@@ -200,7 +200,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                     NetworkAccess {
                         default_effective_canister_id: None,
                         root_key: None,
-                        url: "http://localhost:8000".to_string(),
+                        url: Url::parse("http://localhost:8000").unwrap(),
                     },
                 )
                 .with_network(
@@ -208,7 +208,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                     NetworkAccess {
                         default_effective_canister_id: None,
                         root_key: Some(staging_root_key.clone()),
-                        url: "http://staging:9000".to_string(),
+                        url: Url::parse("http://staging:9000").unwrap(),
                     },
                 ),
         ),
@@ -283,7 +283,7 @@ async fn test_get_agent_for_network_success() {
             NetworkAccess {
                 default_effective_canister_id: None,
                 root_key: Some(root_key.clone()),
-                url: "http://localhost:8000".to_string(),
+                url: Url::parse("http://localhost:8000").unwrap(),
             },
         )),
         ..Context::mocked()
@@ -339,7 +339,10 @@ async fn test_get_agent_for_url_success() {
     let ctx = Context::mocked();
 
     let result = ctx
-        .get_agent_for_url(&IdentitySelection::Anonymous, "http://localhost:8000")
+        .get_agent_for_url(
+            &IdentitySelection::Anonymous,
+            &Url::parse("http://localhost:8000").unwrap(),
+        )
         .await;
 
     assert!(result.is_ok());

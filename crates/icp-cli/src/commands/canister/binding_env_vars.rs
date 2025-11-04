@@ -50,7 +50,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("Could not find canister id(s) for '{}' in environment '{environment}' make sure they are created first", canister_names.join(", "))]
     CanisterNotCreated {

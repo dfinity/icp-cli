@@ -39,7 +39,7 @@ pub(crate) enum CommandError {
     NetworkAccess(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error(transparent)]
     Status(#[from] AgentError),

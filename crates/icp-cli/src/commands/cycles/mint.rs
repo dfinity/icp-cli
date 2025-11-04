@@ -52,7 +52,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("Failed to get identity principal: {message}")]
     Principal { message: String },

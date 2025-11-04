@@ -1,7 +1,9 @@
 use console::Term;
 use std::sync::Arc;
+use url::Url;
 
 use crate::{
+    agent::CreateAgentError,
     canister::{build::Build, sync::Synchronize},
     directories,
     identity::IdentitySelection,
@@ -21,11 +23,11 @@ pub use init::initialize;
 #[derive(Clone, Debug, PartialEq)]
 pub enum NetworkSelection {
     /// Use the network from the environment
-    FromEnvironment,
+    Default,
     /// Use a named network
     Named(String),
     /// Use a network by URL
-    Url(String),
+    Url(Url),
 }
 
 /// Selection type for environments - similar to IdentitySelection
@@ -210,8 +212,8 @@ impl Context {
         &self,
         id: Arc<dyn Identity>,
         network_access: NetworkAccess,
-    ) -> Result<Agent, crate::agent::CreateError> {
-        let agent = self.agent.create(id, &network_access.url).await?;
+    ) -> Result<Agent, CreateAgentError> {
+        let agent = self.agent.create(id, network_access.url.as_str()).await?;
         if let Some(k) = network_access.root_key {
             agent.set_root_key(k);
         }
@@ -222,10 +224,10 @@ impl Context {
     pub async fn get_agent_for_url(
         &self,
         identity: &IdentitySelection,
-        url: &str, // TODO: change to Url
+        url: &Url,
     ) -> Result<Agent, GetAgentForUrlError> {
         let id = self.get_identity(identity).await?;
-        let agent = self.agent.create(id, url).await?;
+        let agent = self.agent.create(id, url.as_str()).await?;
         Ok(agent)
     }
 
@@ -286,14 +288,14 @@ impl Context {
             }
 
             // Canister by name, use environment
-            (CanisterSelection::Named(cname), _, NetworkSelection::FromEnvironment) => {
+            (CanisterSelection::Named(cname), _, NetworkSelection::Default) => {
                 let agent = self.get_agent_for_env(identity, environment).await?;
                 let cid = self.get_canister_id_for_env(cname, environment).await?;
                 (cid, agent)
             }
 
             // Canister by principal, use environment
-            (CanisterSelection::Principal(principal), _, NetworkSelection::FromEnvironment) => {
+            (CanisterSelection::Principal(principal), _, NetworkSelection::Default) => {
                 let agent = self.get_agent_for_env(identity, environment).await?;
                 (*principal, agent)
             }
@@ -407,7 +409,9 @@ pub enum GetAgentForEnvError {
     NetworkAccess { source: crate::network::AccessError },
 
     #[snafu(transparent)]
-    AgentCreate { source: crate::agent::CreateError },
+    AgentCreate {
+        source: crate::agent::CreateAgentError,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -422,7 +426,9 @@ pub enum GetAgentForNetworkError {
     NetworkAccess { source: crate::network::AccessError },
 
     #[snafu(transparent)]
-    AgentCreate { source: crate::agent::CreateError },
+    AgentCreate {
+        source: crate::agent::CreateAgentError,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -431,7 +437,9 @@ pub enum GetAgentForUrlError {
     GetIdentity { source: GetIdentityError },
 
     #[snafu(transparent)]
-    AgentCreate { source: crate::agent::CreateError },
+    AgentCreate {
+        source: crate::agent::CreateAgentError,
+    },
 }
 
 #[derive(Debug, Snafu)]

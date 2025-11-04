@@ -45,7 +45,7 @@ fn canister_delete() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",

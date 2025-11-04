@@ -1,45 +1,45 @@
 #[cfg(test)]
 use std::{collections::HashMap, sync::Mutex};
 
-use async_trait::async_trait;
-use icp::{
+use crate::{
     fs::{
         lock::{DirectoryStructureLock, PathsAccess},
         read, write,
     },
     prelude::*,
 };
+use async_trait::async_trait;
 use snafu::{ResultExt, Snafu};
 
 #[async_trait]
 /// Trait for accessing and managing canister build artifacts.
-pub(crate) trait Access: Sync + Send {
+pub trait Access: Sync + Send {
     /// Save a canister artifact (WASM) to the store.
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError>;
 
     /// Lookup a canister artifact (WASM) from the store.
-    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError>;
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError>;
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum SaveError {
+pub enum SaveError {
     #[snafu(display("failed to write artifact file"))]
-    SaveWriteFileError { source: icp::fs::Error },
+    SaveWriteFileError { source: crate::fs::Error },
 
     #[snafu(transparent)]
-    LockError { source: icp::fs::lock::LockError },
+    LockError { source: crate::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum LookupError {
+pub enum LookupArtifactError {
     #[snafu(display("failed to read artifact file"))]
-    LookupReadFileError { source: icp::fs::Error },
+    LookupReadFileError { source: crate::fs::Error },
 
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },
 
     #[snafu(transparent)]
-    LockError { source: icp::fs::lock::LockError },
+    LockError { source: crate::fs::lock::LockError },
 }
 
 pub(crate) struct ArtifactStore {
@@ -85,13 +85,13 @@ impl Access for ArtifactStore {
             .await?
     }
 
-    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
         self.lock
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
                 // Not Found
                 if !artifact.exists() {
-                    return Err(LookupError::LookupArtifactNotFound {
+                    return Err(LookupArtifactError::LookupArtifactNotFound {
                         name: name.to_owned(),
                     });
                 }
@@ -137,12 +137,12 @@ impl Access for MockInMemoryArtifactStore {
         Ok(())
     }
 
-    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupError> {
+    async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
         let store = self.store.lock().unwrap();
 
         match store.get(name) {
             Some(wasm) => Ok(wasm.clone()),
-            None => Err(LookupError::LookupArtifactNotFound {
+            None => Err(LookupArtifactError::LookupArtifactNotFound {
                 name: name.to_owned(),
             }),
         }

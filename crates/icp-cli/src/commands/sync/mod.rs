@@ -6,15 +6,17 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     agent,
     canister::sync::{Params, SynchronizeError},
+    context::{EnvironmentSelection, GetAgentForEnvError, GetEnvironmentError},
     identity, network,
 };
 
+use icp::context::Context;
+
 use crate::{
-    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError},
 };
+use icp::store_id::{Key, LookupIdError};
 
 #[derive(Args, Debug)]
 pub(crate) struct SyncArgs {
@@ -36,14 +38,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },
@@ -58,36 +57,31 @@ pub(crate) enum CommandError {
     NoCanisters,
 
     #[error(transparent)]
-    IdLookup(#[from] LookupError),
+    IdLookup(#[from] LookupIdError),
 
     #[error(transparent)]
     Synchronize(#[from] SynchronizeError),
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
+
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Load the project
     let p = ctx.project.load().await?;
 
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .await?;
 
     let cnames = match args.names.is_empty() {
         // No canisters specified
@@ -135,7 +129,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
 
         // Get canister principal ID
         let cid = ctx.ids.lookup(&Key {
-            network: env.network.name.to_owned(),
             environment: env.name.to_owned(),
             canister: c.name.to_owned(),
         })?;

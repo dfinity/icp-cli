@@ -2,14 +2,20 @@ use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{agent, identity, network};
+use icp::{
+    agent,
+    context::{EnvironmentSelection, GetAgentForEnvError},
+    identity, network,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
 
+use icp::context::Context;
+
 use crate::{
-    commands::{Context, token::TOKEN_LEDGER_CIDS},
+    commands::token::TOKEN_LEDGER_CIDS,
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -36,14 +42,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("failed to get identity principal: {err}")]
     Principal { err: String },
@@ -66,6 +69,9 @@ pub(crate) enum CommandError {
         balance: BigDecimal,
         required: BigDecimal,
     },
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
 }
 
 pub(crate) async fn exec(
@@ -73,29 +79,12 @@ pub(crate) async fn exec(
     token: &str,
     args: &TransferArgs,
 ) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
-
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
-
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
 
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .await?;
 
     // Obtain ledger address
     let cid = match TOKEN_LEDGER_CIDS.get(token) {

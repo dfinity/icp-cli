@@ -1,5 +1,6 @@
 use ic_agent::export::Principal;
 use snafu::{OptionExt, ResultExt, Snafu};
+use url::Url;
 
 use crate::{
     Network,
@@ -19,22 +20,22 @@ pub struct NetworkAccess {
     pub root_key: Option<Vec<u8>>,
 
     /// Routing configuration
-    pub url: String,
+    pub url: Url,
 }
 
 impl NetworkAccess {
-    pub fn new(url: &str) -> Self {
+    pub fn new(url: &Url) -> Self {
         Self {
             default_effective_canister_id: None,
             root_key: None,
-            url: url.into(),
+            url: url.clone(),
         }
     }
 }
 
 impl NetworkAccess {
     pub fn mainnet() -> Self {
-        Self::new(IC_MAINNET_NETWORK_URL)
+        Self::new(&Url::parse(IC_MAINNET_NETWORK_URL).unwrap())
     }
 }
 
@@ -66,6 +67,11 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("failed to load network descriptor"))]
     LoadNetworkDescriptor { source: LoadNetworkFileError },
+    #[snafu(display("failed to parse URL {url}"))]
+    ParseUrl {
+        url: String,
+        source: url::ParseError,
+    },
 }
 
 pub async fn get_network_access(
@@ -114,7 +120,7 @@ pub async fn get_network_access(
             NetworkAccess {
                 default_effective_canister_id,
                 root_key: Some(root_key),
-                url: format!("http://localhost:{port}"),
+                url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
             }
         }
 
@@ -131,7 +137,9 @@ pub async fn get_network_access(
             NetworkAccess {
                 default_effective_canister_id: None,
                 root_key,
-                url: cfg.url.to_owned(),
+                url: Url::parse(&cfg.url).context(ParseUrlSnafu {
+                    url: cfg.url.clone(),
+                })?,
             }
         }
     };

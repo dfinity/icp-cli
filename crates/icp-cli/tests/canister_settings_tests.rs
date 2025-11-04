@@ -59,7 +59,7 @@ fn canister_settings_update_controllers() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -363,7 +363,7 @@ fn canister_settings_update_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -678,7 +678,7 @@ fn canister_settings_update_miscellaneous() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--cycles",
             &format!("{}", 120 * TRILLION), // 120 TCYCLES because compute allocation is expensive
@@ -801,7 +801,7 @@ fn canister_settings_update_environment_variables() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",

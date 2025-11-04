@@ -5,7 +5,12 @@ use candid::{Decode, Encode, Nat};
 use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
-use icp::{agent, identity, network, prelude::*};
+use icp::{
+    agent,
+    context::{EnvironmentSelection, GetAgentForEnvError, GetEnvironmentError},
+    identity, network,
+    prelude::*,
+};
 use icp_canister_interfaces::{
     cycles_ledger::{
         CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
@@ -16,12 +21,13 @@ use icp_canister_interfaces::{
 };
 use rand::seq::IndexedRandom;
 
+use icp::context::Context;
+
 use crate::{
-    commands::Context,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
-    store_id::{Key, LookupError, RegisterError},
 };
+use icp::store_id::{Key, LookupIdError, RegisterError};
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -84,14 +90,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Identity(#[from] identity::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
     #[error(transparent)]
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },
@@ -101,9 +104,6 @@ pub(crate) enum CommandError {
         environment: String,
         canister: String,
     },
-
-    #[error("no canisters available to create")]
-    NoCanisters,
 
     #[error("canister exists already: {principal}")]
     CanisterExists { principal: Principal },
@@ -125,36 +125,32 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    GetAgentForEnv(#[from] GetAgentForEnvError),
+
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentError),
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Load project
     let p = ctx.project.load().await?;
 
-    // Load identity
-    let id = ctx.identity.load(args.identity.clone().into()).await?;
-
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
-    // Collect environment canisters
-    let cnames = match args.names.is_empty() {
-        // No canisters specified
-        true => env.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
+    let target_canisters = match args.names.is_empty() {
+        true => env.get_canister_names(),
         false => args.names.clone(),
     };
 
-    for name in &cnames {
+    for name in &target_canisters {
         if !p.canisters.contains_key(name) {
             return Err(CommandError::CanisterNotFound {
                 name: name.to_owned(),
@@ -169,16 +165,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         }
     }
 
-    let cs = env
+    let canister_infos = env
         .canisters
         .iter()
-        .filter(|(k, _)| cnames.contains(k))
+        .filter(|(k, _)| target_canisters.contains(k))
         .collect::<HashMap<_, _>>();
-
-    // Ensure at least one canister has been selected
-    if cs.is_empty() {
-        return Err(CommandError::NoCanisters);
-    }
 
     // Do we have any already existing canisters?
     let cexist: Vec<_> = env
@@ -187,7 +178,6 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         .filter_map(|(_, c)| {
             ctx.ids
                 .lookup(&Key {
-                    network: env.network.name.to_owned(),
                     environment: env.name.to_owned(),
                     canister: c.name.to_owned(),
                 })
@@ -195,15 +185,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         })
         .collect();
 
-    // Access network
-    let access = ctx.network.access(&env.network).await?;
-
     // Agent
-    let agent = ctx.agent.create(id, &access.url).await?;
-
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    let agent = ctx
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .await?;
 
     // Select which subnet to deploy the canisters to
     //
@@ -240,9 +225,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
 
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
 
-    for (_, c) in cs.values() {
+    let env_ref = &env;
+    for (name, (_path, info)) in canister_infos.iter() {
         // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&c.name);
+        let pb = progress_manager.create_progress_bar(name);
 
         // Create an async closure that handles the operation for this specific canister
         let create_fn = {
@@ -254,11 +240,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                // Create canister-network association-key
+                // Create canister-environment association-key
                 let k = Key {
-                    network: env.network.name.to_owned(),
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
+                    environment: env_ref.name.to_owned(),
+                    canister: name.to_string(),
                 };
 
                 match ctx.ids.lookup(&k) {
@@ -268,7 +253,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                     }
 
                     // Doesn't exist (include)
-                    Err(LookupError::IdNotFound { .. }) => {}
+                    Err(LookupIdError::IdNotFound { .. }) => {}
 
                     // Lookup failed
                     Err(err) => panic!("{err}"),
@@ -279,7 +264,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                     freezing_threshold: cmd
                         .settings
                         .freezing_threshold
-                        .or(c.settings.freezing_threshold)
+                        .or(info.settings.freezing_threshold)
                         .map(Nat::from),
 
                     controllers: if cmd.controller.is_empty() {
@@ -291,19 +276,19 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                     reserved_cycles_limit: cmd
                         .settings
                         .reserved_cycles_limit
-                        .or(c.settings.reserved_cycles_limit)
+                        .or(info.settings.reserved_cycles_limit)
                         .map(Nat::from),
 
                     memory_allocation: cmd
                         .settings
                         .memory_allocation
-                        .or(c.settings.memory_allocation)
+                        .or(info.settings.memory_allocation)
                         .map(Nat::from),
 
                     compute_allocation: cmd
                         .settings
                         .compute_allocation
-                        .or(c.settings.compute_allocation)
+                        .or(info.settings.compute_allocation)
                         .map(Nat::from),
                 };
 

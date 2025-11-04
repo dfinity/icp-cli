@@ -5,10 +5,11 @@ use icp::{
     fs::{lock::LockError, remove_file},
     manifest,
     network::NetworkDirectory,
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
-use crate::commands::Context;
+use icp::context::Context;
 
 const TIMEOUT_SECS: u64 = 30;
 
@@ -16,7 +17,7 @@ const TIMEOUT_SECS: u64 = 30;
 #[derive(Parser, Debug)]
 pub struct Cmd {
     /// Name of the network to stop
-    #[arg(default_value = "local")]
+    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
 }
 

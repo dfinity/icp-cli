@@ -2,7 +2,11 @@ use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{agent, context::GetAgentForEnvError, identity, network};
+use icp::{
+    agent,
+    context::{EnvironmentSelection, GetAgentForEnvError},
+    identity, network,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
@@ -42,7 +46,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("failed to get identity principal: {err}")]
     Principal { err: String },
@@ -75,9 +79,11 @@ pub(crate) async fn exec(
     token: &str,
     args: &TransferArgs,
 ) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
         .await?;
 
     // Obtain ledger address

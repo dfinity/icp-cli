@@ -124,7 +124,8 @@ Make a canister call
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -170,7 +171,8 @@ Delete a canister from a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -188,7 +190,8 @@ Display a canister's information
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -252,7 +255,8 @@ List the canisters in an environment
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -268,7 +272,8 @@ List the canisters in an environment
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--add-controller <ADD_CONTROLLER>`
 * `--remove-controller <REMOVE_CONTROLLER>`
@@ -300,7 +305,8 @@ Show a canister's details
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 
 
 
@@ -317,7 +323,8 @@ Start a canister on a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -335,7 +342,8 @@ Show the status of a canister
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -353,7 +361,8 @@ Stop a canister on a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
@@ -372,7 +381,8 @@ Top up a canister with cycles
 
 * `--amount <AMOUNT>` — Amount of cycles to top up
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--environment <ENVIRONMENT>` — Name of the target environment
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 

@@ -7,6 +7,7 @@ use icp::{
     context::GetAgentForUrlError,
     identity::{self, IdentitySelection},
     network::{self},
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use tokio::time::sleep;
 
@@ -16,7 +17,7 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 pub(crate) struct PingArgs {
     /// The compute network to connect to. By default, ping the local network.
-    #[arg(value_name = "NETWORK", default_value = "local")]
+    #[arg(value_name = "NETWORK", default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     network: String,
 
     /// Repeatedly ping until the replica is healthy or 1 minute has passed.

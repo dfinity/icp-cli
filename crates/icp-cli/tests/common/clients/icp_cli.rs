@@ -1,5 +1,5 @@
 use candid::Principal;
-use icp::prelude::*;
+use icp::{prelude::*, project::DEFAULT_LOCAL_ENVIRONMENT_NAME};
 
 use crate::common::TestContext;
 
@@ -18,7 +18,7 @@ impl<'a> Client<'a> {
         Self {
             ctx,
             current_dir,
-            environment: environment.unwrap_or("local".to_string()),
+            environment: environment.unwrap_or(DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string()),
         }
     }
 

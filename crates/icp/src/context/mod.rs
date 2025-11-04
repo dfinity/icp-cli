@@ -8,6 +8,7 @@ use crate::{
     directories,
     identity::IdentitySelection,
     network::access::NetworkAccess,
+    project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -42,7 +43,7 @@ pub enum EnvironmentSelection {
 impl EnvironmentSelection {
     pub fn name(&self) -> &str {
         match self {
-            EnvironmentSelection::Default => "local",
+            EnvironmentSelection::Default => DEFAULT_LOCAL_ENVIRONMENT_NAME,
             EnvironmentSelection::Named(name) => name,
         }
     }

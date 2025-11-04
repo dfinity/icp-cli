@@ -1,6 +1,7 @@
 use clap::{ArgGroup, Args};
 use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
+use icp::project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_ENVIRONMENT_NAME};
 use url::Url;
 
 #[derive(Args, Clone, Debug, Default)]
@@ -52,18 +53,20 @@ impl EnvironmentOpt {
     pub(crate) fn name(&self) -> &str {
         // Support --ic
         if self.ic {
-            return "ic";
+            return DEFAULT_MAINNET_ENVIRONMENT_NAME;
         }
 
         // Otherwise, default to `local`
-        self.environment.as_deref().unwrap_or("local")
+        self.environment
+            .as_deref()
+            .unwrap_or(DEFAULT_LOCAL_ENVIRONMENT_NAME)
     }
 }
 
 impl From<EnvironmentOpt> for EnvironmentSelection {
     fn from(v: EnvironmentOpt) -> Self {
         if v.ic {
-            return EnvironmentSelection::Named("ic".to_string());
+            return EnvironmentSelection::Named(DEFAULT_MAINNET_ENVIRONMENT_NAME.to_string());
         }
         match v.environment {
             Some(name) => EnvironmentSelection::Named(name),

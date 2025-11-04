@@ -189,7 +189,7 @@ fn glob_path() {
 //     // Invoke build
 //     ctx.icp()
 //         .current_dir(project_dir)
-//         .args(["deploy", "--subnet-id", common::SUBNET_ID])
+//         .args(["deploy", "--subnet", common::SUBNET_ID])
 //         .assert()
 //         .failure()
 //         .stderr(eq("Error: cannot redefine the 'ic' network; the network path 'networks/ic' is invalid").trim());

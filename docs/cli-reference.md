@@ -444,7 +444,7 @@ Deploy a project to an environment
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
-* `--subnet-id <SUBNET_ID>` — The subnet id to use for the canisters being deployed
+* `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation (in cycles)
 

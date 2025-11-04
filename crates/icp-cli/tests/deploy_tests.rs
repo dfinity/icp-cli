@@ -28,7 +28,7 @@ fn deploy_empty() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet-id", common::SUBNET_ID])
+        .args(["deploy", "--subnet", common::SUBNET_ID])
         .assert()
         .success();
 }
@@ -55,7 +55,7 @@ fn deploy_canister_not_found() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "my-canister", "--subnet-id", common::SUBNET_ID])
+        .args(["deploy", "my-canister", "--subnet", common::SUBNET_ID])
         .assert()
         .failure()
         .stderr(eq("Error: project does not contain a canister named 'my-canister'").trim());
@@ -101,7 +101,7 @@ async fn deploy() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -166,7 +166,7 @@ async fn deploy_twice_should_succeed() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -179,7 +179,7 @@ async fn deploy_twice_should_succeed() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",

@@ -6,7 +6,7 @@ use ic_agent::{Agent, AgentError, Identity};
 use crate::prelude::*;
 
 #[derive(Debug, thiserror::Error)]
-pub enum CreateError {
+pub enum CreateAgentError {
     #[error(transparent)]
     Agent(#[from] AgentError),
 
@@ -16,14 +16,14 @@ pub enum CreateError {
 
 #[async_trait]
 pub trait Create: Sync + Send {
-    async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateError>;
+    async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateAgentError>;
 }
 
 pub struct Creator;
 
 #[async_trait]
 impl Create for Creator {
-    async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateError> {
+    async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateAgentError> {
         let b = Agent::builder();
 
         // Url

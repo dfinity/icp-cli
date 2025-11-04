@@ -21,6 +21,11 @@ use crate::{
     prelude::*,
 };
 
+pub const DEFAULT_LOCAL_ENVIRONMENT_NAME: &str = "local";
+pub const DEFAULT_MAINNET_ENVIRONMENT_NAME: &str = "ic";
+pub const DEFAULT_LOCAL_NETWORK_NAME: &str = "local";
+pub const DEFAULT_MAINNET_NETWORK_NAME: &str = "mainnet";
+
 #[derive(Debug, thiserror::Error)]
 pub enum LoadPathError {
     #[error("failed to read manifest at {0}")]
@@ -112,7 +117,7 @@ fn default_networks() -> Vec<Network> {
     vec![
         Network {
             // The local network at localhost:8000
-            name: "local".to_string(),
+            name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
                     gateway: Gateway {
@@ -124,10 +129,10 @@ fn default_networks() -> Vec<Network> {
         },
         Network {
             // Mainnet at https://icp-api.io
-            name: "mainnet".to_string(),
+            name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
             configuration: Configuration::Connected {
                 connected: Connected {
-                    url: "https://icp-api.io".to_string(),
+                    url: IC_MAINNET_NETWORK_URL.to_string(),
                     // Will use the IC Root key hard coded in agent-rs.
                     // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
                     root_key: None,
@@ -410,14 +415,16 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
         // We're done adding all the user environments
         // Now we add the default `local` environment if the user hasn't overriden it
-        if let Entry::Vacant(vacant_entry) = environments.entry("local".to_string()) {
+        if let Entry::Vacant(vacant_entry) =
+            environments.entry(DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string())
+        {
             vacant_entry.insert(Environment {
-                name: "local".to_string(),
+                name: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string(),
                 network: networks
-                    .get("local")
+                    .get(DEFAULT_LOCAL_NETWORK_NAME)
                     .ok_or(EnvironmentError::Network {
-                        environment: "local".to_owned(),
-                        network: "local".to_owned(),
+                        environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
+                        network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
                     })?
                     .to_owned(),
                 canisters: canisters.clone(),

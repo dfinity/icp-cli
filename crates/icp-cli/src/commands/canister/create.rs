@@ -7,7 +7,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
 use icp::{
     agent,
-    context::{GetAgentForEnvError, GetEnvironmentError},
+    context::{EnvironmentSelection, GetAgentForEnvError, GetEnvironmentError},
     identity, network,
     prelude::*,
 };
@@ -94,7 +94,7 @@ pub(crate) enum CommandError {
     Access(#[from] network::AccessError),
 
     #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    Agent(#[from] agent::CreateAgentError),
 
     #[error("project does not contain a canister named '{name}'")]
     CanisterNotFound { name: String },
@@ -137,11 +137,13 @@ pub(crate) enum CommandError {
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+
     // Load project
     let p = ctx.project.load().await?;
 
     // Load target environment
-    let env = ctx.get_environment(args.environment.name()).await?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
     let target_canisters = match args.names.is_empty() {
         true => env.get_canister_names(),
@@ -185,7 +187,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
 
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), args.environment.name())
+        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
         .await?;
 
     // Select which subnet to deploy the canisters to

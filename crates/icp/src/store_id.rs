@@ -14,21 +14,18 @@ pub trait Access: Sync + Send {
     fn register(&self, key: &Key, cid: &Principal) -> Result<(), RegisterError>;
 
     /// Lookup a canister ID for a given key.
-    fn lookup(&self, key: &Key) -> Result<Principal, LookupError>;
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupIdError>;
 
     /// Lookup all canister IDs for a given environment.
     fn lookup_by_environment(
         &self,
         environment: &str,
-    ) -> Result<Vec<(String, Principal)>, LookupError>;
+    ) -> Result<Vec<(String, Principal)>, LookupIdError>;
 }
 
 /// An association-key, used for associating an existing canister to an ID on a network
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Key {
-    /// Network name
-    pub network: String,
-
     /// Environment name
     pub environment: String,
 
@@ -46,8 +43,8 @@ pub enum RegisterError {
     RegisterLoadStore { source: json::Error },
 
     #[snafu(display(
-        "canister '{}' in environment '{}', associated with network '{}' is already registered with id '{id}'",
-        key.canister, key.environment, key.network,
+        "canister '{}' in environment '{}' is already registered with id '{id}'",
+        key.canister, key.environment,
     ))]
     AlreadyRegistered { key: Key, id: Principal },
 
@@ -56,13 +53,13 @@ pub enum RegisterError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LookupError {
+pub enum LookupIdError {
     #[snafu(display("failed to load canister id store"))]
     LookupLoadStore { source: json::Error },
 
     #[snafu(display(
-        "could not find ID for canister '{}' in environment '{}', associated with network '{}'",
-        key.canister, key.environment, key.network
+        "could not find ID for canister '{}' in environment '{}'",
+        key.canister, key.environment
     ))]
     IdNotFound { key: Key },
 
@@ -119,7 +116,7 @@ impl Access for IdStore {
         Ok(())
     }
 
-    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupIdError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -142,7 +139,7 @@ impl Access for IdStore {
         }
 
         // Not Found
-        Err(LookupError::IdNotFound {
+        Err(LookupIdError::IdNotFound {
             key: key.to_owned(),
         })
     }
@@ -150,7 +147,7 @@ impl Access for IdStore {
     fn lookup_by_environment(
         &self,
         environment: &str,
-    ) -> Result<Vec<(String, Principal)>, LookupError> {
+    ) -> Result<Vec<(String, Principal)>, LookupIdError> {
         // Lock ID Store
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
@@ -172,7 +169,7 @@ impl Access for IdStore {
             .collect();
 
         if filtered_associations.is_empty() {
-            return Err(LookupError::EnvironmentNotFound {
+            return Err(LookupIdError::EnvironmentNotFound {
                 name: environment.to_owned(),
             });
         }
@@ -223,12 +220,12 @@ impl Access for MockInMemoryIdStore {
         Ok(())
     }
 
-    fn lookup(&self, key: &Key) -> Result<Principal, LookupError> {
+    fn lookup(&self, key: &Key) -> Result<Principal, LookupIdError> {
         let store = self.store.lock().unwrap();
 
         match store.get(key) {
             Some(cid) => Ok(*cid),
-            None => Err(LookupError::IdNotFound {
+            None => Err(LookupIdError::IdNotFound {
                 key: key.to_owned(),
             }),
         }
@@ -237,7 +234,7 @@ impl Access for MockInMemoryIdStore {
     fn lookup_by_environment(
         &self,
         environment: &str,
-    ) -> Result<Vec<(String, Principal)>, LookupError> {
+    ) -> Result<Vec<(String, Principal)>, LookupIdError> {
         let store = self.store.lock().unwrap();
 
         let filtered: Vec<(String, Principal)> = store
@@ -247,7 +244,7 @@ impl Access for MockInMemoryIdStore {
             .collect();
 
         if filtered.is_empty() {
-            return Err(LookupError::EnvironmentNotFound {
+            return Err(LookupIdError::EnvironmentNotFound {
                 name: environment.to_owned(),
             });
         }

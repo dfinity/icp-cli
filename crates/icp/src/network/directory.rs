@@ -16,10 +16,14 @@ use crate::{
     prelude::*,
 };
 
+/// General interface to network data directories for a single network, covering both the local network root
+/// and the port descriptor in the global directory.
 #[derive(Clone)]
 pub struct NetworkDirectory {
     pub network_name: String,
+    /// Project-local network data directory
     pub network_root: PathBuf,
+    /// Global fixed-port descriptor directory
     pub port_descriptor_dir: PathBuf,
 }
 
@@ -53,6 +57,7 @@ impl NetworkDirectory {
         Ok(())
     }
 
+    /// Reads the descriptor from the local network root. Returns None if it does not exist.
     pub async fn load_network_descriptor(
         &self,
     ) -> Result<Option<NetworkDescriptorModel>, LoadNetworkFileError> {
@@ -69,6 +74,7 @@ impl NetworkDirectory {
             .await?
     }
 
+    /// Reads the descriptor for the given port. Returns None if it does not exist.
     pub async fn load_port_descriptor(
         &self,
         port: u16,
@@ -86,12 +92,7 @@ impl NetworkDirectory {
             .await?
     }
 
-    pub async fn claim_port(&self, port: u16) -> Result<File, ClaimPortError> {
-        self.port(port)?
-            .with_write(async |paths| paths.claim_port())
-            .await?
-    }
-
+    /// Deletes the network descriptor in the local network root.
     pub async fn cleanup_project_network_descriptor(
         &self,
     ) -> Result<(), CleanupNetworkDescriptorError> {
@@ -101,6 +102,7 @@ impl NetworkDirectory {
         Ok(())
     }
 
+    /// Deletes the port descriptor from the global descriptor directory.
     pub async fn cleanup_port_descriptor(
         &self,
         gateway_port: Option<u16>,
@@ -113,6 +115,7 @@ impl NetworkDirectory {
         Ok(())
     }
 
+    /// Saves the PID of the process spawned for `--background`
     pub async fn save_background_network_runner_pid(&self, pid: Pid) -> Result<(), SavePidError> {
         self.root()?
             .with_write(async |root| {
@@ -125,6 +128,8 @@ impl NetworkDirectory {
             .await?
     }
 
+    /// Loads the PID of the process spawned for `--background`. Returns None if the file does not exist,
+    /// but Some does not mean the process is still running.
     pub async fn load_background_network_runner_pid(&self) -> Result<Option<Pid>, LoadPidError> {
         self.root()?
             .with_read(async |root| {
@@ -140,12 +145,14 @@ impl NetworkDirectory {
             .await?
     }
 
+    /// Locked directory access for the local network root.
     pub fn root(&self) -> Result<DirectoryStructureLock<NetworkRootPaths>, LockError> {
         DirectoryStructureLock::open_or_create(NetworkRootPaths {
             network_root: self.network_root.clone(),
         })
     }
 
+    /// Locked directory access for a port descriptor.
     pub fn port(&self, port: u16) -> Result<DirectoryStructureLock<PortPaths>, LockError> {
         DirectoryStructureLock::open_or_create(PortPaths {
             port_descriptor_dir: self.port_descriptor_dir.clone(),
@@ -154,6 +161,7 @@ impl NetworkDirectory {
     }
 }
 
+/// Saves the network descriptor to the both local network root and port descriptor (if provided).
 pub async fn save_network_descriptors(
     root: LWrite<&NetworkRootPaths>,
     port: Option<LWrite<&PortPaths>>,
@@ -166,23 +174,29 @@ pub async fn save_network_descriptors(
     Ok(())
 }
 
+/// Directory structure for the local network root.
 pub struct NetworkRootPaths {
     network_root: PathBuf,
 }
 
 impl NetworkRootPaths {
+    /// The root directory of the network, usually `./.icp/networks/<network-name>/`
     pub fn root_dir(&self) -> &Path {
         &self.network_root
     }
 
+    /// The path to the network descriptor file
     pub fn network_descriptor_path(&self) -> PathBuf {
         self.network_root.join("descriptor.json")
     }
 
+    /// The path to the state directory. Be careful that PocketIC is not running before attempting
+    /// to read or write this location.
     pub fn state_dir(&self) -> PathBuf {
         self.network_root.join("state")
     }
 
+    /// Subdirectory for PocketIC-related files (but not the state directory)
     pub fn pocketic_dir(&self) -> PathBuf {
         self.network_root.join("pocket-ic")
     }
@@ -193,10 +207,10 @@ impl NetworkRootPaths {
         self.network_root.join("background_network_runner.pid")
     }
 
-    // pocketic expects this file not to exist when launching it.
-    // pocketic populates it with the port number, and deletes the file when it exits.
-    // if the file exists, pocketic assumes this means another pocketic instance
-    // is running, and exits with exit code(0).
+    /// PocketIC expects this file not to exist when launching it.
+    /// PocketIC populates it with the port number, and deletes the file when it exits.
+    /// If the file exists, PocketIC assumes this means another PocketIC instance
+    /// is running, and exits with exit code(0).
     pub fn pocketic_port_file(&self) -> PathBuf {
         self.pocketic_dir().join("port")
     }
@@ -208,6 +222,7 @@ impl PathsAccess for NetworkRootPaths {
     }
 }
 
+/// Represents the lock
 pub struct PortPaths {
     port_descriptor_dir: PathBuf,
     port: u16,
@@ -215,15 +230,20 @@ pub struct PortPaths {
 
 impl PathsAccess for PortPaths {
     fn lock_file(&self) -> PathBuf {
-        self.port_descriptor_dir.join(format!("{}.json", self.port))
+        self.port_descriptor_dir.join(format!("{}.lock", self.port))
     }
 }
 
 impl PortPaths {
+    /// Path to the port descriptor file
     pub fn descriptor_path(&self) -> PathBuf {
-        self.port_descriptor_dir.join(format!("{}.lock", self.port))
+        self.port_descriptor_dir.join(format!("{}.json", self.port))
     }
 
+    /// Claims ownership of a port for this process while the returned file handle is active. Does not impact
+    /// file locking.
+    ///
+    /// Returns `PortAlreadyClaimed` if another process has already claimed the port.
     pub fn claim_port(&self) -> Result<File, ClaimPortError> {
         let claim_path = self.descriptor_path().with_extension("claim");
         let f = File::create(&claim_path).context(OpenClaimFileSnafu { path: claim_path })?;

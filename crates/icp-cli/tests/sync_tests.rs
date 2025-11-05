@@ -59,7 +59,7 @@ fn sync_adapter_script_single() {
         .args([
             "--debug",
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -126,7 +126,7 @@ fn sync_adapter_script_multiple() {
         .args([
             "--debug",
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -204,7 +204,7 @@ async fn sync_adapter_static_assets() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",

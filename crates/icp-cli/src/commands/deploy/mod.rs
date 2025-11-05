@@ -25,9 +25,9 @@ pub(crate) struct DeployArgs {
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub(crate) mode: String,
 
-    /// The subnet id to use for the canisters being deployed.
+    /// The subnet to use for the canisters being deployed.
     #[clap(long)]
-    pub(crate) subnet_id: Option<Principal>,
+    pub(crate) subnet: Option<Principal>,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -146,7 +146,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
             quiet: false,
             cycles: args.cycles,
-            subnet: args.subnet_id,
+            subnet: args.subnet,
         },
     )
     .await?;

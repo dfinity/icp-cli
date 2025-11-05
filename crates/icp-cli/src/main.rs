@@ -33,7 +33,7 @@ struct Cli {
     )]
     project_dir: Option<PathBuf>,
 
-    #[arg(long, default_value = ".icp/ids.json")]
+    #[arg(long, default_value = ".icpdata/")]
     id_store: PathBuf,
 
     #[arg(long, default_value = ".icp/artifacts")]

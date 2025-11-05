@@ -81,15 +81,7 @@ pub fn load_identity(
     match identity {
         IdentitySpec::Pem {
             format, algorithm, ..
-        } => {
-            load_pem_identity(
-                dirs,          // dir
-                name,          // name
-                format,        // format
-                algorithm,     // algorithm
-                password_func, // password_func
-            )
-        }
+        } => load_pem_identity(dirs, name, format, algorithm, password_func),
 
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
@@ -109,18 +101,9 @@ fn load_pem_identity(
         .context(ParsePemSnafu { path: &pem_path })?;
 
     match format {
-        PemFormat::Pbes2 => load_pbes2_identity(
-            &doc,          // doc
-            algorithm,     // algorithm
-            password_func, // password_func
-            &pem_path,     // pem_path
-        ),
+        PemFormat::Pbes2 => load_pbes2_identity(&doc, algorithm, password_func, &pem_path),
 
-        PemFormat::Plaintext => load_plaintext_identity(
-            &doc,      // doc
-            algorithm, // algorithm
-            &pem_path, // pem_path
-        ),
+        PemFormat::Plaintext => load_plaintext_identity(&doc, algorithm, &pem_path),
     }
 }
 
@@ -139,11 +122,8 @@ fn load_pbes2_identity(
 
     match algorithm {
         IdentityKeyAlgorithm::Secp256k1 => {
-            let key = k256::SecretKey::from_pkcs8_encrypted_der(
-                doc.contents(), // bytes
-                &pw,            // password
-            )
-            .context(ParseKeySnafu { path })?;
+            let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
+                .context(ParseKeySnafu { path })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
@@ -162,10 +142,8 @@ fn load_plaintext_identity(
 
     match algorithm {
         IdentityKeyAlgorithm::Secp256k1 => {
-            let key = k256::SecretKey::from_pkcs8_der(
-                doc.contents(), // bytes
-            )
-            .context(ParseKeySnafu { path })?;
+            let key =
+                k256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
@@ -186,10 +164,10 @@ pub async fn load_identity_in_context(
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
     let identity = load_identity(
-        dirs,                                          // dir
-        &IdentityList::load_from(dirs)?,               // list
-        &(IdentityDefaults::load_from(dirs)?).default, // name
-        password_func,                                 // password_func
+        dirs,
+        &IdentityList::load_from(dirs)?,
+        &(IdentityDefaults::load_from(dirs)?).default,
+        password_func,
     )?;
 
     Ok(identity)

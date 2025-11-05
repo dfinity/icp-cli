@@ -9,6 +9,7 @@ use crate::{
     identity::IdentitySelection,
     network::access::NetworkAccess,
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
+    store_id::LookupIdError,
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -173,18 +174,34 @@ impl Context {
         }
 
         // Lookup the canister id
-        let cid = self
-            .ids
-            .lookup(&Key {
-                environment: env.name.to_owned(),
-                canister: canister_name.to_owned(),
-            })
-            .context(CanisterIdLookupSnafu {
+        match self.ids.lookup(&Key {
+            environment: env.name.to_owned(),
+            canister: canister_name.to_owned(),
+        }) {
+            Ok(cid) => Ok(cid),
+            Err(LookupIdError::IdNotFound { .. }) => Err(GetCanisterIdForEnvError::NotFound),
+            Err(err) => Err(GetCanisterIdForEnvError::CanisterIdLookup {
+                source: err,
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
-            })?;
+            }),
+        }
+    }
 
-        Ok(cid)
+    pub fn set_canister_id_for_env(
+        &self,
+        canister_name: &str,
+        environment: &EnvironmentSelection,
+        cid: &Principal,
+    ) -> Result<(), SetCanisterIdForEnvError> {
+        self.ids.register(
+            &Key {
+                environment: environment.name().to_owned(),
+                canister: canister_name.to_owned(),
+            },
+            cid,
+        )?;
+        Ok(())
     }
 
     /// Creates an agent for a given identity and environment.
@@ -384,6 +401,9 @@ pub enum GetNetworkError {
 
 #[derive(Debug, Snafu)]
 pub enum GetCanisterIdForEnvError {
+    #[snafu(display("canister has no registered id"))]
+    NotFound,
+
     #[snafu(transparent)]
     GetEnvironment { source: GetEnvironmentError },
 
@@ -406,6 +426,14 @@ pub enum GetCanisterIdForEnvError {
         source: crate::store_id::LookupIdError,
         canister_name: String,
         environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum SetCanisterIdForEnvError {
+    #[snafu(transparent)]
+    Register {
+        source: crate::store_id::RegisterError,
     },
 }
 

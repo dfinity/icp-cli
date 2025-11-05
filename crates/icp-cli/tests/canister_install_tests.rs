@@ -54,6 +54,7 @@ fn canister_install() {
         .args([
             "canister",
             "create",
+            "my-canister",
             "--quiet", // Set quiet so only the canister ID is output
             "--environment",
             "my-environment",

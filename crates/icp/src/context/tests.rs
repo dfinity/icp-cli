@@ -1,6 +1,7 @@
 use super::*;
-use crate::store_id::MockInMemoryIdStore;
+use crate::store_id::{Access as IdAccess, Key, MockInMemoryIdStore};
 use crate::{MockProjectLoader, identity::MockIdentityLoader, network::MockNetworkAccessor};
+use candid::Principal;
 
 #[tokio::test]
 async fn test_get_identity_default() {
@@ -404,4 +405,63 @@ async fn test_get_canister_id() {
         res.is_err(),
         "An invalid canister name should result in an error"
     );
+}
+
+#[tokio::test]
+async fn test_set_canister_id_for_env_success() {
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ..Context::mocked()
+    };
+
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
+    // Set canister ID for dev environment
+    let result = ctx.set_canister_id_for_env(
+        "backend",
+        &EnvironmentSelection::Named("dev".to_string()),
+        &canister_id,
+    );
+
+    assert!(result.is_ok());
+
+    // Verify it was registered
+    let retrieved_id = ctx
+        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .await
+        .unwrap();
+
+    assert_eq!(retrieved_id, canister_id);
+}
+
+#[tokio::test]
+async fn test_set_canister_id_for_env_already_registered() {
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ..Context::mocked()
+    };
+
+    // Pre-register a canister ID
+    let original_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    ctx.set_canister_id_for_env(
+        "backend",
+        &EnvironmentSelection::Named("dev".to_string()),
+        &original_id,
+    )
+    .unwrap();
+
+    // Try to set a different ID for the same canister
+    let different_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+    let result = ctx.set_canister_id_for_env(
+        "backend",
+        &EnvironmentSelection::Named("dev".to_string()),
+        &different_id,
+    );
+
+    assert!(matches!(
+        result,
+        Err(SetCanisterIdForEnvError::Register {
+            source: crate::store_id::RegisterError::AlreadyRegistered { .. }
+        })
+    ));
 }

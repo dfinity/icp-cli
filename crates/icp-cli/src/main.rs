@@ -18,6 +18,7 @@ use crate::{
 
 mod commands;
 mod logging;
+mod operations;
 mod options;
 mod progress;
 mod telemetry;

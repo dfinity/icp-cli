@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Context;
 use async_trait::async_trait;
 use serde::Serialize;
+use snafu::Snafu;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -62,6 +63,31 @@ impl Environment {
     pub fn get_canister_names(&self) -> Vec<String> {
         self.canisters.keys().cloned().collect()
     }
+
+    pub fn ensure_canister_declared(
+        &self,
+        name: &str,
+    ) -> Result<(), EnvironmentEnsureCanisterDeclaredError> {
+        if !self.canisters.contains_key(name) {
+            return Err(
+                EnvironmentEnsureCanisterDeclaredError::EnvCanisterNotFound {
+                    env_name: self.name.clone(),
+                    canister_name: name.to_owned(),
+                },
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum EnvironmentEnsureCanisterDeclaredError {
+    #[snafu(display("environment '{env_name}' does not include canister '{canister_name}'"))]
+    EnvCanisterNotFound {
+        env_name: String,
+        canister_name: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -70,6 +96,27 @@ pub struct Project {
     pub canisters: HashMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
+}
+
+impl Project {
+    pub fn ensure_canister_declared(
+        &self,
+        name: &str,
+    ) -> Result<(), ProjectEnsureCanisterDeclaredError> {
+        if !self.canisters.contains_key(name) {
+            return Err(ProjectEnsureCanisterDeclaredError::ProjCanisterNotFound {
+                name: name.to_owned(),
+            });
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ProjectEnsureCanisterDeclaredError {
+    #[snafu(display("project does not contain a canister named '{name}'"))]
+    ProjCanisterNotFound { name: String },
 }
 
 #[derive(Debug, thiserror::Error)]

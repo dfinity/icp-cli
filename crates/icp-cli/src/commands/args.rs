@@ -26,7 +26,7 @@ impl CanisterEnvironmentArgs {
     }
 }
 
-#[derive(Args, Debug)]
+#[derive(Clone, Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
     /// Name or principal of canister to target

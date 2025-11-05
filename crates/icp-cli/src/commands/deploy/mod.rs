@@ -1,7 +1,10 @@
 use clap::Args;
 use ic_agent::export::Principal;
 
-use icp::context::Context;
+use icp::{
+    EnvironmentEnsureCanisterDeclaredError, ProjectEnsureCanisterDeclaredError,
+    context::{Context, GetEnvironmentError},
+};
 
 use crate::{
     commands::{
@@ -13,6 +16,7 @@ use crate::{
         },
         sync,
     },
+    operations::create::create_canisters,
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -49,23 +53,14 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
     #[error(transparent)]
     Build(#[from] build::CommandError),
 
     #[error(transparent)]
     Create(#[from] create::CommandError),
+
+    #[error("failed to create canisters: {0}")]
+    CreateOperation(anyhow::Error),
 
     #[error(transparent)]
     Install(#[from] install::CommandError),
@@ -75,6 +70,15 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Sync(#[from] sync::CommandError),
+
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentError),
+
+    #[error(transparent)]
+    EnvironmentEnsureCanisterDeclared(#[from] EnvironmentEnsureCanisterDeclaredError),
+
+    #[error(transparent)]
+    ProjectEnsureCanisterDeclared(#[from] ProjectEnsureCanisterDeclaredError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
@@ -82,12 +86,9 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     let p = ctx.project.load().await?;
 
     // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+    let env = ctx
+        .get_environment(&args.environment.clone().into())
+        .await?;
 
     let cnames = match args.names.is_empty() {
         // No canisters specified
@@ -98,18 +99,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     };
 
     for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
+        p.ensure_canister_declared(name)?;
+        env.ensure_canister_declared(name)?;
     }
 
     // Skip doing any work if no canisters are targeted
@@ -129,27 +120,21 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     // Create the selected canisters
     let _ = ctx.term.write_line("\n\nCreating canisters:");
-    create::exec(
+    let canister_names: Vec<&str> = cnames.iter().map(|s| s.as_str()).collect();
+    create_canisters(
+        canister_names,
         ctx,
-        &create::CreateArgs {
-            names: cnames.to_owned(),
-            identity: args.identity.clone(),
-            environment: args.environment.clone(),
-
-            // Controllers
-            controller: args.controller.to_owned(),
-
-            // Settings
-            settings: CanisterSettings {
-                ..Default::default()
-            },
-
-            quiet: false,
-            cycles: args.cycles,
-            subnet: args.subnet,
+        &args.environment.clone().into(),
+        &args.identity.clone().into(),
+        args.subnet,
+        args.controller.to_owned(),
+        CanisterSettings {
+            ..Default::default()
         },
+        args.cycles,
     )
-    .await?;
+    .await
+    .map_err(CommandError::CreateOperation)?;
 
     let _ = ctx.term.write_line("\n\nSetting environment variables:");
     binding_env_vars::exec(

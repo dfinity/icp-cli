@@ -2562,6 +2562,7 @@ dependencies = [
  "bigdecimal",
  "candid",
  "serde",
+ "snafu",
 ]
 
 [[package]]

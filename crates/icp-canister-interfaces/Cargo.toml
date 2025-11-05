@@ -9,6 +9,7 @@ license = { workspace = true }
 bigdecimal = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }
+snafu = { workspace = true }
 
 [dev-dependencies]
 

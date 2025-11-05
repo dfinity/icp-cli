@@ -203,3 +203,138 @@ async fn deploy_twice_should_succeed() {
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
 }
+
+#[tokio::test]
+async fn deploy_colocates_canisters() {
+    use icp::network::managed::pocketic::default_instance_config;
+    use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
+
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-d
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-e
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-f
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx
+        .start_network_with_config(
+            &project_dir,
+            InstanceConfig {
+                subnet_config_set: (SubnetConfigSet {
+                    application: 3,
+                    ..Default::default()
+                })
+                .into(),
+                ..default_instance_config(&ctx.state_dir(&project_dir))
+            },
+        )
+        .await;
+
+    ctx.ping_until_healthy(&project_dir, "local");
+
+    // Deploy all canisters together to test colocation
+    let icp_client = clients::icp(&ctx, &project_dir, None);
+    icp_client.mint_cycles(20 * TRILLION);
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "canister-a",
+            "canister-b",
+            "canister-c",
+            "canister-d",
+            "canister-e",
+            "canister-f",
+        ])
+        .assert()
+        .success();
+
+    let registry = clients::registry(&ctx);
+
+    // Get the subnet for each canister
+    let subnet_a = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-a"))
+        .await;
+
+    let subnet_b = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-b"))
+        .await;
+
+    let subnet_c = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-c"))
+        .await;
+
+    let subnet_d = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-d"))
+        .await;
+
+    let subnet_e = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-e"))
+        .await;
+
+    let subnet_f = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-f"))
+        .await;
+
+    // All canisters deployed together should be on the same subnet
+    assert_eq!(
+        subnet_a, subnet_b,
+        "Canister A and B should be on the same subnet"
+    );
+    assert_eq!(
+        subnet_a, subnet_c,
+        "Canister A and C should be on the same subnet"
+    );
+    assert_eq!(
+        subnet_a, subnet_d,
+        "Canister A and D should be on the same subnet"
+    );
+    assert_eq!(
+        subnet_a, subnet_e,
+        "Canister A and E should be on the same subnet"
+    );
+    assert_eq!(
+        subnet_a, subnet_f,
+        "Canister A and F should be on the same subnet"
+    );
+}

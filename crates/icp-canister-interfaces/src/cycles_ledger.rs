@@ -1,6 +1,7 @@
 use bigdecimal::BigDecimal;
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
+use snafu::Snafu;
 
 /// 100m cycles
 pub const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
@@ -48,29 +49,31 @@ pub enum CreateCanisterResponse {
     Err(CreateCanisterError),
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Snafu)]
 pub enum CreateCanisterError {
-    GenericError {
-        message: String,
-        error_code: Nat,
-    },
+    #[snafu(display("Cycles ledger error (code {error_code}): {message}"))]
+    GenericError { message: String, error_code: Nat },
+    #[snafu(display("Cycles ledger temporarily unavailable. Please retry in a moment."))]
     TemporarilyUnavailable,
+    #[snafu(display("Duplicate request of block {duplicate_of}."))]
     Duplicate {
         duplicate_of: Nat,
         canister_id: Option<Principal>,
     },
-    CreatedInFuture {
-        ledger_time: u64,
-    },
+    #[snafu(display("created_at_time is too far in the future."))]
+    CreatedInFuture { ledger_time: u64 },
+    #[snafu(display("Failed to create canister: {error}."))]
     FailedToCreate {
         error: String,
         refund_block: Option<Nat>,
         fee_block: Option<Nat>,
     },
+    #[snafu(display("created_at_time is too old."))]
     TooOld,
-    InsufficientFunds {
-        balance: Nat,
-    },
+    #[snafu(display(
+        "Insufficient cycles. Available balance: {balance} cycles. use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount."
+    ))]
+    InsufficientFunds { balance: Nat },
 }
 
 impl CreateCanisterError {

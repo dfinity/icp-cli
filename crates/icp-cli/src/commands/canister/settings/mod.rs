@@ -1,6 +1,7 @@
 use clap::Subcommand;
 
 pub(crate) mod show;
+pub(crate) mod sync;
 pub(crate) mod update;
 
 #[derive(Subcommand, Debug)]
@@ -8,4 +9,5 @@ pub(crate) mod update;
 pub(crate) enum Command {
     Show(show::ShowArgs),
     Update(update::UpdateArgs),
+    Sync(sync::SyncArgs),
 }

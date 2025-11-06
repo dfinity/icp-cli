@@ -1,7 +1,7 @@
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Args;
 use icp::{
-    fs::write_string,
+    fs::{lock::LockError, write_string},
     identity::{
         key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
         seed::derive_default_key_from_seed,
@@ -25,6 +25,9 @@ pub(crate) enum CommandError {
 
     #[error("failed to write seed file")]
     WriteSeedFileError(#[from] icp::fs::Error),
+
+    #[error(transparent)]
+    LoadLockError(#[from] LockError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandError> {
@@ -33,12 +36,17 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandErr
         Language::English,
     );
 
-    create_identity(
-        &ctx.dirs.identity(),
-        &args.name,
-        IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
-        CreateFormat::Plaintext,
-    )?;
+    ctx.dirs
+        .identity()?
+        .with_write(async |dirs| {
+            create_identity(
+                dirs,
+                &args.name,
+                IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
+                CreateFormat::Plaintext,
+            )
+        })
+        .await??;
 
     match &args.output_seed {
         Some(path) => {

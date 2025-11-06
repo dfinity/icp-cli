@@ -48,17 +48,18 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportC
             from_pem,
             args.decryption_password_from_file.as_deref(),
             args.assert_key_type.clone(),
-        )?;
+        )
+        .await?;
     } else if let Some(path) = &args.from_seed_file {
         let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase)?;
+        import_from_seed_phrase(ctx, &args.name, &phrase).await?;
     } else if args.read_seed_phrase {
         let phrase = Password::new()
             .with_prompt("Enter seed phrase")
             .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase)?;
+        import_from_seed_phrase(ctx, &args.name, &phrase).await?;
     } else {
         unreachable!();
     }
@@ -77,7 +78,7 @@ pub(crate) enum ImportCmdError {
     SeedImport { source: DeriveKeyError },
 }
 
-fn import_from_pem(
+async fn import_from_pem(
     ctx: &Context,
     name: &str,
     path: &Path,
@@ -132,7 +133,10 @@ fn import_from_pem(
         _ => unreachable!(),
     };
 
-    create_identity(&ctx.dirs.identity(), name, key, CreateFormat::Plaintext)?;
+    ctx.dirs
+        .identity()?
+        .with_write(async |dirs| create_identity(dirs, name, key, CreateFormat::Plaintext))
+        .await??;
 
     Ok(())
 }
@@ -268,15 +272,24 @@ fn import_sec1(
     }
 }
 
-fn import_from_seed_phrase(ctx: &Context, name: &str, phrase: &str) -> Result<(), DeriveKeyError> {
+async fn import_from_seed_phrase(
+    ctx: &Context,
+    name: &str,
+    phrase: &str,
+) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
     let key = derive_default_key_from_seed(&mnemonic);
-    create_identity(
-        &ctx.dirs.identity(),
-        name,
-        IdentityKey::Secp256k1(key),
-        CreateFormat::Plaintext,
-    )?;
+    ctx.dirs
+        .identity()?
+        .with_write(async |dirs| {
+            create_identity(
+                dirs,
+                name,
+                IdentityKey::Secp256k1(key),
+                CreateFormat::Plaintext,
+            )
+        })
+        .await??;
     Ok(())
 }
 
@@ -333,6 +346,9 @@ pub(crate) enum LoadKeyError {
 
     #[snafu(transparent)]
     CreateIdentityError { source: CreateIdentityError },
+
+    #[snafu(transparent)]
+    LockIdentityDirError { source: icp::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]
@@ -348,4 +364,7 @@ pub(crate) enum DeriveKeyError {
 
     #[snafu(transparent)]
     CreateIdentity { source: CreateIdentityError },
+
+    #[snafu(transparent)]
+    LockIdentityDirError { source: icp::fs::lock::LockError },
 }

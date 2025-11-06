@@ -187,6 +187,43 @@ impl Context {
         Ok(cid)
     }
 
+    /// Sets the canister ID for a given canister name in a specified environment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be loaded or if the canister ID cannot be registered.
+    pub async fn set_canister_id_for_env(
+        &self,
+        canister_name: &str,
+        canister_id: Principal,
+        environment: &EnvironmentSelection,
+    ) -> Result<(), SetCanisterIdForEnvError> {
+        let env = self.get_environment(environment).await?;
+
+        if !env.canisters.contains_key(canister_name) {
+            return Err(SetCanisterIdForEnvError::SetCanisterNotFoundInEnv {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            });
+        }
+
+        // Register the canister id
+        self.ids
+            .register(
+                &Key {
+                    environment: env.name.to_owned(),
+                    canister: canister_name.to_owned(),
+                },
+                &canister_id,
+            )
+            .context(CanisterIdRegisterSnafu {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            })?;
+
+        Ok(())
+    }
+
     /// Creates an agent for a given identity and environment.
     pub async fn get_agent_for_env(
         &self,
@@ -404,6 +441,33 @@ pub enum GetCanisterIdForEnvError {
     ))]
     CanisterIdLookup {
         source: crate::store_id::LookupIdError,
+        canister_name: String,
+        environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum SetCanisterIdForEnvError {
+    #[snafu(transparent)]
+    GetEnvironment { source: GetEnvironmentError },
+
+    #[snafu(display(
+        "canister '{}' not found in environment '{}'",
+        canister_name,
+        environment_name
+    ))]
+    SetCanisterNotFoundInEnv {
+        canister_name: String,
+        environment_name: String,
+    },
+
+    #[snafu(display(
+        "failed to register canister ID for canister '{}' in environment '{}'",
+        canister_name,
+        environment_name
+    ))]
+    CanisterIdRegister {
+        source: crate::store_id::RegisterError,
         canister_name: String,
         environment_name: String,
     },

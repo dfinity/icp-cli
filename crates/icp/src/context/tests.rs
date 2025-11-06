@@ -190,6 +190,111 @@ async fn test_get_canister_id_for_env_id_not_registered() {
 }
 
 #[tokio::test]
+async fn test_set_canister_id_for_env_success() {
+    use crate::store_id::{Access as IdAccess, Key};
+    use candid::Principal;
+
+    let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ids: ids_store.clone() as Arc<dyn IdAccess>,
+        ..Context::mocked()
+    };
+
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
+    // Set the canister ID
+    ctx.set_canister_id_for_env(
+        "backend",
+        canister_id,
+        &EnvironmentSelection::Named("dev".to_string()),
+    )
+    .await
+    .unwrap();
+
+    // Verify it was registered by reading it back
+    let registered_id = ids_store
+        .lookup(&Key {
+            environment: "dev".to_string(),
+            canister: "backend".to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(registered_id, canister_id);
+}
+
+#[tokio::test]
+async fn test_set_canister_id_for_env_canister_not_in_env() {
+    use candid::Principal;
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ..Context::mocked()
+    };
+
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
+    // "database" is only in "dev" environment, not in "test"
+    let result = ctx
+        .set_canister_id_for_env(
+            "database",
+            canister_id,
+            &EnvironmentSelection::Named("test".to_string()),
+        )
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(SetCanisterIdForEnvError::SetCanisterNotFoundInEnv {
+            ref canister_name,
+            ref environment_name,
+        }) if canister_name == "database" && environment_name == "test"
+    ));
+}
+
+#[tokio::test]
+async fn test_set_canister_id_for_env_already_registered() {
+    use crate::store_id::{Access as IdAccess, Key};
+    use candid::Principal;
+
+    let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+    // Pre-register a canister ID
+    let first_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    ids_store
+        .register(
+            &Key {
+                environment: "dev".to_string(),
+                canister: "backend".to_string(),
+            },
+            &first_id,
+        )
+        .unwrap();
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ids: ids_store,
+        ..Context::mocked()
+    };
+
+    // Try to register a different ID for the same canister
+    let second_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+    let result = ctx
+        .set_canister_id_for_env(
+            "backend",
+            second_id,
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(SetCanisterIdForEnvError::CanisterIdRegister { .. })
+    ));
+}
+
+#[tokio::test]
 async fn test_get_agent_for_env_uses_environment_network() {
     use crate::network::access::NetworkAccess;
 

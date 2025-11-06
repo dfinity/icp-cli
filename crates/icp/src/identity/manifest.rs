@@ -6,11 +6,11 @@ use snafu::{Snafu, ensure};
 use strum::{Display, EnumString};
 
 use crate::{
-    fs::json,
-    identity::{
-        ensure_identity_defaults_path, ensure_identity_list_path, identity_defaults_path,
-        identity_list_path,
+    fs::{
+        json,
+        lock::{LRead, LWrite},
     },
+    identity::IdentityPaths,
     prelude::*,
 };
 
@@ -19,6 +19,34 @@ use crate::{
 pub struct IdentityDefaults {
     pub v: u32,
     pub default: String,
+}
+
+impl IdentityDefaults {
+    pub fn write_to(&self, dirs: LWrite<&IdentityPaths>) -> Result<(), WriteIdentityManifestError> {
+        json::save(&dirs.identity_defaults_path(), self)?;
+        Ok(())
+    }
+
+    pub fn load_from(dirs: LRead<&IdentityPaths>) -> Result<Self, LoadIdentityManifestError> {
+        let id_defaults_path = dirs.identity_defaults_path();
+
+        let defaults = json::load(&id_defaults_path).or_else(|err| match err {
+            // Default fallback
+            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(Self::default()),
+
+            // Other
+            _ => Err(err),
+        })?;
+
+        ensure!(
+            defaults.v == 1,
+            BadVersionSnafu {
+                path: &id_defaults_path
+            }
+        );
+
+        Ok(defaults)
+    }
 }
 
 impl Default for IdentityDefaults {
@@ -43,6 +71,33 @@ impl Default for IdentityList {
             v: 1,
             identities: HashMap::from([("anonymous".to_string(), IdentitySpec::Anonymous)]),
         }
+    }
+}
+
+impl IdentityList {
+    pub fn write_to(&self, dirs: LWrite<&IdentityPaths>) -> Result<(), WriteIdentityManifestError> {
+        json::save(&dirs.identity_list_path(), self)?;
+        Ok(())
+    }
+    pub fn load_from(dirs: LRead<&IdentityPaths>) -> Result<Self, LoadIdentityManifestError> {
+        let id_list_file = dirs.identity_list_path();
+
+        let list = json::load(&id_list_file).or_else(|err| match err {
+            // Default fallback
+            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(Self::default()),
+
+            // Other
+            _ => Err(err),
+        })?;
+
+        ensure!(
+            list.v == 1,
+            BadVersionSnafu {
+                path: &id_list_file
+            }
+        );
+
+        Ok(list)
     }
 }
 
@@ -94,30 +149,9 @@ pub enum WriteIdentityManifestError {
 
     #[snafu(transparent)]
     CreateDirectoryError { source: crate::fs::Error },
-}
 
-pub fn write_identity_defaults(
-    dir: &Path,
-    defaults: &IdentityDefaults,
-) -> Result<(), WriteIdentityManifestError> {
-    json::save(
-        &ensure_identity_defaults_path(dir)?, // path
-        defaults,                             // value
-    )?;
-
-    Ok(())
-}
-
-pub fn write_identity_list(
-    dir: &Path,
-    list: &IdentityList,
-) -> Result<(), WriteIdentityManifestError> {
-    json::save(
-        &ensure_identity_list_path(dir)?, // path
-        list,                             // value
-    )?;
-
-    Ok(())
+    #[snafu(transparent)]
+    DirectoryLockError { source: crate::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]
@@ -127,50 +161,9 @@ pub enum LoadIdentityManifestError {
 
     #[snafu(display("file `{path}` was modified by an incompatible new version of icp-cli"))]
     BadVersion { path: PathBuf },
-}
 
-pub fn load_identity_list(dir: &Path) -> Result<IdentityList, LoadIdentityManifestError> {
-    let id_list_file = identity_list_path(dir);
-
-    let list = json::load(&id_list_file).or_else(|err| match err {
-        // Default fallback
-        json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(IdentityList::default()),
-
-        // Other
-        _ => Err(err),
-    })?;
-
-    ensure!(
-        list.v == 1,
-        BadVersionSnafu {
-            path: &id_list_file
-        }
-    );
-
-    Ok(list)
-}
-
-pub fn load_identity_defaults(dir: &Path) -> Result<IdentityDefaults, LoadIdentityManifestError> {
-    let id_defaults_path = identity_defaults_path(dir);
-
-    let defaults = json::load(&id_defaults_path).or_else(|err| match err {
-        // Default fallback
-        json::Error::Io(err) if err.kind() == ErrorKind::NotFound => {
-            Ok(IdentityDefaults::default())
-        }
-
-        // Other
-        _ => Err(err),
-    })?;
-
-    ensure!(
-        defaults.v == 1,
-        BadVersionSnafu {
-            path: &id_defaults_path
-        }
-    );
-
-    Ok(defaults)
+    #[snafu(transparent)]
+    DirectoryLockError { source: crate::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]
@@ -186,7 +179,7 @@ pub enum ChangeDefaultsError {
 }
 
 pub fn change_default_identity(
-    dir: &Path,
+    dirs: LWrite<&IdentityPaths>,
     list: &IdentityList,
     name: &str,
 ) -> Result<(), ChangeDefaultsError> {
@@ -195,9 +188,9 @@ pub fn change_default_identity(
         NoSuchIdentitySnafu { name }
     );
 
-    let mut defaults = load_identity_defaults(dir)?;
+    let mut defaults = IdentityDefaults::load_from(dirs.read())?;
     defaults.default = name.to_string();
-    write_identity_defaults(dir, &defaults)?;
+    defaults.write_to(dirs)?;
 
     Ok(())
 }

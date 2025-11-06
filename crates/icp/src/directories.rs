@@ -4,13 +4,17 @@
 //! used by the ICP CLI tool. It handles both standard system directories and
 //! custom overrides, primarily for storing user data like identities and cache.
 
-use crate::prelude::*;
+use crate::{
+    fs::lock::LockError,
+    identity::{IdentityDirectories, IdentityPaths},
+    prelude::*,
+};
 use directories::ProjectDirs;
 
 /// Trait for accessing ICP CLI directories.
 pub trait Access: Sync + Send {
     /// Returns the path to the identity directory.
-    fn identity(&self) -> PathBuf;
+    fn identity(&self) -> Result<IdentityDirectories, LockError>;
 
     /// Returns the path to the port descriptors cache directory.
     fn port_descriptor(&self) -> PathBuf;
@@ -133,8 +137,8 @@ impl Access for Directories {
     /// Returns the path to the identity directory.
     ///
     /// This directory stores user identity files, keys, and related data.
-    fn identity(&self) -> PathBuf {
-        self.data().join("identity")
+    fn identity(&self) -> Result<IdentityDirectories, LockError> {
+        IdentityPaths::new(self.data().join("identity"))
     }
 
     /// Returns the path to the port descriptors cache directory.
@@ -153,7 +157,7 @@ pub struct UnimplementedMockDirs;
 
 #[cfg(test)]
 impl Access for UnimplementedMockDirs {
-    fn identity(&self) -> PathBuf {
+    fn identity(&self) -> Result<IdentityDirectories, LockError> {
         unimplemented!("UnimplementedMockDirs::identity")
     }
 

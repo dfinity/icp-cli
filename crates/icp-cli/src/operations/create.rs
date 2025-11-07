@@ -14,12 +14,14 @@ use icp_canister_interfaces::{
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
     registry::{GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL},
 };
+use indicatif::ProgressBar;
 use rand::seq::IndexedRandom;
+use std::sync::Arc;
 use tokio::sync::OnceCell;
 
-use crate::{commands::canister::create::CanisterSettings, progress::ProgressManager};
+use crate::commands::canister::create::CanisterSettings;
 
-pub(crate) struct CreateOperation<'a> {
+struct CreateOperationInner<'a> {
     ctx: &'a Context,
     environment: &'a EnvironmentSelection,
     identity: &'a IdentitySelection,
@@ -28,6 +30,18 @@ pub(crate) struct CreateOperation<'a> {
     cycles: u128,
     settings: CanisterSettings,
     resolved_subnet: OnceCell<Result<Principal, String>>,
+}
+
+pub(crate) struct CreateOperation<'a> {
+    inner: Arc<CreateOperationInner<'a>>,
+}
+
+impl<'a> Clone for CreateOperation<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 impl<'a> CreateOperation<'a> {
@@ -41,14 +55,16 @@ impl<'a> CreateOperation<'a> {
         settings: CanisterSettings,
     ) -> Self {
         Self {
-            ctx,
-            environment,
-            identity,
-            subnet,
-            controllers,
-            cycles,
-            settings,
-            resolved_subnet: OnceCell::new(),
+            inner: Arc::new(CreateOperationInner {
+                ctx,
+                environment,
+                identity,
+                subnet,
+                controllers,
+                cycles,
+                settings,
+                resolved_subnet: OnceCell::new(),
+            }),
         }
     }
 
@@ -60,43 +76,51 @@ impl<'a> CreateOperation<'a> {
     pub(crate) async fn create(
         &self,
         canister: &str,
-        progress: &ProgressManager,
+        pb: &ProgressBar,
     ) -> Result<Option<Principal>, Error> {
-        let env = self.ctx.get_environment(self.environment).await?;
-        let (path, info) = env.get_canister_info(canister).map_err(|e| anyhow!(e))?;
-        if self
+        let env = self
+            .inner
             .ctx
-            .get_canister_id_for_env(canister, self.environment)
+            .get_environment(self.inner.environment)
+            .await?;
+        let (_path, info) = env.get_canister_info(canister).map_err(|e| anyhow!(e))?;
+        if self
+            .inner
+            .ctx
+            .get_canister_id_for_env(canister, self.inner.environment)
             .await
             .is_ok()
         {
             return Ok(None);
         }
-        let pb = progress.create_progress_bar(canister);
         pb.set_message("Creating...");
 
         let settings = CanisterSettingsArg {
             freezing_threshold: self
+                .inner
                 .settings
                 .freezing_threshold
                 .or(info.settings.freezing_threshold)
                 .map(Nat::from),
-            controllers: if self.controllers.is_empty() {
+            controllers: if self.inner.controllers.is_empty() {
                 None
             } else {
-                Some(self.controllers.clone())
+                Some(self.inner.controllers.clone())
             },
             reserved_cycles_limit: self
+                .inner
                 .settings
                 .reserved_cycles_limit
                 .or(info.settings.reserved_cycles_limit)
                 .map(Nat::from),
             memory_allocation: self
+                .inner
                 .settings
                 .memory_allocation
                 .or(info.settings.memory_allocation)
                 .map(Nat::from),
             compute_allocation: self
+                .inner
                 .settings
                 .compute_allocation
                 .or(info.settings.compute_allocation)
@@ -111,14 +135,15 @@ impl<'a> CreateOperation<'a> {
         let arg = CreateCanisterArgs {
             from_subaccount: None,
             created_at_time: None,
-            amount: Nat::from(self.cycles),
+            amount: Nat::from(self.inner.cycles),
             creation_args: Some(creation_args),
         };
 
         // Call cycles ledger create_canister
         let resp = self
+            .inner
             .ctx
-            .get_agent_for_env(self.identity, self.environment)
+            .get_agent_for_env(self.inner.identity, self.inner.environment)
             .await?
             .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
             .with_arg(Encode!(&arg)?)
@@ -128,12 +153,13 @@ impl<'a> CreateOperation<'a> {
         let cid = match resp {
             CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
             CreateCanisterResponse::Err(err) => {
-                return Err(anyhow!(err.format_error(self.cycles)));
+                return Err(anyhow!(err.format_error(self.inner.cycles)));
             }
         };
 
-        self.ctx
-            .set_canister_id_for_env(canister, cid, self.environment)
+        self.inner
+            .ctx
+            .set_canister_id_for_env(canister, cid, self.inner.environment)
             .await?;
 
         Ok(Some(cid))
@@ -146,24 +172,27 @@ impl<'a> CreateOperation<'a> {
     /// Both successful results and errors are cached, so failed resolutions will not be retried.
     async fn get_subnet(&self) -> Result<Principal, String> {
         let result = self
+            .inner
             .resolved_subnet
             .get_or_init(|| async {
                 // If subnet is explicitly provided, use it
-                if let Some(subnet) = self.subnet {
+                if let Some(subnet) = self.inner.subnet {
                     return Ok(subnet);
                 }
 
                 // Get existing canisters from the environment
                 let env = self
+                    .inner
                     .ctx
-                    .get_environment(self.environment)
+                    .get_environment(self.inner.environment)
                     .await
                     .map_err(|e| e.to_string())?;
 
                 let existing_canisters: Vec<Principal> =
                     join_all(env.canisters.values().map(|(_, c)| async move {
-                        self.ctx
-                            .get_canister_id_for_env(&c.name, self.environment)
+                        self.inner
+                            .ctx
+                            .get_canister_id_for_env(&c.name, self.inner.environment)
                             .await
                     }))
                     .await
@@ -173,8 +202,9 @@ impl<'a> CreateOperation<'a> {
 
                 // If no canisters exist, pick a random available subnet
                 let agent = self
+                    .inner
                     .ctx
-                    .get_agent_for_env(self.identity, self.environment)
+                    .get_agent_for_env(self.inner.identity, self.inner.environment)
                     .await
                     .map_err(|e| e.to_string())?;
                 if existing_canisters.is_empty() {
@@ -200,9 +230,12 @@ impl<'a> CreateOperation<'a> {
     }
 }
 
-async fn get_canister_subnet(agent: &Agent, id: &Principal) -> Result<Principal, anyhow::Error> {
+async fn get_canister_subnet(
+    agent: &Agent,
+    canister: &Principal,
+) -> Result<Principal, anyhow::Error> {
     let args = &GetSubnetForCanisterRequest {
-        principal: Some(*id),
+        principal: Some(*canister),
     };
 
     let bs = agent

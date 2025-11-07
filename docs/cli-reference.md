@@ -134,17 +134,18 @@ Make a canister call
 
 Create a canister on a network
 
-**Usage:** `icp-cli canister create [OPTIONS] [NAMES]...`
+**Usage:** `icp-cli canister create [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAMES>` — The names of the canister within the current project
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
-* `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically

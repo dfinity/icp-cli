@@ -1,7 +1,10 @@
 use clap::Args;
+use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::export::Principal;
-
-use icp::context::Context;
+use icp::{
+    context::{Context, EnvironmentSelection},
+    identity::IdentitySelection,
+};
 
 use crate::{
     commands::{
@@ -13,7 +16,9 @@ use crate::{
         },
         sync,
     },
+    operations::create::CreateOperation,
     options::{EnvironmentOpt, IdentityOpt},
+    progress::{ProgressManager, ProgressManagerSettings},
 };
 
 #[derive(Args, Debug)]
@@ -75,6 +80,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     Sync(#[from] sync::CommandError),
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
@@ -129,27 +137,50 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     // Create the selected canisters
     let _ = ctx.term.write_line("\n\nCreating canisters:");
-    create::exec(
+
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let identity_selection: IdentitySelection = args.identity.clone().into();
+
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+    let create_operation = CreateOperation::new(
         ctx,
-        &create::CreateArgs {
-            names: cnames.to_owned(),
-            identity: args.identity.clone(),
-            environment: args.environment.clone(),
-
-            // Controllers
-            controller: args.controller.to_owned(),
-
-            // Settings
-            settings: CanisterSettings {
-                ..Default::default()
-            },
-
-            quiet: false,
-            cycles: args.cycles,
-            subnet: args.subnet,
+        &environment_selection,
+        &identity_selection,
+        args.subnet,
+        args.controller.clone(),
+        args.cycles,
+        CanisterSettings {
+            ..Default::default()
         },
-    )
-    .await?;
+    );
+
+    let mut futs = FuturesOrdered::new();
+    for name in cnames.iter() {
+        let pb = progress_manager.create_progress_bar(name);
+        let create_op = create_operation.clone();
+
+        futs.push_back(async move {
+            ProgressManager::execute_with_custom_progress(
+                &pb,
+                create_op.create(name, &pb),
+                || "Created successfully".to_string(),
+                |err| err.to_string(),
+                |_| false,
+            )
+            .await
+        });
+    }
+
+    // Consume the set of futures and abort if an error occurs
+    while let Some(res) = futs.next().await {
+        match res {
+            Ok(Some(id)) => {
+                let _ = ctx.term.write_line(&format!("Created canister {id}"));
+            }
+            Ok(None) => (),
+            Err(err) => return Err(CommandError::Unexpected(err)),
+        }
+    }
 
     let _ = ctx.term.write_line("\n\nSetting environment variables:");
     binding_env_vars::exec(

@@ -1,10 +1,10 @@
+use anyhow::anyhow;
 use clap::Args;
-use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{AgentError, export::Principal};
 use icp::{
     agent,
-    context::{EnvironmentSelection, GetAgentForEnvError, GetEnvironmentError},
-    identity::{self, IdentitySelection},
+    context::{CanisterSelection, GetAgentForEnvError, GetEnvironmentError},
+    identity::{self},
     network,
     prelude::*,
 };
@@ -12,8 +12,8 @@ use icp::{
 use icp::context::Context;
 
 use crate::{
+    commands::args,
     operations::create::CreateOperation,
-    options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
 use icp::store_id::RegisterError;
@@ -39,16 +39,10 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<u64>,
 }
 
-#[derive(Clone, Debug, Args)]
+#[derive(Debug, Args)]
 pub(crate) struct CreateArgs {
-    /// The names of the canister within the current project
-    pub(crate) names: Vec<String>,
-
     #[command(flatten)]
-    pub(crate) identity: IdentityOpt,
-
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -108,52 +102,43 @@ pub(crate) enum CommandError {
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
-    let identity_selection: IdentitySelection = args.identity.clone().into();
-
-    // Load target environment
-    let env = ctx.get_environment(&environment_selection).await?;
-
-    let target_canisters = match args.names.is_empty() {
-        true => env.get_canister_names(),
-        false => args.names.clone(),
+    let selections = args.cmd_args.selections();
+    let canister = match selections.canister {
+        CanisterSelection::Named(name) => name,
+        CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
     };
-
-    // Prepare a futures set for concurrent operations
-    let mut futs = FuturesOrdered::new();
 
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
     let create_operation = CreateOperation::new(
         ctx,
-        &environment_selection,
-        &identity_selection,
+        &selections.environment,
+        &selections.identity,
         args.subnet,
         args.controller.clone(),
         args.cycles,
         args.settings.clone(),
     );
 
-    for name in target_canisters.iter() {
-        let pb = progress_manager.create_progress_bar(name);
-        let create_op = create_operation.clone();
+    let pb = progress_manager.create_progress_bar(&canister);
 
-        futs.push_back(async move {
-            ProgressManager::execute_with_custom_progress(
-                &pb,
-                create_op.create(name, &pb),
-                || "Created successfully".to_string(),
-                |err| err.to_string(),
-                |_| false,
-            )
-            .await
-        });
-    }
-
-    // Consume the set of futures and abort if an error occurs
-    while let Some(res) = futs.next().await {
-        // TODO(or.ricon): Handle canister creation failures
-        res?;
-    }
+    match ProgressManager::execute_with_custom_progress(
+        &pb,
+        create_operation.create(&canister, &pb),
+        || "Created successfully".to_string(),
+        |err| err.to_string(),
+        |_| false,
+    )
+    .await?
+    {
+        Some(id) => {
+            let _ = ctx.term.write_line(&format!("Created canister {id}"));
+        }
+        None => {
+            let _ = ctx
+                .term
+                .write_line(&format!("Canister {canister} already exists"));
+        }
+    };
 
     Ok(())
 }

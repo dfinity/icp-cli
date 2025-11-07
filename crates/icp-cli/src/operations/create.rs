@@ -70,14 +70,14 @@ impl<'a> CreateOperation<'a> {
 
     /// Creates the canister if it does not exist yet.
     /// Returns
-    /// - `Ok(None)` if the canister already exists.
-    /// - `Ok(Some(principal))` if the canister was created.
+    /// - `Ok((canister, None))` if the canister already exists.
+    /// - `Ok((canister, Some(principal)))` if the canister was created.
     /// - `Err(String)` if an error occurred.
     pub(crate) async fn create(
         &self,
         canister: &str,
         pb: &ProgressBar,
-    ) -> Result<Option<Principal>, Error> {
+    ) -> Result<(String, Option<Principal>), Error> {
         let env = self
             .inner
             .ctx
@@ -91,7 +91,7 @@ impl<'a> CreateOperation<'a> {
             .await
             .is_ok()
         {
-            return Ok(None);
+            return Ok((canister.to_string(), None));
         }
         pb.set_message("Creating...");
 
@@ -162,7 +162,7 @@ impl<'a> CreateOperation<'a> {
             .set_canister_id_for_env(canister, cid, self.inner.environment)
             .await?;
 
-        Ok(Some(cid))
+        Ok((canister.to_string(), Some(cid)))
     }
 
     /// 1. If a subnet is explicitly provided, use it

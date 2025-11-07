@@ -120,7 +120,6 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     );
 
     let pb = progress_manager.create_progress_bar(&canister);
-
     match ProgressManager::execute_with_custom_progress(
         &pb,
         create_operation.create(&canister, &pb),
@@ -130,10 +129,12 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     )
     .await?
     {
-        Some(id) => {
-            let _ = ctx.term.write_line(&format!("Created canister {id}"));
+        (canister, Some(id)) => {
+            let _ = ctx
+                .term
+                .write_line(&format!("Created canister {canister} with ID {id}"));
         }
-        None => {
+        (canister, None) => {
             let _ = ctx
                 .term
                 .write_line(&format!("Canister {canister} already exists"));

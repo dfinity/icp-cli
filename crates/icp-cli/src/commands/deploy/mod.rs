@@ -174,10 +174,16 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     // Consume the set of futures and abort if an error occurs
     while let Some(res) = futs.next().await {
         match res {
-            Ok(Some(id)) => {
-                let _ = ctx.term.write_line(&format!("Created canister {id}"));
+            Ok((canister, Some(id))) => {
+                let _ = ctx
+                    .term
+                    .write_line(&format!("Created canister {canister} with ID {id}"));
             }
-            Ok(None) => (),
+            Ok((canister, None)) => {
+                let _ = ctx
+                    .term
+                    .write_line(&format!("Canister {canister} already exists"));
+            }
             Err(err) => return Err(CommandError::Unexpected(err)),
         }
     }

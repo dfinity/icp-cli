@@ -1,5 +1,5 @@
 use super::*;
-use crate::store_id::MockInMemoryIdStore;
+use crate::store_id::mock::MockInMemoryIdStore;
 use crate::{MockProjectLoader, identity::MockIdentityLoader, network::MockNetworkAccessor};
 
 #[tokio::test]
@@ -115,22 +115,14 @@ async fn test_get_network_not_found() {
 
 #[tokio::test]
 async fn test_get_canister_id_for_env_success() {
-    use crate::store_id::{Access as IdAccess, Key};
+    use crate::store_id::Access as IdAccess;
     use candid::Principal;
 
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Register a canister ID for the dev environment
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store
-        .register(
-            &Key {
-                environment: "dev".to_string(),
-                canister: "backend".to_string(),
-            },
-            &canister_id,
-        )
-        .unwrap();
+    ids_store.register("dev", "backend", canister_id).unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -191,7 +183,7 @@ async fn test_get_canister_id_for_env_id_not_registered() {
 
 #[tokio::test]
 async fn test_set_canister_id_for_env_success() {
-    use crate::store_id::{Access as IdAccess, Key};
+    use crate::store_id::Access as IdAccess;
     use candid::Principal;
 
     let ids_store = Arc::new(MockInMemoryIdStore::new());
@@ -214,12 +206,7 @@ async fn test_set_canister_id_for_env_success() {
     .unwrap();
 
     // Verify it was registered by reading it back
-    let registered_id = ids_store
-        .lookup(&Key {
-            environment: "dev".to_string(),
-            canister: "backend".to_string(),
-        })
-        .unwrap();
+    let registered_id = ids_store.lookup("dev", "backend").unwrap();
 
     assert_eq!(registered_id, canister_id);
 }
@@ -255,22 +242,14 @@ async fn test_set_canister_id_for_env_canister_not_in_env() {
 
 #[tokio::test]
 async fn test_set_canister_id_for_env_already_registered() {
-    use crate::store_id::{Access as IdAccess, Key};
+    use crate::store_id::Access as IdAccess;
     use candid::Principal;
 
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Pre-register a canister ID
     let first_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store
-        .register(
-            &Key {
-                environment: "dev".to_string(),
-                canister: "backend".to_string(),
-            },
-            &first_id,
-        )
-        .unwrap();
+    ids_store.register("dev", "backend", first_id).unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -469,22 +448,14 @@ async fn test_get_agent_for_url_success() {
 
 #[tokio::test]
 async fn test_get_canister_id() {
-    use crate::store_id::{Access as IdAccess, Key};
+    use crate::store_id::Access as IdAccess;
     use candid::Principal;
 
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Register a canister ID for the dev environment
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store
-        .register(
-            &Key {
-                environment: "dev".to_string(),
-                canister: "backend".to_string(),
-            },
-            &canister_id,
-        )
-        .unwrap();
+    ids_store.register("dev", "backend", canister_id).unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),

@@ -16,8 +16,6 @@ use snafu::{OptionExt, ResultExt, Snafu};
 
 mod init;
 
-use crate::store_id::Key;
-
 pub use init::initialize;
 
 /// Selection type for networks - similar to IdentitySelection
@@ -175,10 +173,7 @@ impl Context {
         // Lookup the canister id
         let cid = self
             .ids
-            .lookup(&Key {
-                environment: env.name.to_owned(),
-                canister: canister_name.to_owned(),
-            })
+            .lookup(&env.name, canister_name)
             .context(CanisterIdLookupSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
@@ -209,13 +204,7 @@ impl Context {
 
         // Register the canister id
         self.ids
-            .register(
-                &Key {
-                    environment: env.name.to_owned(),
-                    canister: canister_name.to_owned(),
-                },
-                &canister_id,
-            )
+            .register(&env.name, canister_name, canister_id)
             .context(CanisterIdRegisterSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
@@ -373,7 +362,7 @@ impl Context {
         Context {
             term: Term::stderr(),
             dirs: Arc::new(crate::directories::UnimplementedMockDirs),
-            ids: Arc::new(crate::store_id::MockInMemoryIdStore::new()),
+            ids: Arc::new(crate::store_id::mock::MockInMemoryIdStore::new()),
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
             project: Arc::new(crate::MockProjectLoader::minimal()),
             identity: Arc::new(crate::identity::MockIdentityLoader::anonymous()),

@@ -161,6 +161,7 @@ impl<'a> CreateOperation<'a> {
             .ctx
             .set_canister_id_for_env(canister, cid, self.inner.environment)
             .await?;
+        eprintln!("set canister id for env {canister} to {cid}");
 
         Ok((canister.to_string(), Some(cid)))
     }

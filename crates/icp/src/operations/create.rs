@@ -1,6 +1,5 @@
-use anyhow::{Error, anyhow};
 use candid::{Decode, Encode, Nat, Principal};
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use icp_canister_interfaces::{
     cycles_ledger::{
         CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
@@ -9,10 +8,43 @@ use icp_canister_interfaces::{
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
     registry::{GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL},
 };
-use indicatif::ProgressBar;
 use rand::seq::IndexedRandom;
+use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
+
+#[derive(Debug, Snafu)]
+pub enum CreateOperationError {
+    #[snafu(display("failed to encode candid: {source}"))]
+    CandidEncode { source: candid::Error },
+
+    #[snafu(display("failed to decode candid: {source}"))]
+    CandidDecode { source: candid::Error },
+
+    #[snafu(display("agent error: {source}"))]
+    Agent { source: AgentError },
+
+    #[snafu(display("failed to create canister: {message}"))]
+    CreateCanister { message: String },
+
+    #[snafu(display("failed to get subnet for canister: {source}"))]
+    GetSubnet { source: AgentError },
+
+    #[snafu(display("registry error: {message}"))]
+    Registry { message: String },
+
+    #[snafu(display("missing subnet id in registry response"))]
+    MissingSubnetId,
+
+    #[snafu(display("failed to get available subnets: {source}"))]
+    GetAvailableSubnets { source: AgentError },
+
+    #[snafu(display("no available subnets found"))]
+    NoAvailableSubnets,
+
+    #[snafu(display("failed to resolve subnet: {message}"))]
+    SubnetResolution { message: String },
+}
 
 struct CreateOperationInner {
     agent: Agent,
@@ -22,7 +54,7 @@ struct CreateOperationInner {
     resolved_subnet: OnceCell<Result<Principal, String>>,
 }
 
-pub(crate) struct CreateOperation {
+pub struct CreateOperation {
     inner: Arc<CreateOperationInner>,
 }
 
@@ -35,7 +67,7 @@ impl Clone for CreateOperation {
 }
 
 impl CreateOperation {
-    pub(crate) fn new(
+    pub fn new(
         agent: Agent,
         subnet: Option<Principal>,
         cycles: u128,
@@ -55,16 +87,17 @@ impl CreateOperation {
     /// Creates the canister if it does not exist yet.
     /// Returns
     /// - `Ok(principal)` if a canister was created.
-    /// - `Err(String)` if an error occurred.
-    pub(crate) async fn create(
+    /// - `Err(CreateOperationError)` if an error occurred.
+    pub async fn create(
         &self,
         settings: &CanisterSettingsArg,
-        pb: &ProgressBar,
-    ) -> Result<Principal, Error> {
-        pb.set_message("Creating...");
+    ) -> Result<Principal, CreateOperationError> {
         let creation_args = CreationArgs {
             subnet_selection: Some(SubnetSelectionArg::Subnet {
-                subnet: self.get_subnet().await.map_err(|e| anyhow!(e))?,
+                subnet: self
+                    .get_subnet()
+                    .await
+                    .map_err(|e| CreateOperationError::SubnetResolution { message: e })?,
             }),
             settings: Some(settings.clone()),
         };
@@ -80,14 +113,18 @@ impl CreateOperation {
             .inner
             .agent
             .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
-            .with_arg(Encode!(&arg)?)
+            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
             .call_and_wait()
-            .await?;
-        let resp: CreateCanisterResponse = Decode!(&resp, CreateCanisterResponse)?;
+            .await
+            .context(AgentSnafu)?;
+        let resp: CreateCanisterResponse =
+            Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
         let cid = match resp {
             CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
             CreateCanisterResponse::Err(err) => {
-                return Err(anyhow!(err.format_error(self.inner.cycles)));
+                return Err(CreateOperationError::CreateCanister {
+                    message: err.format_error(self.inner.cycles),
+                });
             }
         };
 
@@ -116,10 +153,9 @@ impl CreateOperation {
                     Ok(subnet)
                 } else {
                     // If no canisters exist, pick a random available subnet
-                    let subnets = match get_available_subnets(&self.inner.agent).await {
-                        Ok(subnets) => subnets,
-                        Err(e) => return Err(e.to_string()),
-                    };
+                    let subnets = get_available_subnets(&self.inner.agent)
+                        .await
+                        .map_err(|e| e.to_string())?;
 
                     subnets
                         .choose(&mut rand::rng())
@@ -133,41 +169,44 @@ impl CreateOperation {
     }
 }
 
-async fn get_canister_subnet(agent: &Agent, canister: Principal) -> Result<Principal, Error> {
+async fn get_canister_subnet(
+    agent: &Agent,
+    canister: Principal,
+) -> Result<Principal, CreateOperationError> {
     let args = &GetSubnetForCanisterRequest {
         principal: Some(canister),
     };
 
     let bs = agent
         .query(&REGISTRY_PRINCIPAL, "get_subnet_for_canister")
-        .with_arg(Encode!(args)?)
+        .with_arg(Encode!(args).context(CandidEncodeSnafu)?)
         .call()
         .await
-        .map_err(|err| anyhow!("failed to get subnet: {}", err))?;
+        .context(GetSubnetSnafu)?;
 
-    let resp = Decode!(&bs, GetSubnetForCanisterResult)?;
+    let resp = Decode!(&bs, GetSubnetForCanisterResult).context(CandidDecodeSnafu)?;
 
     let out = resp
-        .map_err(|err| anyhow!("failed to get subnet: {}", err))?
+        .map_err(|err| CreateOperationError::Registry { message: err })?
         .subnet_id
-        .ok_or(anyhow!("missing subnet id"))?;
+        .ok_or(CreateOperationError::MissingSubnetId)?;
 
     Ok(out)
 }
 
-async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, Error> {
+async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {
     let bs = agent
         .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
-        .with_arg(Encode!(&())?)
+        .with_arg(Encode!(&()).context(CandidEncodeSnafu)?)
         .call()
         .await
-        .map_err(|err| anyhow!("failed to get available subnets: {}", err))?;
+        .context(GetAvailableSubnetsSnafu)?;
 
-    let resp = Decode!(&bs, Vec<Principal>)?;
+    let resp = Decode!(&bs, Vec<Principal>).context(CandidDecodeSnafu)?;
 
     // Check if any subnets are available
     if resp.is_empty() {
-        return Err(anyhow!("no available subnets found"));
+        return Err(CreateOperationError::NoAvailableSubnets);
     }
 
     Ok(resp)

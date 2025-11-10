@@ -9,6 +9,7 @@ use icp::{
     },
     identity::{self},
     network,
+    operations::create::CreateOperationError,
     prelude::*,
 };
 
@@ -17,9 +18,9 @@ use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
     commands::args,
-    operations::create::CreateOperation,
     progress::{ProgressManager, ProgressManagerSettings},
 };
+use icp::operations::create::CreateOperation;
 use icp::store_id::RegisterError;
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -125,6 +126,9 @@ pub(crate) enum CommandError {
     Candid(#[from] candid::Error),
 
     #[error(transparent)]
+    CreateOperation(#[from] CreateOperationError),
+
+    #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 
     #[error(transparent)]
@@ -175,11 +179,12 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
     let pb = progress_manager.create_progress_bar(&canister);
+    pb.set_message("Creating...");
     let id = ProgressManager::execute_with_custom_progress(
         &pb,
-        create_operation.create(&canister_settings, &pb),
+        create_operation.create(&canister_settings),
         || "Created successfully".to_string(),
-        |err| err.to_string(),
+        |err: &_| err.to_string(),
         |_| false,
     )
     .await?;

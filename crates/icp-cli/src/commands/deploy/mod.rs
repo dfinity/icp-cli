@@ -5,6 +5,7 @@ use ic_agent::export::Principal;
 use icp::{
     context::{Context, EnvironmentSelection},
     identity::IdentitySelection,
+    operations::create::CreateOperation,
 };
 
 use crate::{
@@ -17,7 +18,6 @@ use crate::{
         },
         sync,
     },
-    operations::create::CreateOperation,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
@@ -170,14 +170,15 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
         for name in canisters_to_create.iter() {
             let pb = progress_manager.create_progress_bar(name);
+            pb.set_message("Creating...");
             let create_op = create_operation.clone();
             let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
             futs.push_back(async move {
                 ProgressManager::execute_with_custom_progress(
                     &pb,
-                    create_op.create(&canister_info.settings.into(), &pb),
+                    create_op.create(&canister_info.settings.into()),
                     || "Created successfully".to_string(),
-                    |err| err.to_string(),
+                    |err: &_| err.to_string(),
                     |_| false,
                 )
                 .await
@@ -201,7 +202,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
                         .map_err(|e| anyhow!(e))?;
                 }
                 Err(err) => {
-                    error = Some(err);
+                    error = Some(err.into());
                 }
             }
             idx += 1;

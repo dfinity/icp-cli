@@ -21,6 +21,7 @@ pub mod fs;
 pub mod identity;
 pub mod manifest;
 pub mod network;
+pub mod operations;
 pub mod prelude;
 pub mod project;
 pub mod store_artifact;

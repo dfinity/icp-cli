@@ -1,8 +1,8 @@
 canisters:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --target wasm32-unknown-unknown --release --locked
-          - mv target/wasm32-unknown-unknown/release/icp_template_rust.wasm "$ICP_WASM_OUTPUT_PATH"
+  - name: my-canister
+    build:
+      steps:
+        - type: script
+          commands:
+            - cargo build --target wasm32-unknown-unknown --release --locked
+            - mv target/wasm32-unknown-unknown/release/icp_template_rust.wasm "$ICP_WASM_OUTPUT_PATH"

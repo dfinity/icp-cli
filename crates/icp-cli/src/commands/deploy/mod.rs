@@ -184,9 +184,9 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
             });
         }
 
-        // Consume the set of futures and abort if an error occurs
-        let mut idx = 0;
+        // Cache errors until all futures are processed. Otherwise we risk dropping a canister id.
         let mut error: Option<anyhow::Error> = None;
+        let mut idx = 0;
         while let Some(res) = futs.next().await {
             match res {
                 Ok(id) => {
@@ -201,7 +201,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
                         .map_err(|e| anyhow!(e))?;
                 }
                 Err(err) => {
-                    error = Some(err.into());
+                    error = Some(err);
                 }
             }
             idx += 1;

@@ -109,11 +109,11 @@ impl CreateOperation {
                     return Ok(subnet);
                 }
 
-                if let Some(canister) = self.inner.existing_canisters.iter().next() {
+                if let Some(canister) = self.inner.existing_canisters.first() {
                     let subnet = get_canister_subnet(&self.inner.agent, *canister)
                         .await
                         .map_err(|e| e.to_string())?;
-                    return Ok(subnet);
+                    Ok(subnet)
                 } else {
                     // If no canisters exist, pick a random available subnet
                     let subnets = match get_available_subnets(&self.inner.agent).await {
@@ -121,10 +121,10 @@ impl CreateOperation {
                         Err(e) => return Err(e.to_string()),
                     };
 
-                    return subnets
+                    subnets
                         .choose(&mut rand::rng())
                         .copied()
-                        .ok_or_else(|| "no available subnets found".to_string());
+                        .ok_or_else(|| "no available subnets found".to_string())
                 }
             })
             .await;

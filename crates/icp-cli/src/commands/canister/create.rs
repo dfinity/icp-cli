@@ -164,17 +164,14 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     let agent = ctx
         .get_agent_for_env(&selections.identity, &selections.environment)
         .await?;
+    let existing_canisters = ctx
+        .ids_by_environment(&selections.environment)
+        .map_err(|e| anyhow!(e))?
+        .into_values()
+        .collect();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-    let create_operation = CreateOperation::new(agent, args.subnet, args.cycles);
-    // Seed the subnet selection with existing canisters
-    create_operation
-        .get_subnet(
-            ctx.ids_by_environment(&selections.environment)
-                .map_err(|e| anyhow!(e))?
-                .into_values(),
-        )
-        .await
-        .map_err(|e| anyhow!(e))?;
+    let create_operation =
+        CreateOperation::new(agent, args.subnet, args.cycles, existing_canisters);
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
     let pb = progress_manager.create_progress_bar(&canister);

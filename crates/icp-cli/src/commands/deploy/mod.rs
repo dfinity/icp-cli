@@ -160,12 +160,12 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     if canisters_to_create.is_empty() {
         let _ = ctx.term.write_line("All canisters already exist");
     } else {
-        let create_operation = CreateOperation::new(agent, args.subnet, args.cycles);
-        // Seed the subnet selection with existing canisters
-        create_operation
-            .get_subnet(existing_canisters.into_values())
-            .await
-            .map_err(|e| anyhow!(e))?;
+        let create_operation = CreateOperation::new(
+            agent,
+            args.subnet,
+            args.cycles,
+            existing_canisters.into_values().collect(),
+        );
         let mut futs = FuturesOrdered::new();
         let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
         for name in canisters_to_create.iter() {

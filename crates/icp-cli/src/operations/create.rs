@@ -18,6 +18,7 @@ struct CreateOperationInner {
     agent: Agent,
     subnet: Option<Principal>,
     cycles: u128,
+    existing_canisters: Vec<Principal>,
     resolved_subnet: OnceCell<Result<Principal, String>>,
 }
 
@@ -34,12 +35,18 @@ impl Clone for CreateOperation {
 }
 
 impl CreateOperation {
-    pub(crate) fn new(agent: Agent, subnet: Option<Principal>, cycles: u128) -> Self {
+    pub(crate) fn new(
+        agent: Agent,
+        subnet: Option<Principal>,
+        cycles: u128,
+        existing_canisters: Vec<Principal>,
+    ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
                 agent,
                 subnet,
                 cycles,
+                existing_canisters,
                 resolved_subnet: OnceCell::new(),
             }),
         }
@@ -57,7 +64,7 @@ impl CreateOperation {
         pb.set_message("Creating...");
         let creation_args = CreationArgs {
             subnet_selection: Some(SubnetSelectionArg::Subnet {
-                subnet: self.get_subnet(vec![]).await.map_err(|e| anyhow!(e))?,
+                subnet: self.get_subnet().await.map_err(|e| anyhow!(e))?,
             }),
             settings: Some(settings.clone()),
         };
@@ -92,10 +99,7 @@ impl CreateOperation {
     /// 3. If canisters exist, use the same subnet as the first existing canister
     ///
     /// Both successful results and errors are cached, so failed resolutions will not be retried.
-    pub(crate) async fn get_subnet(
-        &self,
-        existing_canisters: impl IntoIterator<Item = Principal>,
-    ) -> Result<Principal, String> {
+    async fn get_subnet(&self) -> Result<Principal, String> {
         let result = self
             .inner
             .resolved_subnet
@@ -105,8 +109,8 @@ impl CreateOperation {
                     return Ok(subnet);
                 }
 
-                if let Some(canister) = existing_canisters.into_iter().next() {
-                    let subnet = get_canister_subnet(&self.inner.agent, canister)
+                if let Some(canister) = self.inner.existing_canisters.iter().next() {
+                    let subnet = get_canister_subnet(&self.inner.agent, *canister)
                         .await
                         .map_err(|e| e.to_string())?;
                     return Ok(subnet);

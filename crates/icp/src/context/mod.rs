@@ -9,6 +9,7 @@ use crate::{
     identity::IdentitySelection,
     network::access::NetworkAccess,
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
+    store_id::IdMapping,
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -356,6 +357,17 @@ impl Context {
         Ok((cid, agent))
     }
 
+    pub fn ids_by_environment(
+        &self,
+        environment: &EnvironmentSelection,
+    ) -> Result<IdMapping, GetIdsByEnvironmentError> {
+        self.ids
+            .lookup_by_environment(environment.name())
+            .context(IdsByEnvironmentLookupSnafu {
+                environment_name: environment.name().to_owned(),
+            })
+    }
+
     #[cfg(test)]
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {
@@ -537,6 +549,15 @@ pub enum GetCanisterIdAndAgentError {
 
     #[snafu(transparent)]
     GetAgentForUrl { source: GetAgentForUrlError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetIdsByEnvironmentError {
+    #[snafu(display("failed to lookup IDs for environment '{environment_name}'"))]
+    IdsByEnvironmentLookup {
+        source: crate::store_id::LookupIdError,
+        environment_name: String,
+    },
 }
 
 #[cfg(test)]

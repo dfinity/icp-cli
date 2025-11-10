@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::export::Principal;
@@ -11,7 +12,7 @@ use crate::{
         build,
         canister::{
             binding_env_vars,
-            create::{self, CanisterSettings},
+            create::{self},
             install,
         },
         sync,
@@ -140,51 +141,73 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
+    let env = ctx
+        .get_environment(&environment_selection)
+        .await
+        .map_err(|e| anyhow!(e))?;
+    let agent = ctx
+        .get_agent_for_env(&identity_selection, &environment_selection)
+        .await
+        .map_err(|e| anyhow!(e))?;
+    let existing_canisters = ctx
+        .ids_by_environment(&environment_selection)
+        .map_err(|e| anyhow!(e))?;
+    let canisters_to_create = cnames
+        .iter()
+        .filter(|name| !existing_canisters.contains_key(*name))
+        .collect::<Vec<_>>();
 
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-    let create_operation = CreateOperation::new(
-        ctx,
-        &environment_selection,
-        &identity_selection,
-        args.subnet,
-        args.controller.clone(),
-        args.cycles,
-        CanisterSettings {
-            ..Default::default()
-        },
-    );
-
-    let mut futs = FuturesOrdered::new();
-    for name in cnames.iter() {
-        let pb = progress_manager.create_progress_bar(name);
-        let create_op = create_operation.clone();
-
-        futs.push_back(async move {
-            ProgressManager::execute_with_custom_progress(
-                &pb,
-                create_op.create(name, &pb),
-                || "Created successfully".to_string(),
-                |err| err.to_string(),
-                |_| false,
-            )
+    if canisters_to_create.is_empty() {
+        let _ = ctx.term.write_line("All canisters already exist");
+    } else {
+        let create_operation = CreateOperation::new(agent, args.subnet, args.cycles);
+        // Seed the subnet selection with existing canisters
+        create_operation
+            .get_subnet(existing_canisters.into_values())
             .await
-        });
-    }
+            .map_err(|e| anyhow!(e))?;
+        let mut futs = FuturesOrdered::new();
+        let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+        for name in canisters_to_create.iter() {
+            let pb = progress_manager.create_progress_bar(name);
+            let create_op = create_operation.clone();
+            let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
+            futs.push_back(async move {
+                ProgressManager::execute_with_custom_progress(
+                    &pb,
+                    create_op.create(&canister_info.settings.into(), &pb),
+                    || "Created successfully".to_string(),
+                    |err| err.to_string(),
+                    |_| false,
+                )
+                .await
+            });
+        }
 
-    // Consume the set of futures and abort if an error occurs
-    while let Some(res) = futs.next().await {
-        match res {
-            Ok((canister, Some(id))) => {
-                let _ = ctx
-                    .term
-                    .write_line(&format!("Created canister {canister} with ID {id}"));
+        // Consume the set of futures and abort if an error occurs
+        let mut idx = 0;
+        let mut error: Option<anyhow::Error> = None;
+        while let Some(res) = futs.next().await {
+            match res {
+                Ok(id) => {
+                    let canister_name = canisters_to_create
+                        .get(idx)
+                        .expect("should have tried to create every canister");
+                    let _ = ctx
+                        .term
+                        .write_line(&format!("Created canister {canister_name} with ID {id}"));
+                    ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
+                        .await
+                        .map_err(|e| anyhow!(e))?;
+                }
+                Err(err) => {
+                    error = Some(err.into());
+                }
             }
-            Ok((canister, None)) => {
-                let _ = ctx
-                    .term
-                    .write_line(&format!("Canister {canister} already exists"));
-            }
-            Err(err) => return Err(CommandError::Unexpected(err)),
+            idx += 1;
+        }
+        if let Some(err) = error {
+            return Err(err.into());
         }
     }
 

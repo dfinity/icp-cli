@@ -1,4 +1,5 @@
 use super::*;
+use crate::store_id::Access;
 use crate::store_id::mock::MockInMemoryIdStore;
 use crate::{MockProjectLoader, identity::MockIdentityLoader, network::MockNetworkAccessor};
 
@@ -480,4 +481,29 @@ async fn test_get_canister_id() {
         res.is_err(),
         "An invalid canister name should result in an error"
     );
+}
+
+#[test]
+fn test_ids_by_environment() {
+    let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+    // Register multiple canister IDs for the dev environment
+    let backend_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let frontend_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+    ids_store.register("dev", "backend", backend_id).unwrap();
+    ids_store.register("dev", "frontend", frontend_id).unwrap();
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ids: ids_store,
+        ..Context::mocked()
+    };
+
+    let result = ctx
+        .ids_by_environment(&EnvironmentSelection::Named("dev".to_string()))
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result.get("backend"), Some(&backend_id));
+    assert_eq!(result.get("frontend"), Some(&frontend_id));
 }

@@ -1,15 +1,19 @@
 use anyhow::anyhow;
+use candid::Nat;
 use clap::Args;
 use ic_agent::{AgentError, export::Principal};
 use icp::{
-    agent,
-    context::{CanisterSelection, GetAgentForEnvError, GetEnvironmentError},
+    Canister, agent,
+    context::{
+        CanisterSelection, GetAgentForEnvError, GetEnvironmentError, SetCanisterIdForEnvError,
+    },
     identity::{self},
     network,
     prelude::*,
 };
 
 use icp::context::Context;
+use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
     commands::args,
@@ -65,6 +69,38 @@ pub(crate) struct CreateArgs {
     pub(crate) subnet: Option<Principal>,
 }
 
+impl CreateArgs {
+    pub(crate) fn canister_settings_with_default(&self, default: &Canister) -> CanisterSettingsArg {
+        CanisterSettingsArg {
+            freezing_threshold: self
+                .settings
+                .freezing_threshold
+                .or(default.settings.freezing_threshold)
+                .map(Nat::from),
+            controllers: if self.controller.is_empty() {
+                None
+            } else {
+                Some(self.controller.clone())
+            },
+            reserved_cycles_limit: self
+                .settings
+                .reserved_cycles_limit
+                .or(default.settings.reserved_cycles_limit)
+                .map(Nat::from),
+            memory_allocation: self
+                .settings
+                .memory_allocation
+                .or(default.settings.memory_allocation)
+                .map(Nat::from),
+            compute_allocation: self
+                .settings
+                .compute_allocation
+                .or(default.settings.compute_allocation)
+                .map(Nat::from),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
     #[error(transparent)]
@@ -96,6 +132,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     GetEnvironment(#[from] GetEnvironmentError),
+
+    #[error(transparent)]
+    SetCanisterIdForEnv(#[from] SetCanisterIdForEnvError),
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
@@ -108,38 +147,52 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
     };
 
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-    let create_operation = CreateOperation::new(
-        ctx,
-        &selections.environment,
-        &selections.identity,
-        args.subnet,
-        args.controller.clone(),
-        args.cycles,
-        args.settings.clone(),
-    );
+    let env = ctx.get_environment(&selections.environment).await?;
+    let (_, canister_info) = env.get_canister_info(&canister).map_err(|e| anyhow!(e))?;
 
+    if ctx
+        .get_canister_id_for_env(&canister, &selections.environment)
+        .await
+        .is_ok()
+    {
+        let _ = ctx
+            .term
+            .write_line(&format!("Canister {canister} already exists"));
+        return Ok(());
+    }
+
+    let agent = ctx
+        .get_agent_for_env(&selections.identity, &selections.environment)
+        .await?;
+    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+    let create_operation = CreateOperation::new(agent, args.subnet, args.cycles);
+    // Seed the subnet selection with existing canisters
+    create_operation
+        .get_subnet(
+            ctx.ids_by_environment(&selections.environment)
+                .map_err(|e| anyhow!(e))?
+                .into_values(),
+        )
+        .await
+        .map_err(|e| anyhow!(e))?;
+
+    let canister_settings = args.canister_settings_with_default(&canister_info);
     let pb = progress_manager.create_progress_bar(&canister);
-    match ProgressManager::execute_with_custom_progress(
+    let id = ProgressManager::execute_with_custom_progress(
         &pb,
-        create_operation.create(&canister, &pb),
+        create_operation.create(&canister_settings, &pb),
         || "Created successfully".to_string(),
         |err| err.to_string(),
         |_| false,
     )
-    .await?
-    {
-        (canister, Some(id)) => {
-            let _ = ctx
-                .term
-                .write_line(&format!("Created canister {canister} with ID {id}"));
-        }
-        (canister, None) => {
-            let _ = ctx
-                .term
-                .write_line(&format!("Canister {canister} already exists"));
-        }
-    };
+    .await?;
+
+    ctx.set_canister_id_for_env(&canister, id, &selections.environment)
+        .await?;
+
+    let _ = ctx
+        .term
+        .write_line(&format!("Created canister {canister} with ID {id}"));
 
     Ok(())
 }

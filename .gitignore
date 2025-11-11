@@ -5,5 +5,10 @@
 # Local (directories)
 .icp
 
+# This directory contains canister ID mappings which are encouraged
+# to be included in source control of icp canister projects.
+# They are ignored here because we are developing icp-cli itself.
+.icpdata
+
 # pocket-ic binary
 pocket-ic

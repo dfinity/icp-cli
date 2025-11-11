@@ -27,7 +27,7 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
-use icp::store_id::{Key, LookupIdError, RegisterError};
+use icp::store_id::{LookupIdError, RegisterError};
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -175,14 +175,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     let cexist: Vec<_> = env
         .canisters
         .values()
-        .filter_map(|(_, c)| {
-            ctx.ids
-                .lookup(&Key {
-                    environment: env.name.to_owned(),
-                    canister: c.name.to_owned(),
-                })
-                .ok()
-        })
+        .filter_map(|(_, c)| ctx.ids.lookup(&env.name, &c.name).ok())
         .collect();
 
     // Agent
@@ -240,13 +233,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 // Indicate to user that the canister is created
                 pb.set_message("Creating...");
 
-                // Create canister-environment association-key
-                let k = Key {
-                    environment: env_ref.name.to_owned(),
-                    canister: name.to_string(),
-                };
-
-                match ctx.ids.lookup(&k) {
+                match ctx.ids.lookup(&env_ref.name, name) {
                     // Exists (skip)
                     Ok(principal) => {
                         return Err(CommandError::CanisterExists { principal });
@@ -323,7 +310,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
                 };
 
                 // Register the canister ID
-                ctx.ids.register(&k, &cid)?;
+                ctx.ids.register(&env_ref.name, name, cid)?;
 
                 Ok::<_, CommandError>(())
             }

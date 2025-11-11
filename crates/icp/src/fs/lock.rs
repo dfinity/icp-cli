@@ -158,7 +158,10 @@ impl<T> Drop for DirectoryStructureGuardOwned<T> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct LRead<T>(T);
+
+#[derive(Copy, Clone)]
 pub struct LWrite<T>(T);
 
 impl<T> Deref for LRead<T> {

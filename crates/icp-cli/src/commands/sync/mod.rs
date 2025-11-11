@@ -16,7 +16,7 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
-use icp::store_id::{Key, LookupIdError};
+use icp::store_id::LookupIdError;
 
 #[derive(Args, Debug)]
 pub(crate) struct SyncArgs {
@@ -128,10 +128,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
         let mut pb = progress_manager.create_multi_step_progress_bar(&c.name, "Sync");
 
         // Get canister principal ID
-        let cid = ctx.ids.lookup(&Key {
-            environment: env.name.to_owned(),
-            canister: c.name.to_owned(),
-        })?;
+        let cid = ctx.ids.lookup(&env.name, &c.name)?;
 
         // Create an async closure that handles the sync process for this specific canister
         let fut = {

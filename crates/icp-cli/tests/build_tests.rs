@@ -377,7 +377,7 @@ fn build_adapter_display_script_multiple_commands_output() {
         [my-canister] > command 1
         [my-canister] > command 2
         [my-canister] > command 3
-        Failed to build canister: build did not result in output
+        Failed to build canister: build did not produce a wasm output file
     "#};
 
     ctx.icp()

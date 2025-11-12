@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 
 use anyhow::{Context as _, anyhow};
-use camino_tempfile::tempdir;
 use clap::Args;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp::{
-    canister::build::{BuildError, Params},
-    context::Context,
-    fs::read,
-};
+use icp::context::Context;
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use crate::{
+    operations::build::{BuildOperationError, build},
+    progress::{ProgressManager, ProgressManagerSettings},
+};
 
 #[derive(Args, Debug)]
 pub(crate) struct BuildArgs {
@@ -24,16 +22,7 @@ pub(crate) enum CommandError {
     CanisterNotFound { name: String },
 
     #[error(transparent)]
-    Build(#[from] BuildError),
-
-    #[error("build did not result in output")]
-    MissingOutput,
-
-    #[error("failed to read output wasm artifact")]
-    ReadOutput,
-
-    #[error("failed to store build artifact")]
-    ArtifactStore,
+    Build(#[from] BuildOperationError),
 
     #[error("failed to join build output")]
     JoinError(#[from] tokio::task::JoinError),
@@ -86,61 +75,13 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandE
 
             async move {
                 // Define the build logic
-                let build_result = async {
-                    // Create a temporary directory for build artifacts
-                    let build_dir =
-                        tempdir().context("failed to create a temporary build directory")?;
-
-                    // Prepare a path for our output wasm
-                    let wasm_output_path = build_dir.path().join("out.wasm");
-
-                    let step_count = c.build.steps.len();
-                    for (i, step) in c.build.steps.iter().enumerate() {
-                        // Indicate to user the current step being executed
-                        let current_step = i + 1;
-                        let pb_hdr =
-                            format!("Building: step {current_step} of {step_count} {step}");
-                        let tx = pb.begin_step(pb_hdr);
-
-                        // Perform build step
-                        let build_result = ctx
-                            .builder
-                            .build(
-                                step, // step
-                                &Params {
-                                    path: canister_path.to_owned(),
-                                    output: wasm_output_path.to_owned(),
-                                },
-                                Some(tx),
-                            )
-                            .await;
-
-                        // Ensure background receiver drains all messages
-                        pb.end_step().await;
-
-                        if let Err(e) = build_result {
-                            return Err(CommandError::Build(e));
-                        }
-                    }
-
-                    // Verify a file exists in the wasm output path
-                    if !wasm_output_path.exists() {
-                        return Err(CommandError::MissingOutput);
-                    }
-
-                    // Load wasm output
-                    let wasm = read(&wasm_output_path).context(CommandError::ReadOutput)?;
-
-                    // TODO(or.ricon): Verify wasm output is valid wasm (consider using wasmparser)
-
-                    // Save the wasm artifact
-                    ctx.artifacts
-                        .save(&c.name, &wasm)
-                        .await
-                        .context(CommandError::ArtifactStore)?;
-
-                    Ok::<_, CommandError>(())
-                }
+                let build_result = build(
+                    canister_path,
+                    &c,
+                    &mut pb,
+                    ctx.builder.clone(),
+                    ctx.artifacts.clone(),
+                )
                 .await;
 
                 // Execute with progress tracking for final state
@@ -195,6 +136,6 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandE
     Ok(())
 }
 
-fn print_build_error(err: &CommandError) -> String {
+fn print_build_error(err: &BuildOperationError) -> String {
     format!("Failed to build canister: {err}")
 }

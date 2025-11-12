@@ -10,7 +10,6 @@ use icp::{
 
 use crate::{
     commands::{
-        build,
         canister::{
             binding_env_vars,
             create::{self},
@@ -18,6 +17,7 @@ use crate::{
         },
         sync,
     },
+    operations::build::build_many_with_progress_bar,
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
 };
@@ -66,9 +66,6 @@ pub(crate) enum CommandError {
         environment: String,
         canister: String,
     },
-
-    #[error(transparent)]
-    Build(#[from] build::CommandError),
 
     #[error(transparent)]
     Create(#[from] create::CommandError),
@@ -128,11 +125,19 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
-    build::exec(
-        ctx,
-        &build::BuildArgs {
-            names: cnames.to_owned(),
-        },
+    let canisters_to_build = p
+        .canisters
+        .iter()
+        .filter(|(k, _)| cnames.contains(k))
+        .map(|(_, (path, canister))| (path.clone(), canister.clone()))
+        .collect::<Vec<_>>();
+
+    build_many_with_progress_bar(
+        canisters_to_build,
+        ctx.builder.clone(),
+        ctx.artifacts.clone(),
+        &ctx.term,
+        ctx.debug,
     )
     .await?;
 

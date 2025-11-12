@@ -7,7 +7,6 @@ use ic_utils::interfaces::{
 };
 use icp::Canister;
 use snafu::Snafu;
-use tracing::debug;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 

@@ -12,6 +12,7 @@ pub(crate) mod show;
 pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
+pub(crate) mod sync;
 pub(crate) mod top_up;
 
 #[derive(Debug, Subcommand)]
@@ -49,6 +50,9 @@ pub(crate) enum Command {
 
     /// Stop a canister on a network
     Stop(stop::StopArgs),
+
+    /// Synchronize a canister
+    Sync(sync::SyncArgs),
 
     /// Top up a canister with cycles
     TopUp(top_up::TopUpArgs),

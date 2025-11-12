@@ -9,7 +9,6 @@ pub(crate) mod environment;
 pub(crate) mod identity;
 pub(crate) mod network;
 pub(crate) mod project;
-pub(crate) mod sync;
 pub(crate) mod token;
 
 #[derive(Subcommand, Debug)]
@@ -45,9 +44,6 @@ pub(crate) enum Command {
     #[clap(hide = true)] // TODO: figure out how to structure the commands later
     #[command(subcommand)]
     Project(project::Command),
-
-    /// Synchronize canisters in the current environment
-    Sync(sync::SyncArgs),
 
     /// Perform token transactions
     Token(token::Command),

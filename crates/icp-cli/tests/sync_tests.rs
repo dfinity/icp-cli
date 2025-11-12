@@ -71,7 +71,7 @@ fn sync_adapter_script_single() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["--debug", "sync", "--environment", "my-environment"])
+        .args(["--debug", "canister", "sync", "my-canister", "--environment", "my-environment"])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -138,7 +138,7 @@ fn sync_adapter_script_multiple() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["--debug", "sync", "--environment", "my-environment"])
+        .args(["--debug", "canister", "sync", "my-canister", "--environment", "my-environment"])
         .assert()
         .success()
         .stdout(contains("first").and(contains("second")));
@@ -215,7 +215,7 @@ async fn sync_adapter_static_assets() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync", "--environment", "my-environment"])
+        .args(["canister", "sync", "my-canister", "--environment", "my-environment"])
         .assert()
         .success();
 

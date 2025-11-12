@@ -7,16 +7,15 @@ use icp::{
     identity::IdentitySelection,
     operations::create::CreateOperation,
 };
+use std::sync::Arc;
 
 use crate::{
-    commands::{
-        canister::create::{self},
-        sync,
-    },
+    commands::canister::create::{self},
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
         install::{InstallOperationError, install_many},
+        sync::{SyncOperationError, sync_many},
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
@@ -74,7 +73,7 @@ pub(crate) enum CommandError {
     InstallOperation(#[from] InstallOperationError),
 
     #[error(transparent)]
-    Sync(#[from] sync::CommandError),
+    SyncOperation(#[from] SyncOperationError),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -276,20 +275,44 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     // Sync the selected canisters
     let _ = ctx.term.write_line("\n\nSyncing canisters:");
-    let out = sync::exec(
-        ctx,
-        &sync::SyncArgs {
-            names: cnames.to_owned(),
-            identity: args.identity.clone(),
-            environment: args.environment.clone(),
-        },
-    )
-    .await;
 
-    if let Err(err) = out
-        && !matches!(err, sync::CommandError::NoCanisters)
-    {
-        return Err(err.into());
+    // Prepare list of canisters with their info for syncing
+    let env = ctx
+        .get_environment(&environment_selection)
+        .await
+        .map_err(|e| anyhow!(e))?;
+
+    let env_canisters = &env.canisters;
+    let sync_canisters = try_join_all(cnames.iter().map(|name| {
+        let environment_selection = environment_selection.clone();
+        async move {
+            let cid = ctx
+                .get_canister_id_for_env(name, &environment_selection)
+                .await
+                .map_err(|e| anyhow!(e))?;
+            let (canister_path, info) = env_canisters
+                .get(name)
+                .ok_or_else(|| anyhow!("Canister id exists but no canister info"))?;
+            Ok::<_, anyhow::Error>((name.clone(), cid, canister_path.clone(), info.clone()))
+        }
+    }))
+    .await?;
+
+    // Filter out canisters with no sync steps
+    let sync_canisters: Vec<_> = sync_canisters
+        .into_iter()
+        .filter(|(_, _, _, info)| !info.sync.steps.is_empty())
+        .collect();
+
+    if !sync_canisters.is_empty() {
+        sync_many(
+            ctx.syncer.clone(),
+            agent.clone(),
+            Arc::new(ctx.term.clone()),
+            sync_canisters,
+            ctx.debug,
+        )
+        .await?;
     }
 
     Ok(())

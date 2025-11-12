@@ -323,3 +323,36 @@ fn build_adapter_display_script_multiple_commands_output() {
         .failure()
         .stdout(contains(expected_output));
 }
+
+#[test]
+fn build_with_valid_principal() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Valid principal
+    let principal = "aaaaa-aa";
+
+    // Invoke build with principal (should fail)
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["canister", "build", principal])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "Cannot build canister by principal. Please specify a canister name",
+        ));
+}

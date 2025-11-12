@@ -251,3 +251,44 @@ async fn sync_adapter_static_assets() {
 
     assert_eq!(out, "hello");
 }
+
+#[test]
+fn sync_with_valid_principal() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            sync:
+              steps:
+                - type: script
+                  command: echo syncing
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Valid principal
+    let principal = "aaaaa-aa";
+
+    // Try to sync with principal (should fail)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "sync",
+            principal,
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "Cannot sync canister by principal. Please specify a canister name",
+        ));
+}

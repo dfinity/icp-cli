@@ -1,5 +1,8 @@
 use indoc::formatdoc;
-use predicates::{ord::eq, str::PredicateStrExt};
+use predicates::{
+    ord::eq,
+    str::{PredicateStrExt, contains},
+};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
@@ -89,4 +92,39 @@ fn canister_install() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
+}
+
+#[test]
+fn canister_install_with_valid_principal() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Valid principal
+    let principal = "aaaaa-aa";
+
+    // Try to install with principal (should fail)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            principal,
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("Cannot install canister by principal"));
 }

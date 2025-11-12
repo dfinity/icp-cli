@@ -291,3 +291,41 @@ fn canister_create_canister_not_in_environment() {
             "canister 'b' not declared in environment 'test-env'",
         ));
 }
+
+#[test]
+fn canister_create_with_valid_principal() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Valid principal
+    let principal = "aaaaa-aa";
+
+    // Try to create with principal (should fail)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            principal,
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("Cannot create a canister by principal"));
+}

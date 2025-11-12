@@ -65,7 +65,13 @@ fn canister_install() {
     // Install canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "install", "--environment", "my-environment"])
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 

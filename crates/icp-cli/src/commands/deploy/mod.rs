@@ -10,14 +10,13 @@ use icp::{
 
 use crate::{
     commands::{
-        canister::{
-            create::{self},
-            install,
-        },
+        canister::create::{self},
         sync,
     },
     operations::{
-        binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
+        binding_env_vars::set_binding_env_vars_many,
+        build::build_many_with_progress_bar,
+        install::{InstallOperationError, install_many},
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
@@ -72,7 +71,7 @@ pub(crate) enum CommandError {
     Create(#[from] create::CommandError),
 
     #[error(transparent)]
-    Install(#[from] install::CommandError),
+    InstallOperation(#[from] InstallOperationError),
 
     #[error(transparent)]
     Sync(#[from] sync::CommandError),
@@ -164,7 +163,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let _ = ctx.term.write_line("All canisters already exist");
     } else {
         let create_operation = CreateOperation::new(
-            agent,
+            agent.clone(),
             args.subnet,
             args.cycles,
             existing_canisters.into_values().collect(),
@@ -220,10 +219,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         .get_environment(&environment_selection)
         .await
         .map_err(|e| anyhow!(e))?;
-    let agent = ctx
-        .get_agent_for_env(&identity_selection, &environment_selection)
-        .await
-        .map_err(|e| anyhow!(e))?;
 
     let env_canisters = &env.canisters;
     let target_canisters = try_join_all(cnames.iter().map(|name| {
@@ -245,20 +240,37 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         .ids_by_environment(&environment_selection)
         .map_err(|e| anyhow!(e))?;
 
-    set_binding_env_vars_many(agent, &env.name, target_canisters, canister_list, ctx.debug)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    set_binding_env_vars_many(
+        agent.clone(),
+        &env.name,
+        target_canisters,
+        canister_list,
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
-    install::exec(
-        ctx,
-        &install::InstallArgs {
-            names: cnames.to_owned(),
-            mode: args.mode.to_owned(),
-            identity: args.identity.clone(),
-            environment: args.environment.clone(),
-        },
+
+    let canisters = try_join_all(cnames.iter().map(|name| {
+        let environment_selection = environment_selection.clone();
+        async move {
+            let cid = ctx
+                .get_canister_id_for_env(name, &environment_selection)
+                .await
+                .map_err(|e| anyhow!(e))?;
+            Ok::<_, anyhow::Error>((name.clone(), cid))
+        }
+    }))
+    .await?;
+
+    install_many(
+        agent.clone(),
+        canisters,
+        &args.mode,
+        ctx.artifacts.clone(),
+        ctx.debug,
     )
     .await?;
 

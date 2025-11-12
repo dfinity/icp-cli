@@ -78,11 +78,11 @@ This document contains the help content for the `icp-cli` command-line program.
 
 Build a project
 
-**Usage:** `icp-cli build [NAMES]...`
+**Usage:** `icp-cli build <NAME>`
 
 ###### **Arguments:**
 
-* `<NAMES>` — The names of the canisters within the current project
+* `<NAME>` — The name of the canister within the current project
 
 
 

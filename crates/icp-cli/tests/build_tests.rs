@@ -39,7 +39,7 @@ fn build_adapter_script_single() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -78,7 +78,7 @@ fn build_adapter_script_multiple() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -138,7 +138,7 @@ fn build_adapter_display_failing_build_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output))
@@ -185,7 +185,7 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
@@ -230,74 +230,10 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
-}
-
-#[test]
-fn build_adapter_display_multiple_failing_canisters() {
-    let ctx = TestContext::new();
-
-    // Setup project
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Project manifest with two canisters that both fail
-    let pm = indoc! {r#"
-        canisters:
-          - name: canister-one
-            build:
-              steps:
-                - type: script
-                  command: echo "canister-one step 1"
-                - type: script
-                  command: echo "canister-one error"; exit 1
-          - name: canister-two
-            build:
-              steps:
-                - type: script
-                  command: echo "canister-two step 1"
-                - type: script
-                  command: echo "canister-two error"; exit 1
-        "#};
-
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Invoke build
-    let expected_output_one = indoc! {r#"
-        [canister-one] Build output:
-        [canister-one] Building: step 1 of 2 (script):
-        [canister-one] echo "canister-one step 1":
-        [canister-one] > canister-one step 1
-        [canister-one] Building: step 2 of 2 (script):
-        [canister-one] echo "canister-one error"; exit 1:
-        [canister-one] > canister-one error
-        Failed to build canister: command 'echo "canister-one error"; exit 1' failed with status code 1
-    "#};
-
-    let expected_output_two = indoc! {r#"
-        [canister-two] Build output:
-        [canister-two] Building: step 1 of 2 (script):
-        [canister-two] echo "canister-two step 1":
-        [canister-two] > canister-two step 1
-        [canister-two] Building: step 2 of 2 (script):
-        [canister-two] echo "canister-two error"; exit 1:
-        [canister-two] > canister-two error
-        Failed to build canister: command 'echo "canister-two error"; exit 1' failed with status code 1
-    "#};
-
-    ctx.icp()
-        .current_dir(project_dir)
-        .args(["build"])
-        .assert()
-        .failure()
-        .stdout(contains(expected_output_one))
-        .stdout(contains(expected_output_two));
 }
 
 #[test]
@@ -330,7 +266,7 @@ fn build_adapter_script_with_explicit_sh_c() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 
@@ -382,7 +318,7 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));

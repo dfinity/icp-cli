@@ -103,7 +103,7 @@ This starts a local replica where you can deploy and test your canisters. Keep t
 Build the canister from your source code:
 
 ```bash
-icp build
+icp build my-canister
 ```
 
 This command:
@@ -141,7 +141,7 @@ You should see a response like `("Hello, World!")`.
 ```bash
 # 1. Make changes to your source code
 # 2. Build the updated canister
-icp build
+icp build my-canister
 
 # 3. Redeploy (upgrade) the canister
 icp deploy --mode upgrade
@@ -152,8 +152,8 @@ icp canister call my-canister method_name '(args)'
 
 ### Working with Multiple Canisters
 ```bash
-# Build specific canisters
-icp build canister1 canister2
+# Build a specific canister
+icp build canister1
 
 # Deploy specific canisters
 icp deploy canister1
@@ -226,7 +226,7 @@ pocket-ic binary. You can download pocket-ic from [github](https://github.com/df
 
 **Canister deployment fails**
 - Verify the local network is healthy: `icp network ping`
-- Check canister build succeeded: `icp build`
+- Check canister build succeeded: `icp build <canister-name>`
 
 ### Getting Help
 

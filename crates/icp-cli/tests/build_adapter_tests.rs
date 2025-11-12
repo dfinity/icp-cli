@@ -36,7 +36,7 @@ fn build_adapter_pre_built_path() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -79,7 +79,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(
@@ -127,7 +127,7 @@ fn build_adapter_pre_built_path_valid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -166,7 +166,7 @@ fn build_adapter_pre_built_url() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -213,7 +213,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(
@@ -265,7 +265,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }

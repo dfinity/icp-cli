@@ -44,7 +44,7 @@ fn recipe_remote_url_without_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -85,7 +85,7 @@ fn recipe_remote_url_invalid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stderr(
@@ -133,7 +133,7 @@ fn recipe_remote_url_wrong_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stderr(
@@ -172,7 +172,7 @@ fn recipe_remote_url_valid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -207,7 +207,7 @@ fn recipe_local_file_without_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -243,7 +243,7 @@ fn recipe_local_file_invalid_checksum() {
     // Invoke build - should fail due to invalid checksum
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stderr(
@@ -287,7 +287,7 @@ fn recipe_local_file_wrong_checksum() {
     // Invoke build - should fail due to wrong checksum
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stderr(
@@ -328,7 +328,7 @@ fn recipe_local_file_valid_checksum() {
     // Invoke build - should succeed with valid checksum
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }

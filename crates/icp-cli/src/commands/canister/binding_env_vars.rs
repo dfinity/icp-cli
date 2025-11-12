@@ -55,6 +55,7 @@ pub(crate) enum CommandError {
     Unexpected(#[from] anyhow::Error),
 }
 
+#[allow(unused)]
 pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), CommandError> {
     let selections = args.cmd_args.selections();
     let canister = match selections.canister {

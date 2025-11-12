@@ -28,7 +28,7 @@ pub(crate) async fn sync_canister(
     pb: &mut MultiStepProgressBar,
 ) -> Result<(), SyncOperationError> {
     let step_count = canister_info.sync.steps.len();
-    
+
     for (i, step) in canister_info.sync.steps.iter().enumerate() {
         // Indicate to user the current step being executed
         let current_step = i + 1;
@@ -135,4 +135,3 @@ pub(crate) async fn sync_many(
 
     Ok(())
 }
-

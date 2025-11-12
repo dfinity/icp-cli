@@ -24,29 +24,34 @@ pub(crate) enum CommandError {
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
     let selections = args.cmd_args.selections();
-    
+
     // Extract canister name (reject Principal)
     let canister_name = match selections.canister {
         CanisterSelection::Named(name) => name,
         CanisterSelection::Principal(_) => {
-            return Err(anyhow!("Cannot sync canister by principal. Please specify a canister name"))?
+            return Err(anyhow!(
+                "Cannot sync canister by principal. Please specify a canister name"
+            ))?;
         }
     };
 
     // Load the project to get canister info
     let _p = ctx.project.load().await.map_err(|e| anyhow!(e))?;
-    
+
     // Get the environment
     let env = ctx
         .get_environment(&selections.environment)
         .await
         .map_err(|e| anyhow!(e))?;
-    
+
     // Get canister info from environment (includes path and sync config)
-    let (canister_path, canister_info) = env
-        .canisters
-        .get(&canister_name)
-        .ok_or_else(|| anyhow!("Canister '{}' not found in environment '{}'", canister_name, env.name))?;
+    let (canister_path, canister_info) = env.canisters.get(&canister_name).ok_or_else(|| {
+        anyhow!(
+            "Canister '{}' not found in environment '{}'",
+            canister_name,
+            env.name
+        )
+    })?;
 
     // Check if canister has sync steps
     if canister_info.sync.steps.is_empty() {
@@ -108,7 +113,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
             .write_line(&format!("Failed to sync canister: {}", e));
         let _ = ctx.term.write_line("");
     }
-    
+
     result?;
 
     let _ = ctx
@@ -117,4 +122,3 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
 
     Ok(())
 }
-

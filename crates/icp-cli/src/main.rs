@@ -137,15 +137,14 @@ async fn main() -> Result<(), Error> {
     )?;
 
     match command {
-        // Build
-        Command::Build(args) => {
-            commands::build::exec(&ctx, &args)
-                .instrument(trace_span)
-                .await?
-        }
-
         // Canister
         Command::Canister(cmd) => match cmd {
+            commands::canister::Command::Build(args) => {
+                commands::canister::build::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
             commands::canister::Command::Call(args) => {
                 commands::canister::call::exec(&ctx, &args)
                     .instrument(trace_span)

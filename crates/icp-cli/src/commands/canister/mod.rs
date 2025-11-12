@@ -1,6 +1,7 @@
 use clap::Subcommand;
 
 pub(crate) mod binding_env_vars;
+pub(crate) mod build;
 pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;
@@ -18,6 +19,9 @@ pub(crate) mod top_up;
 #[derive(Debug, Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Command {
+    /// Build a canister
+    Build(build::BuildArgs),
+
     /// Make a canister call
     Call(call::CallArgs),
 

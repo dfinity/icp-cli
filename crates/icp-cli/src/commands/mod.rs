@@ -1,7 +1,6 @@
 use clap::Subcommand;
 
 pub(crate) mod args;
-pub(crate) mod build;
 pub(crate) mod canister;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
@@ -14,9 +13,6 @@ pub(crate) mod token;
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Command {
-    /// Build a project
-    Build(build::BuildArgs),
-
     /// Perform canister operations against a network
     #[command(subcommand)]
     Canister(canister::Command),

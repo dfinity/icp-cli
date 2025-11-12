@@ -42,7 +42,7 @@ fn canister_install() {
     // Build canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .success();
 

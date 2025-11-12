@@ -39,7 +39,7 @@ fn build_adapter_script_single() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .success();
 }
@@ -78,7 +78,7 @@ fn build_adapter_script_multiple() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .success();
 }
@@ -138,7 +138,7 @@ fn build_adapter_display_failing_build_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output))
@@ -185,7 +185,7 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
@@ -230,7 +230,7 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
@@ -266,7 +266,7 @@ fn build_adapter_script_with_explicit_sh_c() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .success();
 
@@ -318,7 +318,7 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build", "my-canister"])
+        .args(["canister", "build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));

@@ -125,7 +125,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BindingArgs) -> Result<(), Comman
     // Check that all the canisters in this environment have an id
     // We need to have all the ids to generate environment variables
     // for the bindings
-    let canisters_with_ids: HashSet<&String> = canister_list.iter().map(|(n, _p)| n).collect();
+    let canisters_with_ids: HashSet<&String> = canister_list.keys().collect();
     debug!("Canisters with ids: {:?}", canisters_with_ids);
 
     let missing_canisters: Vec<String> = env

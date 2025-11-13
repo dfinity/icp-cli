@@ -37,11 +37,13 @@ At least version 10.0.0 of pocket-ic is required.
 
 ```bash
 # for eg for a mac with apple sillicon:
-wget https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-arm64-darwin.gz
-gunzip pocket-ic-arm64-darwin.gz
-chmod +x pocket-ic-arm64-darwin
-export ICP_POCKET_IC_PATH="$(pwd)/pocket-ic-arm64-darwin"
+wget https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-arm64-darwin.gz -O pocket-ic.gz
+gunzip pocket-ic.gz
+chmod +x pocket-ic
+export ICP_POCKET_IC_PATH="$(pwd)/pocket-ic"
 ```
+
+Note: The binary of pocket-ic must be named `pocket-ic` or `pocket-ic-server`.
 
 ### [Optional] Add motoko tools to the path
 

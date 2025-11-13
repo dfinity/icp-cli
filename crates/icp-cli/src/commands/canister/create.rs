@@ -9,7 +9,6 @@ use icp::{
     },
     identity::{self},
     network,
-    operations::create::CreateOperationError,
     prelude::*,
 };
 
@@ -18,9 +17,9 @@ use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
     commands::args,
+    operations::create::{CreateOperation, CreateOperationError},
     progress::{ProgressManager, ProgressManagerSettings},
 };
-use icp::operations::create::CreateOperation;
 use icp::store_id::RegisterError;
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;

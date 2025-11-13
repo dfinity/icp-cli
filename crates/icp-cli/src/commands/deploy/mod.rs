@@ -5,7 +5,6 @@ use ic_agent::export::Principal;
 use icp::{
     context::{Context, EnvironmentSelection},
     identity::IdentitySelection,
-    operations::create::CreateOperation,
 };
 use std::sync::Arc;
 
@@ -14,6 +13,7 @@ use crate::{
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
+        create::CreateOperation,
         install::{InstallOperationError, install_many},
         sync::{SyncOperationError, sync_many},
     },

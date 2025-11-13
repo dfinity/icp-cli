@@ -21,9 +21,7 @@ use crate::{
 pub mod access;
 pub mod config;
 mod directory;
-mod lock;
 pub mod managed;
-pub mod structure;
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {
@@ -114,6 +112,7 @@ impl From<ManifestGateway> for Gateway {
     fn from(value: ManifestGateway) -> Self {
         let host = value.host.unwrap_or("localhost".to_string());
         let port = match value.port {
+            Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };
@@ -185,9 +184,11 @@ impl Access for Accessor {
         );
 
         // NetworkAccess
-        let acceess = get_network_access(nd, network).context("failed to load network access")?;
+        let access = get_network_access(nd, network)
+            .await
+            .context("failed to load network access")?;
 
-        Ok(acceess)
+        Ok(access)
     }
 }
 

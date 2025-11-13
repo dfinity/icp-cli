@@ -65,9 +65,10 @@ fn network_same_port() {
         .args(["network", "run", "my-network"])
         .assert()
         .failure()
-        .stderr(contains(
-            "Error: port 8080 is in use by the my-network network of the project at",
-        ));
+        .stderr(contains(format!(
+            "Error: port 8080 is in use by the my-network network of the project at '{}'",
+            project_dir_a.canonicalize().unwrap().display()
+        )));
 }
 
 #[test]

@@ -49,14 +49,14 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ###### **Subcommands:**
 
-* `build` — Build a project
+* `build` — Build canisters
 * `canister` — Perform canister operations against a network
 * `cycles` — Mint and manage cycles
 * `deploy` — Deploy a project to an environment
 * `environment` — Show information about the current project environments
 * `identity` — Manage your identities
 * `network` — Launch and manage local test networks
-* `sync` — Synchronize canisters in the current environment
+* `sync` — Synchronize canisters
 * `token` — Perform token transactions
 
 ###### **Options:**
@@ -76,13 +76,18 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ## `icp-cli build`
 
-Build a project
+Build canisters
 
-**Usage:** `icp-cli build [NAMES]...`
+**Usage:** `icp-cli build [OPTIONS] [CANISTERS]...`
 
 ###### **Arguments:**
 
-* `<NAMES>` — The names of the canisters within the current project
+* `<CANISTERS>` — Canister names (if empty, build all canisters in environment)
+
+###### **Options:**
+
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
 
 
 
@@ -134,17 +139,18 @@ Make a canister call
 
 Create a canister on a network
 
-**Usage:** `icp-cli canister create [OPTIONS] [NAMES]...`
+**Usage:** `icp-cli canister create [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAMES>` — The names of the canister within the current project
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
-* `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically
@@ -200,11 +206,11 @@ Display a canister's information
 
 Install a built WASM to a canister on a network
 
-**Usage:** `icp-cli canister install [OPTIONS] [NAMES]...`
+**Usage:** `icp-cli canister install [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAMES>` — The names of the canisters within the current project
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 
@@ -214,9 +220,10 @@ Install a built WASM to a canister on a network
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
-* `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
@@ -622,19 +629,19 @@ Stop a background network
 
 ## `icp-cli sync`
 
-Synchronize canisters in the current environment
+Synchronize canisters
 
-**Usage:** `icp-cli sync [OPTIONS] [NAMES]...`
+**Usage:** `icp-cli sync [OPTIONS] [CANISTERS]...`
 
 ###### **Arguments:**
 
-* `<NAMES>` — Canister names
+* `<CANISTERS>` — Canister names (if empty, sync all canisters in environment)
 
 ###### **Options:**
 
-* `--identity <IDENTITY>` — The user identity to run this command as
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 

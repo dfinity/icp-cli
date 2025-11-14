@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use async_trait::async_trait;
+use candid::Nat;
+use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +41,18 @@ pub struct Settings {
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
     pub environment_variables: Option<HashMap<String, String>>,
+}
+
+impl From<Settings> for CanisterSettingsArg {
+    fn from(settings: Settings) -> Self {
+        CanisterSettingsArg {
+            freezing_threshold: settings.freezing_threshold.map(Nat::from),
+            controllers: None,
+            reserved_cycles_limit: settings.reserved_cycles_limit.map(Nat::from),
+            memory_allocation: settings.memory_allocation.map(Nat::from),
+            compute_allocation: settings.compute_allocation.map(Nat::from),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -15,7 +15,7 @@ pub(crate) mod token;
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Command {
-    /// Build a project
+    /// Build canisters
     Build(build::BuildArgs),
 
     /// Perform canister operations against a network
@@ -46,7 +46,7 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Project(project::Command),
 
-    /// Synchronize canisters in the current environment
+    /// Synchronize canisters
     Sync(sync::SyncArgs),
 
     /// Perform token transactions

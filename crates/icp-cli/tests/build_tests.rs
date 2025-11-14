@@ -39,7 +39,7 @@ fn build_adapter_script_single() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -78,7 +78,7 @@ fn build_adapter_script_multiple() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -138,7 +138,7 @@ fn build_adapter_display_failing_build_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output))
@@ -185,7 +185,7 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
@@ -230,7 +230,7 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
@@ -266,7 +266,7 @@ fn build_adapter_script_with_explicit_sh_c() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 
@@ -318,7 +318,7 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
@@ -349,10 +349,115 @@ fn build_with_valid_principal() {
     // Invoke build with principal (should fail)
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", principal])
+        .args(["build", principal])
         .assert()
         .failure()
-        .stderr(contains(
-            "Cannot build canister by principal. Please specify a canister name",
-        ));
+        .stderr(contains("project does not contain a canister named"));
+}
+
+#[test]
+fn build_multiple_canisters() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create temporary file
+    let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // Project manifest with multiple canisters
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-a" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-b" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-c" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Build multiple canisters - verify command processes only specified canisters
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args(["--debug", "build", "canister-a", "canister-b"])
+        .assert()
+        .success()
+        .stdout(contains(r#"canisters: ["canister-a", "canister-b"]"#))
+        .stdout(contains("DEBUG icp::progress: building canister-a"))
+        .stdout(contains("DEBUG icp::progress: building canister-b"))
+        .stdout(contains("DEBUG icp::progress: building canister-c").not());
+}
+
+#[test]
+fn build_all_canisters_in_environment() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create temporary file
+    let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // Project manifest with multiple canisters and environments
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-a" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-b" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-c" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+        
+        environments:
+          - name: test-env
+            canisters:
+              - canister-a
+              - canister-b
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Build all canisters in environment (no canister names specified)
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args(["--debug", "build", "--environment", "test-env"])
+        .assert()
+        .success()
+        .stdout(contains(r#"canisters: []"#))
+        .stdout(contains(r#"environment: Some("test-env")"#))
+        .stdout(contains("DEBUG icp::progress: building canister-a"))
+        .stdout(contains("DEBUG icp::progress: building canister-b"))
+        .stdout(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
 }

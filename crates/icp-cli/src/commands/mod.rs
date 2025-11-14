@@ -1,6 +1,7 @@
 use clap::Subcommand;
 
 pub(crate) mod args;
+pub(crate) mod build;
 pub(crate) mod canister;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
@@ -8,11 +9,15 @@ pub(crate) mod environment;
 pub(crate) mod identity;
 pub(crate) mod network;
 pub(crate) mod project;
+pub(crate) mod sync;
 pub(crate) mod token;
 
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Command {
+    /// Build canisters
+    Build(build::BuildArgs),
+
     /// Perform canister operations against a network
     #[command(subcommand)]
     Canister(canister::Command),
@@ -40,6 +45,9 @@ pub(crate) enum Command {
     #[clap(hide = true)] // TODO: figure out how to structure the commands later
     #[command(subcommand)]
     Project(project::Command),
+
+    /// Synchronize canisters
+    Sync(sync::SyncArgs),
 
     /// Perform token transactions
     Token(token::Command),

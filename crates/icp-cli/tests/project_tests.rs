@@ -36,7 +36,7 @@ fn single_canister_project() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -84,7 +84,7 @@ fn multi_canister_project() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -133,7 +133,7 @@ fn glob_path() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["canister", "build", "my-canister"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }

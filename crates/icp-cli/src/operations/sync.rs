@@ -65,14 +65,14 @@ pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
     term: Arc<Term>,
-    canisters: Vec<(String, Principal, PathBuf, Canister)>,
+    canisters: Vec<(Principal, PathBuf, Canister)>,
     debug: bool,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for (name, cid, canister_path, canister_info) in canisters {
-        let mut pb = progress_manager.create_multi_step_progress_bar(&name, "Sync");
+    for (cid, canister_path, canister_info) in canisters {
+        let mut pb = progress_manager.create_multi_step_progress_bar(&canister_info.name, "Sync");
 
         let fut = {
             let agent = agent.clone();

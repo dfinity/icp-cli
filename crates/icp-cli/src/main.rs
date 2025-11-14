@@ -137,14 +137,15 @@ async fn main() -> Result<(), Error> {
     )?;
 
     match command {
+        // Build
+        Command::Build(args) => {
+            commands::build::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
+
         // Canister
         Command::Canister(cmd) => match cmd {
-            commands::canister::Command::Build(args) => {
-                commands::canister::build::exec(&ctx, &args)
-                    .instrument(trace_span)
-                    .await?
-            }
-
             commands::canister::Command::Call(args) => {
                 commands::canister::call::exec(&ctx, &args)
                     .instrument(trace_span)
@@ -215,12 +216,6 @@ async fn main() -> Result<(), Error> {
 
             commands::canister::Command::Stop(args) => {
                 commands::canister::stop::exec(&ctx, &args)
-                    .instrument(trace_span)
-                    .await?
-            }
-
-            commands::canister::Command::Sync(args) => {
-                commands::canister::sync::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -331,6 +326,13 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
         },
+
+        // Sync
+        Command::Sync(args) => {
+            commands::sync::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
 
         // Token
         Command::Token(cmd) => match cmd.command {

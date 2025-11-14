@@ -293,7 +293,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
             let (canister_path, info) = env_canisters
                 .get(name)
                 .ok_or_else(|| anyhow!("Canister id exists but no canister info"))?;
-            Ok::<_, anyhow::Error>((name.clone(), cid, canister_path.clone(), info.clone()))
+            Ok::<_, anyhow::Error>((cid, canister_path.clone(), info.clone()))
         }
     }))
     .await?;
@@ -301,7 +301,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     // Filter out canisters with no sync steps
     let sync_canisters: Vec<_> = sync_canisters
         .into_iter()
-        .filter(|(_, _, _, info)| !info.sync.steps.is_empty())
+        .filter(|(_, _, info)| !info.sync.steps.is_empty())
         .collect();
 
     if !sync_canisters.is_empty() {

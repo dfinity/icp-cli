@@ -1,6 +1,5 @@
 use clap::Subcommand;
 
-pub(crate) mod build;
 pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;
@@ -12,15 +11,11 @@ pub(crate) mod show;
 pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
-pub(crate) mod sync;
 pub(crate) mod top_up;
 
 #[derive(Debug, Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Command {
-    /// Build a canister
-    Build(build::BuildArgs),
-
     /// Make a canister call
     Call(call::CallArgs),
 
@@ -53,9 +48,6 @@ pub(crate) enum Command {
 
     /// Stop a canister on a network
     Stop(stop::StopArgs),
-
-    /// Synchronize a canister
-    Sync(sync::SyncArgs),
 
     /// Top up a canister with cycles
     TopUp(top_up::TopUpArgs),

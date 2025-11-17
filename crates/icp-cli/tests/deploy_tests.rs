@@ -1,8 +1,9 @@
 use indoc::{formatdoc, indoc};
+use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
 use predicates::{ord::eq, str::PredicateStrExt};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
 
 mod common;
 
@@ -202,4 +203,136 @@ async fn deploy_twice_should_succeed() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
+}
+
+#[tokio::test]
+async fn canister_create_colocates_canisters() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = indoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
+
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
+
+          - name: canister-d
+            build:
+              steps:
+                - type: script
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
+
+          - name: canister-e
+            build:
+              steps:
+                - type: script
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
+
+          - name: canister-f
+            build:
+              steps:
+                - type: script
+                  command: touch "$ICP_WASM_OUTPUT_PATH"
+
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx
+        .start_network_with_config(
+            &project_dir,
+            InstanceConfig {
+                subnet_config_set: (SubnetConfigSet {
+                    application: 3,
+                    ..Default::default()
+                })
+                .into(),
+                ..default_instance_config(&ctx.state_dir(&project_dir))
+            },
+        )
+        .await;
+
+    ctx.ping_until_healthy(&project_dir, "local");
+
+    // Deploy first three canisters
+    let icp_client = clients::icp(&ctx, &project_dir, None);
+    icp_client.mint_cycles(20 * TRILLION);
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "canister-a", "canister-b", "canister-c"])
+        .assert()
+        .failure(); // no valid wasm - should fail but still creates canisters
+
+    let registry = clients::registry(&ctx);
+
+    let subnet_a = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-a"))
+        .await;
+
+    let subnet_b = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-b"))
+        .await;
+
+    let subnet_c = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-c"))
+        .await;
+
+    assert_eq!(
+        subnet_a, subnet_b,
+        "Canister A and B should be on the same subnet"
+    );
+    assert_eq!(
+        subnet_a, subnet_c,
+        "Canister B and C should be on the same subnet"
+    );
+
+    // Deploy remaining canisters
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "canister-d", "canister-e", "canister-f"])
+        .assert()
+        .failure(); // no valid wasm - should fail but still creates canisters
+
+    let subnet_d = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-d"))
+        .await;
+
+    let subnet_e = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-e"))
+        .await;
+
+    let subnet_f = registry
+        .get_subnet_for_canister(icp_client.get_canister_id("canister-f"))
+        .await;
+
+    assert_eq!(
+        subnet_a, subnet_d,
+        "Canister D should be on the same subnet as canister A"
+    );
+    assert_eq!(
+        subnet_a, subnet_e,
+        "Canister E should be on the same subnet as canister A"
+    );
+    assert_eq!(
+        subnet_a, subnet_f,
+        "Canister F should be on the same subnet as canister A"
+    );
 }

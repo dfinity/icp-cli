@@ -1,6 +1,5 @@
 use clap::Subcommand;
 
-pub(crate) mod binding_env_vars;
 pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;

@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use clap::Parser;
 use icp::{
-    fs::remove_file, manifest, network::NetworkDirectory, project::DEFAULT_LOCAL_NETWORK_NAME,
+    fs::{lock::LockError, remove_file},
+    manifest,
+    network::NetworkDirectory,
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
@@ -37,6 +40,9 @@ pub enum CommandError {
 
     #[error("process {pid} did not exit within {timeout} seconds")]
     Timeout { pid: Pid, timeout: u64 },
+
+    #[error(transparent)]
+    LockFile(#[from] LockError),
 }
 
 pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
@@ -61,7 +67,8 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
 
     // Load PID from file
     let pid = nd
-        .load_background_network_runner_pid()?
+        .load_background_network_runner_pid()
+        .await?
         .ok_or(CommandError::NotRunning {
             name: cmd.name.clone(),
         })?;
@@ -73,8 +80,13 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
     send_sigint(pid);
     wait_for_process_exit(pid)?;
 
-    let pid_file = nd.structure.background_network_runner_pid_file();
-    let _ = remove_file(&pid_file); // Cleanup is nice, but optional
+    nd.root()?
+        .with_write(async |root| {
+            let pid_file = root.background_network_runner_pid_file();
+            let _ = remove_file(&pid_file); // Cleanup is nice, but optional
+            Ok::<_, CommandError>(())
+        })
+        .await??;
 
     let _ = ctx.term.write_line("Network stopped successfully");
 

@@ -62,6 +62,29 @@ impl Environment {
     pub fn get_canister_names(&self) -> Vec<String> {
         self.canisters.keys().cloned().collect()
     }
+
+    pub fn ensure_canister_declared(&self, canister: &str) -> Result<(), String> {
+        if !self.canisters.contains_key(canister) {
+            return Err(format!(
+                "canister '{}' not declared in environment '{}'",
+                canister, self.name
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn get_canister_info(&self, canister: &str) -> Result<(PathBuf, Canister), String> {
+        self.canisters
+            .get(canister)
+            .ok_or_else(|| {
+                format!(
+                    "canister '{}' not declared in environment '{}'",
+                    canister, self.name
+                )
+            })
+            .cloned()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

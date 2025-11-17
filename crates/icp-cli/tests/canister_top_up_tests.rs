@@ -43,7 +43,13 @@ async fn canister_top_up() {
     // Create canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "--environment", "my-environment"])
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 

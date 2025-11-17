@@ -8,7 +8,7 @@ use ic_agent::export::Principal;
 use snafu::{ResultExt, Snafu};
 
 /// Mapping of canister names to their Principals within an environment.
-type IdMapping = BTreeMap<String, Principal>;
+pub type IdMapping = BTreeMap<String, Principal>;
 
 /// Trait for accessing and managing canister ID storage.
 pub trait Access: Sync + Send {

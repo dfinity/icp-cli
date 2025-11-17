@@ -16,6 +16,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister settings`↴](#icp-cli-canister-settings)
 * [`icp-cli canister settings show`↴](#icp-cli-canister-settings-show)
 * [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
+* [`icp-cli canister settings sync`↴](#icp-cli-canister-settings-sync)
 * [`icp-cli canister show`↴](#icp-cli-canister-show)
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
@@ -249,6 +250,7 @@ List the canisters in an environment
 
 * `show` — 
 * `update` — 
+* `sync` — 
 
 
 
@@ -298,6 +300,23 @@ List the canisters in an environment
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+
+
+
+## `icp-cli canister settings sync`
+
+**Usage:** `icp-cli canister settings sync [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>`
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 

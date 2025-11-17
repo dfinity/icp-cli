@@ -152,6 +152,28 @@ impl Context {
         }
     }
 
+    pub async fn assert_env_contains_canister(
+        &self,
+        canister_name: &str,
+        environment: &EnvironmentSelection,
+    ) -> Result<(), AssertEnvContainsCanisterError> {
+        let p = self.project.load().await?;
+        if !p.contains_canister(canister_name) {
+            return Err(AssertEnvContainsCanisterError::CanisterNotFoundInProject {
+                canister_name: canister_name.to_owned(),
+            });
+        }
+
+        let env = self.get_environment(environment).await?;
+        if !env.contains_canister(canister_name) {
+            return Err(AssertEnvContainsCanisterError::CanisterNotInEnv {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Gets the canister ID for a given canister name in a specified environment.
     ///
     /// # Errors
@@ -556,6 +578,26 @@ pub enum GetIdsByEnvironmentError {
     #[snafu(display("failed to lookup IDs for environment '{environment_name}'"))]
     IdsByEnvironmentLookup {
         source: crate::store_id::LookupIdError,
+        environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum AssertEnvContainsCanisterError {
+    #[snafu(transparent)]
+    ProjectLoad { source: crate::LoadError },
+
+    #[snafu(transparent)]
+    GetEnvironment { source: GetEnvironmentError },
+
+    #[snafu(display("project does not contain a canister named '{canister_name}'"))]
+    CanisterNotFoundInProject { canister_name: String },
+
+    #[snafu(display(
+        "environment '{environment_name}' does not contain a canister named '{canister_name}'"
+    ))]
+    CanisterNotInEnv {
+        canister_name: String,
         environment_name: String,
     },
 }

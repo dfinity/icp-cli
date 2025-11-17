@@ -27,15 +27,6 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     SyncOperation(#[from] SyncOperationError),
 
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("canister '{canister}' is not in environment '{environment}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
     #[error(transparent)]
     Project(#[from] icp::LoadError),
 
@@ -47,9 +38,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
     // Get environment and identity selections
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
-
-    // Load the project manifest
-    let p = ctx.project.load().await?;
 
     // Get environment
     let env = ctx
@@ -68,18 +56,9 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
 
     // Validate all specified canisters exist in project and environment
     for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
+        ctx.assert_env_contains_canister(name, &environment_selection)
+            .await
+            .map_err(|e| anyhow!(e))?;
     }
 
     // Skip doing any work if no canisters are targeted

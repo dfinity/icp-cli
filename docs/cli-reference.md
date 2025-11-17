@@ -220,6 +220,7 @@ Install a built WASM to a canister on a network
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
+* `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic

@@ -57,15 +57,6 @@ pub(crate) enum CommandError {
     #[error("project does not contain an environment named '{name}'")]
     EnvironmentNotFound { name: String },
 
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
     #[error(transparent)]
     Create(#[from] create::CommandError),
 
@@ -80,6 +71,9 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let identity_selection: IdentitySelection = args.identity.clone().into();
+
     // Load the project manifest, which defines the canisters to be built.
     let p = ctx.project.load().await?;
 
@@ -100,18 +94,9 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     };
 
     for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
+        ctx.assert_env_contains_canister(name, &environment_selection)
+            .await
+            .map_err(|e| anyhow!(e))?;
     }
 
     // Skip doing any work if no canisters are targeted
@@ -140,8 +125,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     // Create the selected canisters
     let _ = ctx.term.write_line("\n\nCreating canisters:");
 
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
-    let identity_selection: IdentitySelection = args.identity.clone().into();
     let env = ctx
         .get_environment(&environment_selection)
         .await

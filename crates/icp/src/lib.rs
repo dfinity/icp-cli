@@ -63,15 +63,8 @@ impl Environment {
         self.canisters.keys().cloned().collect()
     }
 
-    pub fn ensure_canister_declared(&self, canister: &str) -> Result<(), String> {
-        if !self.canisters.contains_key(canister) {
-            return Err(format!(
-                "canister '{}' not declared in environment '{}'",
-                canister, self.name
-            ));
-        }
-
-        Ok(())
+    pub fn contains_canister(&self, canister_name: &str) -> bool {
+        self.canisters.contains_key(canister_name)
     }
 
     pub fn get_canister_info(&self, canister: &str) -> Result<(PathBuf, Canister), String> {
@@ -93,6 +86,12 @@ pub struct Project {
     pub canisters: HashMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
+}
+
+impl Project {
+    pub fn contains_canister(&self, canister_name: &str) -> bool {
+        self.canisters.contains_key(canister_name)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

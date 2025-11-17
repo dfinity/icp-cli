@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use clap::Args;
 use icp::context::{Context, EnvironmentSelection, GetEnvironmentError};
 
@@ -19,15 +20,6 @@ pub(crate) struct BuildArgs {
 pub(crate) enum CommandError {
     #[error(transparent)]
     BuildOperation(#[from] BuildOperationError),
-
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("canister '{canister}' is not in environment '{environment}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
 
     #[error(transparent)]
     GetEnvironment(#[from] GetEnvironmentError),
@@ -60,18 +52,9 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandE
 
     // Validate all specified canisters exist in project and environment
     for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
+        ctx.assert_env_contains_canister(name, &environment_selection)
+            .await
+            .map_err(|e| anyhow!(e))?;
     }
 
     // Skip doing any work if no canisters are targeted

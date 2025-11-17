@@ -114,7 +114,7 @@ fn canister_install_with_valid_principal() {
     // Valid principal
     let principal = "aaaaa-aa";
 
-    // Try to install with principal (should fail)
+    // Try to install with principal (should fail without --wasm flag)
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -126,5 +126,76 @@ fn canister_install_with_valid_principal() {
         ])
         .assert()
         .failure()
-        .stderr(contains("Cannot install canister by principal"));
+        .stderr(contains(
+            "Cannot install canister by principal without --wasm flag",
+        ));
+}
+
+#[test]
+fn canister_install_with_wasm_flag() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_path = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest with a different build command that won't produce a valid wasm
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
+    // Create canister
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .success();
+
+    // Install canister using --wasm flag
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--wasm",
+            wasm_path.as_str(),
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify the installation by calling the canister
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "my-environment",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
 }

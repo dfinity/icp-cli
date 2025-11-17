@@ -62,6 +62,22 @@ impl Environment {
     pub fn get_canister_names(&self) -> Vec<String> {
         self.canisters.keys().cloned().collect()
     }
+
+    pub fn contains_canister(&self, canister_name: &str) -> bool {
+        self.canisters.contains_key(canister_name)
+    }
+
+    pub fn get_canister_info(&self, canister: &str) -> Result<(PathBuf, Canister), String> {
+        self.canisters
+            .get(canister)
+            .ok_or_else(|| {
+                format!(
+                    "canister '{}' not declared in environment '{}'",
+                    canister, self.name
+                )
+            })
+            .cloned()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -70,6 +86,12 @@ pub struct Project {
     pub canisters: HashMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
+}
+
+impl Project {
+    pub fn contains_canister(&self, canister_name: &str) -> bool {
+        self.canisters.contains_key(canister_name)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

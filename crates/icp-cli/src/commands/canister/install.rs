@@ -1,179 +1,83 @@
+use anyhow::anyhow;
 use clap::Args;
-use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
-use ic_agent::AgentError;
-use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
-use icp::{
-    agent,
-    context::{
-        EnvironmentSelection, GetAgentForEnvError, GetCanisterIdForEnvError, GetEnvironmentError,
-    },
-    identity, network,
-};
-use tracing::debug;
+use ic_utils::interfaces::ManagementCanister;
+use icp::fs;
+use icp::{context::CanisterSelection, prelude::*};
 
 use icp::context::Context;
 
 use crate::{
-    options::{EnvironmentOpt, IdentityOpt},
-    progress::{ProgressManager, ProgressManagerSettings},
+    commands::args,
+    operations::install::{InstallOperationError, install_canister},
 };
-use icp::store_artifact::LookupArtifactError;
-use icp::store_id::LookupIdError;
 
-#[derive(Clone, Debug, Args)]
+#[derive(Debug, Args)]
 pub(crate) struct InstallArgs {
-    /// The names of the canisters within the current project
-    pub(crate) names: Vec<String>,
-
     /// Specifies the mode of canister installation.
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub(crate) mode: String,
 
-    #[command(flatten)]
-    pub(crate) identity: IdentityOpt,
+    /// Path to the WASM file to install. Uses the build output if not explicitly provided.
+    #[arg(long)]
+    pub(crate) wasm: Option<PathBuf>,
 
     #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
     #[error(transparent)]
-    Project(#[from] icp::LoadError),
+    InstallOperation(#[from] InstallOperationError),
+
+    #[error("failed to read WASM file: {0}")]
+    ReadWasmFile(#[from] fs::Error),
 
     #[error(transparent)]
-    Identity(#[from] identity::LoadError),
+    GetCanisterIdAndAgent(#[from] icp::context::GetCanisterIdAndAgentError),
 
     #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    LookupCanisterId(#[from] LookupIdError),
-
-    #[error(transparent)]
-    LookupCanisterArtifact(#[from] LookupArtifactError),
-
-    #[error(transparent)]
-    InstallAgent(#[from] AgentError),
-
-    #[error(transparent)]
-    GetEnvironment(#[from] GetEnvironmentError),
-
-    #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
-
-    #[error(transparent)]
-    GetCanisterIdForEnv(#[from] GetCanisterIdForEnvError),
+    Unexpected(#[from] anyhow::Error),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let selections = args.cmd_args.selections();
 
-    // Load target environment
-    let env = ctx.get_environment(&environment_selection).await?;
-
-    // Agent
-    let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
-        .await?;
-
-    let target_canisters = match args.names.is_empty() {
-        true => env.get_canister_names(),
-        false => args.names.clone(),
-    };
-
-    let canisters = try_join_all(target_canisters.into_iter().map(|name| {
-        let environment_selection = environment_selection.clone();
-        async move {
-            let cid = ctx
-                .get_canister_id_for_env(&name, &environment_selection)
-                .await?;
-            Ok::<_, CommandError>((name, cid))
-        }
-    }))
-    .await?;
-
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
-    // Prepare a futures set for concurrent operations
-    let mut futs = FuturesOrdered::new();
-
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-
-    for (name, cid) in canisters {
-        // Create progress bar with standard configuration
-        let pb = progress_manager.create_progress_bar(&name);
-
-        // Create an async closure that handles the operation for this specific canister
-        let install_fn = {
-            let cmd = args.clone();
-            let mgmt = mgmt.clone();
-            let pb = pb.clone();
-
-            async move {
-                // Indicate to user that the canister is being installed
-                pb.set_message("Installing...");
-
-                // Lookup the canister build artifact
-                let wasm = ctx.artifacts.lookup(&name).await?;
-
-                // Retrieve canister status
-                let (status,) = mgmt.canister_status(&cid).await?;
-
-                let install_mode = match cmd.mode.as_ref() {
-                    // Auto
-                    "auto" => match status.module_hash {
-                        // Canister has had code installed to it.
-                        Some(_) => CanisterInstallMode::Upgrade(None),
-
-                        // Canister has not had code installed to it.
-                        None => CanisterInstallMode::Install,
-                    },
-
-                    // Install
-                    "install" => CanisterInstallMode::Install,
-
-                    // Reinstall
-                    "reinstall" => CanisterInstallMode::Reinstall,
-
-                    // Upgrade
-                    "upgrade" => CanisterInstallMode::Upgrade(None),
-
-                    // invalid
-                    _ => panic!("invalid install mode"),
-                };
-
-                // Install code to canister
-                debug!("Install new canister code");
-                mgmt.install_code(&cid, &wasm)
-                    .with_mode(install_mode)
-                    .await?;
-
-                Ok::<_, CommandError>(())
+    let wasm = if let Some(wasm_path) = &args.wasm {
+        // Read from file
+        fs::read(wasm_path)?
+    } else {
+        // Use artifact store (requires named canister)
+        let canister = match &selections.canister {
+            CanisterSelection::Named(name) => name,
+            CanisterSelection::Principal(_) => {
+                return Err(anyhow!(
+                    "Cannot install canister by principal without --wasm flag"
+                ))?;
             }
         };
-
-        futs.push_back(async move {
-            // Execute the install function with progress tracking
-            ProgressManager::execute_with_progress(
-                &pb,
-                install_fn,
-                || "Installed successfully".to_string(),
-                |err| format!("Failed to install canister: {err}"),
-            )
+        ctx.artifacts
+            .lookup(canister)
             .await
-        });
-    }
+            .map_err(|e| anyhow!(e))?
+    };
 
-    // Consume the set of futures and abort if an error occurs
-    while let Some(res) = futs.next().await {
-        // TODO(or.ricon): Handle canister creation failures
-        res?;
-    }
+    let (canister_id, agent) = ctx
+        .get_canister_id_and_agent(
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
+            &selections.identity,
+        )
+        .await?;
+
+    let mgmt = ManagementCanister::create(&agent);
+    let canister_display = args.cmd_args.canister.to_string();
+    install_canister(&mgmt, &canister_id, &canister_display, &wasm, &args.mode).await?;
+
+    let _ = ctx.term.write_line(&format!(
+        "Canister {canister_display} installed successfully"
+    ));
 
     Ok(())
 }

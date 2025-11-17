@@ -9,6 +9,7 @@ use crate::{
     identity::IdentitySelection,
     network::access::NetworkAccess,
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
+    store_id::IdMapping,
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -151,6 +152,28 @@ impl Context {
         }
     }
 
+    pub async fn assert_env_contains_canister(
+        &self,
+        canister_name: &str,
+        environment: &EnvironmentSelection,
+    ) -> Result<(), AssertEnvContainsCanisterError> {
+        let p = self.project.load().await?;
+        if !p.contains_canister(canister_name) {
+            return Err(AssertEnvContainsCanisterError::CanisterNotFoundInProject {
+                canister_name: canister_name.to_owned(),
+            });
+        }
+
+        let env = self.get_environment(environment).await?;
+        if !env.contains_canister(canister_name) {
+            return Err(AssertEnvContainsCanisterError::CanisterNotInEnv {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Gets the canister ID for a given canister name in a specified environment.
     ///
     /// # Errors
@@ -180,6 +203,37 @@ impl Context {
             })?;
 
         Ok(cid)
+    }
+
+    /// Sets the canister ID for a given canister name in a specified environment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment cannot be loaded or if the canister ID cannot be registered.
+    pub async fn set_canister_id_for_env(
+        &self,
+        canister_name: &str,
+        canister_id: Principal,
+        environment: &EnvironmentSelection,
+    ) -> Result<(), SetCanisterIdForEnvError> {
+        let env = self.get_environment(environment).await?;
+
+        if !env.canisters.contains_key(canister_name) {
+            return Err(SetCanisterIdForEnvError::SetCanisterNotFoundInEnv {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            });
+        }
+
+        // Register the canister id
+        self.ids
+            .register(&env.name, canister_name, canister_id)
+            .context(CanisterIdRegisterSnafu {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            })?;
+
+        Ok(())
     }
 
     /// Creates an agent for a given identity and environment.
@@ -325,6 +379,17 @@ impl Context {
         Ok((cid, agent))
     }
 
+    pub fn ids_by_environment(
+        &self,
+        environment: &EnvironmentSelection,
+    ) -> Result<IdMapping, GetIdsByEnvironmentError> {
+        self.ids
+            .lookup_by_environment(environment.name())
+            .context(IdsByEnvironmentLookupSnafu {
+                environment_name: environment.name().to_owned(),
+            })
+    }
+
     #[cfg(test)]
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {
@@ -405,6 +470,33 @@ pub enum GetCanisterIdForEnvError {
 }
 
 #[derive(Debug, Snafu)]
+pub enum SetCanisterIdForEnvError {
+    #[snafu(transparent)]
+    GetEnvironment { source: GetEnvironmentError },
+
+    #[snafu(display(
+        "canister '{}' not found in environment '{}'",
+        canister_name,
+        environment_name
+    ))]
+    SetCanisterNotFoundInEnv {
+        canister_name: String,
+        environment_name: String,
+    },
+
+    #[snafu(display(
+        "failed to register canister ID for canister '{}' in environment '{}'",
+        canister_name,
+        environment_name
+    ))]
+    CanisterIdRegister {
+        source: crate::store_id::RegisterError,
+        canister_name: String,
+        environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
 pub enum GetAgentForEnvError {
     #[snafu(transparent)]
     GetIdentity { source: GetIdentityError },
@@ -479,6 +571,35 @@ pub enum GetCanisterIdAndAgentError {
 
     #[snafu(transparent)]
     GetAgentForUrl { source: GetAgentForUrlError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetIdsByEnvironmentError {
+    #[snafu(display("failed to lookup IDs for environment '{environment_name}'"))]
+    IdsByEnvironmentLookup {
+        source: crate::store_id::LookupIdError,
+        environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum AssertEnvContainsCanisterError {
+    #[snafu(transparent)]
+    ProjectLoad { source: crate::LoadError },
+
+    #[snafu(transparent)]
+    GetEnvironment { source: GetEnvironmentError },
+
+    #[snafu(display("project does not contain a canister named '{canister_name}'"))]
+    CanisterNotFoundInProject { canister_name: String },
+
+    #[snafu(display(
+        "environment '{environment_name}' does not contain a canister named '{canister_name}'"
+    ))]
+    CanisterNotInEnv {
+        canister_name: String,
+        environment_name: String,
+    },
 }
 
 #[cfg(test)]

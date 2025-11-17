@@ -4,9 +4,9 @@ use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
-use icp::{agent, identity, network};
+use icp::{LoadError, agent, identity, network};
 
-use icp::context::{Context, GetCanisterIdAndAgentError};
+use icp::context::{CanisterSelection, Context, GetCanisterIdAndAgentError};
 
 use crate::commands::args;
 use icp::store_id::LookupIdError;
@@ -142,6 +142,16 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         )
         .await?;
 
+    let configured_settings = if let CanisterSelection::Named(name) = &selections.canister {
+        match ctx.project.load().await {
+            Ok(p) => p.canisters[name].1.settings.clone(),
+            Err(LoadError::Locate) => <_>::default(),
+            Err(e) => return Err(CommandError::Project(e)),
+        }
+    } else {
+        <_>::default()
+    };
+
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
@@ -169,6 +179,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
     // Handle environment variables.
     let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
     if let Some(environment_variables_opt) = &args.environment_variables {
+        maybe_warn_on_env_vars_change(&configured_settings, environment_variables_opt);
         environment_variables =
             get_environment_variables(environment_variables_opt, current_status.as_ref());
     }
@@ -181,21 +192,51 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         }
     }
     if let Some(compute_allocation) = args.compute_allocation {
+        if configured_settings.compute_allocation.is_some() {
+            eprintln!(
+                "Warning: Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )
+        }
         update = update.with_compute_allocation(compute_allocation);
     }
     if let Some(memory_allocation) = args.memory_allocation {
+        if configured_settings.memory_allocation.is_some() {
+            eprintln!(
+                "Warning: Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )
+        }
         update = update.with_memory_allocation(memory_allocation.as_u64());
     }
     if let Some(freezing_threshold) = args.freezing_threshold {
+        if configured_settings.freezing_threshold.is_some() {
+            eprintln!(
+                "Warning: Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )
+        }
         update = update.with_freezing_threshold(freezing_threshold);
     }
     if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
+        if configured_settings.reserved_cycles_limit.is_some() {
+            eprintln!(
+                "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )
+        }
         update = update.with_reserved_cycles_limit(reserved_cycles_limit);
     }
     if let Some(wasm_memory_limit) = args.wasm_memory_limit {
+        if configured_settings.wasm_memory_limit.is_some() {
+            eprintln!(
+                "Warning: Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )
+        }
         update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
     }
     if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
+        if configured_settings.wasm_memory_threshold.is_some() {
+            eprintln!(
+                "Warning: Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )
+        }
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
     }
     if let Some(log_visibility) = log_visibility {
@@ -394,4 +435,32 @@ fn get_environment_variables(
     }
 
     None
+}
+
+fn maybe_warn_on_env_vars_change(
+    configured_settings: &icp::canister::Settings,
+    environment_variables_opt: &EnvironmentVariableOpt,
+) {
+    if let Some(configured_vars) = &configured_settings.environment_variables {
+        if let Some(to_add) = &environment_variables_opt.add_environment_variable {
+            for add_var in to_add {
+                if configured_vars.contains_key(&add_var.name) {
+                    eprintln!(
+                        "Warning: Environment variable '{}' is already set in icp.yaml; this new value will be overridden on next settings sync",
+                        add_var.name
+                    )
+                }
+            }
+        }
+        if let Some(to_remove) = &environment_variables_opt.remove_environment_variable {
+            for remove_var in to_remove {
+                if configured_vars.contains_key(remove_var) {
+                    eprintln!(
+                        "Warning: Environment variable '{}' is already set in icp.yaml; removing it here will be overridden on next settings sync",
+                        remove_var
+                    )
+                }
+            }
+        }
+    }
 }

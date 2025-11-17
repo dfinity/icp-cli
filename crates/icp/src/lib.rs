@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    manifest::{ProjectRootLocate, PROJECT_MANIFEST, project::ProjectManifest},
     network::Configuration,
     prelude::*,
 };
@@ -108,7 +108,7 @@ pub struct ProjectLoaders {
 }
 
 pub struct Loader {
-    pub locate: Arc<dyn Locate>,
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub project: ProjectLoaders,
 }
 
@@ -117,7 +117,7 @@ impl Load for Loader {
     async fn load(&self) -> Result<Project, LoadError> {
         debug!("Loading project");
         // Locate project root
-        let pdir = self.locate.locate().context(LoadError::Locate)?;
+        let pdir = self.project_root_locate.locate().context(LoadError::Locate)?;
 
         debug!("Located icp project in {pdir}");
 

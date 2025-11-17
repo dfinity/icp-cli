@@ -42,7 +42,7 @@ pub(crate) enum CommandError {
     Project(#[from] icp::LoadError),
 
     #[error(transparent)]
-    Locate(#[from] manifest::LocateError),
+    Locate(#[from] manifest::ProjectRootLocateError),
 
     #[error(transparent)]
     Agent(#[from] AgentError),

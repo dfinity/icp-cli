@@ -18,14 +18,20 @@ use crate::store_artifact::ArtifactStore;
 use crate::store_id::IdStore;
 
 pub fn initialize(
-    project_dir: Option<PathBuf>,
+    project_root_override: Option<PathBuf>,
     id_store_path: PathBuf,
     artifact_store_path: PathBuf,
     term: Term,
     debug: bool,
 ) -> Result<Context, Error> {
-    // Setup project directory structure
+    // Setup global directory structure
     let dirs = Arc::new(Directories::new()?);
+
+    // Project Root
+    let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
+        current_dir()?.try_into()?, // cwd
+        project_root_override,      // dir
+    ));
 
     // Canister ID Store
     let ids = Arc::new(IdStore::new(&id_store_path));
@@ -38,12 +44,6 @@ pub fn initialize(
 
     // Recipes
     let recipe = Arc::new(Handlebars { http_client });
-
-    // Project Manifest Locator
-    let mloc = Arc::new(manifest::Locator::new(
-        current_dir()?.try_into()?, // cwd
-        project_dir,                // dir
-    ));
 
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
@@ -69,14 +69,14 @@ pub fn initialize(
     let ploaders = ProjectLoaders {
         path: Arc::new(project::PathLoader),
         manifest: Arc::new(project::ManifestLoader {
-            locate: mloc.clone(),
+            project_root_locate: project_root_locate.clone(),
             recipe,
             canister: cload,
         }),
     };
 
     let pload = Loader {
-        locate: mloc.clone(),
+        project_root_locate: project_root_locate.clone(),
         project: ploaders,
     };
 
@@ -90,7 +90,7 @@ pub fn initialize(
 
     // Network accessor
     let netaccess = Arc::new(network::Accessor {
-        project: mloc.clone(),
+        project_root_locate: project_root_locate.clone(),
         descriptors: dirs.port_descriptor(),
     });
 

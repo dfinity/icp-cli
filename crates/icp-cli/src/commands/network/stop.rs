@@ -27,7 +27,7 @@ pub enum CommandError {
     Project(#[from] icp::LoadError),
 
     #[error(transparent)]
-    Locate(#[from] manifest::LocateError),
+    Locate(#[from] manifest::ProjectRootLocateError),
 
     #[error("project does not contain a network named '{name}'")]
     Network { name: String },

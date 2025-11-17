@@ -11,7 +11,7 @@ pub use managed::run::{RunNetworkError, run_network};
 use crate::{
     Network,
     manifest::{
-        Locate, LocateError,
+        ProjectRootLocate, ProjectRootLocateError,
         network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
     },
     network::access::{NetworkAccess, get_network_access},
@@ -151,7 +151,7 @@ impl From<Mode> for Configuration {
 #[derive(Debug, thiserror::Error)]
 pub enum AccessError {
     #[error("failed to find project root")]
-    Project(#[from] LocateError),
+    Project(#[from] ProjectRootLocateError),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -163,8 +163,8 @@ pub trait Access: Sync + Send {
 }
 
 pub struct Accessor {
-    // Project root locator
-    pub project: Arc<dyn Locate>,
+    // Project root
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
 
     // Port descriptors dir
     pub descriptors: PathBuf,
@@ -174,7 +174,7 @@ pub struct Accessor {
 impl Access for Accessor {
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
         // Locate networks directory
-        let dir = self.project.locate()?;
+        let dir = self.project_root_locate.locate()?;
 
         // NetworkDirectory
         let nd = NetworkDirectory::new(

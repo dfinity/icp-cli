@@ -29,9 +29,9 @@ struct Cli {
     #[arg(
         long,
         global = true,
-        help = "Directory to use as your project base directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
+        help = "Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
     )]
-    project_dir: Option<PathBuf>,
+    project_root_override: Option<PathBuf>,
 
     #[arg(long, default_value = ".icpdata/")]
     id_store: PathBuf,
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Error> {
     );
 
     let ctx = icp::context::initialize(
-        cli.project_dir,
+        cli.project_root_override,
         cli.id_store,
         cli.artifact_store,
         term,

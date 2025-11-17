@@ -14,7 +14,7 @@ use crate::{
     fs::read,
     is_glob,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, Item, Locate, canister::Instructions,
+        CANISTER_MANIFEST, CanisterManifest, Item, ProjectRootLocate, canister::Instructions,
         environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType,
     },
     network::{Configuration, Connected, Gateway, Managed, Port},
@@ -106,7 +106,7 @@ pub enum LoadManifestError {
 }
 
 pub struct ManifestLoader {
-    pub locate: Arc<dyn Locate>,
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub recipe: Arc<dyn recipe::Resolve>,
     pub canister: Arc<dyn LoadPath<CanisterManifest, canister::LoadPathError>>,
 }
@@ -154,7 +154,7 @@ fn default_networks() -> Vec<Network> {
 impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoader {
     async fn load(&self, m: &ProjectManifest) -> Result<Project, LoadManifestError> {
         // Locate project root
-        let pdir = self.locate.locate().context(LoadManifestError::Locate)?;
+        let pdir = self.project_root_locate.locate().context(LoadManifestError::Locate)?;
 
         // Canisters
         let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();

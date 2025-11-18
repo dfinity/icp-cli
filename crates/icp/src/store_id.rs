@@ -5,10 +5,9 @@ use std::{io::ErrorKind, sync::Mutex};
 use ic_agent::export::Principal;
 use snafu::{ResultExt, Snafu};
 
-use crate::fs::create_dir_all;
 use crate::{
     CACHE_DIR, DATA_DIR, ICP_BASE,
-    fs::json,
+    fs::{create_dir_all, json, remove_file},
     manifest::{ProjectRootLocate, ProjectRootLocateError},
     prelude::*,
 };
@@ -55,6 +54,9 @@ pub trait Access: Sync + Send {
 
     /// Lookup all canister IDs for a given environment.
     fn lookup_by_environment(&self, is_cache: bool, env: &str) -> Result<IdMapping, LookupIdError>;
+
+    /// Remove all canister ID mappings for a given environment.
+    fn cleanup(&self, is_cache: bool, env: &str) -> Result<(), CleanupError>;
 }
 
 #[derive(Debug, Snafu)]
@@ -97,6 +99,15 @@ pub enum LookupIdError {
 
     #[snafu(display("could not find canisters in environment '{}'", name))]
     EnvironmentNotFound { name: String },
+}
+
+#[derive(Debug, Snafu)]
+pub enum CleanupError {
+    #[snafu(transparent)]
+    ProjectRootLocate { source: ProjectRootLocateError },
+
+    #[snafu(transparent)]
+    DeleteFile { source: crate::fs::Error },
 }
 
 /// Store of canister ID mappings for environments.
@@ -180,6 +191,15 @@ impl Access for AccessImpl {
         load_mapping(&fpath).context(LookupLoadStoreSnafu {
             env: env.to_owned(),
         })
+    }
+
+    fn cleanup(&self, is_cache: bool, env: &str) -> Result<(), CleanupError> {
+        let _g = self.lock.lock().expect("failed to acquire id store lock");
+        let fpath = self.get_fpath_for_env(is_cache, env)?;
+        if fpath.exists() {
+            remove_file(&fpath)?;
+        }
+        Ok(())
     }
 }
 
@@ -302,6 +322,16 @@ pub(crate) mod mock {
                     name: env.to_owned(),
                 }),
             }
+        }
+
+        fn cleanup(&self, is_cache: bool, env: &str) -> Result<(), CleanupError> {
+            let mut store = if is_cache {
+                self.cache.lock().unwrap()
+            } else {
+                self.data.lock().unwrap()
+            };
+            store.remove(env);
+            Ok(())
         }
     }
 }

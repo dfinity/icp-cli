@@ -53,6 +53,15 @@ pub(crate) enum CommandError {
     #[error("network '{name}' must be a managed network")]
     Unmanaged { name: String },
 
+    #[error("failed to create network directory")]
+    CreateNetworkDir { source: icp::fs::Error },
+
+    #[error("failed to cleanup canister ID store for environment '{env}'")]
+    CleanupCanisterIdStore {
+        source: icp::store_id::CleanupError,
+        env: String,
+    },
+
     #[error(transparent)]
     NetworkAccess(#[from] icp::network::AccessError),
 
@@ -98,7 +107,20 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
     // Network directory
     let nd = ctx.network.get_network_directory(network)?;
     nd.ensure_exists()
-        .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
+        .map_err(|e| CommandError::CreateNetworkDir { source: e })?;
+
+    // Clean up any existing canister ID mappings of which environment is on this network
+    for env in p.environments.values() {
+        if env.network == *network {
+            // It's been ensured that the network is managed, so is_cache is true.
+            ctx.ids.cleanup(true, env.name.as_str()).map_err(|e| {
+                CommandError::CleanupCanisterIdStore {
+                    source: e,
+                    env: env.name.to_owned(),
+                }
+            })?;
+        }
+    }
 
     // Identities
     let ids = ctx

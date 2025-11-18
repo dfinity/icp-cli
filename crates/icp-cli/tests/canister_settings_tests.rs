@@ -1095,7 +1095,7 @@ fn canister_settings_sync() {
         ])
         .assert()
         .success()
-        .stderr(contains("Wasm memory limit is already set in icp.yaml"));
+        .stdout(contains("Wasm memory limit is already set in icp.yaml"));
     confirm_wasm_memory_limit(&ctx, &project_dir, "5_368_709_120");
     sync(&ctx, &project_dir);
     confirm_wasm_memory_limit(&ctx, &project_dir, "4_000_000_000");

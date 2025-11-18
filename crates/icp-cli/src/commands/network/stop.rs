@@ -4,7 +4,7 @@ use clap::Parser;
 use icp::{
     fs::{lock::LockError, remove_file},
     manifest,
-    network::NetworkDirectory,
+    network::Configuration,
     project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
@@ -32,6 +32,12 @@ pub enum CommandError {
     #[error("project does not contain a network named '{name}'")]
     Network { name: String },
 
+    #[error("network '{name}' must be a managed network")]
+    Unmanaged { name: String },
+
+    #[error(transparent)]
+    NetworkAccess(#[from] icp::network::AccessError),
+
     #[error("network '{name}' is not running in the background")]
     NotRunning { name: String },
 
@@ -49,21 +55,19 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
     // Load project
     let p = ctx.project.load().await?;
 
-    // Check network exists
-    p.networks.get(&cmd.name).ok_or(CommandError::Network {
+    // Obtain network configuration
+    let network = p.networks.get(&cmd.name).ok_or(CommandError::Network {
         name: cmd.name.clone(),
     })?;
 
-    // Network root
-    let pdir = &p.dir;
-    let nroot = pdir.join(".icp").join("networks").join(&cmd.name);
+    if let Configuration::Connected { connected: _ } = &network.configuration {
+        return Err(CommandError::Unmanaged {
+            name: cmd.name.to_owned(),
+        });
+    };
 
     // Network directory
-    let nd = NetworkDirectory::new(
-        &cmd.name,                   // name
-        &nroot,                      // network_root
-        &ctx.dirs.port_descriptor(), // port_descriptor_dir
-    );
+    let nd = ctx.network.get_network_directory(network)?;
 
     // Load PID from file
     let pid = nd

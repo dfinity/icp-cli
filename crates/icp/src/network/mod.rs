@@ -9,7 +9,7 @@ pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 
 use crate::{
-    Network,
+    CACHE_DIR, ICP_BASE, Network,
     manifest::{
         ProjectRootLocate, ProjectRootLocateError,
         network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
@@ -159,6 +159,7 @@ pub enum AccessError {
 
 #[async_trait]
 pub trait Access: Sync + Send {
+    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError>;
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError>;
 }
 
@@ -172,16 +173,21 @@ pub struct Accessor {
 
 #[async_trait]
 impl Access for Accessor {
-    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
-        // Locate networks directory
+    /// The network directory is located at `<project_root>/.icp/cache/networks/<network_name>`.
+    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
         let dir = self.project_root_locate.locate()?;
-
+        Ok(NetworkDirectory::new(
+            &network.name,
+            &dir.join(ICP_BASE)
+                .join(CACHE_DIR)
+                .join("networks")
+                .join(&network.name),
+            &self.descriptors,
+        ))
+    }
+    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
         // NetworkDirectory
-        let nd = NetworkDirectory::new(
-            &network.name,                                          // name
-            &dir.join(".icp").join("networks").join(&network.name), // network_root
-            &self.descriptors,                                      // port_descriptor_dir
-        );
+        let nd = self.get_network_directory(network)?;
 
         // NetworkAccess
         let access = get_network_access(nd, network)
@@ -227,6 +233,13 @@ impl Default for MockNetworkAccessor {
 #[cfg(test)]
 #[async_trait]
 impl Access for MockNetworkAccessor {
+    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
+        Ok(NetworkDirectory {
+            network_name: network.name.clone(),
+            network_root: PathBuf::new(),
+            port_descriptor_dir: PathBuf::new(),
+        })
+    }
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
         self.networks.get(&network.name).cloned().ok_or_else(|| {
             AccessError::Unexpected(anyhow::anyhow!(

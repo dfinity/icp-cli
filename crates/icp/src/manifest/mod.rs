@@ -52,7 +52,7 @@ pub struct ProjectRootLocateImpl {
 impl ProjectRootLocateImpl {
     /// Creates a new instance of `ProjectRootLocateImpl`.
     ///
-    /// - If `override` is specified, it will be used as Project Root directly.
+    /// - If `dir` is specified, it will be used as Project Root directly.
     /// - Otherwise, it will search upwards from `cwd` for the project manifest file (`icp.yaml`).
     pub fn new(cwd: PathBuf, dir: Option<PathBuf>) -> Self {
         Self { cwd, dir }

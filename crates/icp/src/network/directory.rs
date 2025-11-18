@@ -47,18 +47,6 @@ pub enum LoadNetworkFileError {
 }
 
 impl NetworkDirectory {
-    /// Deletes the network and port descriptor directories.
-    /// This is used when starting a network to ensure that any previous state is cleared.
-    pub fn remove_dirs(&self) -> Result<(), crate::fs::Error> {
-        if self.network_root.exists() {
-            crate::fs::remove_dir_all(&self.network_root)?;
-        }
-        if self.port_descriptor_dir.exists() {
-            crate::fs::remove_dir_all(&self.port_descriptor_dir)?;
-        }
-        Ok(())
-    }
-
     pub fn ensure_exists(&self) -> Result<(), crate::fs::Error> {
         // Network root
         create_dir_all(&self.network_root)?;

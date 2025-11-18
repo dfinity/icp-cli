@@ -442,3 +442,74 @@ async fn network_starts_with_canisters_preset() {
         .unwrap();
     assert!(internet_identity_status.module_hash.is_some());
 }
+
+#[tokio::test]
+async fn network_run_wipe_out_cache() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    eprintln!("Starting network for the first time");
+
+    // Start network in background
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "run", "--background"])
+        .assert()
+        .success();
+    ctx.wait_for_network_descriptor(&project_dir, "local");
+
+    eprintln!("Starting network for the first time");
+
+    // Deploy project (first time)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy"])
+        .assert()
+        .success();
+
+    // Stop the network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "stop"])
+        .assert()
+        .success()
+        .stdout(contains("Network stopped successfully"));
+
+    eprintln!("Starting network for the second time");
+    // Start network in background
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "run", "--background"])
+        .assert()
+        .success();
+    ctx.wait_for_network_descriptor(&project_dir, "local");
+
+    // Deploy project (second time)
+    // This should not fail due to existing canister ID mappings
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy"])
+        .assert()
+        .success();
+}

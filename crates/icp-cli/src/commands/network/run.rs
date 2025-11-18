@@ -53,9 +53,6 @@ pub(crate) enum CommandError {
     #[error("network '{name}' must be a managed network")]
     Unmanaged { name: String },
 
-    #[error("failed to delete network directory")]
-    DeleteNetworkDir { source: icp::fs::Error },
-
     #[error("failed to create network directory")]
     CreateNetworkDir { source: icp::fs::Error },
 
@@ -109,9 +106,6 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
 
     // Network directory
     let nd = ctx.network.get_network_directory(network)?;
-    // Clear any existing network state before starting the network
-    nd.remove_dirs()
-        .map_err(|e| CommandError::DeleteNetworkDir { source: e })?;
     nd.ensure_exists()
         .map_err(|e| CommandError::CreateNetworkDir { source: e })?;
 

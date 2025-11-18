@@ -6,6 +6,8 @@ canisters:
         # cargo package for canister (required field)
         package: icp-canister
         shrink: true
+        # optional
+        candid: greeter.did
         metadata:
           - name: "crate:version"
             value: 1.0.0

@@ -321,6 +321,7 @@ async fn network_run_and_stop_background() {
     // Verify PID file was written
     let pid_file_path = project_dir
         .join(".icp")
+        .join("cache")
         .join("networks")
         .join("my-network")
         .join("background_network_runner.pid");

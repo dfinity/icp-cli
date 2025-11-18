@@ -50,11 +50,16 @@ pub enum LoadIdentityError {
     #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
     ParsePemError {
         path: PathBuf,
-        source: pem::PemError,
+        #[snafu(source(from(pem::PemError, Box::new)))]
+        source: Box<pem::PemError>,
     },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
-    ParseKeyError { path: PathBuf, source: pkcs8::Error },
+    ParseKeyError {
+        path: PathBuf,
+        #[snafu(source(from(pkcs8::Error, Box::new)))]
+        source: Box<pkcs8::Error>,
+    },
 
     #[snafu(display("no identity found with name `{name}`"))]
     NoSuchIdentity { name: String },

@@ -9,7 +9,7 @@ use crate::{
     identity::IdentitySelection,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
-    store_id::IdMapping,
+    store_id::{IdMapping, LookupIdError},
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -476,7 +476,8 @@ pub enum GetCanisterIdForEnvError {
         environment_name
     ))]
     CanisterIdLookup {
-        source: crate::store_id::LookupIdError,
+        #[snafu(source(from(LookupIdError, Box::new)))]
+        source: Box<LookupIdError>,
         canister_name: String,
         environment_name: String,
     },

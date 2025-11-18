@@ -34,9 +34,6 @@ struct Cli {
     )]
     project_root_override: Option<PathBuf>,
 
-    #[arg(long, default_value = ".icpdata/")]
-    id_store: PathBuf,
-
     #[arg(long, default_value = ".icp/artifacts")]
     artifact_store: PathBuf,
 
@@ -130,7 +127,6 @@ async fn main() -> Result<(), Error> {
 
     let ctx = icp::context::initialize(
         cli.project_root_override,
-        cli.id_store,
         cli.artifact_store,
         term,
         cli.debug,

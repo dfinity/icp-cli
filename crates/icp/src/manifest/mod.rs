@@ -41,9 +41,6 @@ pub trait ProjectRootLocate: Sync + Send {
 }
 
 /// Implementation of [`ProjectRootLocate`].
-///
-/// - If `override` is specified, it will be used directly.
-/// - Otherwise, it will search upwards from `cwd` for the project manifest file (`icp.yaml`).
 pub struct ProjectRootLocateImpl {
     /// Current directory to begin search from in case dir is unspecified.
     cwd: PathBuf,
@@ -53,7 +50,10 @@ pub struct ProjectRootLocateImpl {
 }
 
 impl ProjectRootLocateImpl {
+    /// Creates a new instance of `ProjectRootLocateImpl`.
     ///
+    /// - If `override` is specified, it will be used as Project Root directly.
+    /// - Otherwise, it will search upwards from `cwd` for the project manifest file (`icp.yaml`).
     pub fn new(cwd: PathBuf, dir: Option<PathBuf>) -> Self {
         Self { cwd, dir }
     }

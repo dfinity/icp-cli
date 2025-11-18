@@ -154,7 +154,10 @@ fn default_networks() -> Vec<Network> {
 impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoader {
     async fn load(&self, m: &ProjectManifest) -> Result<Project, LoadManifestError> {
         // Locate project root
-        let pdir = self.project_root_locate.locate().context(LoadManifestError::Locate)?;
+        let pdir = self
+            .project_root_locate
+            .locate()
+            .context(LoadManifestError::Locate)?;
 
         // Canisters
         let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();

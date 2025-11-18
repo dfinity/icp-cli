@@ -8,18 +8,17 @@ use crate::canister::script::Script;
 use crate::canister::sync::Syncer;
 use crate::directories::{Access as _, Directories};
 use crate::{
-    Lazy, Loader, ProjectLoaders, agent, canister, identity, manifest, network, prelude::*, project,
+    Lazy, Loader, ProjectLoaders, agent, canister, identity, manifest, network, prelude::*,
+    project, store_id,
 };
 use anyhow::Error;
 use console::Term;
 
 use crate::context::Context;
 use crate::store_artifact::ArtifactStore;
-use crate::store_id::IdStore;
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
-    id_store_path: PathBuf,
     artifact_store_path: PathBuf,
     term: Term,
     debug: bool,
@@ -34,7 +33,7 @@ pub fn initialize(
     ));
 
     // Canister ID Store
-    let ids = Arc::new(IdStore::new(&id_store_path));
+    let ids = Arc::new(store_id::AccessImpl::new(project_root_locate.clone()));
 
     // Canister Artifact Store (wasm)
     let artifacts = Arc::new(ArtifactStore::new(&artifact_store_path));

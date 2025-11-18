@@ -127,9 +127,9 @@ impl TestContext {
     pub(crate) fn state_dir(&self, project_dir: &Path) -> PathBuf {
         project_dir
             .join(".icp")
+            .join("cache")
             .join("networks")
             .join("local")
-            .join("pocketic")
             .join("state")
     }
 
@@ -146,7 +146,11 @@ impl TestContext {
             PathBuf::from(env::var("ICP_POCKET_IC_PATH").expect("ICP_POCKET_IC_PATH must be set"));
 
         // Create network directory structure
-        let network_dir = project_dir.join(".icp").join("networks").join("local");
+        let network_dir = project_dir
+            .join(".icp")
+            .join("cache")
+            .join("networks")
+            .join("local");
         create_dir_all(&network_dir).expect("Failed to create network directory");
 
         let pocketic_dir = network_dir.join("pocketic");
@@ -251,6 +255,7 @@ impl TestContext {
     ) -> TestNetwork {
         let descriptor_path = project_dir
             .join(".icp")
+            .join("cache")
             .join("networks")
             .join(network_name)
             .join("descriptor.json");
@@ -317,6 +322,7 @@ impl TestContext {
     fn network_descriptor_path(&self, project_dir: &Path, network: &str) -> PathBuf {
         project_dir
             .join(".icp")
+            .join("cache")
             .join("networks")
             .join(network)
             .join("descriptor.json")

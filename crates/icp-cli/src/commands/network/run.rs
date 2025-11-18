@@ -42,7 +42,7 @@ pub(crate) enum CommandError {
     Project(#[from] icp::LoadError),
 
     #[error(transparent)]
-    Locate(#[from] manifest::LocateError),
+    Locate(#[from] manifest::ProjectRootLocateError),
 
     #[error(transparent)]
     Agent(#[from] AgentError),
@@ -52,6 +52,9 @@ pub(crate) enum CommandError {
 
     #[error("network '{name}' must be a managed network")]
     Unmanaged { name: String },
+
+    #[error(transparent)]
+    NetworkAccess(#[from] icp::network::AccessError),
 
     #[error("timed out waiting for network to start: {err}")]
     Timeout { err: String },
@@ -90,16 +93,10 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
         }
     };
 
-    // Network root
     let pdir = &p.dir;
-    let ndir = pdir.join(".icp").join("networks").join(&network.name);
 
     // Network directory
-    let nd = NetworkDirectory::new(
-        &network.name,               // name
-        &ndir,                       // network_root
-        &ctx.dirs.port_descriptor(), // port_descriptor_dir
-    );
+    let nd = ctx.network.get_network_directory(network)?;
     nd.ensure_exists()
         .map_err(|e| RunNetworkError::CreateDirFailed { source: e })?;
 
@@ -114,7 +111,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandErr
     let seed_accounts = ids.identities.values().map(|id| id.principal());
 
     debug!("Project root: {pdir}");
-    debug!("Network root: {ndir}");
+    debug!("Network root: {}", nd.network_root);
 
     if args.background {
         let mut child = run_in_background()?;

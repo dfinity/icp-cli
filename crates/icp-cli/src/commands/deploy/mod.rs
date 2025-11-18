@@ -135,6 +135,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         .map_err(|e| anyhow!(e))?;
     let existing_canisters = ctx
         .ids_by_environment(&environment_selection)
+        .await
         .map_err(|e| anyhow!(e))?;
     let canisters_to_create = cnames
         .iter()
@@ -220,6 +221,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     let canister_list = ctx
         .ids_by_environment(&environment_selection)
+        .await
         .map_err(|e| anyhow!(e))?;
 
     set_binding_env_vars_many(

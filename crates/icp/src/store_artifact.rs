@@ -1,11 +1,14 @@
+use std::sync::Arc;
 #[cfg(test)]
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
+    CACHE_DIR, ICP_BASE,
     fs::{
         lock::{DirectoryStructureLock, PathsAccess},
         read, write,
     },
+    manifest::ProjectRootLocate,
     prelude::*,
 };
 use async_trait::async_trait;
@@ -43,7 +46,7 @@ pub enum LookupArtifactError {
 }
 
 pub(crate) struct ArtifactStore {
-    lock: DirectoryStructureLock<ArtifactPaths>,
+    project_root_locate: Arc<dyn ProjectRootLocate>,
 }
 
 struct ArtifactPaths {
@@ -63,20 +66,30 @@ impl PathsAccess for ArtifactPaths {
 }
 
 impl ArtifactStore {
-    pub(crate) fn new(path: &Path) -> Self {
+    pub(crate) fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
         Self {
-            lock: DirectoryStructureLock::open_or_create(ArtifactPaths {
-                dir: path.to_owned(),
-            })
-            .expect("failed to create artifact store lock"),
+            project_root_locate,
         }
+    }
+
+    /// Locked directory access for the artifact store. It will create the directory if it does not exist.
+    fn lock(&self) -> Result<DirectoryStructureLock<ArtifactPaths>, crate::fs::lock::LockError> {
+        let project_root = self
+            .project_root_locate
+            .locate()
+            .expect("failed to locate project root");
+        let artifact_dir = project_root
+            .join(ICP_BASE)
+            .join(CACHE_DIR)
+            .join("artifacts");
+        DirectoryStructureLock::open_or_create(ArtifactPaths { dir: artifact_dir })
     }
 }
 
 #[async_trait]
 impl Access for ArtifactStore {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
-        self.lock
+        self.lock()?
             .with_write(async |store| {
                 // Save artifact
                 write(&store.artifact_by_name(name), wasm).context(SaveWriteFileSnafu)?;
@@ -86,7 +99,7 @@ impl Access for ArtifactStore {
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
-        self.lock
+        self.lock()?
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
                 // Not Found

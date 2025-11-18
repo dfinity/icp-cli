@@ -169,6 +169,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         .await?;
     let existing_canisters = ctx
         .ids_by_environment(&selections.environment)
+        .await
         .map_err(|e| anyhow!(e))?
         .into_values()
         .collect();

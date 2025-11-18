@@ -28,7 +28,7 @@ pub struct NetworkDirectory {
 }
 
 impl NetworkDirectory {
-    pub fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
+    pub(crate) fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
         Self {
             network_name: network_name.to_owned(),
             network_root: network_root.to_path_buf(),

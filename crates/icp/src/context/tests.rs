@@ -123,7 +123,9 @@ async fn test_get_canister_id_for_env_success() {
 
     // Register a canister ID for the dev environment
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store.register("dev", "backend", canister_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", canister_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -207,7 +209,7 @@ async fn test_set_canister_id_for_env_success() {
     .unwrap();
 
     // Verify it was registered by reading it back
-    let registered_id = ids_store.lookup("dev", "backend").unwrap();
+    let registered_id = ids_store.lookup(true, "dev", "backend").unwrap();
 
     assert_eq!(registered_id, canister_id);
 }
@@ -250,7 +252,9 @@ async fn test_set_canister_id_for_env_already_registered() {
 
     // Pre-register a canister ID
     let first_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store.register("dev", "backend", first_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", first_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -456,7 +460,9 @@ async fn test_get_canister_id() {
 
     // Register a canister ID for the dev environment
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store.register("dev", "backend", canister_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", canister_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -483,15 +489,19 @@ async fn test_get_canister_id() {
     );
 }
 
-#[test]
-fn test_ids_by_environment() {
+#[tokio::test]
+async fn test_ids_by_environment() {
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Register multiple canister IDs for the dev environment
     let backend_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let frontend_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
-    ids_store.register("dev", "backend", backend_id).unwrap();
-    ids_store.register("dev", "frontend", frontend_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", backend_id)
+        .unwrap();
+    ids_store
+        .register(true, "dev", "frontend", frontend_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -501,6 +511,7 @@ fn test_ids_by_environment() {
 
     let result = ctx
         .ids_by_environment(&EnvironmentSelection::Named("dev".to_string()))
+        .await
         .unwrap();
 
     assert_eq!(result.len(), 2);

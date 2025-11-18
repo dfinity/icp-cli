@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    manifest::{PROJECT_MANIFEST, ProjectRootLocate, project::ProjectManifest},
     network::Configuration,
     prelude::*,
 };
@@ -25,6 +25,10 @@ pub mod prelude;
 pub mod project;
 pub mod store_artifact;
 pub mod store_id;
+
+const ICP_BASE: &str = ".icp";
+const CACHE_DIR: &str = "cache";
+const DATA_DIR: &str = "data";
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -130,7 +134,7 @@ pub struct ProjectLoaders {
 }
 
 pub struct Loader {
-    pub locate: Arc<dyn Locate>,
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub project: ProjectLoaders,
 }
 
@@ -139,7 +143,10 @@ impl Load for Loader {
     async fn load(&self) -> Result<Project, LoadError> {
         debug!("Loading project");
         // Locate project root
-        let pdir = self.locate.locate().context(LoadError::Locate)?;
+        let pdir = self
+            .project_root_locate
+            .locate()
+            .context(LoadError::Locate)?;
 
         debug!("Located icp project in {pdir}");
 

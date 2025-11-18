@@ -7,7 +7,7 @@ use crate::{
     canister::{build::Build, sync::Synchronize},
     directories,
     identity::IdentitySelection,
-    network::access::NetworkAccess,
+    network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
     store_id::IdMapping,
 };
@@ -185,6 +185,10 @@ impl Context {
         environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdForEnvError> {
         let env = self.get_environment(environment).await?;
+        let is_cache = match env.network.configuration {
+            NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::Connected { .. } => false,
+        };
 
         if !env.canisters.contains_key(canister_name) {
             return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
@@ -196,7 +200,7 @@ impl Context {
         // Lookup the canister id
         let cid = self
             .ids
-            .lookup(&env.name, canister_name)
+            .lookup(is_cache, &env.name, canister_name)
             .context(CanisterIdLookupSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
@@ -217,6 +221,10 @@ impl Context {
         environment: &EnvironmentSelection,
     ) -> Result<(), SetCanisterIdForEnvError> {
         let env = self.get_environment(environment).await?;
+        let is_cache = match env.network.configuration {
+            NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::Connected { .. } => false,
+        };
 
         if !env.canisters.contains_key(canister_name) {
             return Err(SetCanisterIdForEnvError::SetCanisterNotFoundInEnv {
@@ -227,7 +235,7 @@ impl Context {
 
         // Register the canister id
         self.ids
-            .register(&env.name, canister_name, canister_id)
+            .register(is_cache, &env.name, canister_name, canister_id)
             .context(CanisterIdRegisterSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
@@ -379,12 +387,17 @@ impl Context {
         Ok((cid, agent))
     }
 
-    pub fn ids_by_environment(
+    pub async fn ids_by_environment(
         &self,
         environment: &EnvironmentSelection,
     ) -> Result<IdMapping, GetIdsByEnvironmentError> {
+        let env = self.get_environment(environment).await?;
+        let is_cache = match env.network.configuration {
+            NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::Connected { .. } => false,
+        };
         self.ids
-            .lookup_by_environment(environment.name())
+            .lookup_by_environment(is_cache, environment.name())
             .context(IdsByEnvironmentLookupSnafu {
                 environment_name: environment.name().to_owned(),
             })
@@ -575,6 +588,9 @@ pub enum GetCanisterIdAndAgentError {
 
 #[derive(Debug, Snafu)]
 pub enum GetIdsByEnvironmentError {
+    #[snafu(transparent)]
+    GetEnvironment { source: GetEnvironmentError },
+
     #[snafu(display("failed to lookup IDs for environment '{environment_name}'"))]
     IdsByEnvironmentLookup {
         source: crate::store_id::LookupIdError,

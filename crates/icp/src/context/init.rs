@@ -19,7 +19,6 @@ use crate::store_artifact::ArtifactStore;
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
-    artifact_store_path: PathBuf,
     term: Term,
     debug: bool,
 ) -> Result<Context, Error> {
@@ -36,7 +35,7 @@ pub fn initialize(
     let ids = Arc::new(store_id::AccessImpl::new(project_root_locate.clone()));
 
     // Canister Artifact Store (wasm)
-    let artifacts = Arc::new(ArtifactStore::new(&artifact_store_path));
+    let artifacts = Arc::new(ArtifactStore::new(project_root_locate.clone()));
 
     // Prepare http client
     let http_client = reqwest::Client::new();

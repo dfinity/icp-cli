@@ -34,9 +34,6 @@ struct Cli {
     )]
     project_root_override: Option<PathBuf>,
 
-    #[arg(long, default_value = ".icp/artifacts")]
-    artifact_store: PathBuf,
-
     /// Enable debug logging
     #[arg(long, default_value = "false", global = true)]
     debug: bool,
@@ -125,12 +122,7 @@ async fn main() -> Result<(), Error> {
         "Starting icp-cli"
     );
 
-    let ctx = icp::context::initialize(
-        cli.project_root_override,
-        cli.artifact_store,
-        term,
-        cli.debug,
-    )?;
+    let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug)?;
 
     match command {
         // Build

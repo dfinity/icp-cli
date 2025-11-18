@@ -65,15 +65,15 @@ pub(crate) async fn sync_settings(
         } else {
             None
         };
-    if compute_allocation.is_some_and(|s| s == current_settings.compute_allocation)
-        && memory_allocation.is_some_and(|s| s == current_settings.memory_allocation)
-        && freezing_threshold.is_some_and(|s| s == current_settings.freezing_threshold)
-        && reserved_cycles_limit.is_some_and(|s| s == current_settings.reserved_cycles_limit)
-        && wasm_memory_limit.is_some_and(|s| s == current_settings.wasm_memory_limit)
-        && wasm_memory_threshold.is_some_and(|s| s == current_settings.wasm_memory_threshold)
+    if compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
+        && memory_allocation.is_none_or(|s| s == current_settings.memory_allocation)
+        && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
+        && reserved_cycles_limit.is_none_or(|s| s == current_settings.reserved_cycles_limit)
+        && wasm_memory_limit.is_none_or(|s| s == current_settings.wasm_memory_limit)
+        && wasm_memory_threshold.is_none_or(|s| s == current_settings.wasm_memory_threshold)
         && environment_variable_setting
             .as_ref()
-            .is_some_and(|s| *s == current_settings.environment_variables)
+            .is_none_or(|s| *s == current_settings.environment_variables)
     {
         // No changes needed
         return Ok(());

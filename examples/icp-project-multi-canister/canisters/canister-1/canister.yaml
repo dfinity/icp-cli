@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/heads/main/docs/schemas/canister-yaml-schema.json
+
 name: canister-1
 
 build:

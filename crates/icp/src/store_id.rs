@@ -5,6 +5,7 @@ use std::{io::ErrorKind, sync::Mutex};
 use ic_agent::export::Principal;
 use snafu::{ResultExt, Snafu};
 
+use crate::fs::create_dir_all;
 use crate::{
     CACHE_DIR, DATA_DIR, ICP_BASE,
     fs::json,
@@ -60,6 +61,12 @@ pub trait Access: Sync + Send {
 pub enum RegisterError {
     #[snafu(transparent)]
     ProjectRootLocate { source: ProjectRootLocateError },
+
+    #[snafu(display("failed to create directory for canister id store at '{path}'"))]
+    CreateDirAll {
+        source: crate::fs::Error,
+        path: PathBuf,
+    },
 
     #[snafu(display("failed to load canister id store for environment '{env}'"))]
     RegisterLoadStore { source: json::Error, env: String },
@@ -121,6 +128,9 @@ impl Access for AccessImpl {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
         let fpath = self.get_fpath_for_env(is_cache, env)?;
+        create_dir_all(fpath.parent().unwrap()).context(CreateDirAllSnafu {
+            path: fpath.clone(),
+        })?;
 
         // Load the file
         let mut mapping = load_mapping(&fpath).context(RegisterLoadStoreSnafu {
@@ -183,13 +193,14 @@ impl AccessImpl {
         env: &str,
     ) -> Result<PathBuf, ProjectRootLocateError> {
         let project_root = self.project_root_locate.locate()?;
-        let base_path = if is_cache {
-            project_root.join(CACHE_DIR)
+        let base_path = project_root.join(ICP_BASE);
+        let store_path = if is_cache {
+            base_path.join(CACHE_DIR)
         } else {
-            project_root.join(DATA_DIR)
+            base_path.join(DATA_DIR)
         };
         let fname = format!("{env}.ids.json");
-        Ok(base_path.join(ICP_BASE).join("mappings").join(&fname))
+        Ok(store_path.join("mappings").join(&fname))
     }
 }
 

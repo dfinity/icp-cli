@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::io::{self, Write};
 
 use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
+use console::Term;
 use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::{LoadError, agent, identity, network};
@@ -129,6 +131,9 @@ pub(crate) enum CommandError {
 
     #[error(transparent)]
     GetCanisterIdAndAgent(#[from] GetCanisterIdAndAgentError),
+
+    #[error("failed to write to terminal")]
+    WriteTerm(#[from] std::io::Error),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
@@ -179,7 +184,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
     // Handle environment variables.
     let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
     if let Some(environment_variables_opt) = &args.environment_variables {
-        maybe_warn_on_env_vars_change(&configured_settings, environment_variables_opt);
+        maybe_warn_on_env_vars_change(&ctx.term, &configured_settings, environment_variables_opt)?;
         environment_variables =
             get_environment_variables(environment_variables_opt, current_status.as_ref());
     }
@@ -193,49 +198,49 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
     }
     if let Some(compute_allocation) = args.compute_allocation {
         if configured_settings.compute_allocation.is_some() {
-            eprintln!(
+            ctx.term.write_line(
                 "Warning: Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )
+            )?
         }
         update = update.with_compute_allocation(compute_allocation);
     }
     if let Some(memory_allocation) = args.memory_allocation {
         if configured_settings.memory_allocation.is_some() {
-            eprintln!(
+            ctx.term.write_line(
                 "Warning: Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )
+            )?
         }
         update = update.with_memory_allocation(memory_allocation.as_u64());
     }
     if let Some(freezing_threshold) = args.freezing_threshold {
         if configured_settings.freezing_threshold.is_some() {
-            eprintln!(
+            ctx.term.write_line(
                 "Warning: Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )
+            )?
         }
         update = update.with_freezing_threshold(freezing_threshold);
     }
     if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
         if configured_settings.reserved_cycles_limit.is_some() {
-            eprintln!(
+            ctx.term.write_line(
                 "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )
+            )?
         }
         update = update.with_reserved_cycles_limit(reserved_cycles_limit);
     }
     if let Some(wasm_memory_limit) = args.wasm_memory_limit {
         if configured_settings.wasm_memory_limit.is_some() {
-            eprintln!(
+            ctx.term.write_line(
                 "Warning: Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )
+            )?
         }
         update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
     }
     if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
         if configured_settings.wasm_memory_threshold.is_some() {
-            eprintln!(
+            ctx.term.write_line(
                 "Warning: Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )
+            )?
         }
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
     }
@@ -438,29 +443,33 @@ fn get_environment_variables(
 }
 
 fn maybe_warn_on_env_vars_change(
+    mut term: &Term,
     configured_settings: &icp::canister::Settings,
     environment_variables_opt: &EnvironmentVariableOpt,
-) {
+) -> Result<(), io::Error> {
     if let Some(configured_vars) = &configured_settings.environment_variables {
         if let Some(to_add) = &environment_variables_opt.add_environment_variable {
             for add_var in to_add {
                 if configured_vars.contains_key(&add_var.name) {
-                    eprintln!(
+                    writeln!(
+                        term,
                         "Warning: Environment variable '{}' is already set in icp.yaml; this new value will be overridden on next settings sync",
                         add_var.name
-                    )
+                    )?;
                 }
             }
         }
         if let Some(to_remove) = &environment_variables_opt.remove_environment_variable {
             for remove_var in to_remove {
                 if configured_vars.contains_key(remove_var) {
-                    eprintln!(
+                    writeln!(
+                        term,
                         "Warning: Environment variable '{}' is already set in icp.yaml; removing it here will be overridden on next settings sync",
                         remove_var
-                    )
+                    )?;
                 }
             }
         }
     }
+    Ok(())
 }

@@ -106,7 +106,7 @@ Perform canister operations against a network
 * `info` — Display a canister's information
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
-* `settings` — 
+* `settings` — Commands to manage canister settings
 * `show` — Show a canister's details
 * `start` — Start a canister on a network
 * `status` — Show the status of a canister
@@ -244,17 +244,21 @@ List the canisters in an environment
 
 ## `icp-cli canister settings`
 
+Commands to manage canister settings
+
 **Usage:** `icp-cli canister settings <COMMAND>`
 
 ###### **Subcommands:**
 
-* `show` — 
-* `update` — 
-* `sync` — 
+* `show` — Display a canister's settings
+* `update` — Change a canister's settings to specified values
+* `sync` — Synchronize a canister's settings with those defined in the project
 
 
 
 ## `icp-cli canister settings show`
+
+Display a canister's settings
 
 **Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
 
@@ -272,6 +276,8 @@ List the canisters in an environment
 
 
 ## `icp-cli canister settings update`
+
+Change a canister's settings to specified values
 
 **Usage:** `icp-cli canister settings update [OPTIONS] <CANISTER>`
 
@@ -305,11 +311,13 @@ List the canisters in an environment
 
 ## `icp-cli canister settings sync`
 
-**Usage:** `icp-cli canister settings sync [OPTIONS] <NAME>`
+Synchronize a canister's settings with those defined in the project
+
+**Usage:** `icp-cli canister settings sync [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 
 ###### **Options:**
 

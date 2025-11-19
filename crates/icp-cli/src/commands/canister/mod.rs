@@ -34,6 +34,7 @@ pub(crate) enum Command {
     /// List the canisters in an environment
     List(list::ListArgs),
 
+    /// Commands to manage canister settings
     #[command(subcommand)]
     Settings(settings::Command),
 

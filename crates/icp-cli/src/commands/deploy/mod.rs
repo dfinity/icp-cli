@@ -15,6 +15,7 @@ use crate::{
         build::build_many_with_progress_bar,
         create::CreateOperation,
         install::{InstallOperationError, install_many},
+        settings::sync_settings_many,
         sync::{SyncOperationError, sync_many},
     },
     options::{EnvironmentOpt, IdentityOpt},
@@ -225,12 +226,16 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     set_binding_env_vars_many(
         agent.clone(),
         &env.name,
-        target_canisters,
+        target_canisters.clone(),
         canister_list,
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
+
+    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");

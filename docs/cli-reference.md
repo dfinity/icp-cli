@@ -16,6 +16,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister settings`↴](#icp-cli-canister-settings)
 * [`icp-cli canister settings show`↴](#icp-cli-canister-settings-show)
 * [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
+* [`icp-cli canister settings sync`↴](#icp-cli-canister-settings-sync)
 * [`icp-cli canister show`↴](#icp-cli-canister-show)
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
@@ -99,7 +100,7 @@ Perform canister operations against a network
 * `info` — Display a canister's information
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
-* `settings` — 
+* `settings` — Commands to manage canister settings
 * `show` — Show a canister's details
 * `start` — Start a canister on a network
 * `status` — Show the status of a canister
@@ -237,16 +238,21 @@ List the canisters in an environment
 
 ## `icp-cli canister settings`
 
+Commands to manage canister settings
+
 **Usage:** `icp-cli canister settings <COMMAND>`
 
 ###### **Subcommands:**
 
-* `show` — 
-* `update` — 
+* `show` — Display a canister's settings
+* `update` — Change a canister's settings to specified values
+* `sync` — Synchronize a canister's settings with those defined in the project
 
 
 
 ## `icp-cli canister settings show`
+
+Display a canister's settings
 
 **Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
 
@@ -264,6 +270,8 @@ List the canisters in an environment
 
 
 ## `icp-cli canister settings update`
+
+Change a canister's settings to specified values
 
 **Usage:** `icp-cli canister settings update [OPTIONS] <CANISTER>`
 
@@ -292,6 +300,25 @@ List the canisters in an environment
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+
+
+
+## `icp-cli canister settings sync`
+
+Synchronize a canister's settings with those defined in the project
+
+**Usage:** `icp-cli canister settings sync [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 

@@ -182,6 +182,12 @@ async fn main() -> Result<(), Error> {
                         .instrument(trace_span)
                         .await?
                 }
+
+                commands::canister::settings::Command::Sync(args) => {
+                    commands::canister::settings::sync::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
             },
 
             commands::canister::Command::Show(args) => {

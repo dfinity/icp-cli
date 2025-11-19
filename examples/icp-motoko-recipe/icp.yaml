@@ -1,7 +1,9 @@
-canister:
+canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/motoko" 
+      type: "@dfinity/motoko"
       configuration:
         main: src/main.mo
         args: --incremental-gc
+        # optional
+        candid: greeter.did

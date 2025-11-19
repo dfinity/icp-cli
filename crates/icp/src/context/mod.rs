@@ -3,11 +3,13 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::{
+    Canister,
     agent::CreateAgentError,
     canister::{build::Build, sync::Synchronize},
     directories,
     identity::IdentitySelection,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
+    prelude::*,
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
     store_id::IdMapping,
 };
@@ -152,26 +154,26 @@ impl Context {
         }
     }
 
-    pub async fn assert_env_contains_canister(
+    pub async fn get_canister_and_path_for_env(
         &self,
         canister_name: &str,
         environment: &EnvironmentSelection,
-    ) -> Result<(), AssertEnvContainsCanisterError> {
+    ) -> Result<(PathBuf, Canister), GetEnvCanisterError> {
         let p = self.project.load().await?;
-        if !p.contains_canister(canister_name) {
-            return Err(AssertEnvContainsCanisterError::CanisterNotFoundInProject {
+        let Some((path, canister)) = p.get_canister(canister_name) else {
+            return Err(GetEnvCanisterError::CanisterNotFoundInProject {
                 canister_name: canister_name.to_owned(),
             });
-        }
+        };
 
         let env = self.get_environment(environment).await?;
         if !env.contains_canister(canister_name) {
-            return Err(AssertEnvContainsCanisterError::CanisterNotInEnv {
+            return Err(GetEnvCanisterError::CanisterNotInEnv {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
             });
         }
-        Ok(())
+        Ok((path.clone(), canister.clone()))
     }
 
     /// Gets the canister ID for a given canister name in a specified environment.
@@ -599,7 +601,7 @@ pub enum GetIdsByEnvironmentError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum AssertEnvContainsCanisterError {
+pub enum GetEnvCanisterError {
     #[snafu(transparent)]
     ProjectLoad { source: crate::LoadError },
 

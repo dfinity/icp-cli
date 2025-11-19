@@ -3,7 +3,7 @@ use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::export::Principal;
 use icp::{
-    context::{Context, EnvironmentSelection},
+    context::{Context, EnvironmentSelection, GetEnvCanisterError},
     identity::IdentitySelection,
 };
 use std::sync::Arc;
@@ -58,6 +58,9 @@ pub(crate) enum CommandError {
     EnvironmentNotFound { name: String },
 
     #[error(transparent)]
+    GetEnvCanister(#[from] GetEnvCanisterError),
+
+    #[error(transparent)]
     Create(#[from] create::CommandError),
 
     #[error(transparent)]
@@ -93,25 +96,20 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         false => args.names.clone(),
     };
 
-    for name in &cnames {
-        ctx.assert_env_contains_canister(name, &environment_selection)
-            .await
-            .map_err(|e| anyhow!(e))?;
-    }
-
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
         return Ok(());
     }
 
+    let canisters_to_build = try_join_all(
+        cnames
+            .iter()
+            .map(|name| ctx.get_canister_and_path_for_env(name, &environment_selection)),
+    )
+    .await?;
+
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
-    let canisters_to_build = p
-        .canisters
-        .iter()
-        .filter(|(k, _)| cnames.contains(k))
-        .map(|(_, (path, canister))| (path.clone(), canister.clone()))
-        .collect::<Vec<_>>();
 
     build_many_with_progress_bar(
         canisters_to_build,

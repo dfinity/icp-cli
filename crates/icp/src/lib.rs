@@ -93,8 +93,8 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn contains_canister(&self, canister_name: &str) -> bool {
-        self.canisters.contains_key(canister_name)
+    pub fn get_canister(&self, canister_name: &str) -> Option<&(PathBuf, Canister)> {
+        self.canisters.get(canister_name)
     }
 }
 

@@ -31,6 +31,12 @@ pub(crate) enum CommandError {
     Project(#[from] icp::LoadError),
 
     #[error(transparent)]
+    GetEnvCanister(#[from] icp::context::GetEnvCanisterError),
+
+    #[error(transparent)]
+    GetEnvCanisterId(#[from] icp::context::GetCanisterIdForEnvError),
+
+    #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
 
@@ -54,13 +60,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
         false => args.canisters.clone(),
     };
 
-    // Validate all specified canisters exist in project and environment
-    for name in &cnames {
-        ctx.assert_env_contains_canister(name, &environment_selection)
-            .await
-            .map_err(|e| anyhow!(e))?;
-    }
-
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
         return Ok(());
@@ -73,19 +72,14 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
         .map_err(|e| anyhow!(e))?;
 
     // Prepare list of canisters with their info for syncing
-    let env_canisters = &env.canisters;
-    let sync_canisters = try_join_all(cnames.iter().map(|name| {
-        let environment_selection = environment_selection.clone();
-        async move {
-            let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
-                .await
-                .map_err(|e| anyhow!(e))?;
-            let (canister_path, info) = env_canisters
-                .get(name)
-                .ok_or_else(|| anyhow!("Canister id exists but no canister info"))?;
-            Ok::<_, anyhow::Error>((cid, canister_path.clone(), info.clone()))
-        }
+    let sync_canisters = try_join_all(cnames.iter().map(|name| async {
+        let (canister_path, info) = ctx
+            .get_canister_and_path_for_env(name, &environment_selection)
+            .await?;
+        let cid = ctx
+            .get_canister_id_for_env(name, &environment_selection)
+            .await?;
+        Ok::<_, anyhow::Error>((cid, canister_path.clone(), info.clone()))
     }))
     .await?;
 

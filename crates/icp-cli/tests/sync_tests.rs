@@ -261,9 +261,15 @@ fn sync_with_valid_principal() {
               steps:
                 - type: script
                   command: echo syncing
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
 
     // Valid principal
     let principal = "aaaaa-aa";
@@ -271,7 +277,7 @@ fn sync_with_valid_principal() {
     // Try to sync with principal (should fail)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["sync", principal])
+        .args(["sync", principal, "--environment", "my-environment"])
         .assert()
         .failure()
         .stderr(contains("project does not contain a canister named"));

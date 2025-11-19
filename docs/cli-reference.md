@@ -424,12 +424,14 @@ Mint and manage cycles
 
 ###### **Subcommands:**
 
-* `balance` — 
-* `mint` — 
+* `balance` — Display the cycles balance
+* `mint` — Convert icp to cycles
 
 
 
 ## `icp-cli cycles balance`
+
+Display the cycles balance
 
 **Usage:** `icp-cli cycles balance [OPTIONS]`
 
@@ -442,6 +444,8 @@ Mint and manage cycles
 
 
 ## `icp-cli cycles mint`
+
+Convert icp to cycles
 
 **Usage:** `icp-cli cycles mint [OPTIONS]`
 
@@ -492,11 +496,13 @@ Show information about the current project environments
 
 ###### **Subcommands:**
 
-* `list` — 
+* `list` — Display a list of enviroments
 
 
 
 ## `icp-cli environment list`
+
+Display a list of enviroments
 
 **Usage:** `icp-cli environment list`
 
@@ -510,15 +516,17 @@ Manage your identities
 
 ###### **Subcommands:**
 
-* `default` — 
-* `import` — 
-* `list` — 
-* `new` — 
-* `principal` — 
+* `default` — Display the currently selected identity
+* `import` — Import a new identity
+* `list` — List the identities
+* `new` — Create a new identity
+* `principal` — Display the principal for the current identity
 
 
 
 ## `icp-cli identity default`
+
+Display the currently selected identity
 
 **Usage:** `icp-cli identity default [NAME]`
 
@@ -529,6 +537,8 @@ Manage your identities
 
 
 ## `icp-cli identity import`
+
+Import a new identity
 
 **Usage:** `icp-cli identity import [OPTIONS] <--from-pem <FILE>|--read-seed-phrase|--from-seed-file <FILE>> <NAME>`
 
@@ -548,11 +558,15 @@ Manage your identities
 
 ## `icp-cli identity list`
 
+List the identities
+
 **Usage:** `icp-cli identity list`
 
 
 
 ## `icp-cli identity new`
+
+Create a new identity
 
 **Usage:** `icp-cli identity new [OPTIONS] <NAME>`
 
@@ -567,6 +581,8 @@ Manage your identities
 
 
 ## `icp-cli identity principal`
+
+Display the principal for the current identity
 
 **Usage:** `icp-cli identity principal [OPTIONS]`
 

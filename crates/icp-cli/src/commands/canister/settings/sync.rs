@@ -4,12 +4,9 @@ use crate::{
 
 use clap::Args;
 use ic_utils::interfaces::ManagementCanister;
-use icp::{
-    LoadError,
-    context::{
-        AssertEnvContainsCanisterError, CanisterSelection, Context, GetCanisterIdAndAgentError,
-        GetEnvironmentError,
-    },
+use icp::context::{
+    CanisterSelection, Context, GetCanisterIdAndAgentError, GetEnvCanisterError,
+    GetEnvironmentError,
 };
 use snafu::Snafu;
 
@@ -31,15 +28,7 @@ pub(crate) enum CommandError {
     PrincipalCanister,
 
     #[snafu(transparent)]
-    LoadProject { source: LoadError },
-
-    #[snafu(display("project does not contain a canister named '{name}'"))]
-    CanisterNotFound { name: String },
-
-    #[snafu(transparent)]
-    EnvironmentCanisterNotFound {
-        source: AssertEnvContainsCanisterError,
-    },
+    GetEnvCanister { source: GetEnvCanisterError },
 
     #[snafu(transparent)]
     SyncSettingsError { source: SyncSettingsOperationError },
@@ -51,12 +40,8 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
         return PrincipalCanisterSnafu.fail();
     };
 
-    let p = ctx.project.load().await?;
-
-    let Some((_, canister)) = p.canisters.get(name) else {
-        return CanisterNotFoundSnafu { name }.fail();
-    };
-    ctx.assert_env_contains_canister(name, &selections.environment)
+    let (_, canister) = ctx
+        .get_canister_and_path_for_env(name, &selections.environment)
         .await?;
 
     let (cid, agent) = ctx
@@ -70,6 +55,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
 
     let mgmt = ManagementCanister::create(&agent);
 
-    crate::operations::settings::sync_settings(&mgmt, &cid, canister).await?;
+    crate::operations::settings::sync_settings(&mgmt, &cid, &canister).await?;
     Ok(())
 }

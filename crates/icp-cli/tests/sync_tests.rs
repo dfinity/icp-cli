@@ -280,9 +280,7 @@ fn sync_with_valid_principal() {
         .args(["sync", principal, "--environment", "my-environment"])
         .assert()
         .failure()
-        .stderr(contains(
-            "canister 'aaaaa-aa' not found in environment 'my-environment'",
-        ));
+        .stderr(contains("project does not contain a canister named"));
 }
 
 #[test]

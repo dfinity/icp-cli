@@ -73,11 +73,11 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
 
     // Prepare list of canisters with their info for syncing
     let sync_canisters = try_join_all(cnames.iter().map(|name| async {
-        let cid = ctx
-            .get_canister_id_for_env(name, &environment_selection)
-            .await?;
         let (canister_path, info) = ctx
             .get_canister_and_path_for_env(name, &environment_selection)
+            .await?;
+        let cid = ctx
+            .get_canister_id_for_env(name, &environment_selection)
             .await?;
         Ok::<_, anyhow::Error>((cid, canister_path.clone(), info.clone()))
     }))

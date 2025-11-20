@@ -13,14 +13,14 @@ pub(crate) struct ShowArgs {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
     #[error(transparent)]
-    GetCanisterId(#[from] icp::context::GetCanisterIdError),
+    GetCanisterId(#[from] icp::context::GetCanisterIdForEnvError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
     let (canister_selection, environment_selection) = args.cmd_args.selections();
 
     let cid = ctx
-        .get_canister_id(&canister_selection, &environment_selection)
+        .get_canister_id_for_env(&canister_selection, &environment_selection)
         .await?;
 
     println!("{cid} => {}", args.cmd_args.canister);

@@ -5,11 +5,7 @@ use ic_agent::AgentError;
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
-use icp::{
-    agent,
-    context::{EnvironmentSelection, GetAgentForEnvError},
-    identity, network,
-};
+use icp::{agent, context::GetAgentError, identity, network};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
@@ -21,7 +17,7 @@ use icp_canister_interfaces::{
 
 use icp::context::Context;
 
-use crate::options::{EnvironmentOpt, IdentityOpt};
+use crate::commands::args::TokenCommandArgs;
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
@@ -34,10 +30,7 @@ pub(crate) struct MintArgs {
     pub(crate) cycles: Option<u128>,
 
     #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
-
-    #[command(flatten)]
-    pub(crate) identity: IdentityOpt,
+    pub(crate) token_command_args: TokenCommandArgs,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -82,15 +75,19 @@ pub(crate) enum CommandError {
     NotifyMintError { src: NotifyMintErr },
 
     #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
+    GetAgent(#[from] GetAgentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let selections = args.token_command_args.selections();
 
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
         .await?;
 
     // Prepare deposit

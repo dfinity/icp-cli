@@ -25,6 +25,10 @@ pub const DEFAULT_LOCAL_ENVIRONMENT_NAME: &str = "local";
 pub const DEFAULT_MAINNET_ENVIRONMENT_NAME: &str = "ic";
 pub const DEFAULT_LOCAL_NETWORK_NAME: &str = "local";
 pub const DEFAULT_MAINNET_NETWORK_NAME: &str = "mainnet";
+pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
+pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
+pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
+pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadPathError {
@@ -121,8 +125,8 @@ fn default_networks() -> Vec<Network> {
             configuration: Configuration::Managed {
                 managed: Managed {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
+                        host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                        port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
                     },
                 },
             },

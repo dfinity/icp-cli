@@ -68,6 +68,41 @@ impl CanisterCommandArgs {
     }
 }
 
+// Common argument used for Token and Cycles commands
+#[derive(Args, Clone, Debug)]
+pub(crate) struct TokenCommandArgs {
+    #[command(flatten)]
+    pub(crate) network: NetworkOpt,
+
+    #[command(flatten)]
+    pub(crate) environment: EnvironmentOpt,
+
+    #[command(flatten)]
+    pub(crate) identity: IdentityOpt,
+}
+
+/// Selections derived from TokenCommandArgs
+pub(crate) struct TokenCommandSelections {
+    pub(crate) environment: EnvironmentSelection,
+    pub(crate) network: NetworkSelection,
+    pub(crate) identity: IdentitySelection,
+}
+
+impl TokenCommandArgs {
+    /// Convert command arguments into selection enums
+    pub(crate) fn selections(&self) -> TokenCommandSelections {
+        let environment_selection: EnvironmentSelection = self.environment.clone().into();
+        let network_selection: NetworkSelection = self.network.clone().into();
+        let identity_selection: IdentitySelection = self.identity.clone().into();
+
+        TokenCommandSelections {
+            environment: environment_selection,
+            network: network_selection,
+            identity: identity_selection,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Canister {
     Name(String),

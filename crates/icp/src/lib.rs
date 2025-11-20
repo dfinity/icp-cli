@@ -8,7 +8,9 @@ use tracing::debug;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{PROJECT_MANIFEST, ProjectRootLocate, project::ProjectManifest},
+    manifest::{
+        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError, project::ProjectManifest,
+    },
     network::Configuration,
     prelude::*,
 };
@@ -116,6 +118,7 @@ pub enum LoadError {
 #[async_trait]
 pub trait Load: Sync + Send {
     async fn load(&self) -> Result<Project, LoadError>;
+    async fn exists(&self) -> Result<bool, LoadError>;
 }
 
 #[async_trait]
@@ -172,6 +175,14 @@ impl Load for Loader {
 
         Ok(p)
     }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        match self.project_root_locate.locate() {
+            Ok(_) => Ok(true),
+            Err(ProjectRootLocateError::NotFound(_)) => Ok(false),
+            Err(ProjectRootLocateError::Unexpected(e)) => Err(LoadError::Unexpected(e)),
+        }
+    }
 }
 
 pub struct Lazy<T, V>(T, Arc<Mutex<Option<V>>>);
@@ -196,6 +207,15 @@ impl<T: Load> Load for Lazy<T, Project> {
             *g = Some(v.to_owned());
         }
 
+        Ok(v)
+    }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        if self.1.lock().await.as_ref().is_some() {
+            return Ok(true);
+        }
+
+        let v = self.0.exists().await?;
         Ok(v)
     }
 }
@@ -479,5 +499,26 @@ impl MockProjectLoader {
 impl Load for MockProjectLoader {
     async fn load(&self) -> Result<Project, LoadError> {
         Ok(self.project.clone())
+    }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        Ok(true)
+    }
+}
+
+#[cfg(test)]
+/// Mock project loader that always fails with a Locate error.
+/// Useful for testing scenarios where no project exists.
+pub struct NoProjectLoader;
+
+#[cfg(test)]
+#[async_trait]
+impl Load for NoProjectLoader {
+    async fn load(&self) -> Result<Project, LoadError> {
+        Err(LoadError::Locate)
+    }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        Ok(false)
     }
 }

@@ -4,7 +4,7 @@ use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
 
-use icp::context::Context;
+use icp::context::{Context, GetAgentError, GetCanisterIdError};
 
 use crate::commands::args;
 
@@ -35,18 +35,27 @@ pub(crate) enum CommandError {
     Call(#[from] ic_agent::AgentError),
 
     #[error(transparent)]
-    GetCanisterIdAndAgent(#[from] icp::context::GetCanisterIdAndAgentError),
+    GetAgent(#[from] GetAgentError),
+
+    #[error(transparent)]
+    GetCanisterId(#[from] GetCanisterIdError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
     let selections = args.cmd_args.selections();
 
-    let (cid, agent) = ctx
-        .get_canister_id_and_agent(
-            &selections.canister,
-            &selections.environment,
-            &selections.network,
+    let agent = ctx
+        .get_agent(
             &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
         )
         .await?;
 

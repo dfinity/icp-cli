@@ -2,27 +2,17 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use clap::Args;
 use ic_agent::AgentError;
-use icp::{
-    agent,
-    context::{EnvironmentSelection, GetAgentForEnvError},
-    identity, network,
-};
+use icp::{agent, context::GetAgentError, identity, network};
 use icrc_ledger_types::icrc1::account::Account;
 
 use icp::context::Context;
 
-use crate::{
-    commands::token::TOKEN_LEDGER_CIDS,
-    options::{EnvironmentOpt, IdentityOpt},
-};
+use crate::commands::{args::TokenCommandArgs, token::TOKEN_LEDGER_CIDS};
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct BalanceArgs {
     #[command(flatten)]
-    pub(crate) identity: IdentityOpt,
-
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) token_command_args: TokenCommandArgs,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,7 +39,7 @@ pub(crate) enum CommandError {
     Candid(#[from] candid::Error),
 
     #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
+    GetAgent(#[from] GetAgentError),
 }
 
 /// Check the token balance of a given identity
@@ -62,11 +52,15 @@ pub(crate) async fn exec(
     token: &str,
     args: &BalanceArgs,
 ) -> Result<(), CommandError> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let selections = args.token_command_args.selections();
 
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
         .await?;
 
     // Obtain ledger address

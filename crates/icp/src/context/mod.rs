@@ -10,7 +10,9 @@ use crate::{
     identity::IdentitySelection,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
-    project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
+    project::{
+        DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_NETWORK_NAME, DEFAULT_MAINNET_NETWORK_URL,
+    },
     store_id::{IdMapping, LookupIdError},
 };
 use candid::Principal;
@@ -143,14 +145,38 @@ impl Context {
     ) -> Result<crate::Network, GetNetworkError> {
         match network_selection {
             NetworkSelection::Named(network_name) => {
-                let p = self.project.load().await?;
-                let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
-                    name: network_name.to_owned(),
-                })?;
-                Ok(net.clone())
+                if self.project.exists().await? {
+                    let p = self.project.load().await?;
+                    let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
+                        name: network_name.to_owned(),
+                    })?;
+                    Ok(net.clone())
+                } else if network_name == DEFAULT_MAINNET_NETWORK_NAME {
+                    Ok(crate::Network {
+                        name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+                        configuration: crate::network::Configuration::Connected {
+                            connected: crate::network::Connected {
+                                url: DEFAULT_MAINNET_NETWORK_URL.to_string(),
+                                root_key: None,
+                            },
+                        },
+                    })
+                } else {
+                    Err(GetNetworkError::NetworkNotFound {
+                        name: network_name.to_owned(),
+                    })
+                }
             }
             NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(_) => Err(GetNetworkError::UrlSpecifiedNetwork),
+            NetworkSelection::Url(url) => Ok(crate::Network {
+                name: url.to_string(),
+                configuration: crate::network::Configuration::Connected {
+                    connected: crate::network::Connected {
+                        url: url.to_string(),
+                        root_key: None,
+                    },
+                },
+            }),
         }
     }
 
@@ -176,39 +202,47 @@ impl Context {
         Ok((path.clone(), canister.clone()))
     }
 
-    /// Gets the canister ID for a given canister name in a specified environment.
+    /// Gets the canister ID for a given canister selection in a specified environment.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot be loaded or if the canister ID cannot be found.
     pub async fn get_canister_id_for_env(
         &self,
-        canister_name: &str,
+        canister: &CanisterSelection,
         environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdForEnvError> {
-        let env = self.get_environment(environment).await?;
-        let is_cache = match env.network.configuration {
-            NetworkConfiguration::Managed { .. } => true,
-            NetworkConfiguration::Connected { .. } => false,
+        let principal = match canister {
+            CanisterSelection::Named(canister_name) => {
+                let env = self.get_environment(environment).await?;
+                let is_cache = match env.network.configuration {
+                    NetworkConfiguration::Managed { .. } => true,
+                    NetworkConfiguration::Connected { .. } => false,
+                };
+
+                if !env.canisters.contains_key(canister_name) {
+                    return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
+                        canister_name: canister_name.to_owned(),
+                        environment_name: environment.name().to_owned(),
+                    });
+                }
+
+                // Lookup the canister id
+                self.ids
+                    .lookup(is_cache, &env.name, canister_name)
+                    .context(CanisterIdLookupSnafu {
+                        canister_name: canister_name.to_owned(),
+                        environment_name: environment.name().to_owned(),
+                    })?
+            }
+            CanisterSelection::Principal(principal) => {
+                // Make sure a valid environment was requested
+                let _ = self.get_environment(environment).await?;
+                *principal
+            }
         };
 
-        if !env.canisters.contains_key(canister_name) {
-            return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            });
-        }
-
-        // Lookup the canister id
-        let cid = self
-            .ids
-            .lookup(is_cache, &env.name, canister_name)
-            .context(CanisterIdLookupSnafu {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            })?;
-
-        Ok(cid)
+        Ok(principal)
     }
 
     /// Sets the canister ID for a given canister name in a specified environment.
@@ -296,97 +330,76 @@ impl Context {
         Ok(agent)
     }
 
-    /// Gets a canister ID for a given canister and environment selection.
-    ///
-    /// This method validates that the environment exists when using a principal,
-    /// or looks up the canister ID when using a name.
+    pub async fn get_agent(
+        &self,
+        identity: &IdentitySelection,
+        network: &NetworkSelection,
+        environment: &EnvironmentSelection,
+    ) -> Result<Agent, GetAgentError> {
+        match (environment, network) {
+            // Error: Both environment and network specified
+            (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
+            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                Err(GetAgentError::EnvironmentAndNetworkSpecified)
+            }
+
+            // Default environment + default network
+            (EnvironmentSelection::Default, NetworkSelection::Default) => {
+                // Try to get agent from the default environment if project exists
+                match self.get_agent_for_env(identity, environment).await {
+                    Ok(agent) => Ok(agent),
+                    Err(GetAgentForEnvError::GetEnvironment {
+                        source:
+                            GetEnvironmentError::ProjectLoad {
+                                source: crate::LoadError::Locate,
+                            },
+                    }) => Err(GetAgentError::NoProjectOrNetwork),
+                    Err(e) => Err(e.into()),
+                }
+            }
+
+            // Environment specified
+            (EnvironmentSelection::Named(_), NetworkSelection::Default) => {
+                Ok(self.get_agent_for_env(identity, environment).await?)
+            }
+
+            // Network specified
+            (EnvironmentSelection::Default, NetworkSelection::Named(_))
+            | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                Ok(self.get_agent_for_network(identity, network).await?)
+            }
+        }
+    }
+
     pub async fn get_canister_id(
         &self,
         canister: &CanisterSelection,
+        network: &NetworkSelection,
         environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdError> {
-        let principal = match canister {
-            CanisterSelection::Named(canister_name) => {
-                self.get_canister_id_for_env(canister_name, environment)
-                    .await?
-            }
-            CanisterSelection::Principal(principal) => {
-                // Make sure a valid environment was requested
-                let _ = self.get_environment(environment).await?;
-                *principal
-            }
-        };
+        match canister {
+            CanisterSelection::Principal(principal) => Ok(*principal),
+            CanisterSelection::Named(_) => {
+                match (environment, network) {
+                    // Error: Both environment and network specified
+                    (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
+                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                        Err(GetCanisterIdError::CanisterEnvironmentAndNetworkSpecified)
+                    }
 
-        Ok(principal)
-    }
+                    // Error: Canister by name with explicit network but no environment
+                    (EnvironmentSelection::Default, NetworkSelection::Named(_))
+                    | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                        Err(GetCanisterIdError::AmbiguousCanisterName)
+                    }
 
-    /// Gets a canister ID and agent for the given selections.
-    ///
-    /// This is the main entry point for commands that need to interact with a canister.
-    /// It handles all the different combinations of canister, environment, and network selections.
-    pub async fn get_canister_id_and_agent(
-        &self,
-        canister: &CanisterSelection,
-        environment: &EnvironmentSelection,
-        network: &NetworkSelection,
-        identity: &IdentitySelection,
-    ) -> Result<(Principal, Agent), GetCanisterIdAndAgentError> {
-        let (cid, agent) = match (canister, environment, network) {
-            // Error: Both environment and network specified
-            (_, EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-            | (_, EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
-                return Err(GetCanisterIdAndAgentError::EnvironmentAndNetworkSpecified);
+                    // Only environment specified
+                    (_, NetworkSelection::Default) => {
+                        Ok(self.get_canister_id_for_env(canister, environment).await?)
+                    }
+                }
             }
-
-            // Error: Canister by name with default environment and explicit network
-            (
-                CanisterSelection::Named(_),
-                EnvironmentSelection::Default,
-                NetworkSelection::Named(_),
-            )
-            | (
-                CanisterSelection::Named(_),
-                EnvironmentSelection::Default,
-                NetworkSelection::Url(_),
-            ) => {
-                return Err(GetCanisterIdAndAgentError::AmbiguousCanisterName);
-            }
-
-            // Canister by name, use environment
-            (CanisterSelection::Named(cname), _, NetworkSelection::Default) => {
-                let agent = self.get_agent_for_env(identity, environment).await?;
-                let cid = self.get_canister_id_for_env(cname, environment).await?;
-                (cid, agent)
-            }
-
-            // Canister by principal, use environment
-            (CanisterSelection::Principal(principal), _, NetworkSelection::Default) => {
-                let agent = self.get_agent_for_env(identity, environment).await?;
-                (*principal, agent)
-            }
-
-            // Canister by principal, use named network (environment must be default)
-            (
-                CanisterSelection::Principal(principal),
-                EnvironmentSelection::Default,
-                NetworkSelection::Named(_),
-            ) => {
-                let agent = self.get_agent_for_network(identity, network).await?;
-                (*principal, agent)
-            }
-
-            // Canister by principal, use URL network (environment must be default)
-            (
-                CanisterSelection::Principal(principal),
-                EnvironmentSelection::Default,
-                NetworkSelection::Url(url),
-            ) => {
-                let agent = self.get_agent_for_url(identity, url).await?;
-                (*principal, agent)
-            }
-        };
-
-        Ok((cid, agent))
+        }
     }
 
     pub async fn ids_by_environment(
@@ -558,26 +571,17 @@ pub enum GetAgentForUrlError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum GetCanisterIdError {
+pub enum GetAgentError {
     #[snafu(transparent)]
-    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
+    ProjectExists { source: crate::LoadError },
 
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetCanisterIdAndAgentError {
     #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,
 
     #[snafu(display(
-        "Specifying a network is not supported if you are targeting a canister by name, specify an environment instead"
+        "No project found and no network specified. Either run this command inside a project or specify a network with --network"
     ))]
-    AmbiguousCanisterName,
-
-    #[snafu(transparent)]
-    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
+    NoProjectOrNetwork,
 
     #[snafu(transparent)]
     GetAgentForEnv { source: GetAgentForEnvError },
@@ -587,6 +591,20 @@ pub enum GetCanisterIdAndAgentError {
 
     #[snafu(transparent)]
     GetAgentForUrl { source: GetAgentForUrlError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetCanisterIdError {
+    #[snafu(display("You can't specify both an environment and a network"))]
+    CanisterEnvironmentAndNetworkSpecified,
+
+    #[snafu(display(
+        "Specifying a network is not supported if you are targeting a canister by name, specify an environment instead"
+    ))]
+    AmbiguousCanisterName,
+
+    #[snafu(transparent)]
+    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
 }
 
 #[derive(Debug, Snafu)]

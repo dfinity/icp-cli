@@ -14,7 +14,7 @@ use crate::{
         ProjectRootLocate, ProjectRootLocateError,
         network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
     },
-    network::access::{NetworkAccess, get_network_access},
+    network::access::{NetworkAccess, get_connected_network_access, get_managed_network_access},
     prelude::*,
 };
 
@@ -186,15 +186,17 @@ impl Access for Accessor {
         ))
     }
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
-        // NetworkDirectory
-        let nd = self.get_network_directory(network)?;
-
-        // NetworkAccess
-        let access = get_network_access(nd, network)
-            .await
-            .context("failed to load network access")?;
-
-        Ok(access)
+        match &network.configuration {
+            Configuration::Managed { managed: _ } => {
+                let nd = self.get_network_directory(network)?;
+                Ok(get_managed_network_access(nd)
+                    .await
+                    .context("failed to load managed network access")?)
+            }
+            Configuration::Connected { connected: cfg } => Ok(get_connected_network_access(cfg)
+                .await
+                .context("failed to load connected network access")?),
+        }
     }
 }
 

@@ -8,7 +8,7 @@ use ic_agent::{AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::{LoadError, agent, identity, network};
 
-use icp::context::{CanisterSelection, Context, GetCanisterIdAndAgentError};
+use icp::context::{CanisterSelection, Context, GetAgentError, GetCanisterIdError};
 use snafu::{ResultExt, Snafu};
 
 use crate::commands::args;
@@ -131,7 +131,10 @@ pub(crate) enum CommandError {
     Update { source: AgentError },
 
     #[snafu(transparent)]
-    GetCanisterIdAndAgent { source: GetCanisterIdAndAgentError },
+    GetAgent { source: GetAgentError },
+
+    #[snafu(transparent)]
+    GetCanisterId { source: GetCanisterIdError },
 
     #[snafu(display("failed to write to terminal"))]
     WriteTerm { source: std::io::Error },
@@ -139,12 +142,18 @@ pub(crate) enum CommandError {
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
     let selections = args.cmd_args.selections();
-    let (cid, agent) = ctx
-        .get_canister_id_and_agent(
-            &selections.canister,
-            &selections.environment,
-            &selections.network,
+    let agent = ctx
+        .get_agent(
             &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
         )
         .await?;
 

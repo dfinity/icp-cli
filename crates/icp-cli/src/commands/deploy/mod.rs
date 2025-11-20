@@ -3,7 +3,7 @@ use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::export::Principal;
 use icp::{
-    context::{Context, EnvironmentSelection, GetEnvCanisterError},
+    context::{CanisterSelection, Context, EnvironmentSelection, GetEnvCanisterError},
     identity::IdentitySelection,
 };
 use std::sync::Arc;
@@ -207,7 +207,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let environment_selection = environment_selection.clone();
         async move {
             let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
                 .await
                 .map_err(|e| anyhow!(e))?;
             let (_, info) = env_canisters
@@ -244,7 +247,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let environment_selection = environment_selection.clone();
         async move {
             let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
                 .await
                 .map_err(|e| anyhow!(e))?;
             Ok::<_, anyhow::Error>((name.clone(), cid))
@@ -275,7 +281,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let environment_selection = environment_selection.clone();
         async move {
             let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
                 .await
                 .map_err(|e| anyhow!(e))?;
             let (canister_path, info) = env_canisters

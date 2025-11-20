@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use clap::Args;
 use futures::future::try_join_all;
-use icp::context::{Context, EnvironmentSelection};
+use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
 use std::sync::Arc;
 
@@ -77,7 +77,10 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
             .get_canister_and_path_for_env(name, &environment_selection)
             .await?;
         let cid = ctx
-            .get_canister_id_for_env(name, &environment_selection)
+            .get_canister_id_for_env(
+                &CanisterSelection::Named(name.clone()),
+                &environment_selection,
+            )
             .await?;
         Ok::<_, anyhow::Error>((cid, canister_path.clone(), info.clone()))
     }))

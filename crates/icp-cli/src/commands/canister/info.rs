@@ -1,10 +1,10 @@
 use clap::Args;
 use ic_agent::AgentError;
 use ic_utils::interfaces::management_canister::CanisterStatusResult;
-use icp::{agent, context::GetCanisterIdAndAgentError, identity, network};
+use icp::{agent, identity, network};
 use itertools::Itertools;
 
-use icp::context::Context;
+use icp::context::{Context, GetAgentError, GetCanisterIdError};
 
 use crate::commands::args;
 use icp::store_id::LookupIdError;
@@ -36,17 +36,26 @@ pub(crate) enum CommandError {
     Status(#[from] AgentError),
 
     #[error(transparent)]
-    GetCanisterIdAndAgent(#[from] GetCanisterIdAndAgentError),
+    GetAgent(#[from] GetAgentError),
+
+    #[error(transparent)]
+    GetCanisterId(#[from] GetCanisterIdError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandError> {
     let selections = args.cmd_args.selections();
-    let (cid, agent) = ctx
-        .get_canister_id_and_agent(
-            &selections.canister,
-            &selections.environment,
-            &selections.network,
+    let agent = ctx
+        .get_agent(
             &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
         )
         .await?;
 

@@ -5,7 +5,7 @@ use crate::{
 use clap::Args;
 use ic_utils::interfaces::ManagementCanister;
 use icp::context::{
-    CanisterSelection, Context, GetCanisterIdAndAgentError, GetEnvCanisterError,
+    CanisterSelection, Context, GetAgentError, GetCanisterIdError, GetEnvCanisterError,
     GetEnvironmentError,
 };
 use snafu::Snafu;
@@ -19,7 +19,10 @@ pub(crate) struct SyncArgs {
 #[derive(Debug, Snafu)]
 pub(crate) enum CommandError {
     #[snafu(transparent)]
-    GetIdAndAgent { source: GetCanisterIdAndAgentError },
+    GetAgent { source: GetAgentError },
+
+    #[snafu(transparent)]
+    GetCanisterId { source: GetCanisterIdError },
 
     #[snafu(transparent)]
     GetEnvironment { source: GetEnvironmentError },
@@ -44,12 +47,18 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
         .get_canister_and_path_for_env(name, &selections.environment)
         .await?;
 
-    let (cid, agent) = ctx
-        .get_canister_id_and_agent(
-            &selections.canister,
-            &selections.environment,
-            &selections.network,
+    let agent = ctx
+        .get_agent(
             &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
         )
         .await?;
 

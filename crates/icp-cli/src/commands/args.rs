@@ -69,7 +69,7 @@ impl CanisterCommandArgs {
 }
 
 // Common argument used for Token and Cycles commands
-#[derive(Args, Debug)]
+#[derive(Args, Clone, Debug)]
 pub(crate) struct TokenCommandArgs {
     #[command(flatten)]
     pub(crate) network: NetworkOpt,

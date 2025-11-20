@@ -151,22 +151,20 @@ impl Context {
                         name: network_name.to_owned(),
                     })?;
                     Ok(net.clone())
-                } else {
-                    if network_name == DEFAULT_MAINNET_NETWORK_NAME {
-                        Ok(crate::Network {
-                            name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
-                            configuration: crate::network::Configuration::Connected {
-                                connected: crate::network::Connected {
-                                    url: DEFAULT_MAINNET_NETWORK_URL.to_string(),
-                                    root_key: None,
-                                },
+                } else if network_name == DEFAULT_MAINNET_NETWORK_NAME {
+                    Ok(crate::Network {
+                        name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+                        configuration: crate::network::Configuration::Connected {
+                            connected: crate::network::Connected {
+                                url: DEFAULT_MAINNET_NETWORK_URL.to_string(),
+                                root_key: None,
                             },
-                        })
-                    } else {
-                        Err(GetNetworkError::NetworkNotFound {
-                            name: network_name.to_owned(),
-                        })
-                    }
+                        },
+                    })
+                } else {
+                    Err(GetNetworkError::NetworkNotFound {
+                        name: network_name.to_owned(),
+                    })
                 }
             }
             NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),

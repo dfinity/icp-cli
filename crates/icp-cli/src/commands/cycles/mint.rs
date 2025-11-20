@@ -7,7 +7,7 @@ use ic_ledger_types::{
 };
 use icp::{
     agent,
-    context::{EnvironmentSelection, GetAgentForEnvError},
+    context::GetAgentForArgSelectionError,
     identity, network,
 };
 use icp_canister_interfaces::{
@@ -21,7 +21,8 @@ use icp_canister_interfaces::{
 
 use icp::context::Context;
 
-use crate::options::{EnvironmentOpt, IdentityOpt};
+use crate::commands::args;
+
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
@@ -34,10 +35,7 @@ pub(crate) struct MintArgs {
     pub(crate) cycles: Option<u128>,
 
     #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
-
-    #[command(flatten)]
-    pub(crate) identity: IdentityOpt,
+    pub(crate) cmd_args: args::TokenCommandArgs,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -82,16 +80,17 @@ pub(crate) enum CommandError {
     NotifyMintError { src: NotifyMintErr },
 
     #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
+    GetAgent(#[from] GetAgentForArgSelectionError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
 
-    // Agent
-    let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
-        .await?;
+    let selections = args.cmd_args.selections();
+    let agent = ctx.get_agent_for_arg_selection(
+        &selections.identity,
+        &selections.environment,
+        &selections.network
+    ).await?;
 
     // Prepare deposit
     let user_principal = agent

@@ -8,7 +8,7 @@ use crate::{
     canister::{build::Build, sync::Synchronize},
     directories,
     identity::IdentitySelection,
-    network::{Configuration as NetworkConfiguration, access::NetworkAccess},
+    network::{Configuration as NetworkConfiguration, Connected, access::NetworkAccess},
     prelude::*,
     project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
     store_id::{IdMapping, LookupIdError},
@@ -150,7 +150,18 @@ impl Context {
                 Ok(net.clone())
             }
             NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(_) => Err(GetNetworkError::UrlSpecifiedNetwork),
+            NetworkSelection::Url(url) => {
+                Ok(crate::Network {
+                    name: url.to_string(),  // use the url as the network name
+                    configuration: NetworkConfiguration::Connected{
+                        connected: Connected {
+                            url: url.to_string(),
+                            // TODO there should be a way to pass the root key
+                            root_key: None
+                        }
+                    }
+                })
+            },
         }
     }
 
@@ -244,6 +255,32 @@ impl Context {
             })?;
 
         Ok(())
+    }
+
+    //
+    pub async fn get_agent_for_arg_selection(
+        &self,
+        identity: &IdentitySelection,
+        environment: &EnvironmentSelection,
+        network: &NetworkSelection,
+    ) -> Result<Agent, GetAgentForArgSelectionError> {
+
+        match(environment, network) {
+            (EnvironmentSelection::Named(_), NetworkSelection::Named(_)) 
+            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                // Both an environment and a network are specified
+                Err(GetAgentForArgSelectionError::InvalidEnvironmentAndNetworkSpecified)
+            },
+            (EnvironmentSelection::Named(_), NetworkSelection::Default)
+            | (EnvironmentSelection::Default, NetworkSelection::Default) => {
+                Ok(self.get_agent_for_env(identity, environment).await?)
+            },
+            (EnvironmentSelection::Default, NetworkSelection::Named(_))
+            | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                Ok(self.get_agent_for_network(identity, network).await?)
+            },
+        }
+
     }
 
     /// Creates an agent for a given identity and environment.
@@ -599,6 +636,20 @@ pub enum GetIdsByEnvironmentError {
         source: crate::store_id::LookupIdError,
         environment_name: String,
     },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetAgentForArgSelectionError {
+
+    #[snafu(display("You can't specify both an environment and a network"))]
+    InvalidEnvironmentAndNetworkSpecified,
+
+    #[snafu(transparent)]
+    GetEnvironment { source: GetAgentForEnvError },
+
+    #[snafu(transparent)]
+    GetNetwork { source: GetAgentForNetworkError },
+
 }
 
 #[derive(Debug, Snafu)]

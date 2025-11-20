@@ -304,6 +304,67 @@ impl Context {
         Ok(agent)
     }
 
+    pub async fn get_agent(
+        &self,
+        environment: &EnvironmentSelection,
+        network: &NetworkSelection,
+        identity: &IdentitySelection,
+    ) -> Result<Agent, GetAgentError> {
+        match (environment, network) {
+            // Error: Both environment and network specified
+            (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
+            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                Err(GetAgentError::EnvironmentAndNetworkSpecified)
+            }
+
+            // Only environment specified
+            (_, NetworkSelection::Default) => {
+                Ok(self.get_agent_for_env(identity, environment).await?)
+            }
+
+            // Only network name specified
+            (EnvironmentSelection::Default, NetworkSelection::Named(_)) => {
+                Ok(self.get_agent_for_network(identity, network).await?)
+            }
+
+            // Only network URL specified
+            (EnvironmentSelection::Default, NetworkSelection::Url(url)) => {
+                Ok(self.get_agent_for_url(identity, url).await?)
+            }
+        }
+    }
+
+    pub async fn get_canister_id(
+        &self,
+        canister: &CanisterSelection,
+        environment: &EnvironmentSelection,
+        network: &NetworkSelection,
+    ) -> Result<Principal, GetCanisterIdError> {
+        match canister {
+            CanisterSelection::Principal(principal) => Ok(*principal),
+            CanisterSelection::Named(_) => {
+                match (environment, network) {
+                    // Error: Both environment and network specified
+                    (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
+                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                        Err(GetCanisterIdError::CanisterEnvironmentAndNetworkSpecified)
+                    }
+
+                    // Error: Canister by name with explicit network but no environment
+                    (EnvironmentSelection::Default, NetworkSelection::Named(_))
+                    | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                        Err(GetCanisterIdError::AmbiguousCanisterName)
+                    }
+
+                    // Only environment specified
+                    (_, NetworkSelection::Default) => {
+                        Ok(self.get_canister_id_for_env(canister, environment).await?)
+                    }
+                }
+            }
+        }
+    }
+
     /// Gets a canister ID and agent for the given selections.
     ///
     /// This is the main entry point for commands that need to interact with a canister.
@@ -315,63 +376,8 @@ impl Context {
         network: &NetworkSelection,
         identity: &IdentitySelection,
     ) -> Result<(Principal, Agent), GetCanisterIdAndAgentError> {
-        let (cid, agent) = match (canister, environment, network) {
-            // Error: Both environment and network specified
-            (_, EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-            | (_, EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
-                return Err(GetCanisterIdAndAgentError::EnvironmentAndNetworkSpecified);
-            }
-
-            // Error: Canister by name with default environment and explicit network
-            (
-                CanisterSelection::Named(_),
-                EnvironmentSelection::Default,
-                NetworkSelection::Named(_),
-            )
-            | (
-                CanisterSelection::Named(_),
-                EnvironmentSelection::Default,
-                NetworkSelection::Url(_),
-            ) => {
-                return Err(GetCanisterIdAndAgentError::AmbiguousCanisterName);
-            }
-
-            // Canister by name, use environment
-            (CanisterSelection::Named(cname), _, NetworkSelection::Default) => {
-                let agent = self.get_agent_for_env(identity, environment).await?;
-                let cid = self
-                    .get_canister_id_for_env(&CanisterSelection::Named(cname.clone()), environment)
-                    .await?;
-                (cid, agent)
-            }
-
-            // Canister by principal, use environment
-            (CanisterSelection::Principal(principal), _, NetworkSelection::Default) => {
-                let agent = self.get_agent_for_env(identity, environment).await?;
-                (*principal, agent)
-            }
-
-            // Canister by principal, use named network (environment must be default)
-            (
-                CanisterSelection::Principal(principal),
-                EnvironmentSelection::Default,
-                NetworkSelection::Named(_),
-            ) => {
-                let agent = self.get_agent_for_network(identity, network).await?;
-                (*principal, agent)
-            }
-
-            // Canister by principal, use URL network (environment must be default)
-            (
-                CanisterSelection::Principal(principal),
-                EnvironmentSelection::Default,
-                NetworkSelection::Url(url),
-            ) => {
-                let agent = self.get_agent_for_url(identity, url).await?;
-                (*principal, agent)
-            }
-        };
-
+        let agent = self.get_agent(environment, network, identity).await?;
+        let cid = self.get_canister_id(canister, environment, network).await?;
         Ok((cid, agent))
     }
 
@@ -544,17 +550,9 @@ pub enum GetAgentForUrlError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum GetCanisterIdAndAgentError {
+pub enum GetAgentError {
     #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,
-
-    #[snafu(display(
-        "Specifying a network is not supported if you are targeting a canister by name, specify an environment instead"
-    ))]
-    AmbiguousCanisterName,
-
-    #[snafu(transparent)]
-    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
 
     #[snafu(transparent)]
     GetAgentForEnv { source: GetAgentForEnvError },
@@ -564,6 +562,29 @@ pub enum GetCanisterIdAndAgentError {
 
     #[snafu(transparent)]
     GetAgentForUrl { source: GetAgentForUrlError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetCanisterIdError {
+    #[snafu(display("You can't specify both an environment and a network"))]
+    CanisterEnvironmentAndNetworkSpecified,
+
+    #[snafu(display(
+        "Specifying a network is not supported if you are targeting a canister by name, specify an environment instead"
+    ))]
+    AmbiguousCanisterName,
+
+    #[snafu(transparent)]
+    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetCanisterIdAndAgentError {
+    #[snafu(transparent)]
+    GetAgent { source: GetAgentError },
+
+    #[snafu(transparent)]
+    GetCanisterId { source: GetCanisterIdError },
 }
 
 #[derive(Debug, Snafu)]

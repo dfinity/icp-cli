@@ -481,3 +481,16 @@ impl Load for MockProjectLoader {
         Ok(self.project.clone())
     }
 }
+
+#[cfg(test)]
+/// Mock project loader that always fails with a Locate error.
+/// Useful for testing scenarios where no project exists.
+pub struct NoProjectLoader;
+
+#[cfg(test)]
+#[async_trait]
+impl Load for NoProjectLoader {
+    async fn load(&self) -> Result<Project, LoadError> {
+        Err(LoadError::Locate)
+    }
+}

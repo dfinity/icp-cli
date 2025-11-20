@@ -10,7 +10,10 @@ use crate::{
     identity::IdentitySelection,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
-    project::DEFAULT_LOCAL_ENVIRONMENT_NAME,
+    project::{
+        DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_LOCAL_NETWORK_NAME, DEFAULT_LOCAL_NETWORK_URL,
+        DEFAULT_MAINNET_NETWORK_NAME, DEFAULT_MAINNET_NETWORK_URL,
+    },
     store_id::{IdMapping, LookupIdError},
 };
 use candid::Principal;
@@ -306,9 +309,9 @@ impl Context {
 
     pub async fn get_agent(
         &self,
-        environment: &EnvironmentSelection,
-        network: &NetworkSelection,
         identity: &IdentitySelection,
+        network: &NetworkSelection,
+        environment: &EnvironmentSelection,
     ) -> Result<Agent, GetAgentError> {
         match (environment, network) {
             // Error: Both environment and network specified
@@ -317,17 +320,63 @@ impl Context {
                 Err(GetAgentError::EnvironmentAndNetworkSpecified)
             }
 
-            // Only environment specified
-            (_, NetworkSelection::Default) => {
+            // Default environment + default network
+            (EnvironmentSelection::Default, NetworkSelection::Default) => {
+                // Try to get agent from the default environment if project exists
+                match self.get_agent_for_env(identity, environment).await {
+                    Ok(agent) => Ok(agent),
+                    // If no project found, fall back to default local network
+                    Err(GetAgentForEnvError::GetEnvironment {
+                        source:
+                            GetEnvironmentError::ProjectLoad {
+                                source: crate::LoadError::Locate,
+                            },
+                    }) => {
+                        let url = Url::parse(DEFAULT_LOCAL_NETWORK_URL)
+                            .expect("hardcoded URL should be valid");
+                        self.get_agent_for_url(identity, &url)
+                            .await
+                            .map_err(Into::into)
+                    }
+                    Err(e) => Err(e.into()),
+                }
+            }
+
+            // Environment specified
+            (EnvironmentSelection::Named(_), NetworkSelection::Default) => {
                 Ok(self.get_agent_for_env(identity, environment).await?)
             }
 
-            // Only network name specified
-            (EnvironmentSelection::Default, NetworkSelection::Named(_)) => {
-                Ok(self.get_agent_for_network(identity, network).await?)
+            // Network name specified
+            (EnvironmentSelection::Default, NetworkSelection::Named(network_name)) => {
+                // Try to get from project first
+                match self.get_agent_for_network(identity, network).await {
+                    Ok(agent) => Ok(agent),
+                    // If no project found, try to use the default networks
+                    Err(GetAgentForNetworkError::GetNetwork {
+                        source:
+                            GetNetworkError::ProjectLoad {
+                                source: crate::LoadError::Locate,
+                            },
+                    }) if network_name == DEFAULT_LOCAL_NETWORK_NAME
+                        || network_name == DEFAULT_MAINNET_NETWORK_NAME =>
+                    {
+                        // For defaults, construct agent directly
+                        let url = if network_name == DEFAULT_LOCAL_NETWORK_NAME {
+                            DEFAULT_LOCAL_NETWORK_URL
+                        } else {
+                            DEFAULT_MAINNET_NETWORK_URL
+                        };
+                        let url = Url::parse(url).expect("hardcoded URL should be valid");
+                        self.get_agent_for_url(identity, &url)
+                            .await
+                            .map_err(Into::into)
+                    }
+                    Err(e) => Err(e.into()),
+                }
             }
 
-            // Only network URL specified
+            // Network URL specified
             (EnvironmentSelection::Default, NetworkSelection::Url(url)) => {
                 Ok(self.get_agent_for_url(identity, url).await?)
             }
@@ -337,8 +386,8 @@ impl Context {
     pub async fn get_canister_id(
         &self,
         canister: &CanisterSelection,
-        environment: &EnvironmentSelection,
         network: &NetworkSelection,
+        environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdError> {
         match canister {
             CanisterSelection::Principal(principal) => Ok(*principal),

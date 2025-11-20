@@ -7,7 +7,7 @@ use ic_ledger_types::{
 };
 use icp::{
     agent,
-    context::{EnvironmentSelection, GetAgentForEnvError, NetworkSelection},
+    context::{EnvironmentSelection, GetAgentError, NetworkSelection},
     identity::{self, IdentitySelection},
     network,
 };
@@ -86,7 +86,7 @@ pub(crate) enum CommandError {
     NotifyMintError { src: NotifyMintErr },
 
     #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
+    GetAgent(#[from] GetAgentError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
@@ -96,7 +96,11 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandEr
 
     // Agent
     let agent = ctx
-        .get_agent_for_env(&args.identity.clone().into(), &environment_selection)
+        .get_agent(
+            &identity_selection,
+            &network_selection,
+            &environment_selection,
+        )
         .await?;
 
     // Prepare deposit

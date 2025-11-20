@@ -46,16 +46,16 @@ pub(crate) async fn exec(ctx: &Context, args: &InfoArgs) -> Result<(), CommandEr
     let selections = args.cmd_args.selections();
     let agent = ctx
         .get_agent(
-            &selections.environment,
-            &selections.network,
             &selections.identity,
+            &selections.network,
+            &selections.environment,
         )
         .await?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
-            &selections.environment,
             &selections.network,
+            &selections.environment,
         )
         .await?;
 

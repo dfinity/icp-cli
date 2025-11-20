@@ -77,7 +77,10 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
             .get_canister_and_path_for_env(name, &environment_selection)
             .await?;
         let cid = ctx
-            .get_canister_id_for_env(name, &environment_selection)
+            .get_canister_id_for_env(
+                &icp::context::CanisterSelection::Named(name.clone()),
+                &environment_selection,
+            )
             .await?;
         Ok::<_, anyhow::Error>((cid, canister_path.clone(), info.clone()))
     }))

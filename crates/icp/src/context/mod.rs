@@ -176,39 +176,47 @@ impl Context {
         Ok((path.clone(), canister.clone()))
     }
 
-    /// Gets the canister ID for a given canister name in a specified environment.
+    /// Gets the canister ID for a given canister selection in a specified environment.
     ///
     /// # Errors
     ///
     /// Returns an error if the environment cannot be loaded or if the canister ID cannot be found.
     pub async fn get_canister_id_for_env(
         &self,
-        canister_name: &str,
+        canister: &CanisterSelection,
         environment: &EnvironmentSelection,
     ) -> Result<Principal, GetCanisterIdForEnvError> {
-        let env = self.get_environment(environment).await?;
-        let is_cache = match env.network.configuration {
-            NetworkConfiguration::Managed { .. } => true,
-            NetworkConfiguration::Connected { .. } => false,
+        let principal = match canister {
+            CanisterSelection::Named(canister_name) => {
+                let env = self.get_environment(environment).await?;
+                let is_cache = match env.network.configuration {
+                    NetworkConfiguration::Managed { .. } => true,
+                    NetworkConfiguration::Connected { .. } => false,
+                };
+
+                if !env.canisters.contains_key(canister_name) {
+                    return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
+                        canister_name: canister_name.to_owned(),
+                        environment_name: environment.name().to_owned(),
+                    });
+                }
+
+                // Lookup the canister id
+                self.ids
+                    .lookup(is_cache, &env.name, canister_name)
+                    .context(CanisterIdLookupSnafu {
+                        canister_name: canister_name.to_owned(),
+                        environment_name: environment.name().to_owned(),
+                    })?
+            }
+            CanisterSelection::Principal(principal) => {
+                // Make sure a valid environment was requested
+                let _ = self.get_environment(environment).await?;
+                *principal
+            }
         };
 
-        if !env.canisters.contains_key(canister_name) {
-            return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            });
-        }
-
-        // Lookup the canister id
-        let cid = self
-            .ids
-            .lookup(is_cache, &env.name, canister_name)
-            .context(CanisterIdLookupSnafu {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            })?;
-
-        Ok(cid)
+        Ok(principal)
     }
 
     /// Sets the canister ID for a given canister name in a specified environment.
@@ -296,30 +304,6 @@ impl Context {
         Ok(agent)
     }
 
-    /// Gets a canister ID for a given canister and environment selection.
-    ///
-    /// This method validates that the environment exists when using a principal,
-    /// or looks up the canister ID when using a name.
-    pub async fn get_canister_id(
-        &self,
-        canister: &CanisterSelection,
-        environment: &EnvironmentSelection,
-    ) -> Result<Principal, GetCanisterIdError> {
-        let principal = match canister {
-            CanisterSelection::Named(canister_name) => {
-                self.get_canister_id_for_env(canister_name, environment)
-                    .await?
-            }
-            CanisterSelection::Principal(principal) => {
-                // Make sure a valid environment was requested
-                let _ = self.get_environment(environment).await?;
-                *principal
-            }
-        };
-
-        Ok(principal)
-    }
-
     /// Gets a canister ID and agent for the given selections.
     ///
     /// This is the main entry point for commands that need to interact with a canister.
@@ -355,7 +339,9 @@ impl Context {
             // Canister by name, use environment
             (CanisterSelection::Named(cname), _, NetworkSelection::Default) => {
                 let agent = self.get_agent_for_env(identity, environment).await?;
-                let cid = self.get_canister_id_for_env(cname, environment).await?;
+                let cid = self
+                    .get_canister_id_for_env(&CanisterSelection::Named(cname.clone()), environment)
+                    .await?;
                 (cid, agent)
             }
 
@@ -555,15 +541,6 @@ pub enum GetAgentForUrlError {
     AgentCreate {
         source: crate::agent::CreateAgentError,
     },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetCanisterIdError {
-    #[snafu(transparent)]
-    GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
-
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
 }
 
 #[derive(Debug, Snafu)]

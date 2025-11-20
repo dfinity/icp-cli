@@ -7,8 +7,9 @@ use ic_ledger_types::{
 };
 use icp::{
     agent,
-    context::{EnvironmentSelection, GetAgentForEnvError},
-    identity, network,
+    context::{EnvironmentSelection, GetAgentForEnvError, NetworkSelection},
+    identity::{self, IdentitySelection},
+    network,
 };
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
@@ -21,7 +22,7 @@ use icp_canister_interfaces::{
 
 use icp::context::Context;
 
-use crate::options::{EnvironmentOpt, IdentityOpt};
+use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
@@ -35,6 +36,9 @@ pub(crate) struct MintArgs {
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
+
+    #[command(flatten)]
+    pub(crate) network: NetworkOpt,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -87,6 +91,8 @@ pub(crate) enum CommandError {
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let network_selection: NetworkSelection = args.network.clone().into();
+    let identity_selection: IdentitySelection = args.identity.clone().into();
 
     // Agent
     let agent = ctx

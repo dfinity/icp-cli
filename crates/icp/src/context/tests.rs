@@ -134,7 +134,10 @@ async fn test_get_canister_id_for_env_success() {
     };
 
     let cid = ctx
-        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .get_canister_id_for_env(
+            &CanisterSelection::Named("backend".to_string()),
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
         .await
         .unwrap();
 
@@ -150,7 +153,10 @@ async fn test_get_canister_id_for_env_canister_not_in_env() {
 
     // "database" is only in "dev" environment, not in "test"
     let result = ctx
-        .get_canister_id_for_env("database", &EnvironmentSelection::Named("test".to_string()))
+        .get_canister_id_for_env(
+            &CanisterSelection::Named("database".to_string()),
+            &EnvironmentSelection::Named("test".to_string()),
+        )
         .await;
 
     assert!(matches!(
@@ -171,7 +177,10 @@ async fn test_get_canister_id_for_env_id_not_registered() {
 
     // Environment exists and canister is in it, but ID not registered
     let result = ctx
-        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .get_canister_id_for_env(
+            &CanisterSelection::Named("backend".to_string()),
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
         .await;
 
     assert!(matches!(
@@ -452,7 +461,7 @@ async fn test_get_agent_for_url_success() {
 }
 
 #[tokio::test]
-async fn test_get_canister_id() {
+async fn test_get_canister_id_for_env() {
     use crate::store_id::Access as IdAccess;
     use candid::Principal;
 
@@ -474,14 +483,14 @@ async fn test_get_canister_id() {
     let environment_selection = EnvironmentSelection::Named("dev".to_string());
 
     assert!(
-        matches!(ctx.get_canister_id(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
+        matches!(ctx.get_canister_id_for_env(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
     );
 
     let canister_selection = CanisterSelection::Named("INVALID".to_string());
     let environment_selection = EnvironmentSelection::Named("dev".to_string());
 
     let res = ctx
-        .get_canister_id(&canister_selection, &environment_selection)
+        .get_canister_id_for_env(&canister_selection, &environment_selection)
         .await;
     assert!(
         res.is_err(),

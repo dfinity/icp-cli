@@ -3,7 +3,7 @@ use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::export::Principal;
 use icp::{
-    context::{Context, EnvironmentSelection, GetEnvCanisterError},
+    context::{CanisterSelection, Context, EnvironmentSelection, GetEnvCanisterError},
     identity::IdentitySelection,
 };
 use std::sync::Arc;
@@ -208,7 +208,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
-                    &icp::context::CanisterSelection::Named(name.clone()),
+                    &CanisterSelection::Named(name.clone()),
                     &environment_selection,
                 )
                 .await
@@ -248,7 +248,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
-                    &icp::context::CanisterSelection::Named(name.clone()),
+                    &CanisterSelection::Named(name.clone()),
                     &environment_selection,
                 )
                 .await
@@ -282,7 +282,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
-                    &icp::context::CanisterSelection::Named(name.clone()),
+                    &CanisterSelection::Named(name.clone()),
                     &environment_selection,
                 )
                 .await

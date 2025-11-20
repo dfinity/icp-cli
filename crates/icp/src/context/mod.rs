@@ -363,6 +363,7 @@ impl Context {
                 Ok(self.get_agent_for_env(identity, environment).await?)
             }
 
+            // Network specified
             (EnvironmentSelection::Default, NetworkSelection::Named(_))
             | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
                 Ok(self.get_agent_for_network(identity, network).await?)

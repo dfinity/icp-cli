@@ -195,7 +195,7 @@ impl Access for Accessor {
             }
             Configuration::Connected { connected: cfg } => Ok(get_connected_network_access(cfg)
                 .await
-                .context("failed to load connectednetwork access")?),
+                .context("failed to load connected network access")?),
         }
     }
 }

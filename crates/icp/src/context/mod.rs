@@ -325,19 +325,12 @@ impl Context {
                 // Try to get agent from the default environment if project exists
                 match self.get_agent_for_env(identity, environment).await {
                     Ok(agent) => Ok(agent),
-                    // If no project found, fall back to default local network
                     Err(GetAgentForEnvError::GetEnvironment {
                         source:
                             GetEnvironmentError::ProjectLoad {
                                 source: crate::LoadError::Locate,
                             },
-                    }) => {
-                        let url = Url::parse(DEFAULT_LOCAL_NETWORK_URL)
-                            .expect("hardcoded URL should be valid");
-                        self.get_agent_for_url(identity, &url)
-                            .await
-                            .map_err(Into::into)
-                    }
+                    }) => Err(GetAgentError::NoProjectOrNetwork),
                     Err(e) => Err(e.into()),
                 }
             }
@@ -586,6 +579,11 @@ pub enum GetAgentForUrlError {
 pub enum GetAgentError {
     #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,
+
+    #[snafu(display(
+        "No project found and no network specified. Either run this command inside a project or specify a network with --network"
+    ))]
+    NoProjectOrNetwork,
 
     #[snafu(transparent)]
     GetAgentForEnv { source: GetAgentForEnvError },

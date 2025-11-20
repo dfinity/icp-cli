@@ -525,18 +525,18 @@ async fn test_get_agent_defaults_outside_project() {
         ..Context::mocked()
     };
 
-    // Default environment + default network outside project should fall back to hardcoded localhost:8000
-    let _ = ctx
+    // Default environment + default network outside project should error
+    let error = ctx
         .get_agent(
             &IdentitySelection::Anonymous,
             &NetworkSelection::Default,
             &EnvironmentSelection::Default,
         )
         .await
-        .unwrap();
+        .unwrap_err();
 
-    // Agent should be successfully created (we don't check root key because it's created via URL)
-    // Just verifying it doesn't fail
+    // Should fail with NoProjectOrNetwork error
+    assert!(matches!(error, GetAgentError::NoProjectOrNetwork));
 }
 
 #[tokio::test]

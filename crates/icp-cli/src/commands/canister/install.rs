@@ -4,7 +4,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp::fs;
 use icp::{context::CanisterSelection, prelude::*};
 
-use icp::context::Context;
+use icp::context::{Context, GetAgentError, GetCanisterIdError};
 
 use crate::{
     commands::args,
@@ -34,7 +34,10 @@ pub(crate) enum CommandError {
     ReadWasmFile(#[from] fs::Error),
 
     #[error(transparent)]
-    GetCanisterIdAndAgent(#[from] icp::context::GetCanisterIdAndAgentError),
+    GetAgent(#[from] GetAgentError),
+
+    #[error(transparent)]
+    GetCanisterId(#[from] GetCanisterIdError),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -62,12 +65,18 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), Comman
             .map_err(|e| anyhow!(e))?
     };
 
-    let (canister_id, agent) = ctx
-        .get_canister_id_and_agent(
-            &selections.canister,
+    let agent = ctx
+        .get_agent(
             &selections.environment,
             &selections.network,
             &selections.identity,
+        )
+        .await?;
+    let canister_id = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
         )
         .await?;
 

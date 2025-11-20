@@ -365,22 +365,6 @@ impl Context {
         }
     }
 
-    /// Gets a canister ID and agent for the given selections.
-    ///
-    /// This is the main entry point for commands that need to interact with a canister.
-    /// It handles all the different combinations of canister, environment, and network selections.
-    pub async fn get_canister_id_and_agent(
-        &self,
-        canister: &CanisterSelection,
-        environment: &EnvironmentSelection,
-        network: &NetworkSelection,
-        identity: &IdentitySelection,
-    ) -> Result<(Principal, Agent), GetCanisterIdAndAgentError> {
-        let agent = self.get_agent(environment, network, identity).await?;
-        let cid = self.get_canister_id(canister, environment, network).await?;
-        Ok((cid, agent))
-    }
-
     pub async fn ids_by_environment(
         &self,
         environment: &EnvironmentSelection,
@@ -576,15 +560,6 @@ pub enum GetCanisterIdError {
 
     #[snafu(transparent)]
     GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetCanisterIdAndAgentError {
-    #[snafu(transparent)]
-    GetAgent { source: GetAgentError },
-
-    #[snafu(transparent)]
-    GetCanisterId { source: GetCanisterIdError },
 }
 
 #[derive(Debug, Snafu)]

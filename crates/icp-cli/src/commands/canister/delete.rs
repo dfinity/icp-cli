@@ -1,7 +1,7 @@
 use clap::Args;
 use ic_agent::AgentError;
 
-use icp::context::Context;
+use icp::context::{Context, GetAgentError, GetCanisterIdError};
 
 use crate::commands::args;
 
@@ -17,18 +17,27 @@ pub(crate) enum CommandError {
     Delete(#[from] AgentError),
 
     #[error(transparent)]
-    GetCanisterIdAndAgent(#[from] icp::context::GetCanisterIdAndAgentError),
+    GetAgent(#[from] GetAgentError),
+
+    #[error(transparent)]
+    GetCanisterId(#[from] GetCanisterIdError),
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), CommandError> {
     let selections = args.cmd_args.selections();
 
-    let (cid, agent) = ctx
-        .get_canister_id_and_agent(
-            &selections.canister,
+    let agent = ctx
+        .get_agent(
             &selections.environment,
             &selections.network,
             &selections.identity,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.environment,
+            &selections.network,
         )
         .await?;
 

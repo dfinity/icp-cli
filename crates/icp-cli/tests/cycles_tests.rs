@@ -2,7 +2,7 @@ use indoc::formatdoc;
 use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::fs::write_string;
+use icp::{fs::write_string, prelude::IC_MAINNET_NETWORK_URL};
 
 mod common;
 
@@ -153,6 +153,23 @@ async fn cycles_mint_with_mainnet() {
     ctx.icp()
         .current_dir(&project_dir)
         .args(["cycles", "mint", "--icp", "1", "--mainnet"])
+        .assert()
+        .stderr(contains(
+            "Error: Insufficient funds: 1.00010000 ICP required, 0 ICP available.",
+        ))
+        .failure();
+
+    // Run mint command with --network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "1",
+            "--network",
+            IC_MAINNET_NETWORK_URL,
+        ])
         .assert()
         .stderr(contains(
             "Error: Insufficient funds: 1.00010000 ICP required, 0 ICP available.",

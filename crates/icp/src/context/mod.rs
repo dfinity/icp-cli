@@ -145,14 +145,40 @@ impl Context {
     ) -> Result<crate::Network, GetNetworkError> {
         match network_selection {
             NetworkSelection::Named(network_name) => {
-                let p = self.project.load().await?;
-                let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
-                    name: network_name.to_owned(),
-                })?;
-                Ok(net.clone())
+                if self.project.exists().await? {
+                    let p = self.project.load().await?;
+                    let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
+                        name: network_name.to_owned(),
+                    })?;
+                    Ok(net.clone())
+                } else {
+                    if network_name == DEFAULT_MAINNET_NETWORK_NAME {
+                        Ok(crate::Network {
+                            name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+                            configuration: crate::network::Configuration::Connected {
+                                connected: crate::network::Connected {
+                                    url: DEFAULT_MAINNET_NETWORK_URL.to_string(),
+                                    root_key: None,
+                                },
+                            },
+                        })
+                    } else {
+                        Err(GetNetworkError::NetworkNotFound {
+                            name: network_name.to_owned(),
+                        })
+                    }
+                }
             }
             NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(_) => Err(GetNetworkError::UrlSpecifiedNetwork),
+            NetworkSelection::Url(url) => Ok(crate::Network {
+                name: url.to_string(),
+                configuration: crate::network::Configuration::Connected {
+                    connected: crate::network::Connected {
+                        url: url.to_string(),
+                        root_key: None,
+                    },
+                },
+            }),
         }
     }
 
@@ -339,22 +365,9 @@ impl Context {
                 Ok(self.get_agent_for_env(identity, environment).await?)
             }
 
-            // Network name specified
-            (EnvironmentSelection::Default, NetworkSelection::Named(network_name)) => {
-                if self.project.exists().await? {
-                    return Ok(self.get_agent_for_network(identity, network).await?);
-                } else if network_name == DEFAULT_MAINNET_NETWORK_NAME {
-                    let url = Url::parse(DEFAULT_MAINNET_NETWORK_URL)
-                        .expect("hardcoded URL should be valid");
-                    return Ok(self.get_agent_for_url(identity, &url).await?);
-                } else {
-                    return Err(GetAgentError::NoProjectOrNetwork);
-                }
-            }
-
-            // Network URL specified
-            (EnvironmentSelection::Default, NetworkSelection::Url(url)) => {
-                Ok(self.get_agent_for_url(identity, url).await?)
+            (EnvironmentSelection::Default, NetworkSelection::Named(_))
+            | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                Ok(self.get_agent_for_network(identity, network).await?)
             }
         }
     }

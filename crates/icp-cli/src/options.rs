@@ -1,7 +1,9 @@
 use clap::{ArgGroup, Args};
 use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
-use icp::project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_ENVIRONMENT_NAME};
+use icp::project::{
+    DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_ENVIRONMENT_NAME, DEFAULT_MAINNET_NETWORK_NAME,
+};
 use url::Url;
 
 #[derive(Args, Clone, Debug, Default)]
@@ -79,12 +81,19 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOpt {
     /// Name of the network to target, conflicts with environment argument
-    #[arg(long, group = "network-select")]
+    #[arg(long, env = "ICP_NETWORK", group = "network-select")]
     network: Option<String>,
+
+    /// Shorthand for --network=mainnet
+    #[arg(long, group = "network-select")]
+    mainnet: bool,
 }
 
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
+        if v.mainnet {
+            return NetworkSelection::Named(DEFAULT_MAINNET_NETWORK_NAME.to_string());
+        }
         match v.network {
             Some(network) => match Url::parse(&network) {
                 Ok(url) => NetworkSelection::Url(url),

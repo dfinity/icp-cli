@@ -11,8 +11,7 @@ use crate::{
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
     project::{
-        DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_LOCAL_NETWORK_NAME, DEFAULT_LOCAL_NETWORK_URL,
-        DEFAULT_MAINNET_NETWORK_NAME, DEFAULT_MAINNET_NETWORK_URL,
+        DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_NETWORK_NAME, DEFAULT_MAINNET_NETWORK_URL,
     },
     store_id::{IdMapping, LookupIdError},
 };
@@ -342,30 +341,14 @@ impl Context {
 
             // Network name specified
             (EnvironmentSelection::Default, NetworkSelection::Named(network_name)) => {
-                // Try to get from project first
-                match self.get_agent_for_network(identity, network).await {
-                    Ok(agent) => Ok(agent),
-                    // If no project found, try to use the default networks
-                    Err(GetAgentForNetworkError::GetNetwork {
-                        source:
-                            GetNetworkError::ProjectLoad {
-                                source: crate::LoadError::Locate,
-                            },
-                    }) if network_name == DEFAULT_LOCAL_NETWORK_NAME
-                        || network_name == DEFAULT_MAINNET_NETWORK_NAME =>
-                    {
-                        // For defaults, construct agent directly
-                        let url = if network_name == DEFAULT_LOCAL_NETWORK_NAME {
-                            DEFAULT_LOCAL_NETWORK_URL
-                        } else {
-                            DEFAULT_MAINNET_NETWORK_URL
-                        };
-                        let url = Url::parse(url).expect("hardcoded URL should be valid");
-                        self.get_agent_for_url(identity, &url)
-                            .await
-                            .map_err(Into::into)
-                    }
-                    Err(e) => Err(e.into()),
+                if self.project.exists().await? {
+                    return Ok(self.get_agent_for_network(identity, network).await?);
+                } else if network_name == DEFAULT_MAINNET_NETWORK_NAME {
+                    let url = Url::parse(DEFAULT_MAINNET_NETWORK_URL)
+                        .expect("hardcoded URL should be valid");
+                    return Ok(self.get_agent_for_url(identity, &url).await?);
+                } else {
+                    return Err(GetAgentError::NoProjectOrNetwork);
                 }
             }
 
@@ -577,6 +560,9 @@ pub enum GetAgentForUrlError {
 
 #[derive(Debug, Snafu)]
 pub enum GetAgentError {
+    #[snafu(transparent)]
+    ProjectExists { source: crate::LoadError },
+
     #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,
 

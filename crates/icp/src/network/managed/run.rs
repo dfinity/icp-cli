@@ -18,6 +18,7 @@ use pocket_ic::{
 use reqwest::Url;
 use snafu::prelude::*;
 use std::{env::var, fs::read_to_string, io::Write, process::ExitStatus, time::Duration};
+use sysinfo::Pid;
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
@@ -41,12 +42,21 @@ pub async fn run_network(
     nd: NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    background: bool,
 ) -> Result<(), RunNetworkError> {
     let pocketic_path = PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
 
     nd.ensure_exists()?;
 
-    run_pocketic(&pocketic_path, config, &nd, project_root, seed_accounts).await?;
+    run_pocketic(
+        &pocketic_path,
+        config,
+        &nd,
+        project_root,
+        seed_accounts,
+        background,
+    )
+    .await?;
     Ok(())
 }
 
@@ -71,11 +81,11 @@ async fn run_pocketic(
     nd: &NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    background: bool,
 ) -> Result<(), RunPocketIcError> {
     let network_root = nd.root()?;
-    let mut c_port = None;
-    let mut c_child = None;
-    let result = network_root
+    // hold port_claim until the end of this function
+    let (mut child, port, _port_claim) = network_root
         .with_write(async |root| -> Result<_, RunPocketIcError> {
             let port_lock = if let Port::Fixed(port) = &config.gateway.port {
                 Some(nd.port(*port)?.into_write().await?)
@@ -100,9 +110,14 @@ async fn run_pocketic(
                 remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
-
-            let child = c_child.insert(spawn_pocketic(pocketic_path, &port_file));
-            let pocketic_port = wait_for_port(&port_file, child).await?;
+            let mut child = spawn_pocketic(
+                pocketic_path,
+                &port_file,
+                &root.pocketic_stdout_file(),
+                &root.pocketic_stderr_file(),
+                background,
+            );
+            let pocketic_port = wait_for_port(&port_file, &mut child).await?;
             eprintln!("PocketIC started on port {pocketic_port}");
             let instance = initialize_pocketic(
                 pocketic_port,
@@ -111,10 +126,10 @@ async fn run_pocketic(
                 seed_accounts,
             )
             .await?;
-            c_port = Some(instance.gateway_port);
+            let port = instance.gateway_port;
 
             let gateway = NetworkDescriptorGatewayPort {
-                port: instance.gateway_port,
+                port,
                 fixed: matches!(config.gateway.port, Port::Fixed(_)),
             };
             let default_effective_canister_id = instance.effective_canister_id;
@@ -137,23 +152,26 @@ async fn run_pocketic(
                 &descriptor,
             )
             .await?;
-            Ok(port_claim)
+            Ok((child, port, port_claim))
         })
-        .await?;
-    eprintln!("Press Ctrl-C to exit.");
-    if let Some(mut child) = c_child {
-        let _ = wait_for_shutdown(&mut child).await;
+        .await??;
+    if background {
+        // Save the PID of the main `pocket-ic` process
+        // This is used by the `icp network stop` command to find and kill the process.
+        nd.save_background_network_runner_pid(Pid::from(child.id().unwrap() as usize))
+            .await?;
+        eprintln!("To stop the network, run `icp network stop`");
+    } else {
+        eprintln!("Press Ctrl-C to exit.");
 
+        let _ = wait_for_shutdown(&mut child).await;
         let _ = child.kill().await;
         let _ = child.wait().await;
-    }
 
-    let _ = nd.cleanup_project_network_descriptor().await;
-    if let Some(port) = c_port {
+        let _ = nd.cleanup_project_network_descriptor().await;
         let _ = nd.cleanup_port_descriptor(Some(port)).await;
     }
-
-    result.map(|_| ())
+    Ok(())
 }
 
 #[derive(Debug, Snafu)]
@@ -181,6 +199,11 @@ pub enum RunPocketIcError {
 
     #[snafu(transparent)]
     ClaimPort { source: ClaimPortError },
+
+    #[snafu(transparent)]
+    SavePid {
+        source: crate::network::directory::SavePidError,
+    },
 }
 
 #[derive(Debug)]

@@ -154,11 +154,7 @@ pub async fn transfer(
     );
 
     // Check for errors
-    let (Nat(fee), decimals, symbol) = (
-        fee?,
-        decimals? as u32,
-        symbol?,
-    );
+    let (Nat(fee), decimals, symbol) = (fee?, decimals? as u32, symbol?);
 
     // Calculate units of token to transfer
     // Ledgers do not work in decimals and instead use the smallest non-divisible unit of the token

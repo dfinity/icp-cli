@@ -128,11 +128,7 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<BalanceInfo, GetB
     );
 
     // Check for errors
-    let (Nat(balance), decimals, symbol) = (
-        balance?,
-        decimals? as i64,
-        symbol?,
-    );
+    let (Nat(balance), decimals, symbol) = (balance?, decimals? as i64, symbol?);
 
     // Calculate amount
     let amount = BigDecimal::from_biguint(balance, decimals);

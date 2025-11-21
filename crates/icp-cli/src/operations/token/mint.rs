@@ -5,7 +5,7 @@ use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use icp_canister_interfaces::{
-    cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
+    cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_DECIMALS},
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
         NotifyMintArgs, NotifyMintResponse,
@@ -188,8 +188,11 @@ pub async fn mint_cycles(
     };
 
     // Calculate display values in TCYCLES (12 decimals)
-    let deposited = BigDecimal::new((minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(), 12);
-    let new_balance = BigDecimal::new(minted.balance.into(), 12);
+    let deposited = BigDecimal::new(
+        (minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(),
+        CYCLES_LEDGER_DECIMALS,
+    );
+    let new_balance = BigDecimal::new(minted.balance.into(), CYCLES_LEDGER_DECIMALS);
 
     Ok(MintInfo {
         deposited,

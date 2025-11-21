@@ -2,6 +2,7 @@ use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_
 use phf::phf_map;
 
 pub(crate) mod balance;
+pub(crate) mod mint;
 pub(crate) mod transfer;
 
 /// A compile-time map of token names to their corresponding ledger canister IDs.

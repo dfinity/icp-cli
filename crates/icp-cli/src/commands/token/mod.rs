@@ -5,6 +5,7 @@ pub(crate) mod transfer;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Command {
+    /// The token to execute the operation on, defaults to `icp`
     #[arg(default_value = "icp")]
     pub(crate) token: String,
 

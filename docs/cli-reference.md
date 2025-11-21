@@ -712,7 +712,7 @@ Perform token transactions
 
 ###### **Arguments:**
 
-* `<TOKEN>`
+* `<TOKEN>` — The token to execute the operation on, defaults to `icp`
 
   Default value: `icp`
 

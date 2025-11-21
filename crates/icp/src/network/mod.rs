@@ -20,7 +20,7 @@ use crate::{
 
 pub mod access;
 pub mod config;
-mod directory;
+pub mod directory;
 pub mod managed;
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]

@@ -6,6 +6,7 @@ use pocket_ic::common::rest::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
+use std::process::Stdio;
 use time::OffsetDateTime;
 
 use crate::prelude::*;
@@ -74,16 +75,25 @@ pub fn spawn_pocketic(
     port_file: &Path,
     stdout_file: &Path,
     stderr_file: &Path,
+    background: bool,
 ) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new(pocketic_path);
     cmd.arg("--port-file");
     cmd.arg(port_file.as_os_str());
     cmd.args(["--ttl", "2592000", "--log-levels", "error"]);
 
-    let stdout = std::fs::File::create(stdout_file).expect("Failed to create stdout file.");
-    let stderr = std::fs::File::create(stderr_file).expect("Failed to create stderr file.");
-    cmd.stdout(std::process::Stdio::from(stdout));
-    cmd.stderr(std::process::Stdio::from(stderr));
+    if background {
+        eprintln!("For background mode, PocketIC output will be redirected:");
+        eprintln!("  stdout: {}", stdout_file);
+        eprintln!("  stderr: {}", stderr_file);
+        let stdout = std::fs::File::create(stdout_file).expect("Failed to create stdout file.");
+        let stderr = std::fs::File::create(stderr_file).expect("Failed to create stderr file.");
+        cmd.stdout(Stdio::from(stdout));
+        cmd.stderr(Stdio::from(stderr));
+    } else {
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
+    }
 
     #[cfg(unix)]
     {

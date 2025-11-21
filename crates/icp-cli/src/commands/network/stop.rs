@@ -88,6 +88,10 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
         .with_write(async |root| {
             let pid_file = root.background_network_runner_pid_file();
             let _ = remove_file(&pid_file); // Cleanup is nice, but optional
+            let descriptor_file = root.network_descriptor_path();
+            // Desciptor file must be deleted to allow the network to be restarted, but if it doesn't exist, that's fine too
+            let _ = remove_file(&descriptor_file);
+
             Ok::<_, CommandError>(())
         })
         .await??;

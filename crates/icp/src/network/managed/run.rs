@@ -101,7 +101,12 @@ async fn run_pocketic(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            let child = c_child.insert(spawn_pocketic(pocketic_path, &port_file));
+            let child = c_child.insert(spawn_pocketic(
+                pocketic_path,
+                &port_file,
+                &root.pocketic_stdout_file(),
+                &root.pocketic_stderr_file(),
+            ));
             let pocketic_port = wait_for_port(&port_file, child).await?;
             eprintln!("PocketIC started on port {pocketic_port}");
             let instance = initialize_pocketic(

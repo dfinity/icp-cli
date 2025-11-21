@@ -214,6 +214,16 @@ impl NetworkRootPaths {
     pub fn pocketic_port_file(&self) -> PathBuf {
         self.pocketic_dir().join("port")
     }
+
+    /// PocketIC writes its stdout to this file.
+    pub fn pocketic_stdout_file(&self) -> PathBuf {
+        self.pocketic_dir().join("stdout.log")
+    }
+
+    /// PocketIC writes its stderr to this file.
+    pub fn pocketic_stderr_file(&self) -> PathBuf {
+        self.pocketic_dir().join("stderr.log")
+    }
 }
 
 impl PathsAccess for NetworkRootPaths {

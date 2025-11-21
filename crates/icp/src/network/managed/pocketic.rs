@@ -69,14 +69,22 @@ pub struct PocketIcInstance {
     pub root_key: String,
 }
 
-pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process::Child {
+pub fn spawn_pocketic(
+    pocketic_path: &Path,
+    port_file: &Path,
+    stdout_file: &Path,
+    stderr_file: &Path,
+) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new(pocketic_path);
     cmd.arg("--port-file");
     cmd.arg(port_file.as_os_str());
     cmd.args(["--ttl", "2592000", "--log-levels", "error"]);
 
-    cmd.stdout(std::process::Stdio::inherit());
-    cmd.stderr(std::process::Stdio::inherit());
+    let stdout = std::fs::File::create(stdout_file).expect("Failed to create stdout file.");
+    let stderr = std::fs::File::create(stderr_file).expect("Failed to create stderr file.");
+    cmd.stdout(std::process::Stdio::from(stdout));
+    cmd.stderr(std::process::Stdio::from(stderr));
+
     #[cfg(unix)]
     {
         cmd.process_group(0);

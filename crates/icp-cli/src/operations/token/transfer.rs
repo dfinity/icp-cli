@@ -155,9 +155,9 @@ pub async fn transfer(
 
     // Check for errors
     let (Nat(fee), decimals, symbol) = (
-        fee?,             //
-        decimals? as u32, //
-        symbol?,          //
+        fee?,
+        decimals? as u32,
+        symbol?,
     );
 
     // Calculate units of token to transfer

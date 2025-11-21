@@ -84,14 +84,15 @@ async fn run_pocketic(
     background: bool,
 ) -> Result<(), RunPocketIcError> {
     let network_root = nd.root()?;
-    let (mut child, port) = network_root
+    // hold port_claim until the end of this function
+    let (mut child, port, _port_claim) = network_root
         .with_write(async |root| -> Result<_, RunPocketIcError> {
             let port_lock = if let Port::Fixed(port) = &config.gateway.port {
                 Some(nd.port(*port)?.into_write().await?)
             } else {
                 None
             };
-            let _port_claim = port_lock
+            let port_claim = port_lock
                 .as_ref()
                 .map(|lock| lock.claim_port())
                 .transpose()?;
@@ -151,7 +152,7 @@ async fn run_pocketic(
                 &descriptor,
             )
             .await?;
-            Ok((child, port))
+            Ok((child, port, port_claim))
         })
         .await??;
     if background {

@@ -16,4 +16,3 @@ pub(super) static TOKEN_LEDGER_CIDS: phf::Map<&'static str, &'static str> = phf_
     "icp" => ICP_LEDGER_CID,
     "cycles" => CYCLES_LEDGER_CID,
 };
-

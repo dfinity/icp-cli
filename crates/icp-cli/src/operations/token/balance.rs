@@ -60,10 +60,7 @@ pub struct BalanceInfo {
 /// # Returns
 ///
 /// A `BalanceInfo` struct containing the formatted amount and token symbol
-pub async fn get_balance(
-    agent: &Agent,
-    token: &str,
-) -> Result<BalanceInfo, GetBalanceError> {
+pub async fn get_balance(agent: &Agent, token: &str) -> Result<BalanceInfo, GetBalanceError> {
     // Obtain ledger address
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
@@ -142,4 +139,3 @@ pub async fn get_balance(
 
     Ok(BalanceInfo { amount, symbol })
 }
-

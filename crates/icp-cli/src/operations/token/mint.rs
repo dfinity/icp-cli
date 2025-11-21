@@ -7,8 +7,8 @@ use ic_ledger_types::{
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
-        ConversionRateResponse, NotifyMintArgs, NotifyMintResponse,
-        CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_MINT_CYCLES,
+        CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
+        NotifyMintArgs, NotifyMintResponse,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };

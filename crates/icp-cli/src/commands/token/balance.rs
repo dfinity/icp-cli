@@ -4,7 +4,7 @@ use icp::{agent, context::GetAgentError, identity, network};
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::operations::token::balance::{get_balance, GetBalanceError};
+use crate::operations::token::balance::{GetBalanceError, get_balance};
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct BalanceArgs {
@@ -58,9 +58,10 @@ pub(crate) async fn exec(
     let balance_info = get_balance(&agent, token).await?;
 
     // Output information
-    let _ = ctx
-        .term
-        .write_line(&format!("Balance: {} {}", balance_info.amount, balance_info.symbol));
+    let _ = ctx.term.write_line(&format!(
+        "Balance: {} {}",
+        balance_info.amount, balance_info.symbol
+    ));
 
     Ok(())
 }

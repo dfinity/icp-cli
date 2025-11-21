@@ -5,7 +5,7 @@ use icp::{agent, context::GetAgentError, identity, network};
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::operations::token::mint::{mint_cycles, MintCyclesError};
+use crate::operations::token::mint::{MintCyclesError, mint_cycles};
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {

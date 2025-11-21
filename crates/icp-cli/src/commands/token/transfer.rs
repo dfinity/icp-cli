@@ -6,7 +6,7 @@ use icp::{agent, context::GetAgentError, identity, network};
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::operations::token::transfer::{transfer, TokenTransferError};
+use crate::operations::token::transfer::{TokenTransferError, transfer};
 
 #[derive(Debug, Args)]
 pub(crate) struct TransferArgs {
@@ -63,7 +63,10 @@ pub(crate) async fn exec(
     // Output information
     let _ = ctx.term.write_line(&format!(
         "Transferred {} {} to {} in block {}",
-        transfer_info.amount, transfer_info.symbol, transfer_info.receiver, transfer_info.block_index
+        transfer_info.amount,
+        transfer_info.symbol,
+        transfer_info.receiver,
+        transfer_info.block_index
     ));
 
     Ok(())

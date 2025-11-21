@@ -1,8 +1,8 @@
-use icp::{agent, context::GetAgentError, identity, network};
 use icp::context::Context;
+use icp::{agent, context::GetAgentError, identity, network};
 
 use crate::commands::token;
-use crate::operations::token::balance::{get_balance, GetBalanceError};
+use crate::operations::token::balance::{GetBalanceError, get_balance};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CommandError {
@@ -44,9 +44,10 @@ pub(crate) async fn exec(
     let balance_info = get_balance(&agent, "cycles").await?;
 
     // Output information
-    let _ = ctx
-        .term
-        .write_line(&format!("Balance: {} {}", balance_info.amount, balance_info.symbol));
+    let _ = ctx.term.write_line(&format!(
+        "Balance: {} {}",
+        balance_info.amount, balance_info.symbol
+    ));
 
     Ok(())
 }

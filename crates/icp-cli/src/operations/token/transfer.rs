@@ -47,7 +47,9 @@ pub enum TokenTransferError {
     #[snafu(display("failed to decode transfer response"))]
     DecodeTransferResponse { source: candid::Error },
 
-    #[snafu(display("insufficient funds. balance: {balance} {symbol}, required: {required} {symbol}"))]
+    #[snafu(display(
+        "insufficient funds. balance: {balance} {symbol}, required: {required} {symbol}"
+    ))]
     InsufficientFunds {
         symbol: String,
         balance: BigDecimal,
@@ -201,8 +203,8 @@ pub async fn transfer(
         .context(ExecuteTransferSnafu)?;
 
     // Parse response
-    let resp = Decode!(&resp, Result<Nat, Icrc1TransferError>)
-        .context(DecodeTransferResponseSnafu)?;
+    let resp =
+        Decode!(&resp, Result<Nat, Icrc1TransferError>).context(DecodeTransferResponseSnafu)?;
 
     // Process response
     let block_index = resp.map_err(|err| match err {
@@ -237,4 +239,3 @@ pub async fn transfer(
         receiver,
     })
 }
-

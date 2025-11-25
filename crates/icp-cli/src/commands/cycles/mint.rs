@@ -1,11 +1,10 @@
+use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
-use icp::{agent, context::GetAgentError, identity, network};
-
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::operations::token::mint::{MintCyclesError, mint_cycles};
+use crate::operations::token::mint::mint_cycles;
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
@@ -21,34 +20,10 @@ pub(crate) struct MintArgs {
     pub(crate) token_command_args: TokenCommandArgs,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    MintCycles(#[from] MintCyclesError),
-
-    #[error("No amount specified. Use --icp or --cycles.")]
-    NoAmountSpecified,
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::Error> {
     // Validate args
     if args.icp.is_none() && args.cycles.is_none() {
-        return Err(CommandError::NoAmountSpecified);
+        bail!("no amount specified. Use --icp or --cycles");
     }
 
     let selections = args.token_command_args.selections();

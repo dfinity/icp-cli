@@ -1,36 +1,13 @@
 use clap::Args;
-use icp::{agent, context::GetAgentError, identity, network};
-
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::operations::token::balance::{GetBalanceError, get_balance};
+use crate::operations::token::balance::get_balance;
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct BalanceArgs {
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    GetBalance(#[from] GetBalanceError),
 }
 
 /// Check the token balance of a given identity
@@ -42,7 +19,7 @@ pub(crate) async fn exec(
     ctx: &Context,
     token: &str,
     args: &BalanceArgs,
-) -> Result<(), CommandError> {
+) -> Result<(), anyhow::Error> {
     let selections = args.token_command_args.selections();
 
     // Agent

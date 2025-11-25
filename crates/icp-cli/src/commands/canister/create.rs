@@ -1,26 +1,15 @@
 use anyhow::anyhow;
-use candid::Nat;
+use candid::{Nat, Principal};
 use clap::Args;
-use ic_agent::{AgentError, export::Principal};
-use icp::{
-    Canister, agent,
-    context::{
-        CanisterSelection, GetAgentForEnvError, GetEnvironmentError, SetCanisterIdForEnvError,
-    },
-    identity::{self},
-    network,
-    prelude::*,
-};
-
 use icp::context::Context;
+use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
     commands::args,
-    operations::create::{CreateOperation, CreateOperationError},
+    operations::create::CreateOperation,
     progress::{ProgressManager, ProgressManagerSettings},
 };
-use icp::store_id::RegisterError;
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -101,49 +90,10 @@ impl CreateArgs {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    CreateCanister(#[from] AgentError),
-
-    #[error(transparent)]
-    RegisterCanister(#[from] RegisterError),
-
-    #[error(transparent)]
-    Candid(#[from] candid::Error),
-
-    #[error(transparent)]
-    CreateOperation(#[from] CreateOperationError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
-
-    #[error(transparent)]
-    GetEnvironment(#[from] GetEnvironmentError),
-
-    #[error(transparent)]
-    SetCanisterIdForEnv(#[from] SetCanisterIdForEnvError),
-}
-
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
-pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
     let canister = match selections.canister {
         CanisterSelection::Named(name) => name,

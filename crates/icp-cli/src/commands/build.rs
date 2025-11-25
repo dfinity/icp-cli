@@ -1,11 +1,8 @@
 use clap::Args;
 use futures::future::try_join_all;
-use icp::context::{Context, EnvironmentSelection, GetEnvironmentError};
+use icp::context::{Context, EnvironmentSelection};
 
-use crate::{
-    operations::build::{BuildOperationError, build_many_with_progress_bar},
-    options::EnvironmentOpt,
-};
+use crate::{operations::build::build_many_with_progress_bar, options::EnvironmentOpt};
 
 #[derive(Debug, Args)]
 pub(crate) struct BuildArgs {
@@ -16,25 +13,7 @@ pub(crate) struct BuildArgs {
     pub(crate) environment: EnvironmentOpt,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    BuildOperation(#[from] BuildOperationError),
-
-    #[error(transparent)]
-    GetEnvironment(#[from] GetEnvironmentError),
-
-    #[error(transparent)]
-    GetEnvCanister(#[from] icp::context::GetEnvCanisterError),
-
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::Error> {
     // Get environment selection
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
 

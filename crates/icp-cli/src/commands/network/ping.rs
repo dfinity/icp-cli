@@ -1,14 +1,8 @@
-use std::time::Duration;
-
+use anyhow::{anyhow, bail};
 use clap::Args;
-use ic_agent::{Agent, AgentError, agent::status::Status};
-use icp::{
-    agent,
-    context::GetAgentForUrlError,
-    identity::{self, IdentitySelection},
-    network::{self},
-    project::DEFAULT_LOCAL_NETWORK_NAME,
-};
+use ic_agent::{Agent, agent::status::Status};
+use icp::{identity::IdentitySelection, project::DEFAULT_LOCAL_NETWORK_NAME};
+use std::time::Duration;
 use tokio::time::sleep;
 
 use icp::context::Context;
@@ -25,42 +19,17 @@ pub(crate) struct PingArgs {
     wait_healthy: bool,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error("network not found")]
-    Network,
-
-    #[error("failed to obtain network access")]
-    NetworkAccess(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    Status(#[from] AgentError),
-
-    #[error("timed-out waiting for replica to become healthy")]
-    Timeout,
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    GetAgentForUrl(#[from] GetAgentForUrlError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::Error> {
     // Load Project
     let p = ctx.project.load().await?;
 
-    // Network
-    let network = p.networks.get(&args.network).ok_or(CommandError::Network)?;
+    // Obtain network configuration
+    let network = p.networks.get(&args.network).ok_or_else(|| {
+        anyhow!(
+            "project does not contain a network named '{}'",
+            args.network
+        )
+    })?;
 
     // NetworkAccess
     let access = ctx.network.access(network).await?;
@@ -88,7 +57,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), CommandEr
     Ok(())
 }
 
-async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
+async fn ping_until_healthy(agent: &Agent) -> Result<Status, anyhow::Error> {
     let mut retries = 0;
 
     loop {
@@ -112,7 +81,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, CommandError> {
         }
 
         if retries >= 60 {
-            break Err(CommandError::Timeout);
+            bail!("timed-out waiting for replica to become healthy");
         }
 
         sleep(Duration::from_secs(1)).await;

@@ -1,12 +1,7 @@
-use std::time::Duration;
-
+use anyhow::{anyhow, bail};
 use clap::Parser;
-use icp::{
-    fs::{lock::LockError, remove_file},
-    manifest,
-    network::Configuration,
-    project::DEFAULT_LOCAL_NETWORK_NAME,
-};
+use icp::{fs::remove_file, network::Configuration, project::DEFAULT_LOCAL_NETWORK_NAME};
+use std::time::Duration;
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
 use icp::context::Context;
@@ -21,49 +16,18 @@ pub struct Cmd {
     name: String,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Locate(#[from] manifest::ProjectRootLocateError),
-
-    #[error("project does not contain a network named '{name}'")]
-    Network { name: String },
-
-    #[error("network '{name}' must be a managed network")]
-    Unmanaged { name: String },
-
-    #[error(transparent)]
-    NetworkAccess(#[from] icp::network::AccessError),
-
-    #[error("network '{name}' is not running in the background")]
-    NotRunning { name: String },
-
-    #[error(transparent)]
-    LoadPid(#[from] icp::network::LoadPidError),
-
-    #[error("process {pid} did not exit within {timeout} seconds")]
-    Timeout { pid: Pid, timeout: u64 },
-
-    #[error(transparent)]
-    LockFile(#[from] LockError),
-}
-
-pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
+pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     // Load project
     let p = ctx.project.load().await?;
 
     // Obtain network configuration
-    let network = p.networks.get(&cmd.name).ok_or(CommandError::Network {
-        name: cmd.name.clone(),
-    })?;
+    let network = p
+        .networks
+        .get(&cmd.name)
+        .ok_or_else(|| anyhow!("project does not contain a network named '{}'", cmd.name))?;
 
     if let Configuration::Connected { connected: _ } = &network.configuration {
-        return Err(CommandError::Unmanaged {
-            name: cmd.name.to_owned(),
-        });
+        bail!("network '{}' is not a managed network", cmd.name)
     };
 
     // Network directory
@@ -73,9 +37,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
     let pid = nd
         .load_background_network_runner_pid()
         .await?
-        .ok_or(CommandError::NotRunning {
-            name: cmd.name.clone(),
-        })?;
+        .ok_or_else(|| anyhow!("network '{}' is not running in the background", cmd.name))?;
 
     let _ = ctx
         .term
@@ -92,7 +54,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), CommandError> {
             // Desciptor file must be deleted to allow the network to be restarted, but if it doesn't exist, that's fine too
             let _ = remove_file(&descriptor_file);
 
-            Ok::<_, CommandError>(())
+            Ok::<_, anyhow::Error>(())
         })
         .await??;
 
@@ -109,7 +71,7 @@ fn send_sigint(pid: Pid) {
     }
 }
 
-fn wait_for_process_exit(pid: Pid) -> Result<(), CommandError> {
+fn wait_for_process_exit(pid: Pid) -> Result<(), anyhow::Error> {
     let start = std::time::Instant::now();
     let timeout = Duration::from_secs(TIMEOUT_SECS);
     let mut system = System::new();
@@ -121,10 +83,11 @@ fn wait_for_process_exit(pid: Pid) -> Result<(), CommandError> {
         }
 
         if start.elapsed() > timeout {
-            return Err(CommandError::Timeout {
+            bail!(
+                "process {} did not exit within {} seconds",
                 pid,
-                timeout: TIMEOUT_SECS,
-            });
+                TIMEOUT_SECS
+            );
         }
 
         std::thread::sleep(Duration::from_millis(100));

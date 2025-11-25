@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
@@ -6,7 +5,7 @@ use icp::identity::IdentitySelection;
 use std::sync::Arc;
 
 use crate::{
-    operations::sync::{SyncOperationError, sync_many},
+    operations::sync::sync_many,
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -22,34 +21,13 @@ pub(crate) struct SyncArgs {
     pub(crate) identity: IdentityOpt,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    SyncOperation(#[from] SyncOperationError),
-
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    GetEnvCanister(#[from] icp::context::GetEnvCanisterError),
-
-    #[error(transparent)]
-    GetEnvCanisterId(#[from] icp::context::GetCanisterIdForEnvError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::Error> {
     // Get environment and identity selections
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
 
     // Get environment
-    let env = ctx
-        .get_environment(&environment_selection)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
     // Determine which canisters to sync
     let cnames = match args.canisters.is_empty() {
@@ -68,8 +46,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandEr
     // Get agent
     let agent = ctx
         .get_agent_for_env(&identity_selection, &environment_selection)
-        .await
-        .map_err(|e| anyhow!(e))?;
+        .await?;
 
     // Prepare list of canisters with their info for syncing
     let sync_canisters = try_join_all(cnames.iter().map(|name| async {

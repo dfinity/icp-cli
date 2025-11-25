@@ -1,12 +1,10 @@
 use bigdecimal::BigDecimal;
 use candid::Principal;
 use clap::Args;
-use icp::{agent, context::GetAgentError, identity, network};
-
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::operations::token::transfer::{TokenTransferError, transfer};
+use crate::operations::token::transfer::transfer;
 
 #[derive(Debug, Args)]
 pub(crate) struct TransferArgs {
@@ -20,32 +18,11 @@ pub(crate) struct TransferArgs {
     pub(crate) token_command_args: TokenCommandArgs,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    Transfer(#[from] TokenTransferError),
-}
-
 pub(crate) async fn exec(
     ctx: &Context,
     token: &str,
     args: &TransferArgs,
-) -> Result<(), CommandError> {
+) -> Result<(), anyhow::Error> {
     let selections = args.token_command_args.selections();
 
     // Agent

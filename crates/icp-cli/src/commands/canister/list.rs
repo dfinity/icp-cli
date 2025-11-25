@@ -1,5 +1,4 @@
 use clap::Args;
-
 use icp::context::Context;
 
 use crate::options::EnvironmentOpt;
@@ -10,26 +9,9 @@ pub(crate) struct ListArgs {
     pub(crate) environment: EnvironmentOpt,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), CommandError> {
-    // Load project
-    let p = ctx.project.load().await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::Error> {
+    let environment_selection = args.environment.clone().into();
+    let env = ctx.get_environment(&environment_selection).await?;
 
     for (_, c) in env.canisters.values() {
         let _ = ctx.term.write_line(&format!("{c:?}"));

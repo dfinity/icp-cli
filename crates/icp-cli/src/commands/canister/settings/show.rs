@@ -1,12 +1,9 @@
 use clap::Args;
-use ic_agent::{AgentError, export::Principal};
+use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
-use icp::{agent, identity, network};
-
-use icp::context::{Context, GetAgentError, GetAgentForEnvError, GetCanisterIdError};
+use icp::context::Context;
 
 use crate::commands::args;
-use icp::store_id::LookupIdError;
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
@@ -14,37 +11,7 @@ pub(crate) struct ShowArgs {
     pub(crate) cmd_args: args::CanisterCommandArgs,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateAgentError),
-
-    #[error(transparent)]
-    Lookup(#[from] LookupIdError),
-
-    #[error(transparent)]
-    Status(#[from] AgentError),
-
-    #[error(transparent)]
-    GetAgentForEnv(#[from] GetAgentForEnvError),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    GetCanisterId(#[from] GetCanisterIdError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
     let agent = ctx
         .get_agent(

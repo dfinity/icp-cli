@@ -1,32 +1,13 @@
 use clap::Args;
-use icp::{
-    fs::lock::LockError,
-    identity::manifest::{
-        ChangeDefaultsError, IdentityDefaults, IdentityList, LoadIdentityManifestError,
-        change_default_identity,
-    },
-};
-
 use icp::context::Context;
+use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {
     name: Option<String>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    ChangeDefault(#[from] ChangeDefaultsError),
-
-    #[error(transparent)]
-    LoadList(#[from] LoadIdentityManifestError),
-
-    #[error(transparent)]
-    LoadLockError(#[from] LockError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), anyhow::Error> {
     // Load project directories
     let dirs = ctx.dirs.identity()?;
 

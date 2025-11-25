@@ -52,6 +52,7 @@ pub(crate) struct EnvironmentOpt {
 }
 
 impl EnvironmentOpt {
+    #[allow(dead_code)]
     pub(crate) fn name(&self) -> &str {
         // Support --ic
         if self.ic {

@@ -6,16 +6,7 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 pub(crate) struct ListArgs;
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), anyhow::Error> {
     // Load project
     let p = ctx.project.load().await?;
 

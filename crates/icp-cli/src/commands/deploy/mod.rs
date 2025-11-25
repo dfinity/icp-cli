@@ -3,20 +3,17 @@ use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::export::Principal;
 use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection, GetEnvCanisterError},
+    context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
 };
 use std::sync::Arc;
 
 use crate::{
-    commands::canister::create::{self},
+    commands::canister::create,
     operations::{
-        binding_env_vars::set_binding_env_vars_many,
-        build::build_many_with_progress_bar,
-        create::CreateOperation,
-        install::{InstallOperationError, install_many},
-        settings::sync_settings_many,
-        sync::{SyncOperationError, sync_many},
+        binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
+        create::CreateOperation, install::install_many, settings::sync_settings_many,
+        sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
@@ -50,44 +47,11 @@ pub(crate) struct DeployArgs {
     pub(crate) environment: EnvironmentOpt,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
-    #[error(transparent)]
-    GetEnvCanister(#[from] GetEnvCanisterError),
-
-    #[error(transparent)]
-    Create(#[from] create::CommandError),
-
-    #[error(transparent)]
-    InstallOperation(#[from] InstallOperationError),
-
-    #[error(transparent)]
-    SyncOperation(#[from] SyncOperationError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
 
-    // Load the project manifest, which defines the canisters to be built.
-    let p = ctx.project.load().await?;
-
-    // Load target environment
-    let env =
-        p.environments
-            .get(args.environment.name())
-            .ok_or(CommandError::EnvironmentNotFound {
-                name: args.environment.name().to_owned(),
-            })?;
+    let env = ctx.get_environment(&environment_selection).await?;
 
     let cnames = match args.names.is_empty() {
         // No canisters specified
@@ -192,7 +156,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
             idx += 1;
         }
         if let Some(err) = error {
-            return Err(err.into());
+            return Err(err);
         }
     }
 

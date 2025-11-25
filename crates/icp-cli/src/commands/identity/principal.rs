@@ -1,7 +1,5 @@
 use clap::Args;
-use icp::identity;
-
-use icp::context::{Context, GetIdentityError};
+use icp::context::Context;
 
 use crate::options::IdentityOpt;
 
@@ -11,24 +9,12 @@ pub(crate) struct PrincipalArgs {
     pub(crate) identity: IdentityOpt,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum PrincipalError {
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error("failed to load identity principal: {message}")]
-    Sender { message: String },
-
-    #[error(transparent)]
-    GetIdentity(#[from] GetIdentityError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), PrincipalError> {
+pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), anyhow::Error> {
     let id = ctx.get_identity(&args.identity.clone().into()).await?;
 
     let principal = id
         .sender()
-        .map_err(|message| PrincipalError::Sender { message })?;
+        .map_err(|_| anyhow::anyhow!("failed to load identity principal"))?;
 
     println!("{principal}");
 

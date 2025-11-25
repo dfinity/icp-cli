@@ -25,7 +25,7 @@ The build phase compiles your source code and generates WASM bytecode files that
 - The result of this step is compiled WASM and possibly some other assets (for eg, static files in the case of an asset canister serving a frontend).
 - icp-cli does not concern itself with the compilation process, instead it delegates to the appropriate toolchain.
 - Ideally, the WASM and assets produced are reproducible and don't contain any hard coded deployment specific information.
-- The toolchains are responsible for detecting whether building is necessary.
+- The toolchains are responsible for detecting whether building is necessary and which version of the compiler to use.
 
 ### Creating Canisters
 
@@ -59,14 +59,14 @@ These phases work together to provide a complete deployment pipeline from source
 ### Single Canister Project
 
 ```yaml
-canister:
-  name: my-canister
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --target wasm32-unknown-unknown --release
-          - mv target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
+canisters:
+  - name: my-canister
+    build:
+      steps:
+        - type: script
+          commands:
+            - cargo build --target wasm32-unknown-unknown --release
+            - mv target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### Multi-Canister Project
@@ -89,35 +89,35 @@ canisters:
 #### Inline Canister Definition
 
 ```yaml
-canister:
-  name: my-canister
-  
-  # Build configuration (required)
-  build:
-    steps:
-      - type: script
-        commands:
-          - echo "Building canister..."
-          - # Your build commands here
-  
-  # Sync configuration (optional)
-  sync:
-    steps:
-      - type: assets
-        source: www
-        target: /
-  
-  # Canister settings (optional)
-  settings:
-    compute_allocation: 1
-    memory_allocation: 4294967296  # 4GB in bytes
-    freezing_threshold: 2592000    # 30 days in seconds
-    reserved_cycles_limit: 1000000000000
-    wasm_memory_limit: 1073741824  # 1GB in bytes
-    wasm_memory_threshold: 536870912  # 512MB in bytes
-    environment_variables:
-      API_URL: "https://api.example.com"
-      DEBUG: "false"
+canisters:
+  - name: my-canister
+
+    # Build configuration (required)
+    build:
+      steps:
+        - type: script
+          commands:
+            - echo "Building canister..."
+            - # Your build commands here
+
+    # Sync configuration (optional)
+    sync:
+      steps:
+        - type: assets
+          source: www
+          target: /
+
+    # Canister settings (optional)
+    settings:
+      compute_allocation: 1
+      memory_allocation: 4294967296  # 4GB in bytes
+      freezing_threshold: 2592000    # 30 days in seconds
+      reserved_cycles_limit: 1000000000000
+      wasm_memory_limit: 1073741824  # 1GB in bytes
+      wasm_memory_threshold: 536870912  # 512MB in bytes
+      environment_variables:
+        API_URL: "https://api.example.com"
+        DEBUG: "false"
 ```
 
 #### External Canister References
@@ -199,45 +199,30 @@ sync:
 
 ### Recipe System
 
-Recipes provide reusable, templated build configurations. At the moment there are
-different types of recipes you can use:
-- built-in recipes - Those are hard coded into `icp-cli` itself.
-- local recipes - Those are handlebar templates defined locally in your project.
-- remote recipes - Those are handlebar templates defined in a remote location that
-can be reused and shared across teams or with the community.
+Recipes provide reusable, templated build configurations. The DFINITY foundation maintains
+a set of recipes at https://github.com/dfinity/icp-cli-recipes, you can also host your own
+or even refer to a local recipe file.
 
-#### Built-in Recipes
+Recipes are essentially handlebar templates that take a few paramters and render into build+sync steps.
 
-Those recipes are baked into `icp-cli`, they might be impacted by upgrades to `icp-cli`
-and require a new releast to be modified.
+In a manifest they are referred to through the `type` field that can have one of these formats:
 
-```yaml
-canister:
-  name: my-canister
-  recipe:
-    type: rust  # Built-in Rust recipe
-    configuration:
-      package: my-canister  # Cargo package name
-```
+#### Local Recipes
 
-**Available Built-in Recipes:**
-- `assets`: Asset canister
-- `motoko`: Motoko compiler integration
-- `rust`: Cargo-based Rust canister builds
-
-#### Custom Local Recipes
+A local path to a handlebar template, in this case a file called "myrecipe.hb.yaml"
 
 ```yaml
 canister:
   name: my-canister
   recipe:
-    type: file://./recipes/custom-build.hb.yaml
+    type: ./myrecipe.hb.yaml
     configuration:  # Configuration passed to the template
-      source_dir: src
-      optimization_level: 3
+      package: my-canister
 ```
 
 #### Remote Recipes
+
+A URL to a handlebar template.
 
 ```yaml
 canister:
@@ -249,9 +234,32 @@ canister:
       package: my-canister
 ```
 
+#### From a registry
+
+Pointing to a known registry. In this particular case, `@dfinity` is mapped to https://github.com/dfinity/icp-cli-recipes
+and `prebuilt` points to https://github.com/dfinity/icp-cli-recipes/releases/tag/prebuilt-v2.0.0 
+
+```yaml
+canisters:
+  - name: my-canister-with-version
+    recipe:
+      type: "@dfinity/prebuilt@v2.0.0"
+      configuration:
+        path: ../icp-pre-built/dist/hello_world.wasm
+        sha256: d7c1aba0de1d7152897aeca49bd5fe89a174b076a0ee1cc3b9e45fcf6bde71a6
+```
+
 ### Networks
 
-Define custom networks for deployment:
+An ICP network that icp-cli can interact with.
+There are two types of networks:
+- managed - this is a network whose lifecycle icp-cli is responsible for.
+- external - A remote network that is hosted, this could be mainnet or a remote instance of pocket-ic serving as a long lived testnet.
+
+You can define your own networks but there are two implict networks defined:
+- local - A managed network that is spun up with pocket-ic and typically used for local development.
+- mainnet - The mainnet, production network.
+
 
 ```yaml
 networks:
@@ -288,7 +296,20 @@ gateway:
 
 ### Environments
 
-Environments link canisters to networks with specific settings:
+Environments link canisters to networks with specific settings. For example, your project might have a couple of canisters
+and you might define 3 different environments:
+
+- local - that you use for development against a managed local network
+- ic-stage - A staging environment that is deployed to mainnet
+- ic - Your production environment deployed to mainnet
+
+There are implicit environments:
+- `local` - Assumes the local network and assumed to be the default
+- `ic` - Assumes mainnet
+
+Canisters can have different settings in each environment.
+
+Example configuration:
 
 ```yaml
 environments:
@@ -347,7 +368,10 @@ settings:
   wasm_memory_threshold: 536870912  # 512MB
 ```
 
-### Environment Variables
+### Canister Environment Variables
+
+Canister Environment Variables are variables available to your canister at *runtime*.
+They allow compiling once and running the same WASM with different configuration.
 
 ```yaml
 settings:

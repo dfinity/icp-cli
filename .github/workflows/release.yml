@@ -59,6 +59,7 @@ jobs:
         if: github.ref_type == 'tag'
         run: |
           REF_NAME_SANITIZED=$(echo "$GITHUB_REF_NAME" | tr '/' '-')
+          echo "ICP_CLI_VERSION=$REF_NAME_SANITIZED" >> $GITHUB_ENV
           echo "TARBALL_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
           echo "SHA256_FILENAME=icp-cli-$REF_NAME_SANITIZED-${{ matrix.name }}.tar.gz.sha256" >> $GITHUB_ENV
 

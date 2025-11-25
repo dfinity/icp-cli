@@ -2612,7 +2612,6 @@ dependencies = [
  "serial_test",
  "snafu",
  "sysinfo",
- "thiserror 2.0.17",
  "tiny-bip39 2.0.0",
  "tokio",
  "tracing",

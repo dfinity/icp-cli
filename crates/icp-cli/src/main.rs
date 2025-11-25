@@ -30,15 +30,9 @@ struct Cli {
     #[arg(
         long,
         global = true,
-        help = "Directory to use as your project base directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
+        help = "Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
     )]
-    project_dir: Option<PathBuf>,
-
-    #[arg(long, default_value = ".icpdata/")]
-    id_store: PathBuf,
-
-    #[arg(long, default_value = ".icp/artifacts")]
-    artifact_store: PathBuf,
+    project_root_override: Option<PathBuf>,
 
     /// Enable debug logging
     #[arg(long, default_value = "false", global = true)]
@@ -128,13 +122,7 @@ async fn main() -> Result<(), Error> {
         "Starting icp-cli"
     );
 
-    let ctx = icp::context::initialize(
-        cli.project_dir,
-        cli.id_store,
-        cli.artifact_store,
-        term,
-        cli.debug,
-    )?;
+    let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug)?;
 
     match command {
         // Build
@@ -191,6 +179,12 @@ async fn main() -> Result<(), Error> {
 
                 commands::canister::settings::Command::Update(args) => {
                     commands::canister::settings::update::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::settings::Command::Sync(args) => {
+                    commands::canister::settings::sync::exec(&ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }

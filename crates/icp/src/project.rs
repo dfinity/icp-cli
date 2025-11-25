@@ -14,7 +14,7 @@ use crate::{
     fs::read,
     is_glob,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, Item, Locate, canister::Instructions,
+        CANISTER_MANIFEST, CanisterManifest, Item, ProjectRootLocate, canister::Instructions,
         environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType,
     },
     network::{Configuration, Connected, Gateway, Managed, Port},
@@ -25,6 +25,10 @@ pub const DEFAULT_LOCAL_ENVIRONMENT_NAME: &str = "local";
 pub const DEFAULT_MAINNET_ENVIRONMENT_NAME: &str = "ic";
 pub const DEFAULT_LOCAL_NETWORK_NAME: &str = "local";
 pub const DEFAULT_MAINNET_NETWORK_NAME: &str = "mainnet";
+pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
+pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
+pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
+pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadPathError {
@@ -106,7 +110,7 @@ pub enum LoadManifestError {
 }
 
 pub struct ManifestLoader {
-    pub locate: Arc<dyn Locate>,
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub recipe: Arc<dyn recipe::Resolve>,
     pub canister: Arc<dyn LoadPath<CanisterManifest, canister::LoadPathError>>,
 }
@@ -121,8 +125,8 @@ fn default_networks() -> Vec<Network> {
             configuration: Configuration::Managed {
                 managed: Managed {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
+                        host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                        port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
                     },
                 },
             },
@@ -154,7 +158,10 @@ fn default_networks() -> Vec<Network> {
 impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoader {
     async fn load(&self, m: &ProjectManifest) -> Result<Project, LoadManifestError> {
         // Locate project root
-        let pdir = self.locate.locate().context(LoadManifestError::Locate)?;
+        let pdir = self
+            .project_root_locate
+            .locate()
+            .context(LoadManifestError::Locate)?;
 
         // Canisters
         let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();

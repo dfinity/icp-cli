@@ -154,7 +154,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
     let (_, canister_info) = env.get_canister_info(&canister).map_err(|e| anyhow!(e))?;
 
     if ctx
-        .get_canister_id_for_env(&canister, &selections.environment)
+        .get_canister_id_for_env(
+            &icp::context::CanisterSelection::Named(canister.clone()),
+            &selections.environment,
+        )
         .await
         .is_ok()
     {
@@ -169,6 +172,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), Command
         .await?;
     let existing_canisters = ctx
         .ids_by_environment(&selections.environment)
+        .await
         .map_err(|e| anyhow!(e))?
         .into_values()
         .collect();

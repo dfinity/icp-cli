@@ -1,4 +1,5 @@
 use clap::Args;
+use futures::future::try_join_all;
 use icp::context::{Context, EnvironmentSelection, GetEnvironmentError};
 
 use crate::{
@@ -20,17 +21,11 @@ pub(crate) enum CommandError {
     #[error(transparent)]
     BuildOperation(#[from] BuildOperationError),
 
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("canister '{canister}' is not in environment '{environment}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
     #[error(transparent)]
     GetEnvironment(#[from] GetEnvironmentError),
+
+    #[error(transparent)]
+    GetEnvCanister(#[from] icp::context::GetEnvCanisterError),
 
     #[error(transparent)]
     Project(#[from] icp::LoadError),
@@ -42,9 +37,6 @@ pub(crate) enum CommandError {
 pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandError> {
     // Get environment selection
     let environment_selection: EnvironmentSelection = args.environment.clone().into();
-
-    // Load the project manifest
-    let p = ctx.project.load().await?;
 
     // Load target environment
     let env = ctx.get_environment(&environment_selection).await?;
@@ -58,35 +50,19 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), CommandE
         false => args.canisters.clone(),
     };
 
-    // Validate all specified canisters exist in project and environment
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
-
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
         return Ok(());
     }
 
+    let canisters_to_build = try_join_all(
+        cnames
+            .iter()
+            .map(|name| ctx.get_canister_and_path_for_env(name, &environment_selection)),
+    )
+    .await?;
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
-    let canisters_to_build = p
-        .canisters
-        .iter()
-        .filter(|(k, _)| cnames.contains(k))
-        .map(|(_, (path, canister))| (path.clone(), canister.clone()))
-        .collect::<Vec<_>>();
 
     build_many_with_progress_bar(
         canisters_to_build,

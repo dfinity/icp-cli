@@ -8,7 +8,9 @@ use tracing::debug;
 
 use crate::{
     canister::{Settings, build, sync},
-    manifest::{Locate, PROJECT_MANIFEST, project::ProjectManifest},
+    manifest::{
+        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError, project::ProjectManifest,
+    },
     network::Configuration,
     prelude::*,
 };
@@ -25,6 +27,10 @@ pub mod prelude;
 pub mod project;
 pub mod store_artifact;
 pub mod store_id;
+
+const ICP_BASE: &str = ".icp";
+const CACHE_DIR: &str = "cache";
+const DATA_DIR: &str = "data";
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
@@ -63,15 +69,8 @@ impl Environment {
         self.canisters.keys().cloned().collect()
     }
 
-    pub fn ensure_canister_declared(&self, canister: &str) -> Result<(), String> {
-        if !self.canisters.contains_key(canister) {
-            return Err(format!(
-                "canister '{}' not declared in environment '{}'",
-                canister, self.name
-            ));
-        }
-
-        Ok(())
+    pub fn contains_canister(&self, canister_name: &str) -> bool {
+        self.canisters.contains_key(canister_name)
     }
 
     pub fn get_canister_info(&self, canister: &str) -> Result<(PathBuf, Canister), String> {
@@ -95,6 +94,12 @@ pub struct Project {
     pub environments: HashMap<String, Environment>,
 }
 
+impl Project {
+    pub fn get_canister(&self, canister_name: &str) -> Option<&(PathBuf, Canister)> {
+        self.canisters.get(canister_name)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     #[error("failed to locate project directory")]
@@ -113,6 +118,7 @@ pub enum LoadError {
 #[async_trait]
 pub trait Load: Sync + Send {
     async fn load(&self) -> Result<Project, LoadError>;
+    async fn exists(&self) -> Result<bool, LoadError>;
 }
 
 #[async_trait]
@@ -131,7 +137,7 @@ pub struct ProjectLoaders {
 }
 
 pub struct Loader {
-    pub locate: Arc<dyn Locate>,
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub project: ProjectLoaders,
 }
 
@@ -140,7 +146,10 @@ impl Load for Loader {
     async fn load(&self) -> Result<Project, LoadError> {
         debug!("Loading project");
         // Locate project root
-        let pdir = self.locate.locate().context(LoadError::Locate)?;
+        let pdir = self
+            .project_root_locate
+            .locate()
+            .context(LoadError::Locate)?;
 
         debug!("Located icp project in {pdir}");
 
@@ -166,6 +175,14 @@ impl Load for Loader {
 
         Ok(p)
     }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        match self.project_root_locate.locate() {
+            Ok(_) => Ok(true),
+            Err(ProjectRootLocateError::NotFound(_)) => Ok(false),
+            Err(ProjectRootLocateError::Unexpected(e)) => Err(LoadError::Unexpected(e)),
+        }
+    }
 }
 
 pub struct Lazy<T, V>(T, Arc<Mutex<Option<V>>>);
@@ -190,6 +207,15 @@ impl<T: Load> Load for Lazy<T, Project> {
             *g = Some(v.to_owned());
         }
 
+        Ok(v)
+    }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        if self.1.lock().await.as_ref().is_some() {
+            return Ok(true);
+        }
+
+        let v = self.0.exists().await?;
         Ok(v)
     }
 }
@@ -473,5 +499,26 @@ impl MockProjectLoader {
 impl Load for MockProjectLoader {
     async fn load(&self) -> Result<Project, LoadError> {
         Ok(self.project.clone())
+    }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        Ok(true)
+    }
+}
+
+#[cfg(test)]
+/// Mock project loader that always fails with a Locate error.
+/// Useful for testing scenarios where no project exists.
+pub struct NoProjectLoader;
+
+#[cfg(test)]
+#[async_trait]
+impl Load for NoProjectLoader {
+    async fn load(&self) -> Result<Project, LoadError> {
+        Err(LoadError::Locate)
+    }
+
+    async fn exists(&self) -> Result<bool, LoadError> {
+        Ok(false)
     }
 }

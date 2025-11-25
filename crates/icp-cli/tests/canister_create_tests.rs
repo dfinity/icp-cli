@@ -58,7 +58,11 @@ fn canister_create() {
         .assert()
         .success();
 
-    let id_mapping_path = project_dir.join(".icpdata").join("my-environment.ids.json");
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("my-environment.ids.json");
     assert!(
         id_mapping_path.exists(),
         "ID mapping file should exist at {id_mapping_path}"

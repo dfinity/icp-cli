@@ -314,13 +314,14 @@ async fn network_run_and_stop_background() {
         .args(["network", "run", "my-network", "--background"])
         .assert()
         .success()
-        .stdout(contains("Created instance with id")); // part of network start output
+        .stderr(contains("Created instance with id")); // part of network start output
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
 
     // Verify PID file was written
     let pid_file_path = project_dir
         .join(".icp")
+        .join("cache")
         .join("networks")
         .join("my-network")
         .join("background_network_runner.pid");
@@ -331,7 +332,7 @@ async fn network_run_and_stop_background() {
     );
 
     let pid_contents = read_to_string(&pid_file_path).expect("Failed to read PID file");
-    let background_controller_pid: Pid = pid_contents
+    let background_pocketic_pid: Pid = pid_contents
         .trim()
         .parse()
         .expect("PID file should contain a valid process ID");
@@ -356,7 +357,7 @@ async fn network_run_and_stop_background() {
         .success()
         .stdout(contains(format!(
             "Stopping background network (PID: {})",
-            background_controller_pid
+            background_pocketic_pid
         )))
         .stdout(contains("Network stopped successfully"));
 
@@ -366,11 +367,11 @@ async fn network_run_and_stop_background() {
         "PID file should be removed after stopping"
     );
 
-    // Verify controller process is no longer running
+    // Verify pocketic process is no longer running
     let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[background_controller_pid]), true);
+    system.refresh_processes(ProcessesToUpdate::Some(&[background_pocketic_pid]), true);
     assert!(
-        system.process(background_controller_pid).is_none(),
+        system.process(background_pocketic_pid).is_none(),
         "Process should no longer be running"
     );
 

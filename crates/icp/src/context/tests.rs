@@ -1,7 +1,13 @@
 use super::*;
-use crate::store_id::Access;
-use crate::store_id::mock::MockInMemoryIdStore;
-use crate::{MockProjectLoader, identity::MockIdentityLoader, network::MockNetworkAccessor};
+use crate::{
+    Environment, MockProjectLoader, Network, Project,
+    identity::MockIdentityLoader,
+    network::{Configuration, Gateway, Managed, MockNetworkAccessor, Port, access::NetworkAccess},
+    project::{DEFAULT_LOCAL_NETWORK_NAME, DEFAULT_LOCAL_NETWORK_URL},
+    store_id::{Access as IdAccess, mock::MockInMemoryIdStore},
+};
+use candid::Principal;
+use std::collections::HashMap;
 
 #[tokio::test]
 async fn test_get_identity_default() {
@@ -93,11 +99,13 @@ async fn test_get_network_success() {
     };
 
     let network = ctx
-        .get_network(&NetworkSelection::Named("local".to_string()))
+        .get_network(&NetworkSelection::Named(
+            DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        ))
         .await
         .unwrap();
 
-    assert_eq!(network.name, "local");
+    assert_eq!(network.name, DEFAULT_LOCAL_NETWORK_NAME);
 }
 
 #[tokio::test]
@@ -116,14 +124,13 @@ async fn test_get_network_not_found() {
 
 #[tokio::test]
 async fn test_get_canister_id_for_env_success() {
-    use crate::store_id::Access as IdAccess;
-    use candid::Principal;
-
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Register a canister ID for the dev environment
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store.register("dev", "backend", canister_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", canister_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -132,7 +139,10 @@ async fn test_get_canister_id_for_env_success() {
     };
 
     let cid = ctx
-        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .get_canister_id_for_env(
+            &CanisterSelection::Named("backend".to_string()),
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
         .await
         .unwrap();
 
@@ -148,7 +158,10 @@ async fn test_get_canister_id_for_env_canister_not_in_env() {
 
     // "database" is only in "dev" environment, not in "test"
     let result = ctx
-        .get_canister_id_for_env("database", &EnvironmentSelection::Named("test".to_string()))
+        .get_canister_id_for_env(
+            &CanisterSelection::Named("database".to_string()),
+            &EnvironmentSelection::Named("test".to_string()),
+        )
         .await;
 
     assert!(matches!(
@@ -169,7 +182,10 @@ async fn test_get_canister_id_for_env_id_not_registered() {
 
     // Environment exists and canister is in it, but ID not registered
     let result = ctx
-        .get_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .get_canister_id_for_env(
+            &CanisterSelection::Named("backend".to_string()),
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
         .await;
 
     assert!(matches!(
@@ -184,9 +200,6 @@ async fn test_get_canister_id_for_env_id_not_registered() {
 
 #[tokio::test]
 async fn test_set_canister_id_for_env_success() {
-    use crate::store_id::Access as IdAccess;
-    use candid::Principal;
-
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     let ctx = Context {
@@ -207,15 +220,13 @@ async fn test_set_canister_id_for_env_success() {
     .unwrap();
 
     // Verify it was registered by reading it back
-    let registered_id = ids_store.lookup("dev", "backend").unwrap();
+    let registered_id = ids_store.lookup(true, "dev", "backend").unwrap();
 
     assert_eq!(registered_id, canister_id);
 }
 
 #[tokio::test]
 async fn test_set_canister_id_for_env_canister_not_in_env() {
-    use candid::Principal;
-
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
         ..Context::mocked()
@@ -243,14 +254,13 @@ async fn test_set_canister_id_for_env_canister_not_in_env() {
 
 #[tokio::test]
 async fn test_set_canister_id_for_env_already_registered() {
-    use crate::store_id::Access as IdAccess;
-    use candid::Principal;
-
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Pre-register a canister ID
     let first_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store.register("dev", "backend", first_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", first_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -276,8 +286,6 @@ async fn test_set_canister_id_for_env_already_registered() {
 
 #[tokio::test]
 async fn test_get_agent_for_env_uses_environment_network() {
-    use crate::network::access::NetworkAccess;
-
     let staging_root_key = vec![1, 2, 3];
 
     // Complex project has "test" environment which uses "staging" network
@@ -362,8 +370,6 @@ async fn test_get_agent_for_env_network_not_configured() {
 
 #[tokio::test]
 async fn test_get_agent_for_network_success() {
-    use crate::network::access::NetworkAccess;
-
     let root_key = vec![1, 2, 3];
 
     let ctx = Context {
@@ -440,7 +446,7 @@ async fn test_get_agent_for_url_success() {
     let result = ctx
         .get_agent_for_url(
             &IdentitySelection::Anonymous,
-            &Url::parse("http://localhost:8000").unwrap(),
+            &Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
         )
         .await;
 
@@ -448,15 +454,14 @@ async fn test_get_agent_for_url_success() {
 }
 
 #[tokio::test]
-async fn test_get_canister_id() {
-    use crate::store_id::Access as IdAccess;
-    use candid::Principal;
-
+async fn test_get_canister_id_for_env() {
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Register a canister ID for the dev environment
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    ids_store.register("dev", "backend", canister_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", canister_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -468,14 +473,14 @@ async fn test_get_canister_id() {
     let environment_selection = EnvironmentSelection::Named("dev".to_string());
 
     assert!(
-        matches!(ctx.get_canister_id(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
+        matches!(ctx.get_canister_id_for_env(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
     );
 
     let canister_selection = CanisterSelection::Named("INVALID".to_string());
     let environment_selection = EnvironmentSelection::Named("dev".to_string());
 
     let res = ctx
-        .get_canister_id(&canister_selection, &environment_selection)
+        .get_canister_id_for_env(&canister_selection, &environment_selection)
         .await;
     assert!(
         res.is_err(),
@@ -483,15 +488,19 @@ async fn test_get_canister_id() {
     );
 }
 
-#[test]
-fn test_ids_by_environment() {
+#[tokio::test]
+async fn test_ids_by_environment() {
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     // Register multiple canister IDs for the dev environment
     let backend_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let frontend_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
-    ids_store.register("dev", "backend", backend_id).unwrap();
-    ids_store.register("dev", "frontend", frontend_id).unwrap();
+    ids_store
+        .register(true, "dev", "backend", backend_id)
+        .unwrap();
+    ids_store
+        .register(true, "dev", "frontend", frontend_id)
+        .unwrap();
 
     let ctx = Context {
         project: Arc::new(MockProjectLoader::complex()),
@@ -501,9 +510,334 @@ fn test_ids_by_environment() {
 
     let result = ctx
         .ids_by_environment(&EnvironmentSelection::Named("dev".to_string()))
+        .await
         .unwrap();
 
     assert_eq!(result.len(), 2);
     assert_eq!(result.get("backend"), Some(&backend_id));
     assert_eq!(result.get("frontend"), Some(&frontend_id));
+}
+
+#[tokio::test]
+async fn test_get_agent_defaults_outside_project() {
+    let ctx = Context {
+        project: Arc::new(crate::NoProjectLoader),
+        ..Context::mocked()
+    };
+
+    // Default environment + default network outside project should error
+    let error = ctx
+        .get_agent(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Default,
+            &EnvironmentSelection::Default,
+        )
+        .await
+        .unwrap_err();
+
+    // Should fail with NoProjectOrNetwork error
+    assert!(matches!(error, GetAgentError::NoProjectOrNetwork));
+}
+
+#[tokio::test]
+async fn test_get_agent_defaults_inside_project_with_default_local() {
+    let local_root_key = vec![1, 1, 1];
+
+    // Create a project with a "local" environment (the default environment name)
+    let local_network = Network {
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        configuration: Configuration::Managed {
+            managed: Managed {
+                gateway: Gateway {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(8000),
+                },
+            },
+        },
+    };
+
+    let mut networks = HashMap::new();
+    networks.insert(
+        DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        local_network.clone(),
+    );
+
+    let local_env = Environment {
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        network: local_network,
+        canisters: HashMap::new(), // No canisters needed for get_agent test
+    };
+
+    let mut environments = HashMap::new();
+    environments.insert(DEFAULT_LOCAL_NETWORK_NAME.to_string(), local_env);
+
+    let project = Project {
+        dir: "/project".into(),
+        canisters: HashMap::new(), // No canisters needed for get_agent test
+        networks,
+        environments,
+    };
+
+    let ctx = Context {
+        project: Arc::new(crate::MockProjectLoader::new(project)),
+        network: Arc::new(MockNetworkAccessor::new().with_network(
+            DEFAULT_LOCAL_NETWORK_NAME,
+            NetworkAccess {
+                default_effective_canister_id: None,
+                root_key: Some(local_root_key.clone()),
+                url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+            },
+        )),
+        ..Context::mocked()
+    };
+
+    let agent = ctx
+        .get_agent(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Default,
+            &EnvironmentSelection::Default,
+        )
+        .await
+        .unwrap();
+
+    // Should successfully create agent using project's default environment
+    assert_eq!(agent.read_root_key(), local_root_key);
+}
+
+#[tokio::test]
+async fn test_get_agent_defaults_with_overridden_local_network() {
+    // Create a project where "local" network is overridden to use port 9000
+    let custom_local_network = Network {
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        configuration: Configuration::Managed {
+            managed: Managed {
+                gateway: Gateway {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(9000),
+                },
+            },
+        },
+    };
+
+    let mut networks = HashMap::new();
+    networks.insert(
+        DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        custom_local_network.clone(),
+    );
+
+    let local_env = Environment {
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        network: custom_local_network,
+        canisters: HashMap::new(), // No canisters needed for get_agent test
+    };
+
+    let mut environments = HashMap::new();
+    environments.insert(DEFAULT_LOCAL_NETWORK_NAME.to_string(), local_env);
+
+    let project = Project {
+        dir: "/project".into(),
+        canisters: HashMap::new(), // No canisters needed for get_agent test
+        networks,
+        environments,
+    };
+
+    let custom_root_key = vec![1, 2, 3, 4];
+
+    let ctx = Context {
+        project: Arc::new(crate::MockProjectLoader::new(project)),
+        network: Arc::new(MockNetworkAccessor::new().with_network(
+            DEFAULT_LOCAL_NETWORK_NAME,
+            NetworkAccess {
+                default_effective_canister_id: None,
+                root_key: Some(custom_root_key.clone()),
+                url: Url::parse("http://localhost:9000").unwrap(), // Custom port
+            },
+        )),
+        ..Context::mocked()
+    };
+
+    let agent = ctx
+        .get_agent(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Default,
+            &EnvironmentSelection::Default,
+        )
+        .await
+        .unwrap();
+
+    // Should use the custom network configuration
+    assert_eq!(agent.read_root_key(), custom_root_key);
+}
+
+#[tokio::test]
+async fn test_get_agent_defaults_with_overridden_local_environment() {
+    // Create project where "local" environment uses a custom network
+    let default_local_network = Network {
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        configuration: Configuration::Managed {
+            managed: Managed {
+                gateway: Gateway {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(8000),
+                },
+            },
+        },
+    };
+
+    let custom_network = Network {
+        name: "custom".to_string(),
+        configuration: Configuration::Managed {
+            managed: Managed {
+                gateway: Gateway {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(7000),
+                },
+            },
+        },
+    };
+
+    let mut networks = HashMap::new();
+    networks.insert(
+        DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        default_local_network,
+    );
+    networks.insert("custom".to_string(), custom_network.clone());
+
+    // "local" environment uses "custom" network
+    let local_env = Environment {
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        network: custom_network,
+        canisters: HashMap::new(), // No canisters needed for get_agent test
+    };
+
+    let mut environments = HashMap::new();
+    environments.insert(DEFAULT_LOCAL_NETWORK_NAME.to_string(), local_env);
+
+    let project = Project {
+        dir: "/project".into(),
+        canisters: HashMap::new(), // No canisters needed for get_agent test
+        networks,
+        environments,
+    };
+
+    let custom_root_key = vec![5, 6, 7, 8];
+
+    let ctx = Context {
+        project: Arc::new(crate::MockProjectLoader::new(project)),
+        network: Arc::new(
+            MockNetworkAccessor::new()
+                .with_network(
+                    DEFAULT_LOCAL_NETWORK_NAME,
+                    NetworkAccess {
+                        default_effective_canister_id: None,
+                        root_key: None,
+                        url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                    },
+                )
+                .with_network(
+                    "custom",
+                    NetworkAccess {
+                        default_effective_canister_id: None,
+                        root_key: Some(custom_root_key.clone()),
+                        url: Url::parse("http://localhost:7000").unwrap(),
+                    },
+                ),
+        ),
+        ..Context::mocked()
+    };
+
+    let agent = ctx
+        .get_agent(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Default,
+            &EnvironmentSelection::Default,
+        )
+        .await
+        .unwrap();
+
+    // Should use the custom network from the overridden environment
+    assert_eq!(agent.read_root_key(), custom_root_key);
+}
+
+#[tokio::test]
+async fn test_get_agent_explicit_network_inside_project() {
+    let staging_root_key = vec![12, 13, 14];
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        network: Arc::new(
+            MockNetworkAccessor::new()
+                .with_network(
+                    DEFAULT_LOCAL_NETWORK_NAME,
+                    NetworkAccess {
+                        default_effective_canister_id: None,
+                        root_key: None,
+                        url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                    },
+                )
+                .with_network(
+                    "staging",
+                    NetworkAccess {
+                        default_effective_canister_id: None,
+                        root_key: Some(staging_root_key.clone()),
+                        url: Url::parse("http://localhost:8001").unwrap(),
+                    },
+                ),
+        ),
+        ..Context::mocked()
+    };
+
+    let agent = ctx
+        .get_agent(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Named("staging".to_string()),
+            &EnvironmentSelection::Default,
+        )
+        .await
+        .unwrap();
+
+    // Should use the explicitly specified network, regardless of project
+    assert_eq!(agent.read_root_key(), staging_root_key);
+}
+
+#[tokio::test]
+async fn test_get_agent_explicit_environment_inside_project() {
+    let staging_root_key = vec![15, 16, 17];
+
+    // complex() has "test" environment using "staging" network
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        network: Arc::new(
+            MockNetworkAccessor::new()
+                .with_network(
+                    DEFAULT_LOCAL_NETWORK_NAME,
+                    NetworkAccess {
+                        default_effective_canister_id: None,
+                        root_key: None,
+                        url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                    },
+                )
+                .with_network(
+                    "staging",
+                    NetworkAccess {
+                        default_effective_canister_id: None,
+                        root_key: Some(staging_root_key.clone()),
+                        url: Url::parse("http://localhost:8001").unwrap(),
+                    },
+                ),
+        ),
+        ..Context::mocked()
+    };
+
+    let agent = ctx
+        .get_agent(
+            &IdentitySelection::Anonymous,
+            &NetworkSelection::Default,
+            &EnvironmentSelection::Named("test".to_string()),
+        )
+        .await
+        .unwrap();
+
+    // Should use the network from the "test" environment (which is "staging")
+    assert_eq!(agent.read_root_key(), staging_root_key);
 }

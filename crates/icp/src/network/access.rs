@@ -3,9 +3,8 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
 
 use crate::{
-    Network,
     network::{
-        Configuration, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey,
+        Connected, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey,
         directory::LoadNetworkFileError,
     },
     prelude::*,
@@ -74,75 +73,66 @@ pub enum GetNetworkAccessError {
     },
 }
 
-pub async fn get_network_access(
+pub async fn get_managed_network_access(
     nd: NetworkDirectory,
-    network: &Network,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
-    let access = match &network.configuration {
-        //
-        // Managed
-        Configuration::Managed { managed: _ } => {
-            // Load network descriptor
-            let desc = nd
-                .load_network_descriptor()
-                .await
-                .context(LoadNetworkDescriptorSnafu)?
-                .ok_or(GetNetworkAccessError::NetworkNotRunning {
-                    network: nd.network_name.to_owned(),
-                })?;
+    // Load network descriptor
+    let desc = nd
+        .load_network_descriptor()
+        .await
+        .context(LoadNetworkDescriptorSnafu)?
+        .ok_or(GetNetworkAccessError::NetworkNotRunning {
+            network: nd.network_name.to_owned(),
+        })?;
 
-            // Specify port
-            let port = desc.gateway.port;
+    // Specify port
+    let port = desc.gateway.port;
 
-            // Apply gateway configuration
-            if desc.gateway.fixed {
-                let pdesc = nd
-                    .load_port_descriptor(port)
-                    .await
-                    .context(LoadPortDescriptorSnafu { port })?
-                    .context(NoPortDescriptorSnafu { port })?;
+    // Apply gateway configuration
+    if desc.gateway.fixed {
+        let pdesc = nd
+            .load_port_descriptor(port)
+            .await
+            .context(LoadPortDescriptorSnafu { port })?
+            .context(NoPortDescriptorSnafu { port })?;
 
-                if desc.id != pdesc.id {
-                    return Err(GetNetworkAccessError::NetworkRunningOtherProject {
-                        network: pdesc.network,
-                        port: pdesc.gateway.port,
-                        project_dir: pdesc.project_dir,
-                    });
-                }
-            }
-
-            // Specify effective canister ID
-            let default_effective_canister_id = Some(desc.default_effective_canister_id);
-
-            // Specify root-key
-            let root_key = hex::decode(desc.root_key).map_err(|source| DecodeRootKey { source })?;
-
-            NetworkAccess {
-                default_effective_canister_id,
-                root_key: Some(root_key),
-                url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
-            }
+        if desc.id != pdesc.id {
+            return Err(GetNetworkAccessError::NetworkRunningOtherProject {
+                network: pdesc.network,
+                port: pdesc.gateway.port,
+                project_dir: pdesc.project_dir,
+            });
         }
+    }
 
-        //
-        // Connected
-        Configuration::Connected { connected: cfg } => {
-            let root_key = cfg
-                .root_key
-                .as_ref()
-                .map(hex::decode)
-                .transpose()
-                .map_err(|err| DecodeRootKey { source: err })?;
+    // Specify effective canister ID
+    let default_effective_canister_id = Some(desc.default_effective_canister_id);
 
-            NetworkAccess {
-                default_effective_canister_id: None,
-                root_key,
-                url: Url::parse(&cfg.url).context(ParseUrlSnafu {
-                    url: cfg.url.clone(),
-                })?,
-            }
-        }
-    };
+    // Specify root-key
+    let root_key = hex::decode(desc.root_key).map_err(|source| DecodeRootKey { source })?;
 
-    Ok(access)
+    Ok(NetworkAccess {
+        default_effective_canister_id,
+        root_key: Some(root_key),
+        url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
+    })
+}
+
+pub async fn get_connected_network_access(
+    connected: &Connected,
+) -> Result<NetworkAccess, GetNetworkAccessError> {
+    let root_key = connected
+        .root_key
+        .as_ref()
+        .map(hex::decode)
+        .transpose()
+        .map_err(|err| DecodeRootKey { source: err })?;
+
+    Ok(NetworkAccess {
+        default_effective_canister_id: None,
+        root_key,
+        url: Url::parse(&connected.url).context(ParseUrlSnafu {
+            url: connected.url.clone(),
+        })?,
+    })
 }

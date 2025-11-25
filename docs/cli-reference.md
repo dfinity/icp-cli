@@ -16,6 +16,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister settings`↴](#icp-cli-canister-settings)
 * [`icp-cli canister settings show`↴](#icp-cli-canister-settings-show)
 * [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
+* [`icp-cli canister settings sync`↴](#icp-cli-canister-settings-sync)
 * [`icp-cli canister show`↴](#icp-cli-canister-show)
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
@@ -61,13 +62,7 @@ This document contains the help content for the `icp-cli` command-line program.
 
 ###### **Options:**
 
-* `--project-dir <PROJECT_DIR>` — Directory to use as your project base directory. If not specified the directory structure is traversed up until an icp.yaml file is found
-* `--id-store <ID_STORE>`
-
-  Default value: `.icpdata/`
-* `--artifact-store <ARTIFACT_STORE>`
-
-  Default value: `.icp/artifacts`
+* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found
 * `--debug` — Enable debug logging
 
   Default value: `false`
@@ -105,7 +100,7 @@ Perform canister operations against a network
 * `info` — Display a canister's information
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
-* `settings` — 
+* `settings` — Commands to manage canister settings
 * `show` — Show a canister's details
 * `start` — Start a canister on a network
 * `status` — Show the status of a canister
@@ -129,6 +124,7 @@ Make a canister call
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -148,6 +144,7 @@ Create a canister on a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -177,6 +174,7 @@ Delete a canister from a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -196,6 +194,7 @@ Display a canister's information
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -220,7 +219,9 @@ Install a built WASM to a canister on a network
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
+* `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -242,16 +243,21 @@ List the canisters in an environment
 
 ## `icp-cli canister settings`
 
+Commands to manage canister settings
+
 **Usage:** `icp-cli canister settings <COMMAND>`
 
 ###### **Subcommands:**
 
-* `show` — 
-* `update` — 
+* `show` — Display a canister's settings
+* `update` — Change a canister's settings to specified values
+* `sync` — Synchronize a canister's settings with those defined in the project
 
 
 
 ## `icp-cli canister settings show`
+
+Display a canister's settings
 
 **Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
 
@@ -262,6 +268,7 @@ List the canisters in an environment
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -269,6 +276,8 @@ List the canisters in an environment
 
 
 ## `icp-cli canister settings update`
+
+Change a canister's settings to specified values
 
 **Usage:** `icp-cli canister settings update [OPTIONS] <CANISTER>`
 
@@ -279,6 +288,7 @@ List the canisters in an environment
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -297,6 +307,26 @@ List the canisters in an environment
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+
+
+
+## `icp-cli canister settings sync`
+
+Synchronize a canister's settings with those defined in the project
+
+**Usage:** `icp-cli canister settings sync [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
@@ -330,6 +360,7 @@ Start a canister on a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -349,6 +380,7 @@ Show the status of a canister
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -368,6 +400,7 @@ Stop a canister on a network
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -388,6 +421,7 @@ Top up a canister with cycles
 
 * `--amount <AMOUNT>` — Amount of cycles to top up
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -402,24 +436,30 @@ Mint and manage cycles
 
 ###### **Subcommands:**
 
-* `balance` — 
-* `mint` — 
+* `balance` — Display the cycles balance
+* `mint` — Convert icp to cycles
 
 
 
 ## `icp-cli cycles balance`
 
+Display the cycles balance
+
 **Usage:** `icp-cli cycles balance [OPTIONS]`
 
 ###### **Options:**
 
-* `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
 ## `icp-cli cycles mint`
+
+Convert icp to cycles
 
 **Usage:** `icp-cli cycles mint [OPTIONS]`
 
@@ -427,6 +467,8 @@ Mint and manage cycles
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -470,11 +512,13 @@ Show information about the current project environments
 
 ###### **Subcommands:**
 
-* `list` — 
+* `list` — Display a list of enviroments
 
 
 
 ## `icp-cli environment list`
+
+Display a list of enviroments
 
 **Usage:** `icp-cli environment list`
 
@@ -488,15 +532,17 @@ Manage your identities
 
 ###### **Subcommands:**
 
-* `default` — 
-* `import` — 
-* `list` — 
-* `new` — 
-* `principal` — 
+* `default` — Display the currently selected identity
+* `import` — Import a new identity
+* `list` — List the identities
+* `new` — Create a new identity
+* `principal` — Display the principal for the current identity
 
 
 
 ## `icp-cli identity default`
+
+Display the currently selected identity
 
 **Usage:** `icp-cli identity default [NAME]`
 
@@ -507,6 +553,8 @@ Manage your identities
 
 
 ## `icp-cli identity import`
+
+Import a new identity
 
 **Usage:** `icp-cli identity import [OPTIONS] <--from-pem <FILE>|--read-seed-phrase|--from-seed-file <FILE>> <NAME>`
 
@@ -526,11 +574,15 @@ Manage your identities
 
 ## `icp-cli identity list`
 
+List the identities
+
 **Usage:** `icp-cli identity list`
 
 
 
 ## `icp-cli identity new`
+
+Create a new identity
 
 **Usage:** `icp-cli identity new [OPTIONS] <NAME>`
 
@@ -545,6 +597,8 @@ Manage your identities
 
 
 ## `icp-cli identity principal`
+
+Display the principal for the current identity
 
 **Usage:** `icp-cli identity principal [OPTIONS]`
 
@@ -658,7 +712,7 @@ Perform token transactions
 
 ###### **Arguments:**
 
-* `<TOKEN>`
+* `<TOKEN>` — The token to execute the operation on, defaults to `icp`
 
   Default value: `icp`
 
@@ -670,9 +724,11 @@ Perform token transactions
 
 ###### **Options:**
 
-* `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
@@ -687,9 +743,11 @@ Perform token transactions
 
 ###### **Options:**
 
-* `--identity <IDENTITY>` — The user identity to run this command as
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 

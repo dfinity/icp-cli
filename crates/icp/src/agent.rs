@@ -2,16 +2,20 @@ use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use ic_agent::{Agent, AgentError, Identity};
+use snafu::Snafu;
 
 use crate::prelude::*;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum CreateAgentError {
-    #[error(transparent)]
-    Agent(#[from] AgentError),
+    #[snafu(transparent)]
+    Agent {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Unexpected { source: anyhow::Error },
 }
 
 #[async_trait]

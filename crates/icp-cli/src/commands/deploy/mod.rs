@@ -3,7 +3,7 @@ use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::export::Principal;
 use icp::{
-    context::{Context, EnvironmentSelection},
+    context::{CanisterSelection, Context, EnvironmentSelection, GetEnvCanisterError},
     identity::IdentitySelection,
 };
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use crate::{
         build::build_many_with_progress_bar,
         create::CreateOperation,
         install::{InstallOperationError, install_many},
+        settings::sync_settings_many,
         sync::{SyncOperationError, sync_many},
     },
     options::{EnvironmentOpt, IdentityOpt},
@@ -57,14 +58,8 @@ pub(crate) enum CommandError {
     #[error("project does not contain an environment named '{name}'")]
     EnvironmentNotFound { name: String },
 
-    #[error("project does not contain a canister named '{name}'")]
-    CanisterNotFound { name: String },
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
+    #[error(transparent)]
+    GetEnvCanister(#[from] GetEnvCanisterError),
 
     #[error(transparent)]
     Create(#[from] create::CommandError),
@@ -80,6 +75,9 @@ pub(crate) enum CommandError {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), CommandError> {
+    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let identity_selection: IdentitySelection = args.identity.clone().into();
+
     // Load the project manifest, which defines the canisters to be built.
     let p = ctx.project.load().await?;
 
@@ -99,34 +97,20 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         false => args.names.clone(),
     };
 
-    for name in &cnames {
-        if !p.canisters.contains_key(name) {
-            return Err(CommandError::CanisterNotFound {
-                name: name.to_owned(),
-            });
-        }
-
-        if !env.canisters.contains_key(name) {
-            return Err(CommandError::EnvironmentCanister {
-                environment: env.name.to_owned(),
-                canister: name.to_owned(),
-            });
-        }
-    }
-
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
         return Ok(());
     }
 
+    let canisters_to_build = try_join_all(
+        cnames
+            .iter()
+            .map(|name| ctx.get_canister_and_path_for_env(name, &environment_selection)),
+    )
+    .await?;
+
     // Build the selected canisters
     let _ = ctx.term.write_line("Building canisters:");
-    let canisters_to_build = p
-        .canisters
-        .iter()
-        .filter(|(k, _)| cnames.contains(k))
-        .map(|(_, (path, canister))| (path.clone(), canister.clone()))
-        .collect::<Vec<_>>();
 
     build_many_with_progress_bar(
         canisters_to_build,
@@ -140,8 +124,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
     // Create the selected canisters
     let _ = ctx.term.write_line("\n\nCreating canisters:");
 
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
-    let identity_selection: IdentitySelection = args.identity.clone().into();
     let env = ctx
         .get_environment(&environment_selection)
         .await
@@ -152,6 +134,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         .map_err(|e| anyhow!(e))?;
     let existing_canisters = ctx
         .ids_by_environment(&environment_selection)
+        .await
         .map_err(|e| anyhow!(e))?;
     let canisters_to_create = cnames
         .iter()
@@ -224,7 +207,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let environment_selection = environment_selection.clone();
         async move {
             let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
                 .await
                 .map_err(|e| anyhow!(e))?;
             let (_, info) = env_canisters
@@ -237,17 +223,22 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
 
     let canister_list = ctx
         .ids_by_environment(&environment_selection)
+        .await
         .map_err(|e| anyhow!(e))?;
 
     set_binding_env_vars_many(
         agent.clone(),
         &env.name,
-        target_canisters,
+        target_canisters.clone(),
         canister_list,
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
+
+    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
@@ -256,7 +247,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let environment_selection = environment_selection.clone();
         async move {
             let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
                 .await
                 .map_err(|e| anyhow!(e))?;
             Ok::<_, anyhow::Error>((name.clone(), cid))
@@ -287,7 +281,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), Command
         let environment_selection = environment_selection.clone();
         async move {
             let cid = ctx
-                .get_canister_id_for_env(name, &environment_selection)
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
                 .await
                 .map_err(|e| anyhow!(e))?;
             let (canister_path, info) = env_canisters

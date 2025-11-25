@@ -28,7 +28,7 @@ pub struct NetworkDirectory {
 }
 
 impl NetworkDirectory {
-    pub fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
+    pub(crate) fn new(network_name: &str, network_root: &Path, port_descriptor_dir: &Path) -> Self {
         Self {
             network_name: network_name.to_owned(),
             network_root: network_root.to_path_buf(),
@@ -213,6 +213,16 @@ impl NetworkRootPaths {
     /// is running, and exits with exit code(0).
     pub fn pocketic_port_file(&self) -> PathBuf {
         self.pocketic_dir().join("port")
+    }
+
+    /// PocketIC writes its stdout to this file.
+    pub fn pocketic_stdout_file(&self) -> PathBuf {
+        self.pocketic_dir().join("stdout.log")
+    }
+
+    /// PocketIC writes its stderr to this file.
+    pub fn pocketic_stderr_file(&self) -> PathBuf {
+        self.pocketic_dir().join("stderr.log")
     }
 }
 

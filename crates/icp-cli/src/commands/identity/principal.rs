@@ -14,7 +14,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), anyh
 
     let principal = id
         .sender()
-        .map_err(|_| anyhow::anyhow!("failed to load identity principal"))?;
+        .map_err(|e| anyhow::anyhow!("failed to load identity principal: {e}"))?;
 
     println!("{principal}");
 

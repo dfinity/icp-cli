@@ -1,9 +1,10 @@
+use anyhow::Context as _;
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Args;
 use icp::{
-    fs::{lock::LockError, write_string},
+    fs::write_string,
     identity::{
-        key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
+        key::{CreateFormat, IdentityKey, create_identity},
         seed::derive_default_key_from_seed,
     },
     prelude::*,
@@ -18,21 +19,9 @@ pub(crate) struct NewArgs {
     output_seed: Option<PathBuf>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    CreateIdentityError(#[from] CreateIdentityError),
-
-    #[error("failed to write seed file")]
-    WriteSeedFileError(#[from] icp::fs::Error),
-
-    #[error(transparent)]
-    LoadLockError(#[from] LockError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Error> {
     let mnemonic = Mnemonic::new(
-        MnemonicType::for_key_size(256).expect("failed to get mnemonic type"),
+        MnemonicType::for_key_size(256).context("failed to get mnemonic type")?,
         Language::English,
     );
 
@@ -50,7 +39,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), CommandErr
 
     match &args.output_seed {
         Some(path) => {
-            write_string(path, mnemonic.as_ref())?;
+            write_string(path, mnemonic.as_ref()).context("failed to write seed file")?;
             println!("Seed phrase written to file {path}")
         }
 

@@ -1,14 +1,9 @@
-use crate::{
-    commands::args::CanisterCommandArgs, operations::settings::SyncSettingsOperationError,
-};
-
+use anyhow::bail;
 use clap::Args;
 use ic_utils::interfaces::ManagementCanister;
-use icp::context::{
-    CanisterSelection, Context, GetAgentError, GetCanisterIdError, GetEnvCanisterError,
-    GetEnvironmentError,
-};
-use snafu::Snafu;
+use icp::context::{CanisterSelection, Context};
+
+use crate::commands::args::CanisterCommandArgs;
 
 #[derive(Debug, Args)]
 pub(crate) struct SyncArgs {
@@ -16,31 +11,10 @@ pub(crate) struct SyncArgs {
     cmd_args: CanisterCommandArgs,
 }
 
-#[derive(Debug, Snafu)]
-pub(crate) enum CommandError {
-    #[snafu(transparent)]
-    GetAgent { source: GetAgentError },
-
-    #[snafu(transparent)]
-    GetCanisterId { source: GetCanisterIdError },
-
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(display("Canister name must be used for settings sync"))]
-    PrincipalCanister,
-
-    #[snafu(transparent)]
-    GetEnvCanister { source: GetEnvCanisterError },
-
-    #[snafu(transparent)]
-    SyncSettingsError { source: SyncSettingsOperationError },
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
     let CanisterSelection::Named(name) = &selections.canister else {
-        return PrincipalCanisterSnafu.fail();
+        bail!("canister name must be used for settings sync");
     };
 
     let (_, canister) = ctx

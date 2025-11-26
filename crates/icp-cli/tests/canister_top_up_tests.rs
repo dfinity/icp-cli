@@ -72,7 +72,7 @@ async fn canister_top_up() {
         ])
         .assert()
         .stderr(contains(
-            "Failed to top up: Insufficient cycles. Requested: 123456.000000000000T cycles",
+            "failed to top up: Insufficient cycles. Requested: 123456.000000000000T cycles",
         ))
         .failure();
 

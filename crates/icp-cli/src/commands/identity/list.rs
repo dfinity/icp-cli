@@ -1,8 +1,5 @@
 use clap::Args;
-use icp::{
-    fs::lock::LockError,
-    identity::manifest::{IdentityDefaults, IdentityList, LoadIdentityManifestError},
-};
+use icp::identity::manifest::{IdentityDefaults, IdentityList};
 use itertools::Itertools;
 
 use icp::context::Context;
@@ -10,15 +7,7 @@ use icp::context::Context;
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs;
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ListKeysError {
-    #[error(transparent)]
-    LoadIdentity(#[from] LoadIdentityManifestError),
-    #[error(transparent)]
-    LoadLock(#[from] LockError),
-}
-
-pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), ListKeysError> {
+pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), anyhow::Error> {
     let dirs = ctx.dirs.identity()?.into_read().await?;
 
     let list = IdentityList::load_from(dirs.as_ref())?;

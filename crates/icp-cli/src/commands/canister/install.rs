@@ -1,15 +1,11 @@
-use anyhow::anyhow;
+use anyhow::{Context as _, anyhow};
 use clap::Args;
 use ic_utils::interfaces::ManagementCanister;
+use icp::context::{CanisterSelection, Context};
 use icp::fs;
-use icp::{context::CanisterSelection, prelude::*};
+use icp::prelude::*;
 
-use icp::context::{Context, GetAgentError, GetCanisterIdError};
-
-use crate::{
-    commands::args,
-    operations::install::{InstallOperationError, install_canister},
-};
+use crate::{commands::args, operations::install::install_canister};
 
 #[derive(Debug, Args)]
 pub(crate) struct InstallArgs {
@@ -25,30 +21,12 @@ pub(crate) struct InstallArgs {
     pub(crate) cmd_args: args::CanisterCommandArgs,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    InstallOperation(#[from] InstallOperationError),
-
-    #[error("failed to read WASM file: {0}")]
-    ReadWasmFile(#[from] fs::Error),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    GetCanisterId(#[from] GetCanisterIdError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
 
     let wasm = if let Some(wasm_path) = &args.wasm {
         // Read from file
-        fs::read(wasm_path)?
+        fs::read(wasm_path).context("failed to read WASM file")?
     } else {
         // Use artifact store (requires named canister)
         let canister = match &selections.canister {

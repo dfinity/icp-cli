@@ -1,18 +1,15 @@
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
-
+use anyhow::bail;
 use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
 use console::Term;
-use ic_agent::{AgentError, export::Principal};
+use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
-use icp::{LoadError, agent, identity, network};
-
-use icp::context::{CanisterSelection, Context, GetAgentError, GetCanisterIdError};
-use snafu::{ResultExt, Snafu};
+use icp::LoadError;
+use icp::context::{CanisterSelection, Context};
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
 
 use crate::commands::args;
-use icp::store_id::LookupIdError;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -107,40 +104,7 @@ pub(crate) struct UpdateArgs {
     environment_variables: Option<EnvironmentVariableOpt>,
 }
 
-#[derive(Debug, Snafu)]
-pub(crate) enum CommandError {
-    #[snafu(transparent)]
-    Project { source: icp::LoadError },
-
-    #[snafu(transparent)]
-    Identity { source: identity::LoadError },
-
-    #[snafu(transparent)]
-    Access { source: network::AccessError },
-
-    #[snafu(transparent)]
-    Agent { source: agent::CreateAgentError },
-
-    #[snafu(display("invalid environment variable '{variable}'"))]
-    InvalidEnvironmentVariable { variable: String },
-
-    #[snafu(transparent)]
-    Lookup { source: LookupIdError },
-
-    #[snafu(transparent)]
-    Update { source: AgentError },
-
-    #[snafu(transparent)]
-    GetAgent { source: GetAgentError },
-
-    #[snafu(transparent)]
-    GetCanisterId { source: GetCanisterIdError },
-
-    #[snafu(display("failed to write to terminal"))]
-    WriteTerm { source: std::io::Error },
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
     let agent = ctx
         .get_agent(
@@ -161,7 +125,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         match ctx.project.load().await {
             Ok(p) => p.canisters[name].1.settings.clone(),
             Err(LoadError::Locate) => <_>::default(),
-            Err(e) => return Err(CommandError::Project { source: e }),
+            Err(e) => bail!("failed to load project: {}", e),
         }
     } else {
         <_>::default()
@@ -210,7 +174,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         if configured_settings.compute_allocation.is_some() {
             ctx.term.write_line(
                 "Warning: Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            ).context(WriteTermSnafu)?
+            )?
         }
         update = update.with_compute_allocation(compute_allocation);
     }
@@ -218,7 +182,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         if configured_settings.memory_allocation.is_some() {
             ctx.term.write_line(
                 "Warning: Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            ).context(WriteTermSnafu)?
+            )?
         }
         update = update.with_memory_allocation(memory_allocation.as_u64());
     }
@@ -226,7 +190,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         if configured_settings.freezing_threshold.is_some() {
             ctx.term.write_line(
                 "Warning: Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            ).context(WriteTermSnafu)?
+            )?
         }
         update = update.with_freezing_threshold(freezing_threshold);
     }
@@ -234,7 +198,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         if configured_settings.reserved_cycles_limit.is_some() {
             ctx.term.write_line(
                 "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            ).context(WriteTermSnafu)?
+            )?
         }
         update = update.with_reserved_cycles_limit(reserved_cycles_limit);
     }
@@ -242,7 +206,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         if configured_settings.wasm_memory_limit.is_some() {
             ctx.term.write_line(
                 "Warning: Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            ).context(WriteTermSnafu)?
+            )?
         }
         update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
     }
@@ -250,7 +214,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), Command
         if configured_settings.wasm_memory_threshold.is_some() {
             ctx.term.write_line(
                 "Warning: Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            ).context(WriteTermSnafu)?
+            )?
         }
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
     }
@@ -306,14 +270,10 @@ fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> 
     }
 }
 
-#[allow(clippy::result_large_err)]
-fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, CommandError> {
-    let (name, value) =
-        env_var
-            .split_once('=')
-            .ok_or(CommandError::InvalidEnvironmentVariable {
-                variable: env_var.to_owned(),
-            })?;
+fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, anyhow::Error> {
+    let (name, value) = env_var
+        .split_once('=')
+        .ok_or(anyhow::anyhow!("invalid environment variable: {}", env_var))?;
     Ok(EnvironmentVariable {
         name: name.to_owned(),
         value: value.to_owned(),
@@ -456,7 +416,7 @@ fn maybe_warn_on_env_vars_change(
     mut term: &Term,
     configured_settings: &icp::canister::Settings,
     environment_variables_opt: &EnvironmentVariableOpt,
-) -> Result<(), CommandError> {
+) -> Result<(), anyhow::Error> {
     if let Some(configured_vars) = &configured_settings.environment_variables {
         if let Some(to_add) = &environment_variables_opt.add_environment_variable {
             for add_var in to_add {
@@ -465,7 +425,7 @@ fn maybe_warn_on_env_vars_change(
                         term,
                         "Warning: Environment variable '{}' is already set in icp.yaml; this new value will be overridden on next settings sync",
                         add_var.name
-                    ).context(WriteTermSnafu)?;
+                    )?;
                 }
             }
         }
@@ -476,7 +436,7 @@ fn maybe_warn_on_env_vars_change(
                         term,
                         "Warning: Environment variable '{}' is already set in icp.yaml; removing it here will be overridden on next settings sync",
                         remove_var
-                    ).context(WriteTermSnafu)?;
+                    )?;
                 }
             }
         }

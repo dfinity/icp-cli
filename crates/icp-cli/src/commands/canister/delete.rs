@@ -1,7 +1,5 @@
 use clap::Args;
-use ic_agent::AgentError;
-
-use icp::context::{Context, GetAgentError, GetCanisterIdError};
+use icp::context::Context;
 
 use crate::commands::args;
 
@@ -11,19 +9,7 @@ pub(crate) struct DeleteArgs {
     pub(crate) cmd_args: args::CanisterCommandArgs,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Delete(#[from] AgentError),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    GetCanisterId(#[from] GetCanisterIdError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
 
     let agent = ctx

@@ -6,15 +6,9 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 pub(crate) struct ShowArgs;
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
 /// Loads the project's configuration and output the effective yaml config
 /// after resolving recipes
-pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), anyhow::Error> {
     // Load the project manifest, which defines the canisters to be built.
     let p = ctx.project.load().await.context("failed to load project")?;
 

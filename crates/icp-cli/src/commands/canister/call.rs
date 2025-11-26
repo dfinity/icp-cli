@@ -1,10 +1,9 @@
-use std::io::{self, Write};
-
+use anyhow::Context as _;
 use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
-
-use icp::context::{Context, GetAgentError, GetCanisterIdError};
+use icp::context::Context;
+use std::io::{self, Write};
 
 use crate::commands::args;
 
@@ -20,28 +19,7 @@ pub(crate) struct CallArgs {
     pub(crate) args: String,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommandError {
-    #[error("failed to parse candid arguments")]
-    DecodeArgsError(#[from] candid_parser::Error),
-
-    #[error("failed to serialize candid arguments")]
-    Candid(#[from] candid::Error),
-
-    #[error("failed to print candid return value")]
-    WriteTermError(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Call(#[from] ic_agent::AgentError),
-
-    #[error(transparent)]
-    GetAgent(#[from] GetAgentError),
-
-    #[error(transparent)]
-    GetCanisterId(#[from] GetCanisterIdError),
-}
-
-pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
+pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
 
     let agent = ctx
@@ -60,16 +38,22 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandEr
         .await?;
 
     // Parse candid arguments
-    let cargs = candid_parser::parse_idl_args(&args.args)?;
+    let cargs =
+        candid_parser::parse_idl_args(&args.args).context("failed to parse candid arguments")?;
 
     let res = agent
         .update(&cid, &args.method)
-        .with_arg(cargs.to_bytes()?)
+        .with_arg(
+            cargs
+                .to_bytes()
+                .context("failed to serialize candid arguments")?,
+        )
         .await?;
 
     let ret = IDLArgs::from_bytes(&res[..])?;
 
-    print_candid_for_term(&mut Term::buffered_stdout(), &ret)?;
+    print_candid_for_term(&mut Term::buffered_stdout(), &ret)
+        .context("failed to print candid return value")?;
 
     Ok(())
 }

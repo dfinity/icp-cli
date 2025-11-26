@@ -40,7 +40,7 @@ pub(crate) struct ImportArgs {
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }
 
-pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportCmdError> {
+pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow::Error> {
     if let Some(from_pem) = &args.from_pem {
         import_from_pem(
             ctx,
@@ -67,15 +67,6 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), ImportC
     println!("Identity \"{}\" created", args.name);
 
     Ok(())
-}
-
-#[derive(Snafu, Debug)]
-pub(crate) enum ImportCmdError {
-    #[snafu(transparent)]
-    PemImport { source: LoadKeyError },
-
-    #[snafu(transparent)]
-    SeedImport { source: DeriveKeyError },
 }
 
 async fn import_from_pem(

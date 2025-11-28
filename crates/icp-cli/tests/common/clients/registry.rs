@@ -6,18 +6,18 @@ use pocket_ic::nonblocking::PocketIc;
 
 use crate::common::TestContext;
 
-pub struct Client<'a> {
+pub(crate) struct Client<'a> {
     pic: &'a PocketIc,
 }
 
 impl<'a> Client<'a> {
-    pub fn new(ctx: &'a TestContext) -> Self {
+    pub(crate) fn new(ctx: &'a TestContext) -> Self {
         Self {
             pic: ctx.pocketic(),
         }
     }
 
-    pub async fn get_subnet_for_canister(&self, canister: Principal) -> Principal {
+    pub(crate) async fn get_subnet_for_canister(&self, canister: Principal) -> Principal {
         let arg = GetSubnetForCanisterRequest {
             principal: Some(canister),
         };

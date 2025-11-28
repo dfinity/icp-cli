@@ -24,16 +24,16 @@ fn sync_adapter_script_single() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
-          sync:
-            steps:
-              - type: script
-                command: echo "syncing"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -59,7 +59,7 @@ fn sync_adapter_script_single() {
         .args([
             "--debug",
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -71,7 +71,13 @@ fn sync_adapter_script_single() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["--debug", "sync", "--environment", "my-environment"])
+        .args([
+            "--debug",
+            "sync",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stdout(contains("syncing").trim());
@@ -89,18 +95,18 @@ fn sync_adapter_script_multiple() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
-          sync:
-            steps:
-              - type: script
-                command: echo "second"
-              - type: script
-                command: echo "first"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "second"
+                - type: script
+                  command: echo "first"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -126,7 +132,7 @@ fn sync_adapter_script_multiple() {
         .args([
             "--debug",
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -138,7 +144,13 @@ fn sync_adapter_script_multiple() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["--debug", "sync", "--environment", "my-environment"])
+        .args([
+            "--debug",
+            "sync",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success()
         .stdout(contains("first").and(contains("second")));
@@ -160,19 +172,19 @@ async fn sync_adapter_static_assets() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
-                sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                  sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
 
-          sync:
-            steps:
-              - type: assets
-                dirs:
-                  - {assets_dir}
+            sync:
+              steps:
+                - type: assets
+                  dirs:
+                    - {assets_dir}
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -204,7 +216,7 @@ async fn sync_adapter_static_assets() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -215,7 +227,7 @@ async fn sync_adapter_static_assets() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync", "--environment", "my-environment"])
+        .args(["sync", "my-canister", "--environment", "my-environment"])
         .assert()
         .success();
 
@@ -230,4 +242,229 @@ async fn sync_adapter_static_assets() {
         .expect("failed to read canister response body");
 
     assert_eq!(out, "hello");
+}
+
+#[test]
+fn sync_with_valid_principal() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            sync:
+              steps:
+                - type: script
+                  command: echo syncing
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
+    // Valid principal
+    let principal = "aaaaa-aa";
+
+    // Try to sync with principal (should fail)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["sync", principal, "--environment", "my-environment"])
+        .assert()
+        .failure()
+        .stderr(contains("project does not contain a canister named"));
+}
+
+#[test]
+fn sync_multiple_canisters() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest with multiple canisters
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing canister-a"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing canister-b"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing canister-c"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
+    // Deploy project
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .success();
+
+    // Sync multiple canisters
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args([
+            "--debug",
+            "sync",
+            "canister-a",
+            "canister-b",
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Syncing canisters"))
+        .stdout(contains(r#"canisters: ["canister-a", "canister-b"]"#))
+        .stdout(contains("DEBUG icp::progress: syncing canister-a"))
+        .stdout(contains("DEBUG icp::progress: syncing canister-b"))
+        .stdout(contains("DEBUG icp::progress: syncing canister-c").not());
+}
+
+#[test]
+fn sync_all_canisters_in_environment() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest with multiple canisters and environments
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing canister-a"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing canister-b"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing canister-c"
+
+        {NETWORK_RANDOM_PORT}
+        
+        environments:
+          - name: test-env
+            network: my-network
+            canisters:
+              - canister-a
+              - canister-b
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
+    // Deploy project
+    clients::icp(&ctx, &project_dir, Some("test-env".to_string())).mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "test-env",
+        ])
+        .assert()
+        .success();
+
+    // Sync all canisters in environment (no canister names specified)
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args(["--debug", "sync", "--environment", "test-env"])
+        .assert()
+        .success()
+        .stdout(contains("Syncing canisters"))
+        .stdout(contains(r#"canisters: []"#))
+        .stdout(contains(r#"environment: Some("test-env")"#))
+        .stdout(contains("DEBUG icp::progress: syncing canister-a"))
+        .stdout(contains("DEBUG icp::progress: syncing canister-b"))
+        .stdout(contains("DEBUG icp::progress: syncing canister-c").not()); // not in test-env
 }

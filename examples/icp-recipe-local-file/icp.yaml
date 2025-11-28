@@ -1,7 +1,9 @@
-canister:
-  name: my-canister
-  recipe:
-    type: file://recipe.hb.yaml
-    configuration:
-      path: ../icp-pre-built/dist/hello_world.wasm
-      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.0/docs/schemas/icp-yaml-schema.json
+
+canisters:
+  - name: my-canister
+    recipe:
+      type: file://recipe.hb.yaml
+      configuration:
+        path: ../icp-pre-built/dist/hello_world.wasm
+        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a

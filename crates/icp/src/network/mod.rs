@@ -5,22 +5,23 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub use directory::NetworkDirectory;
+pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 
 use crate::{
-    Network,
-    manifest::{Locate, LocateError},
-    network::access::{NetworkAccess, get_network_access},
+    CACHE_DIR, ICP_BASE, Network,
+    manifest::{
+        ProjectRootLocate, ProjectRootLocateError,
+        network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
+    },
+    network::access::{NetworkAccess, get_connected_network_access, get_managed_network_access},
     prelude::*,
 };
 
 pub mod access;
 pub mod config;
-mod directory;
-mod lock;
+pub mod directory;
 pub mod managed;
-pub mod structure;
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {
@@ -83,24 +84,74 @@ pub struct Connected {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
 pub enum Configuration {
+    // Note: we must use struct variants to be able to flatten
+    // and make schemars generate the proper schema
     /// A managed network is one which can be controlled and manipulated.
-    Managed(Managed),
+    Managed {
+        #[serde(flatten)]
+        managed: Managed,
+    },
 
     /// A connected network is one which can be interacted with
     /// but cannot be controlled or manipulated.
-    Connected(Connected),
+    Connected {
+        #[serde(flatten)]
+        connected: Connected,
+    },
 }
 
 impl Default for Configuration {
     fn default() -> Self {
-        Configuration::Managed(Managed::default())
+        Configuration::Managed {
+            managed: Managed::default(),
+        }
+    }
+}
+
+impl From<ManifestGateway> for Gateway {
+    fn from(value: ManifestGateway) -> Self {
+        let host = value.host.unwrap_or("localhost".to_string());
+        let port = match value.port {
+            Some(0) => Port::Random,
+            Some(p) => Port::Fixed(p),
+            None => Port::Random,
+        };
+        Gateway { host, port }
+    }
+}
+
+impl From<ManifestConnected> for Connected {
+    fn from(value: ManifestConnected) -> Self {
+        let url = value.url.clone();
+        let root_key = value.root_key;
+        Connected { url, root_key }
+    }
+}
+
+impl From<Mode> for Configuration {
+    fn from(value: Mode) -> Self {
+        match value {
+            Mode::Managed(managed) => {
+                let gateway: Gateway = match managed.gateway {
+                    Some(g) => g.into(),
+                    None => Gateway::default(),
+                };
+
+                Configuration::Managed {
+                    managed: Managed { gateway },
+                }
+            }
+            Mode::Connected(connected) => Configuration::Connected {
+                connected: connected.into(),
+            },
+        }
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum AccessError {
     #[error("failed to find project root")]
-    Project(#[from] LocateError),
+    Project(#[from] ProjectRootLocateError),
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
@@ -108,12 +159,13 @@ pub enum AccessError {
 
 #[async_trait]
 pub trait Access: Sync + Send {
+    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError>;
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError>;
 }
 
 pub struct Accessor {
-    // Project root locator
-    pub project: Arc<dyn Locate>,
+    // Project root
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
 
     // Port descriptors dir
     pub descriptors: PathBuf,
@@ -121,20 +173,81 @@ pub struct Accessor {
 
 #[async_trait]
 impl Access for Accessor {
+    /// The network directory is located at `<project_root>/.icp/cache/networks/<network_name>`.
+    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
+        let dir = self.project_root_locate.locate()?;
+        Ok(NetworkDirectory::new(
+            &network.name,
+            &dir.join(ICP_BASE)
+                .join(CACHE_DIR)
+                .join("networks")
+                .join(&network.name),
+            &self.descriptors,
+        ))
+    }
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
-        // Locate networks directory
-        let dir = self.project.locate()?;
+        match &network.configuration {
+            Configuration::Managed { managed: _ } => {
+                let nd = self.get_network_directory(network)?;
+                Ok(get_managed_network_access(nd)
+                    .await
+                    .context("failed to load managed network access")?)
+            }
+            Configuration::Connected { connected: cfg } => Ok(get_connected_network_access(cfg)
+                .await
+                .context("failed to load connected network access")?),
+        }
+    }
+}
 
-        // NetworkDirectory
-        let nd = NetworkDirectory::new(
-            &network.name,                                          // name
-            &dir.join(".icp").join("networks").join(&network.name), // network_root
-            &self.descriptors,                                      // port_descriptor_dir
-        );
+#[cfg(test)]
+use std::collections::HashMap;
 
-        // NetworkAccess
-        let acceess = get_network_access(nd, network).context("failed to load network access")?;
+#[cfg(test)]
+pub struct MockNetworkAccessor {
+    /// Network-specific access configurations by network name
+    networks: HashMap<String, NetworkAccess>,
+}
 
-        Ok(acceess)
+#[cfg(test)]
+impl MockNetworkAccessor {
+    /// Creates a new empty mock network accessor.
+    pub fn new() -> Self {
+        Self {
+            networks: HashMap::new(),
+        }
+    }
+
+    /// Adds a network-specific access configuration.
+    pub fn with_network(mut self, name: impl Into<String>, access: NetworkAccess) -> Self {
+        self.networks.insert(name.into(), access);
+        self
+    }
+}
+
+#[cfg(test)]
+impl Default for MockNetworkAccessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl Access for MockNetworkAccessor {
+    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
+        Ok(NetworkDirectory {
+            network_name: network.name.clone(),
+            network_root: PathBuf::new(),
+            port_descriptor_dir: PathBuf::new(),
+        })
+    }
+    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
+        self.networks.get(&network.name).cloned().ok_or_else(|| {
+            AccessError::Unexpected(anyhow::anyhow!(
+                "network '{}' not configured in mock",
+                network.name
+            ))
+        })
     }
 }

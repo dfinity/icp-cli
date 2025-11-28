@@ -19,12 +19,12 @@ async fn canister_top_up() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo hi
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -43,7 +43,13 @@ async fn canister_top_up() {
     // Create canister
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "--environment", "my-environment"])
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
 
@@ -66,7 +72,7 @@ async fn canister_top_up() {
         ])
         .assert()
         .stderr(contains(
-            "Failed to top up: Insufficient cycles. Requested: 123456.000000000000T cycles",
+            "failed to top up: Insufficient cycles. Requested: 123456.000000000000T cycles",
         ))
         .failure();
 

@@ -7,15 +7,14 @@ on:
   pull_request:
 
 jobs:
-
   compile:
     name: compile:required
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.rustup/
@@ -33,13 +32,13 @@ jobs:
 
   lint:
     name: lint:required
-    needs: compile  # Run after compilation to use the cache
+    needs: compile # Run after compilation to use the cache
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.rustup/
@@ -51,10 +50,9 @@ jobs:
           key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run Lint
-        run: cargo clippy --verbose --tests --benches -- -D warnings -D clippy::all
+        run: cargo clippy --verbose --tests --benches -- -D warnings
         env:
           RUST_BACKTRACE: 1
-
 
   format:
     name: fmt:required
@@ -62,12 +60,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - name: Install Rust toolchain from rust-toolchain.toml
         run: rustup show
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.rustup/
@@ -80,7 +78,6 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
-
 
   #
   # Runs a series of checks to make sure that all the docs
@@ -97,12 +94,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - name: Show Rust toolchain
         run: rustup show
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.rustup/
@@ -138,12 +135,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - name: Show Rust toolchain
         run: rustup show
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.rustup/
@@ -155,12 +152,12 @@ jobs:
           key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: generate icp.yaml schema
-        run: ./scripts/generate-config-schema.sh
+        run: ./scripts/generate-config-schemas.sh
 
       - name: Check for uncommitted changes
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
-            echo "❌ The icp.yaml schema is not up to date"
+            echo "❌ The schema docs are not up to date"
             echo ""
             echo " Run ./scripts/generate-config-schema.sh to update them"
             echo ""

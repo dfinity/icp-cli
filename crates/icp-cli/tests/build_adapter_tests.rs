@@ -19,12 +19,12 @@ fn build_adapter_pre_built_path() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                path: {wasm}
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  path: {wasm}
     "#};
 
     write_string(
@@ -36,7 +36,7 @@ fn build_adapter_pre_built_path() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -61,13 +61,13 @@ fn build_adapter_pre_built_path_invalid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                path: {wasm}
-                sha256: invalid
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  path: {wasm}
+                  sha256: invalid
     "#};
 
     write_string(
@@ -79,7 +79,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(
@@ -109,13 +109,13 @@ fn build_adapter_pre_built_path_valid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                path: {wasm}
-                sha256: {actual}
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  path: {wasm}
+                  sha256: {actual}
     "#};
 
     write_string(
@@ -127,7 +127,7 @@ fn build_adapter_pre_built_path_valid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -149,12 +149,12 @@ fn build_adapter_pre_built_url() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: http://{addr}/canister.wasm
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: http://{addr}/canister.wasm
     "#};
 
     write_string(
@@ -166,7 +166,7 @@ fn build_adapter_pre_built_url() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -195,13 +195,13 @@ fn build_adapter_pre_built_url_invalid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: http://{addr}/canister.wasm
-                sha256: invalid
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: http://{addr}/canister.wasm
+                  sha256: invalid
     "#};
 
     write_string(
@@ -213,7 +213,7 @@ fn build_adapter_pre_built_url_invalid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(
@@ -247,13 +247,13 @@ fn build_adapter_pre_built_url_valid_checksum() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: pre-built
-                url: http://{addr}/canister.wasm
-                sha256: {actual}
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: http://{addr}/canister.wasm
+                  sha256: {actual}
     "#};
 
     write_string(
@@ -265,7 +265,7 @@ fn build_adapter_pre_built_url_valid_checksum() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }

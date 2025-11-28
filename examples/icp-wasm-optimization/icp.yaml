@@ -1,20 +1,22 @@
-canister:
-  name: my-canister
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.0/docs/schemas/icp-yaml-schema.json
 
-  build:
-    steps:
-      - type: pre-built
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+canisters:
+  - name: my-canister
 
-      - type: script
-        commands:
-          - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
-          - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}-opt" shrink --keep-name-section
-          - mv "${ICP_WASM_OUTPUT_PATH}-opt" "$ICP_WASM_OUTPUT_PATH"
+    build:
+      steps:
+        - type: pre-built
+          path: ../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 
-      - type: script
-        commands:
-          - command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }
-          - gzip --no-name "$ICP_WASM_OUTPUT_PATH"
-          - mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"
+        - type: script
+          commands:
+            - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n"; exit 1; }
+            - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}-opt" shrink --keep-name-section
+            - mv "${ICP_WASM_OUTPUT_PATH}-opt" "$ICP_WASM_OUTPUT_PATH"
+
+        - type: script
+          commands:
+            - command -v gzip >/dev/null 2>&1 || { echo >&2 "gzip not found. Please install gzip to compress build output. \n"; exit 1; }
+            - gzip --no-name "$ICP_WASM_OUTPUT_PATH"
+            - mv "${ICP_WASM_OUTPUT_PATH}.gz" "$ICP_WASM_OUTPUT_PATH"

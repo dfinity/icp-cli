@@ -1,38 +1,22 @@
 use clap::Args;
-use icp::identity;
+use icp::context::Context;
 
-use crate::{
-    commands::{Context, Mode},
-    options::IdentityOpt,
-};
+use crate::options::IdentityOpt;
 
 #[derive(Debug, Args)]
-pub struct PrincipalArgs {
+pub(crate) struct PrincipalArgs {
     #[command(flatten)]
-    pub identity: IdentityOpt,
+    pub(crate) identity: IdentityOpt,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum PrincipalError {
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
+pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), anyhow::Error> {
+    let id = ctx.get_identity(&args.identity.clone().into()).await?;
 
-    #[error("failed to load identity principal: {message}")]
-    Sender { message: String },
-}
+    let principal = id
+        .sender()
+        .map_err(|e| anyhow::anyhow!("failed to load identity principal: {e}"))?;
 
-pub async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), PrincipalError> {
-    match &ctx.mode {
-        Mode::Global | Mode::Project(_) => {
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            let principal = id
-                .sender()
-                .map_err(|message| PrincipalError::Sender { message })?;
-
-            println!("{principal}");
-        }
-    }
+    println!("{principal}");
 
     Ok(())
 }

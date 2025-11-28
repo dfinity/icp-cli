@@ -1,20 +1,14 @@
 use clap::Args;
-use icp::{identity, prelude::PathBuf};
+use icp::prelude::PathBuf;
 
+use crate::commands::args;
 use crate::commands::canister::snapshot::{SnapshotId, directory_parser};
-use crate::commands::{Context, Mode};
-use crate::options::{EnvironmentOpt, IdentityOpt};
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub struct UploadArgs {
-    /// The name of the canister within the current project
-    name: String,
-
     #[command(flatten)]
-    identity: IdentityOpt,
-
-    #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// If a snapshot ID is specified, this snapshot will replace it and reuse the ID.
     #[arg(long)]
@@ -33,23 +27,6 @@ pub struct UploadArgs {
     concurrency: usize,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
-
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-}
-
-pub async fn exec(ctx: &Context, _args: &UploadArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
-
-        Mode::Project(_) => {
-            unimplemented!("project mode is not implemented yet");
-        }
-    }
+pub async fn exec(_ctx: &Context, _args: &UploadArgs) -> Result<(), anyhow::Error> {
+    unimplemented!("canister snapshot upload is not yet implemented");
 }

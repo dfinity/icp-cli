@@ -1,13 +1,12 @@
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use indoc::{formatdoc, indoc};
-use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
 use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
+use icp::{fs::write_string, prelude::*};
 
 mod common;
 
@@ -20,12 +19,12 @@ fn canister_create() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo hi
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -49,9 +48,25 @@ fn canister_create() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "--environment", "my-environment"])
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "my-environment",
+        ])
         .assert()
         .success();
+
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("my-environment.ids.json");
+    assert!(
+        id_mapping_path.exists(),
+        "ID mapping file should exist at {id_mapping_path}"
+    );
 }
 
 #[test]
@@ -67,17 +82,17 @@ fn canister_create_with_settings() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-            canister:
-              name: my-canister
-              build:
-                steps:
-                  - type: script
-                    command: cp {path} "$ICP_WASM_OUTPUT_PATH"
-              settings:
-                compute_allocation: 1
-                memory_allocation: 4294967296
-                freezing_threshold: 2592000
-                reserved_cycles_limit: 1000000000000
+            canisters:
+              - name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                settings:
+                  compute_allocation: 1
+                  memory_allocation: 4294967296
+                  freezing_threshold: 2592000
+                  reserved_cycles_limit: 1000000000000
 
             {NETWORK_RANDOM_PORT}
             {ENVIRONMENT_RANDOM_PORT}
@@ -104,6 +119,7 @@ fn canister_create_with_settings() {
         .args([
             "canister",
             "create",
+            "my-canister",
             "--environment",
             "my-environment",
             "--cycles",
@@ -147,14 +163,14 @@ fn canister_create_with_settings_cmdline_override() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-            canister:
-              name: my-canister
-              build:
-                steps:
-                  - type: script
-                    command: cp {path} \"$ICP_WASM_OUTPUT_PATH\"
-              settings:
-                compute_allocation: 1
+            canisters:
+              - name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: cp {path} \"$ICP_WASM_OUTPUT_PATH\"
+                settings:
+                  compute_allocation: 1
 
             {NETWORK_RANDOM_PORT}
             {ENVIRONMENT_RANDOM_PORT}
@@ -181,6 +197,7 @@ fn canister_create_with_settings_cmdline_override() {
         .args([
             "canister",
             "create",
+            "my-canister",
             "--compute-allocation",
             "2",
             "--environment",
@@ -217,12 +234,12 @@ fn canister_create_nonexistent_canister() {
 
     // Project manifest with canister named "a"
     let pm = indoc! {r#"
-        canister:
-          name: a
-          build:
-            steps:
-              - type: script
-                command: echo hi
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
     "#};
 
     write_string(
@@ -236,7 +253,7 @@ fn canister_create_nonexistent_canister() {
         .args(["canister", "create", "b"])
         .assert()
         .failure()
-        .stderr(contains("project does not contain a canister named 'b'"));
+        .stderr(contains("canister 'b' not declared in environment 'local'"));
 }
 
 #[test]
@@ -275,145 +292,44 @@ fn canister_create_canister_not_in_environment() {
         .assert()
         .failure()
         .stderr(contains(
-            "environment 'test-env' does not include canister 'b'",
+            "canister 'b' not declared in environment 'test-env'",
         ));
 }
 
-#[tokio::test]
-async fn canister_create_colocates_canisters() {
+#[test]
+fn canister_create_with_valid_principal() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
-    let pm = indoc! {r#"
+    // Project manifest
+    let pm = formatdoc! {r#"
         canisters:
-          - name: canister-a
+          - name: my-canister
             build:
               steps:
                 - type: script
                   command: echo hi
-          - name: canister-b
-            build:
-              steps:
-                - type: script
-                  command: echo hi
-          - name: canister-c
-            build:
-              steps:
-                - type: script
-                  command: echo hi
-          - name: canister-d
-            build:
-              steps:
-                - type: script
-                  command: echo hi
-          - name: canister-e
-            build:
-              steps:
-                - type: script
-                  command: echo hi
-          - name: canister-f
-            build:
-              steps:
-                - type: script
-                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
     "#};
 
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
-    )
-    .expect("failed to write project manifest");
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
-    // Start network
-    let _g = ctx
-        .start_network_with_config(
-            &project_dir,
-            InstanceConfig {
-                subnet_config_set: (SubnetConfigSet {
-                    application: 3,
-                    ..Default::default()
-                })
-                .into(),
-                ..default_instance_config(&ctx.state_dir(&project_dir))
-            },
-        )
-        .await;
+    // Valid principal
+    let principal = "aaaaa-aa";
 
-    ctx.ping_until_healthy(&project_dir, "local");
-
-    // Create first three canisters
-    let icp_client = clients::icp(&ctx, &project_dir, None);
-    icp_client.mint_cycles(20 * TRILLION);
+    // Try to create with principal (should fail)
     ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
             "create",
-            "canister-a",
-            "canister-b",
-            "canister-c",
+            principal,
+            "--environment",
+            "my-environment",
         ])
         .assert()
-        .success();
-
-    let registry = clients::registry(&ctx);
-
-    let subnet_a = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-a"))
-        .await;
-
-    let subnet_b = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-b"))
-        .await;
-
-    let subnet_c = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-c"))
-        .await;
-
-    assert_eq!(
-        subnet_a, subnet_b,
-        "Canister A and B should be on the same subnet"
-    );
-    assert_eq!(
-        subnet_a, subnet_c,
-        "Canister B and C should be on the same subnet"
-    );
-
-    // Create remaining canisters
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "create",
-            "canister-d",
-            "canister-e",
-            "canister-f",
-        ])
-        .assert()
-        .success();
-
-    let subnet_d = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-d"))
-        .await;
-
-    let subnet_e = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-e"))
-        .await;
-
-    let subnet_f = registry
-        .get_subnet_for_canister(icp_client.get_canister_id("canister-f"))
-        .await;
-
-    assert_eq!(
-        subnet_a, subnet_d,
-        "Canister D should be on the same subnet as canister A"
-    );
-    assert_eq!(
-        subnet_a, subnet_e,
-        "Canister E should be on the same subnet as canister A"
-    );
-    assert_eq!(
-        subnet_a, subnet_f,
-        "Canister F should be on the same subnet as canister A"
-    );
+        .failure()
+        .stderr(contains("Cannot create a canister by principal"));
 }

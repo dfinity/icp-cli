@@ -1,19 +1,18 @@
-use std::collections::{HashMap, HashSet};
-
+use anyhow::bail;
 use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
-use ic_agent::{AgentError, export::Principal};
+use console::Term;
+use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
-use icp::{agent, identity, network};
+use icp::LoadError;
+use icp::context::{CanisterSelection, Context};
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
 
-use crate::{
-    commands::{Context, Mode},
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError as LookupIdError},
-};
+use crate::commands::args;
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct ControllerOpt {
+pub(crate) struct ControllerOpt {
     #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
     add_controller: Option<Vec<Principal>>,
 
@@ -25,13 +24,13 @@ pub struct ControllerOpt {
 }
 
 impl ControllerOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_controller.is_some() || self.remove_controller.is_some()
     }
 }
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct LogVisibilityOpt {
+pub(crate) struct LogVisibilityOpt {
     #[arg(
         long,
         value_parser = log_visibility_parser,
@@ -52,13 +51,13 @@ pub struct LogVisibilityOpt {
 }
 
 impl LogVisibilityOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_log_viewer.is_some() || self.remove_log_viewer.is_some()
     }
 }
 
 #[derive(Clone, Debug, Default, Args)]
-pub struct EnvironmentVariableOpt {
+pub(crate) struct EnvironmentVariableOpt {
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
 
@@ -67,21 +66,15 @@ pub struct EnvironmentVariableOpt {
 }
 
 impl EnvironmentVariableOpt {
-    pub fn require_current_settings(&self) -> bool {
+    pub(crate) fn require_current_settings(&self) -> bool {
         self.add_environment_variable.is_some() || self.remove_environment_variable.is_some()
     }
 }
 
 #[derive(Debug, Args)]
-pub struct UpdateArgs {
-    /// The name of the canister within the current project
-    pub name: String,
-
+pub(crate) struct UpdateArgs {
     #[command(flatten)]
-    identity: IdentityOpt,
-
-    #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     #[command(flatten)]
     controllers: Option<ControllerOpt>,
@@ -111,149 +104,127 @@ pub struct UpdateArgs {
     environment_variables: Option<EnvironmentVariableOpt>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
+pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
+    let selections = args.cmd_args.selections();
+    let agent = ctx
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
 
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
-
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
-
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
-
-    #[error(transparent)]
-    Agent(#[from] agent::CreateError),
-
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[error("invalid environment variable '{variable}'")]
-    InvalidEnvironmentVariable { variable: String },
-
-    #[error(transparent)]
-    Lookup(#[from] LookupIdError),
-
-    #[error(transparent)]
-    Update(#[from] AgentError),
-}
-
-pub async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
+    let configured_settings = if let CanisterSelection::Named(name) = &selections.canister {
+        match ctx.project.load().await {
+            Ok(p) => p.canisters[name].1.settings.clone(),
+            Err(LoadError::Locate) => <_>::default(),
+            Err(e) => bail!("failed to load project: {}", e),
         }
+    } else {
+        <_>::default()
+    };
 
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
+    // Management Interface
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
+    let mut current_status: Option<CanisterStatusResult> = None;
+    if require_current_settings(args) {
+        current_status = Some(mgmt.canister_status(&cid).await?.0);
+    }
 
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
+    // TODO(VZ): Ask for consent
+    // - if the freezing threshold is too long or too short.
+    // - if trying to remove the caller itself from the controllers.
 
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
+    // Handle controllers.
+    let mut controllers: Option<Vec<Principal>> = None;
+    if let Some(controllers_opt) = &args.controllers {
+        controllers = get_controllers(controllers_opt, current_status.as_ref());
+    }
 
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
+    // Handle log visibility.
+    let mut log_visibility: Option<LogVisibility> = None;
+    if let Some(log_visibility_opt) = args.log_visibility.clone() {
+        log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
+    }
 
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
+    // Handle environment variables.
+    let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
+    if let Some(environment_variables_opt) = &args.environment_variables {
+        maybe_warn_on_env_vars_change(&ctx.term, &configured_settings, environment_variables_opt)?;
+        environment_variables =
+            get_environment_variables(environment_variables_opt, current_status.as_ref());
+    }
 
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
-            })?;
-
-            // Management Interface
-            let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
-            let mut current_status: Option<CanisterStatusResult> = None;
-            if require_current_settings(args) {
-                current_status = Some(mgmt.canister_status(&cid).await?.0);
-            }
-
-            // TODO(VZ): Ask for consent
-            // - if the freezing threshold is too long or too short.
-            // - if trying to remove the caller itself from the controllers.
-
-            // Handle controllers.
-            let mut controllers: Option<Vec<Principal>> = None;
-            if let Some(controllers_opt) = &args.controllers {
-                controllers = get_controllers(controllers_opt, current_status.as_ref());
-            }
-
-            // Handle log visibility.
-            let mut log_visibility: Option<LogVisibility> = None;
-            if let Some(log_visibility_opt) = args.log_visibility.clone() {
-                log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
-            }
-
-            // Handle environment variables.
-            let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
-            if let Some(environment_variables_opt) = &args.environment_variables {
-                environment_variables =
-                    get_environment_variables(environment_variables_opt, current_status.as_ref());
-            }
-
-            // Update settings.
-            let mut update = mgmt.update_settings(&cid);
-            if let Some(controllers) = controllers {
-                for controller in controllers {
-                    update = update.with_controller(controller);
-                }
-            }
-            if let Some(compute_allocation) = args.compute_allocation {
-                update = update.with_compute_allocation(compute_allocation);
-            }
-            if let Some(memory_allocation) = args.memory_allocation {
-                update = update.with_memory_allocation(memory_allocation.as_u64());
-            }
-            if let Some(freezing_threshold) = args.freezing_threshold {
-                update = update.with_freezing_threshold(freezing_threshold);
-            }
-            if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
-                update = update.with_reserved_cycles_limit(reserved_cycles_limit);
-            }
-            if let Some(wasm_memory_limit) = args.wasm_memory_limit {
-                update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
-            }
-            if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
-                update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
-            }
-            if let Some(log_visibility) = log_visibility {
-                update = update.with_log_visibility(log_visibility);
-            }
-            if let Some(environment_variables) = environment_variables {
-                update = update.with_environment_variables(environment_variables);
-            }
-            update.await?;
+    // Update settings.
+    let mut update = mgmt.update_settings(&cid);
+    if let Some(controllers) = controllers {
+        for controller in controllers {
+            update = update.with_controller(controller);
         }
     }
+    if let Some(compute_allocation) = args.compute_allocation {
+        if configured_settings.compute_allocation.is_some() {
+            ctx.term.write_line(
+                "Warning: Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_compute_allocation(compute_allocation);
+    }
+    if let Some(memory_allocation) = args.memory_allocation {
+        if configured_settings.memory_allocation.is_some() {
+            ctx.term.write_line(
+                "Warning: Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_memory_allocation(memory_allocation.as_u64());
+    }
+    if let Some(freezing_threshold) = args.freezing_threshold {
+        if configured_settings.freezing_threshold.is_some() {
+            ctx.term.write_line(
+                "Warning: Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_freezing_threshold(freezing_threshold);
+    }
+    if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
+        if configured_settings.reserved_cycles_limit.is_some() {
+            ctx.term.write_line(
+                "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_reserved_cycles_limit(reserved_cycles_limit);
+    }
+    if let Some(wasm_memory_limit) = args.wasm_memory_limit {
+        if configured_settings.wasm_memory_limit.is_some() {
+            ctx.term.write_line(
+                "Warning: Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
+    }
+    if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
+        if configured_settings.wasm_memory_threshold.is_some() {
+            ctx.term.write_line(
+                "Warning: Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
+    }
+    if let Some(log_visibility) = log_visibility {
+        update = update.with_log_visibility(log_visibility);
+    }
+    if let Some(environment_variables) = environment_variables {
+        update = update.with_environment_variables(environment_variables);
+    }
+    update.await?;
 
     Ok(())
 }
@@ -299,13 +270,10 @@ fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> 
     }
 }
 
-fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, CommandError> {
-    let (name, value) =
-        env_var
-            .split_once('=')
-            .ok_or(CommandError::InvalidEnvironmentVariable {
-                variable: env_var.to_owned(),
-            })?;
+fn environment_variable_parser(env_var: &str) -> Result<EnvironmentVariable, anyhow::Error> {
+    let (name, value) = env_var
+        .split_once('=')
+        .ok_or(anyhow::anyhow!("invalid environment variable: {}", env_var))?;
     Ok(EnvironmentVariable {
         name: name.to_owned(),
         value: value.to_owned(),
@@ -442,4 +410,36 @@ fn get_environment_variables(
     }
 
     None
+}
+
+fn maybe_warn_on_env_vars_change(
+    mut term: &Term,
+    configured_settings: &icp::canister::Settings,
+    environment_variables_opt: &EnvironmentVariableOpt,
+) -> Result<(), anyhow::Error> {
+    if let Some(configured_vars) = &configured_settings.environment_variables {
+        if let Some(to_add) = &environment_variables_opt.add_environment_variable {
+            for add_var in to_add {
+                if configured_vars.contains_key(&add_var.name) {
+                    writeln!(
+                        term,
+                        "Warning: Environment variable '{}' is already set in icp.yaml; this new value will be overridden on next settings sync",
+                        add_var.name
+                    )?;
+                }
+            }
+        }
+        if let Some(to_remove) = &environment_variables_opt.remove_environment_variable {
+            for remove_var in to_remove {
+                if configured_vars.contains_key(remove_var) {
+                    writeln!(
+                        term,
+                        "Warning: Environment variable '{}' is already set in icp.yaml; removing it here will be overridden on next settings sync",
+                        remove_var
+                    )?;
+                }
+            }
+        }
+    }
+    Ok(())
 }

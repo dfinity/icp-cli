@@ -17,24 +17,21 @@ use pocket_ic::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
-use std::{env::var, fs::read_to_string, process::ExitStatus, time::Duration};
+use std::{env::var, fs::read_to_string, io::Write, process::ExitStatus, time::Duration};
+use sysinfo::Pid;
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
 use crate::{
-    fs::{create_dir_all, remove_dir_all, remove_file},
+    fs::{create_dir_all, lock::LockError, remove_dir_all, remove_file},
     network::{
         Managed, NetworkDirectory, Port,
         RunNetworkError::NoPocketIcPath,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
-        directory::SaveNetworkDescriptorError,
-        lock::OpenFileForWriteLockError,
-        managed::{
-            descriptor::{AnotherProjectRunningOnSamePortError, ProjectNetworkAlreadyRunningError},
-            pocketic::{
-                CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface,
-                PocketIcInstance, default_instance_config, spawn_pocketic,
-            },
+        directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
+        managed::pocketic::{
+            CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
+            default_instance_config, spawn_pocketic,
         },
     },
     prelude::*,
@@ -45,38 +42,26 @@ pub async fn run_network(
     nd: NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    background: bool,
 ) -> Result<(), RunNetworkError> {
     let pocketic_path = PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
 
     nd.ensure_exists()?;
 
-    let mut network_lock = nd.open_network_lock_file()?;
-    let _network_claim = network_lock.try_acquire()?;
-
-    let mut port_lock;
-    let _port_claim;
-
-    if let Port::Fixed(port) = &config.gateway.port {
-        port_lock = Some(nd.open_port_lock_file(*port)?);
-        _port_claim = Some(port_lock.as_mut().unwrap().try_acquire()?);
-    }
-
-    run_pocketic(&pocketic_path, config, &nd, project_root, seed_accounts).await?;
+    run_pocketic(
+        &pocketic_path,
+        config,
+        &nd,
+        project_root,
+        seed_accounts,
+        background,
+    )
+    .await?;
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
-    #[snafu(transparent)]
-    ProjectNetworkAlreadyRunning {
-        source: ProjectNetworkAlreadyRunningError,
-    },
-
-    #[snafu(transparent)]
-    AnotherProjectRunningOnSamePort {
-        source: AnotherProjectRunningOnSamePortError,
-    },
-
     #[snafu(transparent)]
     CreateDirFailed { source: crate::fs::Error },
 
@@ -84,7 +69,7 @@ pub enum RunNetworkError {
     NoPocketIcPath,
 
     #[snafu(transparent)]
-    OpenFileForWriteLock { source: OpenFileForWriteLockError },
+    LockFileError { source: LockError },
 
     #[snafu(transparent)]
     RunPocketIc { source: RunPocketIcError },
@@ -96,64 +81,97 @@ async fn run_pocketic(
     nd: &NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    background: bool,
 ) -> Result<(), RunPocketIcError> {
-    eprintln!("PocketIC path: {pocketic_path}");
+    let network_root = nd.root()?;
+    // hold port_claim until the end of this function
+    let (mut child, port, _port_claim) = network_root
+        .with_write(async |root| -> Result<_, RunPocketIcError> {
+            let port_lock = if let Port::Fixed(port) = &config.gateway.port {
+                Some(nd.port(*port)?.into_write().await?)
+            } else {
+                None
+            };
+            let port_claim = port_lock
+                .as_ref()
+                .map(|lock| lock.claim_port())
+                .transpose()?;
+            eprintln!("PocketIC path: {pocketic_path}");
 
-    create_dir_all(&nd.structure.pocketic_dir()).context(CreateDirAllSnafu)?;
+            create_dir_all(&root.pocketic_dir()).context(CreateDirAllSnafu)?;
 
-    let port_file = nd.structure.pocketic_port_file();
-    if port_file.exists() {
-        remove_file(&port_file).context(RemoveDirAllSnafu)?;
-    }
-    eprintln!("Port file: {port_file}");
+            let port_file = root.pocketic_port_file();
+            if port_file.exists() {
+                remove_file(&port_file).context(RemoveDirAllSnafu)?;
+            }
+            eprintln!("Port file: {port_file}");
 
-    if nd.structure.state_dir().exists() {
-        remove_dir_all(&nd.structure.state_dir()).context(RemoveDirAllSnafu)?;
-    }
-    create_dir_all(&nd.structure.state_dir()).context(CreateDirAllSnafu)?;
+            if root.state_dir().exists() {
+                remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
+            }
+            create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
+            let mut child = spawn_pocketic(
+                pocketic_path,
+                &port_file,
+                &root.pocketic_stdout_file(),
+                &root.pocketic_stderr_file(),
+                background,
+            );
+            let pocketic_port = wait_for_port(&port_file, &mut child).await?;
+            eprintln!("PocketIC started on port {pocketic_port}");
+            let instance = initialize_pocketic(
+                pocketic_port,
+                &config.gateway.port,
+                &root.state_dir(),
+                seed_accounts,
+            )
+            .await?;
+            let port = instance.gateway_port;
 
-    let mut child = spawn_pocketic(pocketic_path, &port_file);
+            let gateway = NetworkDescriptorGatewayPort {
+                port,
+                fixed: matches!(config.gateway.port, Port::Fixed(_)),
+            };
+            let default_effective_canister_id = instance.effective_canister_id;
+            let descriptor = NetworkDescriptorModel {
+                id: Uuid::new_v4(),
+                project_dir: project_root.to_path_buf(),
+                network: nd.network_name.to_owned(),
+                network_dir: root.root_dir().to_path_buf(),
+                gateway,
+                default_effective_canister_id,
+                pocketic_url: instance.admin.base_url.to_string(),
+                pocketic_instance_id: instance.instance_id,
+                pid: Some(child.id().unwrap()),
+                root_key: instance.root_key,
+            };
 
-    let result = async {
-        let pocketic_port = wait_for_port(&port_file, &mut child).await?;
-        eprintln!("PocketIC started on port {pocketic_port}");
-        let instance = initialize_pocketic(
-            pocketic_port,
-            &config.gateway.port,
-            &nd.structure.state_dir(),
-            seed_accounts,
-        )
-        .await?;
-
-        let gateway = NetworkDescriptorGatewayPort {
-            port: instance.gateway_port,
-            fixed: matches!(config.gateway.port, Port::Fixed(_)),
-        };
-        let default_effective_canister_id = instance.effective_canister_id;
-        let descriptor = NetworkDescriptorModel {
-            id: Uuid::new_v4(),
-            project_dir: project_root.to_path_buf(),
-            network: nd.network_name.to_owned(),
-            network_dir: nd.structure.network_root.to_path_buf(),
-            gateway,
-            default_effective_canister_id,
-            pocketic_url: instance.admin.base_url.to_string(),
-            pocketic_instance_id: instance.instance_id,
-            pid: Some(child.id().unwrap()),
-            root_key: instance.root_key,
-        };
-
-        let _cleaner = nd.save_network_descriptors(&descriptor)?;
+            save_network_descriptors(
+                root,
+                port_lock.as_ref().map(|lock| lock.as_ref()),
+                &descriptor,
+            )
+            .await?;
+            Ok((child, port, port_claim))
+        })
+        .await??;
+    if background {
+        // Save the PID of the main `pocket-ic` process
+        // This is used by the `icp network stop` command to find and kill the process.
+        nd.save_background_network_runner_pid(Pid::from(child.id().unwrap() as usize))
+            .await?;
+        eprintln!("To stop the network, run `icp network stop`");
+    } else {
         eprintln!("Press Ctrl-C to exit.");
+
         let _ = wait_for_shutdown(&mut child).await;
-        Ok(())
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+
+        let _ = nd.cleanup_project_network_descriptor().await;
+        let _ = nd.cleanup_port_descriptor(Some(port)).await;
     }
-    .await;
-
-    let _ = child.kill().await;
-    let _ = child.wait().await;
-
-    result
+    Ok(())
 }
 
 #[derive(Debug, Snafu)]
@@ -175,21 +193,40 @@ pub enum RunPocketIcError {
 
     #[snafu(transparent)]
     WaitForPort { source: WaitForPortError },
+
+    #[snafu(transparent)]
+    LockFile { source: LockError },
+
+    #[snafu(transparent)]
+    ClaimPort { source: ClaimPortError },
+
+    #[snafu(transparent)]
+    SavePid {
+        source: crate::network::directory::SavePidError,
+    },
 }
 
+#[derive(Debug)]
 pub enum ShutdownReason {
     CtrlC,
     ChildExited,
 }
 
+/// Write to stderr, ignoring any errors. This is safe to use even when stderr is closed
+/// (e.g., in a background process after the parent exits), unlike eprintln! which panics.
+fn safe_eprintln(msg: &str) {
+    let _ = std::io::stderr().write_all(msg.as_bytes());
+    let _ = std::io::stderr().write_all(b"\n");
+}
+
 async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     select!(
         _ = ctrl_c() => {
-            eprintln!("Received Ctrl-C, shutting down PocketIC...");
+            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         res = notice_child_exit(child) => {
-            eprintln!("PocketIC exited with status: {:?}", res.status);
+            safe_eprintln(&format!("PocketIC exited with status: {:?}", res.status));
             ShutdownReason::ChildExited
         }
     )

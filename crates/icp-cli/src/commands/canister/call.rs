@@ -1,137 +1,65 @@
-use std::io::{self, Write};
-
+use anyhow::Context as _;
 use candid::IDLArgs;
 use clap::Args;
 use dialoguer::console::Term;
-use icp::{agent, identity, network};
+use icp::context::Context;
+use std::io::{self, Write};
 
-use crate::{
-    commands::{Context, Mode},
-    options::{EnvironmentOpt, IdentityOpt},
-    store_id::{Key, LookupError},
-};
+use crate::commands::args;
 
 #[derive(Args, Debug)]
-pub struct CallArgs {
-    /// Name of canister to call to
-    pub name: String,
+pub(crate) struct CallArgs {
+    #[command(flatten)]
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// Name of canister method to call into
-    pub method: String,
+    pub(crate) method: String,
 
     /// String representation of canister call arguments
-    pub args: String,
-
-    #[command(flatten)]
-    identity: IdentityOpt,
-
-    #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) args: String,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
+pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
+    let selections = args.cmd_args.selections();
 
-    #[error(transparent)]
-    Identity(#[from] identity::LoadError),
+    let agent = ctx
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
+    // Parse candid arguments
+    let cargs =
+        candid_parser::parse_idl_args(&args.args).context("failed to parse candid arguments")?;
 
-    #[error(transparent)]
-    Access(#[from] network::AccessError),
+    let res = agent
+        .update(&cid, &args.method)
+        .with_arg(
+            cargs
+                .to_bytes()
+                .context("failed to serialize candid arguments")?,
+        )
+        .await?;
 
-    #[error(transparent)]
-    Agent(#[from] agent::CreateError),
+    let ret = IDLArgs::from_bytes(&res[..])?;
 
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
-
-    #[error(transparent)]
-    Lookup(#[from] LookupError),
-
-    #[error("failed to parse candid arguments")]
-    DecodeArgsError(#[from] candid_parser::Error),
-
-    #[error("failed to serialize candid arguments")]
-    Candid(#[from] candid::Error),
-
-    #[error("failed to print candid return value")]
-    WriteTermError(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Call(#[from] ic_agent::AgentError),
-}
-
-pub async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
-
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
-
-            // Load identity
-            let id = ctx.identity.load(args.identity.clone().into()).await?;
-
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
-
-            // Access network
-            let access = ctx.network.access(&env.network).await?;
-
-            // Agent
-            let agent = ctx.agent.create(id, &access.url).await?;
-
-            if let Some(k) = access.root_key {
-                agent.set_root_key(k);
-            }
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
-            })?;
-
-            // Parse candid arguments
-            let cargs = candid_parser::parse_idl_args(&args.args)?;
-
-            let res = agent
-                .update(&cid, &args.method)
-                .with_arg(cargs.to_bytes()?)
-                .await?;
-
-            let ret = IDLArgs::from_bytes(&res[..])?;
-
-            print_candid_for_term(&mut Term::buffered_stdout(), &ret)?;
-        }
-    }
+    print_candid_for_term(&mut Term::buffered_stdout(), &ret)
+        .context("failed to print candid return value")?;
 
     Ok(())
 }
 
 /// Pretty-prints IDLArgs detecting the terminal's width to avoid the 80-column default.
-pub fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Result<()> {
+pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Result<()> {
     if term.is_term() {
         let width = term.size().1 as usize;
         let pp_args = candid_parser::pretty::candid::value::pp_args(args);

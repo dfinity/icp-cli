@@ -19,12 +19,12 @@ fn single_canister_project() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -36,7 +36,7 @@ fn single_canister_project() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -84,7 +84,7 @@ fn multi_canister_project() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -133,7 +133,7 @@ fn glob_path() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -189,7 +189,7 @@ fn glob_path() {
 //     // Invoke build
 //     ctx.icp()
 //         .current_dir(project_dir)
-//         .args(["deploy", "--subnet-id", common::SUBNET_ID])
+//         .args(["deploy", "--subnet", common::SUBNET_ID])
 //         .assert()
 //         .failure()
 //         .stderr(eq("Error: cannot redefine the 'ic' network; the network path 'networks/ic' is invalid").trim());

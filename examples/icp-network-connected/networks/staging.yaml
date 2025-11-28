@@ -1,5 +1,7 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.0/docs/schemas/network-yaml-schema.json
+
 # This "staging" network is an alias for mainnet
 # "icp deploy --network staging" would deploy a second set of canisters to mainnet
-
+name: staging
 mode: connected
 url: https://icp0.io

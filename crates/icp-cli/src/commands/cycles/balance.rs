@@ -1,13 +1,31 @@
-use crate::{commands::Context, commands::token};
+use icp::context::Context;
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Balance(#[from] token::balance::CommandError),
-}
+use crate::commands::token;
+use crate::operations::token::balance::get_balance;
 
-pub async fn exec(ctx: &Context, args: &token::balance::BalanceArgs) -> Result<(), CommandError> {
-    token::balance::exec(ctx, "cycles", args)
-        .await
-        .map_err(Into::into)
+pub(crate) async fn exec(
+    ctx: &Context,
+    args: &token::balance::BalanceArgs,
+) -> Result<(), anyhow::Error> {
+    let selections = args.token_command_args.selections();
+
+    // Agent
+    let agent = ctx
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+
+    // Get the balance from the ledger
+    let balance_info = get_balance(&agent, "cycles").await?;
+
+    // Output information
+    let _ = ctx.term.write_line(&format!(
+        "Balance: {} {}",
+        balance_info.amount, balance_info.symbol
+    ));
+
+    Ok(())
 }

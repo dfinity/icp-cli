@@ -1,24 +1,28 @@
 use candid::Principal;
-use icp::prelude::*;
+use icp::{prelude::*, project::DEFAULT_LOCAL_ENVIRONMENT_NAME};
 
 use crate::common::TestContext;
 
-pub struct Client<'a> {
+pub(crate) struct Client<'a> {
     ctx: &'a TestContext,
     current_dir: PathBuf,
     environment: String,
 }
 
 impl<'a> Client<'a> {
-    pub fn new(ctx: &'a TestContext, current_dir: PathBuf, environment: Option<String>) -> Self {
+    pub(crate) fn new(
+        ctx: &'a TestContext,
+        current_dir: PathBuf,
+        environment: Option<String>,
+    ) -> Self {
         Self {
             ctx,
             current_dir,
-            environment: environment.unwrap_or("local".to_string()),
+            environment: environment.unwrap_or(DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string()),
         }
     }
 
-    pub fn active_principal(&self) -> Principal {
+    pub(crate) fn active_principal(&self) -> Principal {
         let stdout = String::from_utf8(
             self.ctx
                 .icp()
@@ -33,7 +37,7 @@ impl<'a> Client<'a> {
         Principal::from_text(stdout.trim()).unwrap()
     }
 
-    pub fn create_identity(&self, name: &str) {
+    pub(crate) fn create_identity(&self, name: &str) {
         self.ctx
             .icp()
             .current_dir(&self.current_dir)
@@ -42,7 +46,7 @@ impl<'a> Client<'a> {
             .success();
     }
 
-    pub fn get_principal(&self, name: &str) -> Principal {
+    pub(crate) fn get_principal(&self, name: &str) -> Principal {
         let stdout = String::from_utf8(
             self.ctx
                 .icp()
@@ -57,7 +61,7 @@ impl<'a> Client<'a> {
         Principal::from_text(stdout.trim()).unwrap()
     }
 
-    pub fn use_identity(&self, name: &str) {
+    pub(crate) fn use_identity(&self, name: &str) {
         self.ctx
             .icp()
             .current_dir(&self.current_dir)
@@ -66,14 +70,14 @@ impl<'a> Client<'a> {
             .success();
     }
 
-    pub fn use_new_random_identity(&self) -> Principal {
+    pub(crate) fn use_new_random_identity(&self) -> Principal {
         let random_name = format!("alice-{}", rand::random::<u64>());
         self.create_identity(&random_name);
         self.use_identity(&random_name);
         self.active_principal()
     }
 
-    pub fn mint_cycles(&self, amount: u128) {
+    pub(crate) fn mint_cycles(&self, amount: u128) {
         self.ctx
             .icp()
             .current_dir(&self.current_dir)
@@ -89,7 +93,7 @@ impl<'a> Client<'a> {
             .success();
     }
 
-    pub fn get_canister_id(&self, canister_name: &str) -> Principal {
+    pub(crate) fn get_canister_id(&self, canister_name: &str) -> Principal {
         let output = self
             .ctx
             .icp()

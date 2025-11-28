@@ -1,14 +1,16 @@
-canister:
-  name: my-canister
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.0/docs/schemas/icp-yaml-schema.json
 
-  build:
-    steps:
-      - type: pre-built
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+canisters:
+  - name: my-canister
 
-  settings:
-    environment_variables:
-      var-1: value-1
-      var-2: value-2
-      var-3: value-3
+    build:
+      steps:
+        - type: pre-built
+          path: ../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+    settings:
+      environment_variables:
+        var-1: value-1
+        var-2: value-2
+        var-3: value-3

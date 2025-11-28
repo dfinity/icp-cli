@@ -4,8 +4,21 @@
 //! used by the ICP CLI tool. It handles both standard system directories and
 //! custom overrides, primarily for storing user data like identities and cache.
 
-use crate::prelude::*;
+use crate::{
+    fs::lock::LockError,
+    identity::{IdentityDirectories, IdentityPaths},
+    prelude::*,
+};
 use directories::ProjectDirs;
+
+/// Trait for accessing ICP CLI directories.
+pub trait Access: Sync + Send {
+    /// Returns the path to the identity directory.
+    fn identity(&self) -> Result<IdentityDirectories, LockError>;
+
+    /// Returns the path to the port descriptors cache directory.
+    fn port_descriptor(&self) -> PathBuf;
+}
 
 /// Inner structure holding data and cache directory paths.
 ///
@@ -117,18 +130,38 @@ impl Directories {
             Self::Overridden(path) => path.clone(),
         }
     }
+}
 
+/// Implementation of Access trait for Directories.
+impl Access for Directories {
     /// Returns the path to the identity directory.
     ///
     /// This directory stores user identity files, keys, and related data.
-    pub fn identity(&self) -> PathBuf {
-        self.data().join("identity")
+    fn identity(&self) -> Result<IdentityDirectories, LockError> {
+        IdentityPaths::new(self.data().join("identity"))
     }
 
     /// Returns the path to the port descriptors cache directory.
     ///
     /// This directory caches information about network ports used by canisters.
-    pub fn port_descriptor(&self) -> PathBuf {
+    fn port_descriptor(&self) -> PathBuf {
         self.cache().join("port-descriptors")
+    }
+}
+
+#[cfg(test)]
+/// Unimplemented mock implementation of `Access`.
+/// All methods panic with `unimplemented!()` when called.
+#[derive(Debug, Clone)]
+pub struct UnimplementedMockDirs;
+
+#[cfg(test)]
+impl Access for UnimplementedMockDirs {
+    fn identity(&self) -> Result<IdentityDirectories, LockError> {
+        unimplemented!("UnimplementedMockDirs::identity")
+    }
+
+    fn port_descriptor(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::port_descriptor")
     }
 }

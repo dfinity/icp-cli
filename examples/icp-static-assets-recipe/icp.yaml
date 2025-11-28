@@ -1,7 +1,9 @@
-canister:
-  name: my-canister
-  recipe:
-    type: "@dfinity/asset-canister"
-    configuration:
-      version: 0.29.2
-      dir: www
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.0/docs/schemas/icp-yaml-schema.json
+
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/asset-canister"
+      configuration:
+        version: 0.29.2
+        dir: www

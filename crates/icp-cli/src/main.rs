@@ -1,21 +1,8 @@
-use std::{env::current_dir, sync::Arc};
-
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
-use commands::{Command, Context};
+use commands::Command;
 use console::Term;
-use icp::{
-    Directories, agent,
-    canister::{
-        self, assets::Assets, build::Builder, prebuilt::Prebuilt, recipe::handlebars::Handlebars,
-        script::Script, sync::Syncer,
-    },
-    identity,
-    manifest::{self, Locate, LocateError},
-    network,
-    prelude::*,
-    project,
-};
+use icp::prelude::*;
 use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
@@ -24,20 +11,16 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    commands::Mode,
     logging::{TermWriter, debug_layer},
-    store_artifact::ArtifactStore,
-    store_id::IdStore,
     telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
 
 mod commands;
 mod logging;
+pub(crate) mod operations;
 mod options;
 mod progress;
-mod store_artifact;
-mod store_id;
 mod telemetry;
 mod version;
 
@@ -47,15 +30,9 @@ struct Cli {
     #[arg(
         long,
         global = true,
-        help = "Directory to use as your project base directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
+        help = "Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
     )]
-    project_dir: Option<PathBuf>,
-
-    #[arg(long, default_value = ".icp/ids.json")]
-    id_store: PathBuf,
-
-    #[arg(long, default_value = ".icp/artifacts")]
-    artifact_store: PathBuf,
+    project_root_override: Option<PathBuf>,
 
     /// Enable debug logging
     #[arg(long, default_value = "false", global = true)]
@@ -131,107 +108,6 @@ async fn main() -> Result<(), Error> {
     // This enables the logging and telemetry layers we configured above
     set_global_default(reg)?;
 
-    // Setup project directory structure
-    let dirs = Directories::new()?;
-
-    // Canister ID Store
-    let ids = IdStore::new(&cli.id_store);
-
-    // Canister Artifact Store (wasm)
-    let artifacts = ArtifactStore::new(&cli.artifact_store);
-
-    // Prepare http client
-    let http_client = reqwest::Client::new();
-
-    // Recipes
-    let recipe = Arc::new(Handlebars { http_client });
-
-    // Project Manifest Locator
-    let mloc = Arc::new(manifest::Locator::new(
-        current_dir()?.try_into()?, // cwd
-        cli.project_dir,            // dir
-    ));
-
-    // Infer execution mode
-    let mode = match mloc.locate() {
-        // Project
-        Ok(dir) => Mode::Project(dir),
-
-        // Global
-        Err(LocateError::NotFound(_)) => Mode::Global,
-
-        // Failure
-        Err(LocateError::Unexpected(err)) => panic!("{err}"),
-    };
-
-    // Canister loader
-    let cload = Arc::new(canister::PathLoader);
-
-    // Builders/Syncers
-    let cprebuilt = Arc::new(Prebuilt);
-    let cassets = Arc::new(Assets);
-    let cscript = Arc::new(Script);
-
-    // Canister builder
-    let builder = Arc::new(Builder {
-        prebuilt: cprebuilt.to_owned(),
-        script: cscript.to_owned(),
-    });
-
-    // Canister syncer
-    let syncer = Arc::new(Syncer {
-        assets: cassets.to_owned(),
-        script: cscript.to_owned(),
-    });
-
-    // Project Loaders
-    let ploaders = icp::ProjectLoaders {
-        path: Arc::new(project::PathLoader),
-        manifest: Arc::new(project::ManifestLoader {
-            locate: mloc.clone(),
-            recipe,
-            canister: cload,
-        }),
-    };
-
-    let pload = icp::Loader {
-        locate: mloc.clone(),
-        project: ploaders,
-    };
-
-    let pload = icp::Lazy::new(pload);
-    let pload = Arc::new(pload);
-
-    // Identity loader
-    let idload = Arc::new(identity::Loader {
-        dir: dirs.identity(),
-    });
-
-    // Network accessor
-    let netaccess = Arc::new(network::Accessor {
-        project: mloc.clone(),
-        descriptors: dirs.port_descriptor(),
-    });
-
-    // Agent creator
-    let agent_creator = Arc::new(agent::Creator);
-
-    // Setup environment
-    let ctx = Context {
-        mode,
-        term,
-        dirs,
-        ids,
-        artifacts,
-        project: pload,
-        identity: idload,
-        network: netaccess,
-        agent: agent_creator,
-        builder,
-        syncer,
-        debug: cli.debug,
-    };
-
     // Execute the command within a span that includes version and SHA context
     let trace_span = trace_span!(
         "icp-cli",
@@ -245,6 +121,8 @@ async fn main() -> Result<(), Error> {
         command = ?command,
         "Starting icp-cli"
     );
+
+    let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug)?;
 
     match command {
         // Build
@@ -301,6 +179,12 @@ async fn main() -> Result<(), Error> {
 
                 commands::canister::settings::Command::Update(args) => {
                     commands::canister::settings::update::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::settings::Command::Sync(args) => {
+                    commands::canister::settings::sync::exec(&ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
@@ -455,6 +339,12 @@ async fn main() -> Result<(), Error> {
 
             commands::network::Command::Run(args) => {
                 commands::network::run::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::network::Command::Stop(args) => {
+                commands::network::stop::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }

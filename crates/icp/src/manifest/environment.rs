@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
-use crate::canister::Settings;
+use crate::{
+    canister::Settings,
+    project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_LOCAL_NETWORK_NAME},
+};
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 pub struct EnvironmentInner {
     pub name: String,
     pub network: Option<String>,
@@ -30,16 +33,20 @@ pub enum CanisterSelection {
 
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
 pub struct EnvironmentManifest {
-    // environment name
+    // The environment name
     pub name: String,
 
-    // target network for canister deployment
+    /// The target network for canister deployment.
+    /// Defaults to the `local` network if not specified
+    #[schemars(with = "Option<String>")]
     pub network: String,
 
-    // canisters the environment should contain
+    /// An optional list of the canisters to be included in this environments.
+    /// Defaults to all the canisters if not specified.
+    #[schemars(with = "Option<Vec<String>>")]
     pub canisters: CanisterSelection,
 
-    // canister settings overrides
+    /// Override the canister settings for this environment
     pub settings: Option<HashMap<String, Settings>>,
 }
 
@@ -64,12 +71,12 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
         } = v;
 
         // Name
-        if name == "local" {
+        if name == DEFAULT_LOCAL_ENVIRONMENT_NAME {
             return Err(ParseError::OverrideLocal);
         }
 
         // Network
-        let network = network.unwrap_or("local".to_string());
+        let network = network.unwrap_or(DEFAULT_LOCAL_NETWORK_NAME.to_string());
 
         // Canisters
         let canisters = match canisters {

@@ -1,6 +1,7 @@
 use indoc::formatdoc;
 use serde::Deserialize;
 use std::{str::FromStr, string::FromUtf8Error};
+use tracing::debug;
 
 use crate::{
     canister::{
@@ -9,10 +10,7 @@ use crate::{
         sync,
     },
     fs::read,
-    manifest::{
-        canister::Instructions,
-        recipe::{Recipe, RecipeType},
-    },
+    manifest::recipe::{Recipe, RecipeType},
     prelude::*,
 };
 use async_trait::async_trait;
@@ -129,6 +127,8 @@ impl Resolve for Handlebars {
                     source: HandlebarsError::UrlParse { source: err },
                 })?;
 
+                debug!("Requesting template from: {u}");
+
                 let resp = self
                     .http_client
                     .execute(Request::new(Method::GET, u))
@@ -169,6 +169,16 @@ impl Resolve for Handlebars {
         // Reject unset template variables
         reg.set_strict_mode(true);
 
+        debug!(
+            "{}",
+            formatdoc! {r#"
+            Loaded template:
+            ------
+            {tmpl}
+            ------
+        "#}
+        );
+
         // Render the template to YAML
         let out = reg
             .render_template(&tmpl, &recipe.configuration)
@@ -190,11 +200,8 @@ impl Resolve for Handlebars {
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        let insts = match insts {
-            Ok(helper) => Instructions::BuildSync {
-                build: helper.build,
-                sync: helper.sync,
-            },
+        match insts {
+            Ok(helper) => Ok((helper.build, helper.sync)),
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
@@ -206,19 +213,7 @@ impl Resolve for Handlebars {
                 ------
             "#, recipe.recipe_type}
             ),
-        };
-
-        let (build, sync) = match insts {
-            // Supported
-            Instructions::BuildSync { build, sync } => (build, sync),
-
-            // Unsupported
-            Instructions::Recipe { .. } => {
-                panic!("recipe within a recipe is not supported")
-            }
-        };
-
-        Ok((build, sync))
+        }
     }
 }
 

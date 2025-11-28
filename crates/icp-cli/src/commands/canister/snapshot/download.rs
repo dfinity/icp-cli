@@ -1,20 +1,16 @@
 use clap::Args;
 use icp::{identity, prelude::PathBuf};
 
-use crate::commands::canister::snapshot::{SnapshotId, directory_parser};
-use crate::commands::{Context, Mode};
-use crate::options::{EnvironmentOpt, IdentityOpt};
+use crate::commands::{
+    args,
+    canister::snapshot::{SnapshotId, directory_parser},
+};
+use icp::context::Context;
 
 #[derive(Debug, Args)]
 pub struct DownloadArgs {
-    /// The name of the canister within the current project
-    name: String,
-
     #[command(flatten)]
-    identity: IdentityOpt,
-
-    #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// The ID of the snapshot to download.
     snapshot: SnapshotId,
@@ -41,14 +37,6 @@ pub enum CommandError {
     Identity(#[from] identity::LoadError),
 }
 
-pub async fn exec(ctx: &Context, _args: &DownloadArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
-
-        Mode::Project(_) => {
-            unimplemented!("project mode is not implemented yet");
-        }
-    }
+pub async fn exec(_ctx: &Context, _args: &DownloadArgs) -> Result<(), CommandError> {
+    unimplemented!("project mode is not implemented yet");
 }

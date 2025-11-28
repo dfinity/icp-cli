@@ -29,12 +29,12 @@ fn canister_settings_update_controllers() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -59,7 +59,7 @@ fn canister_settings_update_controllers() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -333,12 +333,12 @@ fn canister_settings_update_log_visibility() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -363,7 +363,7 @@ fn canister_settings_update_log_visibility() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -649,12 +649,12 @@ fn canister_settings_update_miscellaneous() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -678,7 +678,7 @@ fn canister_settings_update_miscellaneous() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--cycles",
             &format!("{}", 120 * TRILLION), // 120 TCYCLES because compute allocation is expensive
@@ -772,12 +772,12 @@ fn canister_settings_update_environment_variables() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -801,7 +801,7 @@ fn canister_settings_update_environment_variables() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "my-environment",
@@ -943,4 +943,188 @@ fn canister_settings_update_environment_variables() {
                 .and(contains("Name: var2, Value: value2").not())
                 .and(contains("Name: var3, Value: value3").not()),
         );
+}
+
+#[test]
+fn canister_settings_sync() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "my-network");
+
+    // Deploy project
+    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "my-environment",
+        ])
+        .assert()
+        .success();
+
+    // Test helpers for syncing settings and checking wasm memory limit
+    fn sync(ctx: &TestContext, project_dir: &Path) {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "settings",
+                "sync",
+                "my-canister",
+                "--environment",
+                "my-environment",
+            ])
+            .assert()
+            .success();
+    }
+
+    fn confirm_wasm_memory_limit(ctx: &TestContext, project_dir: &Path, expected_limit: &str) {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "settings",
+                "show",
+                "my-canister",
+                "--environment",
+                "my-environment",
+            ])
+            .assert()
+            .success()
+            .stderr(contains(format!("Wasm memory limit: {}", expected_limit)));
+    }
+
+    // Initial value
+    confirm_wasm_memory_limit(&ctx, &project_dir, "3_221_225_472");
+
+    let pm_with_empty_settings = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            settings:
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    let pm_with_empty_wasm_limit = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              wasm_memory_limit: ~
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    let pm_with_wasm_limit_4gb = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              wasm_memory_limit: 4000000000
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    // Syncing a nonexistent setting should not override the default
+    write_string(&project_dir.join("icp.yaml"), &pm_with_empty_settings)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "3_221_225_472");
+    write_string(&project_dir.join("icp.yaml"), &pm_with_empty_wasm_limit)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "3_221_225_472");
+    // Setting wasm memory limit in the manifest and syncing should update the canister settings
+    write_string(&project_dir.join("icp.yaml"), &pm_with_wasm_limit_4gb)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "4_000_000_000");
+    // Existing settings should be overridden on sync
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "my-environment",
+            "--wasm-memory-limit",
+            "5GiB",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Wasm memory limit is already set in icp.yaml"));
+    confirm_wasm_memory_limit(&ctx, &project_dir, "5_368_709_120");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "4_000_000_000");
+    // Syncing a nonexistent setting should not override a previously set setting
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "4_000_000_000");
+    write_string(&project_dir.join("icp.yaml"), &pm_with_empty_settings)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "4_000_000_000");
+    write_string(&project_dir.join("icp.yaml"), &pm_with_empty_wasm_limit)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "4_000_000_000");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "my-environment",
+            "--wasm-memory-limit",
+            "5GiB",
+        ])
+        .assert()
+        .success();
+    sync(&ctx, &project_dir);
+    confirm_wasm_memory_limit(&ctx, &project_dir, "5_368_709_120");
 }

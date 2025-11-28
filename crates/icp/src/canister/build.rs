@@ -21,8 +21,8 @@ use crate::{
 /// For example:
 ///
 /// ```yaml
-/// type: rust
-/// package: my_canister
+/// type: script
+/// command: do_something.sh
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -105,5 +105,23 @@ impl Build for Builder {
             build::Step::Prebuilt(_) => self.prebuilt.build(step, params, stdio).await,
             build::Step::Script(_) => self.script.build(step, params, stdio).await,
         }
+    }
+}
+
+#[cfg(test)]
+/// Unimplemented mock implementation of `Build`.
+/// All methods panic with `unimplemented!()` when called.
+pub struct UnimplementedMockBuilder;
+
+#[cfg(test)]
+#[async_trait]
+impl Build for UnimplementedMockBuilder {
+    async fn build(
+        &self,
+        _step: &build::Step,
+        _params: &Params,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError> {
+        unimplemented!("UnimplementedMockBuilder::build")
     }
 }

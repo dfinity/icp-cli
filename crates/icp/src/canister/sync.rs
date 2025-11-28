@@ -47,8 +47,7 @@ impl fmt::Display for Step {
     }
 }
 
-/// Describes how the canister should be built into WebAssembly,
-/// including the adapters and build steps responsible for the build.
+/// Describes how to synchronize the canister state after deployment.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Steps {
     pub steps: Vec<Step>,
@@ -97,5 +96,24 @@ impl Synchronize for Syncer {
             sync::Step::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
             sync::Step::Script(_) => self.script.sync(step, params, agent, stdio).await,
         }
+    }
+}
+
+#[cfg(test)]
+/// Unimplemented mock implementation of `Synchronize`.
+/// All methods panic with `unimplemented!()` when called.
+pub struct UnimplementedMockSyncer;
+
+#[cfg(test)]
+#[async_trait]
+impl Synchronize for UnimplementedMockSyncer {
+    async fn sync(
+        &self,
+        _step: &sync::Step,
+        _params: &Params,
+        _agent: &Agent,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
+        unimplemented!("UnimplementedMockSyncer::sync")
     }
 }

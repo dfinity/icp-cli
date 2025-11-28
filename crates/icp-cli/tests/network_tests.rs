@@ -10,11 +10,15 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 use serial_test::file_serial;
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
 };
-use icp::{fs::write_string, prelude::*};
+use icp::{
+    fs::{read_to_string, write_string},
+    prelude::*,
+};
 
 mod common;
 
@@ -27,11 +31,11 @@ fn network_same_port() {
 
     // Project manifest
     let pm = indoc! {r#"
-        network:
-          name: my-network
-          mode: managed
-          gateway:
-            port: 8080
+        networks:
+          - name: my-network
+            mode: managed
+            gateway:
+              port: 8080
     "#};
 
     // write manifest to project a
@@ -61,9 +65,10 @@ fn network_same_port() {
         .args(["network", "run", "my-network"])
         .assert()
         .failure()
-        .stderr(contains(
-            "Error: port 8080 is in use by the my-network network of the project at",
-        ));
+        .stderr(contains(format!(
+            "Error: port 8080 is in use by the my-network network of the project at '{}'",
+            project_dir_a.canonicalize().unwrap().display()
+        )));
 }
 
 #[test]
@@ -76,11 +81,11 @@ fn two_projects_different_fixed_ports() {
     write_string(
         &project_dir_a.join("icp.yaml"), // path
         indoc! {r#"
-            network:
-              name: my-network
-              mode: managed
-              gateway:
-                port: 8001
+            networks:
+              - name: my-network
+                mode: managed
+                gateway:
+                  port: 8001
         "#}, // contents
     )
     .expect("failed to write project manifest");
@@ -92,11 +97,11 @@ fn two_projects_different_fixed_ports() {
     write_string(
         &project_dir_b.join("icp.yaml"), // path
         indoc! {r#"
-            network:
-              name: my-network
-              mode: managed
-              gateway:
-                port: 8002
+            networks:
+              - name: my-network
+                mode: managed
+                gateway:
+                  port: 8002
         "#}, // contents
     )
     .expect("failed to write project manifest");
@@ -146,12 +151,12 @@ fn deploy_to_other_projects_network() {
 
     // Connect to Project A's network
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
 
         networks:
           - name: network-a
@@ -177,7 +182,7 @@ fn deploy_to_other_projects_network() {
         .current_dir(&projb)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "environment-1",
@@ -190,7 +195,7 @@ fn deploy_to_other_projects_network() {
         .current_dir(&projb)
         .args([
             "deploy",
-            "--subnet-id",
+            "--subnet",
             common::SUBNET_ID,
             "--environment",
             "environment-1",
@@ -291,6 +296,91 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
+}
+
+#[tokio::test]
+async fn network_run_and_stop_background() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // Start network in background and verify we can see child process output
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "run", "my-network", "--background"])
+        .assert()
+        .success()
+        .stderr(contains("Created instance with id")); // part of network start output
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
+
+    // Verify PID file was written
+    let pid_file_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("networks")
+        .join("my-network")
+        .join("background_network_runner.pid");
+    assert!(
+        pid_file_path.exists(),
+        "PID file should exist at {:?}",
+        pid_file_path
+    );
+
+    let pid_contents = read_to_string(&pid_file_path).expect("Failed to read PID file");
+    let background_pocketic_pid: Pid = pid_contents
+        .trim()
+        .parse()
+        .expect("PID file should contain a valid process ID");
+
+    // Verify network is healthy with agent.status()
+    let agent = ic_agent::Agent::builder()
+        .with_url(format!("http://127.0.0.1:{}", network.gateway_port))
+        .build()
+        .expect("Failed to build agent");
+
+    let status = agent.status().await.expect("Failed to get network status");
+    assert!(
+        matches!(&status.replica_health_status, Some(health) if health == "healthy"),
+        "Network should be healthy"
+    );
+
+    // Stop the network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "stop", "my-network"])
+        .assert()
+        .success()
+        .stdout(contains(format!(
+            "Stopping background network (PID: {})",
+            background_pocketic_pid
+        )))
+        .stdout(contains("Network stopped successfully"));
+
+    // Verify PID file is removed
+    assert!(
+        !pid_file_path.exists(),
+        "PID file should be removed after stopping"
+    );
+
+    // Verify pocketic process is no longer running
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[background_pocketic_pid]), true);
+    assert!(
+        system.process(background_pocketic_pid).is_none(),
+        "Process should no longer be running"
+    );
+
+    // Verify network is no longer reachable
+    let status_result = agent.status().await;
+    assert!(
+        status_result.is_err(),
+        "Network should not be reachable after stopping"
+    );
 }
 
 #[tokio::test]

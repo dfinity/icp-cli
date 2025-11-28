@@ -6,6 +6,7 @@ use pocket_ic::common::rest::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
+use std::process::Stdio;
 use time::OffsetDateTime;
 
 use crate::prelude::*;
@@ -36,8 +37,11 @@ pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
             // Same as above
             ii: Some(IcpFeaturesConfig::DefaultConfig),
 
-            // The rest of the features are disabled by default
-            ..Default::default()
+            // The rest of the features are disabled for now
+            nns_governance: None,
+            sns: None,
+            nns_ui: None,
+            // do not use ..default() here so we notice if new features are available
         }),
 
         subnet_config_set: (SubnetConfigSet {
@@ -66,14 +70,31 @@ pub struct PocketIcInstance {
     pub root_key: String,
 }
 
-pub fn spawn_pocketic(pocketic_path: &Path, port_file: &Path) -> tokio::process::Child {
+pub fn spawn_pocketic(
+    pocketic_path: &Path,
+    port_file: &Path,
+    stdout_file: &Path,
+    stderr_file: &Path,
+    background: bool,
+) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new(pocketic_path);
     cmd.arg("--port-file");
     cmd.arg(port_file.as_os_str());
     cmd.args(["--ttl", "2592000", "--log-levels", "error"]);
 
-    cmd.stdout(std::process::Stdio::inherit());
-    cmd.stderr(std::process::Stdio::inherit());
+    if background {
+        eprintln!("For background mode, PocketIC output will be redirected:");
+        eprintln!("  stdout: {}", stdout_file);
+        eprintln!("  stderr: {}", stderr_file);
+        let stdout = std::fs::File::create(stdout_file).expect("Failed to create stdout file.");
+        let stderr = std::fs::File::create(stderr_file).expect("Failed to create stderr file.");
+        cmd.stdout(Stdio::from(stdout));
+        cmd.stderr(Stdio::from(stderr));
+    } else {
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
+    }
+
     #[cfg(unix)]
     {
         cmd.process_group(0);

@@ -1,7 +1,11 @@
-canister:
-  name: my-canister
-  recipe:
-    type: "@dfinity/motoko" 
-    configuration:
-      main: src/main.mo
-      args: --incremental-gc
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.0/docs/schemas/icp-yaml-schema.json
+
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/motoko"
+      configuration:
+        main: src/main.mo
+        args: --incremental-gc
+        # optional
+        candid: greeter.did

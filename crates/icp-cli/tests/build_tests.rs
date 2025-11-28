@@ -22,12 +22,12 @@ fn build_adapter_script_single() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -39,7 +39,7 @@ fn build_adapter_script_single() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -57,16 +57,16 @@ fn build_adapter_script_multiple() {
 
     // Project manifest
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: echo "before"
-              - type: script
-                command: cp {path} "$ICP_WASM_OUTPUT_PATH"
-              - type: script
-                command: echo "after"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "before"
+                - type: script
+                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                - type: script
+                  command: echo "after"
     "#};
 
     write_string(
@@ -78,7 +78,7 @@ fn build_adapter_script_multiple() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 }
@@ -119,29 +119,26 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Build output for canister my-canister:
-
-        Building: step 1 of 3 (script)
-        echo "success 1"
-        success 1
-
-        Building: step 2 of 3 (script)
-        echo "success 2"
-        success 2
-
-        Building: step 3 of 3 (script)
-        for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1
-        failing build step 1
-        failing build step 2
-        failing build step 3
-        failing build step 4
-        failing build step 5
+        [my-canister] Build output:
+        [my-canister] Building: step 1 of 3 (script):
+        [my-canister] echo "success 1":
+        [my-canister] > success 1
+        [my-canister] Building: step 2 of 3 (script):
+        [my-canister] echo "success 2":
+        [my-canister] > success 2
+        [my-canister] Building: step 3 of 3 (script):
+        [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
+        [my-canister] > failing build step 1
+        [my-canister] > failing build step 2
+        [my-canister] > failing build step 3
+        [my-canister] > failing build step 4
+        [my-canister] > failing build step 5
         Failed to build canister: command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output))
@@ -176,24 +173,22 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Build output for canister my-canister:
-
-        Building: step 1 of 2 (script)
-        echo "initial step succeeded"
-        initial step succeeded
-
-        Building: step 2 of 2 (pre-built)
-        path: /nonexistent/path/to/wasm.wasm, sha: invalid
-        Reading local file: /nonexistent/path/to/wasm.wasm
+        [my-canister] Build output:
+        [my-canister] Building: step 1 of 2 (script):
+        [my-canister] echo "initial step succeeded":
+        [my-canister] > initial step succeeded
+        [my-canister] Building: step 2 of 2 (pre-built):
+        [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
+        [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
+        Failed to build canister: failed to read prebuilt canister file
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output))
-        .stdout(contains("Failed to build canister:"));
+        .stdout(contains(expected_output));
 }
 
 #[test]
@@ -223,92 +218,22 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Build output for canister my-canister:
-
-        Building: step 1 of 2 (script)
-        echo "step 1 succeeded"
-        step 1 succeeded
-
-        Building: step 2 of 2 (script)
-        exit 1
-        <no output>
+        [my-canister] Build output:
+        [my-canister] Building: step 1 of 2 (script):
+        [my-canister] echo "step 1 succeeded":
+        [my-canister] > step 1 succeeded
+        [my-canister] Building: step 2 of 2 (script):
+        [my-canister] exit 1:
+        [my-canister] <no output>
         Failed to build canister: command 'exit 1' failed with status code 1
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
-}
-
-#[test]
-fn build_adapter_display_multiple_failing_canisters() {
-    let ctx = TestContext::new();
-
-    // Setup project
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Project manifest with two canisters that both fail
-    let pm = indoc! {r#"
-        canisters:
-          - name: canister-one
-            build:
-              steps:
-                - type: script
-                  command: echo "canister-one step 1"
-                - type: script
-                  command: echo "canister-one error"; exit 1
-          - name: canister-two
-            build:
-              steps:
-                - type: script
-                  command: echo "canister-two step 1"
-                - type: script
-                  command: echo "canister-two error"; exit 1
-        "#};
-
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Invoke build
-    let expected_output_one = indoc! {r#"
-        Build output for canister canister-one:
-
-        Building: step 1 of 2 (script)
-        echo "canister-one step 1"
-        canister-one step 1
-
-        Building: step 2 of 2 (script)
-        echo "canister-one error"; exit 1
-        canister-one error
-        Failed to build canister: command 'echo "canister-one error"; exit 1' failed with status code 1
-    "#};
-
-    let expected_output_two = indoc! {r#"
-        Build output for canister canister-two:
-
-        Building: step 1 of 2 (script)
-        echo "canister-two step 1"
-        canister-two step 1
-
-        Building: step 2 of 2 (script)
-        echo "canister-two error"; exit 1
-        canister-two error
-        Failed to build canister: command 'echo "canister-two error"; exit 1' failed with status code 1
-    "#};
-
-    ctx.icp()
-        .current_dir(project_dir)
-        .args(["build"])
-        .assert()
-        .failure()
-        .stdout(contains(expected_output_one))
-        .stdout(contains(expected_output_two));
 }
 
 #[test]
@@ -324,12 +249,12 @@ fn build_adapter_script_with_explicit_sh_c() {
 
     // Project manifest with explicit sh -c
     let pm = formatdoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
     "#};
 
     write_string(
@@ -341,7 +266,7 @@ fn build_adapter_script_with_explicit_sh_c() {
     // Invoke build
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .success();
 
@@ -361,15 +286,15 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Project manifest with multiple commands
     let pm = indoc! {r#"
-        canister:
-          name: my-canister
-          build:
-            steps:
-              - type: script
-                commands:
-                  - echo "command 1"
-                  - echo "command 2"
-                  - echo "command 3"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  commands:
+                    - echo "command 1"
+                    - echo "command 2"
+                    - echo "command 3"
     "#};
 
     write_string(
@@ -380,20 +305,159 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        Building: step 1 of 1 (script)
-        echo "command 1"
-        echo "command 2"
-        echo "command 3"
-        command 1
-        command 2
-        command 3
-        Failed to build canister: build did not result in output
+        [my-canister] Build output:
+        [my-canister] Building: step 1 of 1 (script):
+        [my-canister] echo "command 1":
+        [my-canister] echo "command 2":
+        [my-canister] echo "command 3":
+        [my-canister] > command 1
+        [my-canister] > command 2
+        [my-canister] > command 3
+        Failed to build canister: build did not produce a wasm output file
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["build", "my-canister"])
         .assert()
         .failure()
         .stdout(contains(expected_output));
+}
+
+#[test]
+fn build_with_valid_principal() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Valid principal
+    let principal = "aaaaa-aa";
+
+    // Invoke build with principal (should fail)
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build", principal])
+        .assert()
+        .failure()
+        .stderr(contains("project does not contain a canister named"));
+}
+
+#[test]
+fn build_multiple_canisters() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create temporary file
+    let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // Project manifest with multiple canisters
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-a" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-b" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-c" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Build multiple canisters - verify command processes only specified canisters
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args(["--debug", "build", "canister-a", "canister-b"])
+        .assert()
+        .success()
+        .stdout(contains(r#"canisters: ["canister-a", "canister-b"]"#))
+        .stdout(contains("DEBUG icp::progress: building canister-a"))
+        .stdout(contains("DEBUG icp::progress: building canister-b"))
+        .stdout(contains("DEBUG icp::progress: building canister-c").not());
+}
+
+#[test]
+fn build_all_canisters_in_environment() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create temporary file
+    let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // Project manifest with multiple canisters and environments
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-a" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-b" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-c" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+        
+        environments:
+          - name: test-env
+            canisters:
+              - canister-a
+              - canister-b
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Build all canisters in environment (no canister names specified)
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args(["--debug", "build", "--environment", "test-env"])
+        .assert()
+        .success()
+        .stdout(contains(r#"canisters: []"#))
+        .stdout(contains(r#"environment: Some("test-env")"#))
+        .stdout(contains("DEBUG icp::progress: building canister-a"))
+        .stdout(contains("DEBUG icp::progress: building canister-b"))
+        .stdout(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
 }

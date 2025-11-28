@@ -1,96 +1,79 @@
+use anyhow::{Context as _, anyhow, bail};
 use clap::Args;
 use icp::{
-    identity::manifest::{LoadIdentityManifestError, load_identity_list},
-    manifest,
-    network::{Configuration, NetworkDirectory, RunNetworkError, run_network},
+    identity::manifest::IdentityList,
+    network::{Configuration, run_network},
+    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
+use tracing::debug;
 
-use crate::commands::{Context, Mode};
+use icp::context::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]
-pub struct RunArgs {
+pub(crate) struct RunArgs {
     /// Name of the network to run
-    #[arg(default_value = "local")]
+    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
+
+    /// Starts the network in a background process. This command will exit once the network is running.
+    /// To stop the network, use 'icp network stop'.
+    #[arg(long)]
+    background: bool,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
+pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), anyhow::Error> {
+    // Load project
+    let p = ctx.project.load().await?;
 
-    #[error(transparent)]
-    Locate(#[from] manifest::LocateError),
+    // Obtain network configuration
+    let network = p
+        .networks
+        .get(&args.name)
+        .ok_or_else(|| anyhow!("project does not contain a network named '{}'", args.name))?;
 
-    #[error("project does not contain a network named '{name}'")]
-    Network { name: String },
+    let cfg = match &network.configuration {
+        // Locally-managed network
+        Configuration::Managed { managed: cfg } => cfg,
 
-    #[error("network '{name}' must be a managed network")]
-    Unmanaged { name: String },
-
-    #[error(transparent)]
-    Identities(#[from] LoadIdentityManifestError),
-
-    #[error(transparent)]
-    RunNetwork(#[from] RunNetworkError),
-}
-
-pub async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
-
-        Mode::Project(pdir) => {
-            // Load project
-            let p = ctx.project.load().await?;
-
-            // Obtain network configuration
-            let network = p.networks.get(&args.name).ok_or(CommandError::Network {
-                name: args.name.to_owned(),
-            })?;
-
-            let cfg = match &network.configuration {
-                // Locally-managed network
-                Configuration::Managed(cfg) => cfg,
-
-                // Non-managed networks cannot be started
-                Configuration::Connected(_) => {
-                    return Err(CommandError::Unmanaged {
-                        name: args.name.to_owned(),
-                    });
-                }
-            };
-
-            // Network root
-            let ndir = pdir.join(".icp").join("networks").join(&network.name);
-
-            // Network directory
-            let nd = NetworkDirectory::new(
-                &network.name,               // name
-                &ndir,                       // network_root
-                &ctx.dirs.port_descriptor(), // port_descriptor_dir
-            );
-
-            // Identities
-            let ids = load_identity_list(&ctx.dirs.identity())?;
-
-            // Determine ICP accounts to seed
-            let seed_accounts = ids.identities.values().map(|id| id.principal());
-
-            eprintln!("Project root: {pdir}");
-            eprintln!("Network root: {ndir}");
-
-            run_network(
-                cfg,           // config
-                nd,            // nd
-                pdir,          // project_root
-                seed_accounts, // seed_accounts
-            )
-            .await?;
+        // Non-managed networks cannot be started
+        Configuration::Connected { connected: _ } => {
+            bail!("network '{}' is not a managed network", args.name)
         }
     };
 
+    let pdir = &p.dir;
+
+    // Network directory
+    let nd = ctx.network.get_network_directory(network)?;
+    nd.ensure_exists()
+        .context("failed to create network directory")?;
+
+    if nd.load_network_descriptor().await?.is_some() {
+        bail!("network '{}' is already running", args.name);
+    }
+
+    // Clean up any existing canister ID mappings of which environment is on this network
+    for env in p.environments.values() {
+        if env.network == *network {
+            // It's been ensured that the network is managed, so is_cache is true.
+            ctx.ids.cleanup(true, env.name.as_str())?;
+        }
+    }
+
+    // Identities
+    let ids = ctx
+        .dirs
+        .identity()?
+        .with_read(async |dirs| IdentityList::load_from(dirs))
+        .await??;
+
+    // Determine ICP accounts to seed
+    let seed_accounts = ids.identities.values().map(|id| id.principal());
+
+    debug!("Project root: {pdir}");
+    debug!("Network root: {}", nd.network_root);
+
+    run_network(cfg, nd, pdir, seed_accounts, args.background).await?;
     Ok(())
 }

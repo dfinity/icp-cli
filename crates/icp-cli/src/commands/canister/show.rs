@@ -1,78 +1,27 @@
 use clap::Args;
+use icp::context::Context;
 
-use crate::{
-    commands::{Context, Mode},
-    options::EnvironmentOpt,
-    store_id::{Key, LookupError as LookupIdError},
-};
+use crate::commands::args::CanisterEnvironmentArgs;
 
 #[derive(Debug, Args)]
-pub struct ShowArgs {
-    /// The name of the canister within the current project
-    pub name: String,
-
+pub(crate) struct ShowArgs {
     #[command(flatten)]
-    environment: EnvironmentOpt,
+    pub(crate) cmd_args: CanisterEnvironmentArgs,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-    #[error(transparent)]
-    Project(#[from] icp::LoadError),
+pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::Error> {
+    let (canister_selection, environment_selection) = args.cmd_args.selections();
 
-    #[error("project does not contain an environment named '{name}'")]
-    EnvironmentNotFound { name: String },
+    let cid = ctx
+        .get_canister_id_for_env(&canister_selection, &environment_selection)
+        .await?;
 
-    #[error("environment '{environment}' does not include canister '{canister}'")]
-    EnvironmentCanister {
-        environment: String,
-        canister: String,
-    },
+    println!("{cid} => {}", args.cmd_args.canister);
 
-    #[error(transparent)]
-    LookupCanisterId(#[from] LookupIdError),
-}
-
-pub async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), CommandError> {
-    match &ctx.mode {
-        Mode::Global => {
-            unimplemented!("global mode is not implemented yet");
-        }
-
-        Mode::Project(_) => {
-            // Load project
-            let p = ctx.project.load().await?;
-
-            // Load target environment
-            let env = p.environments.get(args.environment.name()).ok_or(
-                CommandError::EnvironmentNotFound {
-                    name: args.environment.name().to_owned(),
-                },
-            )?;
-
-            // Ensure canister is included in the environment
-            if !env.canisters.contains_key(&args.name) {
-                return Err(CommandError::EnvironmentCanister {
-                    environment: env.name.to_owned(),
-                    canister: args.name.to_owned(),
-                });
-            }
-
-            // Lookup the canister id
-            let cid = ctx.ids.lookup(&Key {
-                network: env.network.name.to_owned(),
-                environment: env.name.to_owned(),
-                canister: args.name.to_owned(),
-            })?;
-
-            println!("{cid} => {}", args.name);
-
-            // TODO(or.ricon): Show canister details
-            //  Things we might want to show (do we need to sub-command this?)
-            //  - canister manifest (e.g resulting canister manifest after recipe definitions are processed)
-            //  - canister deployment details (this canister is deployed to network X as part of environment Y)
-        }
-    }
+    // TODO(or.ricon): Show canister details
+    //  Things we might want to show (do we need to sub-command this?)
+    //  - canister manifest (e.g resulting canister manifest after recipe definitions are processed)
+    //  - canister deployment details (this canister is deployed to network X as part of environment Y)
 
     Ok(())
 }

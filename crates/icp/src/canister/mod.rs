@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use anyhow::Context;
 use async_trait::async_trait;
 use candid::Nat;
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use snafu::prelude::*;
 
 use crate::{LoadPath, fs::read, manifest::CanisterManifest, prelude::*};
 
@@ -55,16 +55,13 @@ impl From<Settings> for CanisterSettingsArg {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum LoadPathError {
-    #[error("failed to read canister manifest")]
-    Read,
+    #[snafu(display("failed to read canister manifest"))]
+    Read { source: crate::fs::IoError },
 
-    #[error("failed to deserialize canister manifest")]
-    Deserialize,
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(display("failed to deserialize canister manifest"))]
+    Deserialize { source: serde_yaml::Error },
 }
 
 pub struct PathLoader;
@@ -73,11 +70,10 @@ pub struct PathLoader;
 impl LoadPath<CanisterManifest, LoadPathError> for PathLoader {
     async fn load(&self, path: &Path) -> Result<CanisterManifest, LoadPathError> {
         // Read file
-        let mbs = read(path).context(LoadPathError::Read)?;
+        let mbs = read(path).context(ReadSnafu)?;
 
         // Load YAML
-        let m =
-            serde_yaml::from_slice::<CanisterManifest>(&mbs).context(LoadPathError::Deserialize)?;
+        let m = serde_yaml::from_slice::<CanisterManifest>(&mbs).context(DeserializeSnafu)?;
 
         Ok(m)
     }

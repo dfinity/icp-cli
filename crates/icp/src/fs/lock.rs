@@ -125,7 +125,7 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
 #[derive(Debug, Snafu)]
 pub enum LockError {
     #[snafu(transparent)]
-    CreateDirFailed { source: crate::fs::Error },
+    CreateDirFailed { source: crate::fs::IoError },
     #[snafu(display("failed to create or open lock file '{path}'"))]
     OpenLockFileFailed { source: io::Error, path: PathBuf },
     #[snafu(display("failed to lock the file '{lock_path}'"))]

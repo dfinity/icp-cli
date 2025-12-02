@@ -27,7 +27,7 @@ pub trait Access: Sync + Send {
 #[derive(Debug, Snafu)]
 pub enum SaveError {
     #[snafu(display("failed to write artifact file"))]
-    SaveWriteFileError { source: crate::fs::Error },
+    SaveWriteFileError { source: crate::fs::IoError },
 
     #[snafu(transparent)]
     LockError { source: crate::fs::lock::LockError },
@@ -36,7 +36,7 @@ pub enum SaveError {
 #[derive(Debug, Snafu)]
 pub enum LookupArtifactError {
     #[snafu(display("failed to read artifact file"))]
-    LookupReadFileError { source: crate::fs::Error },
+    LookupReadFileError { source: crate::fs::IoError },
 
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },

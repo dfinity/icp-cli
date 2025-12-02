@@ -57,7 +57,7 @@ async fn test_get_identity_named_not_found() {
         result,
         Err(GetIdentityError::IdentityLoad {
             identity: IdentitySelection::Named(_),
-            source: crate::identity::LoadError::LoadIdentity(_)
+            source: crate::identity::LoadError::LoadIdentity { .. }
         })
     ));
 }
@@ -363,7 +363,7 @@ async fn test_get_agent_for_env_network_not_configured() {
     assert!(matches!(
         result,
         Err(GetAgentForEnvError::NetworkAccess {
-            source: crate::network::AccessError::Unexpected(_)
+            source: crate::network::AccessError::GetNetworkAccess { .. }
         })
     ));
 }
@@ -434,7 +434,7 @@ async fn test_get_agent_for_network_not_configured() {
     assert!(matches!(
         result,
         Err(GetAgentForNetworkError::NetworkAccess {
-            source: crate::network::AccessError::Unexpected(_)
+            source: crate::network::AccessError::GetNetworkAccess { .. }
         })
     ));
 }

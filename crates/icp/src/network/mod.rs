@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::Context as _;
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
+use snafu::prelude::*;
 
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
@@ -14,7 +14,10 @@ use crate::{
         ProjectRootLocate, ProjectRootLocateError,
         network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
     },
-    network::access::{NetworkAccess, get_connected_network_access, get_managed_network_access},
+    network::access::{
+        GetNetworkAccessError, NetworkAccess, get_connected_network_access,
+        get_managed_network_access,
+    },
     prelude::*,
 };
 
@@ -148,13 +151,13 @@ impl From<Mode> for Configuration {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum AccessError {
-    #[error("failed to find project root")]
-    Project(#[from] ProjectRootLocateError),
+    #[snafu(display("failed to find project root"))]
+    ProjectRootLocate { source: ProjectRootLocateError },
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    GetNetworkAccess { source: GetNetworkAccessError },
 }
 
 #[async_trait]
@@ -175,7 +178,10 @@ pub struct Accessor {
 impl Access for Accessor {
     /// The network directory is located at `<project_root>/.icp/cache/networks/<network_name>`.
     fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
-        let dir = self.project_root_locate.locate()?;
+        let dir = self
+            .project_root_locate
+            .locate()
+            .context(ProjectRootLocateSnafu)?;
         Ok(NetworkDirectory::new(
             &network.name,
             &dir.join(ICP_BASE)
@@ -189,13 +195,11 @@ impl Access for Accessor {
         match &network.configuration {
             Configuration::Managed { managed: _ } => {
                 let nd = self.get_network_directory(network)?;
-                Ok(get_managed_network_access(nd)
-                    .await
-                    .context("failed to load managed network access")?)
+                Ok(get_managed_network_access(nd).await?)
             }
-            Configuration::Connected { connected: cfg } => Ok(get_connected_network_access(cfg)
-                .await
-                .context("failed to load connected network access")?),
+            Configuration::Connected { connected: cfg } => {
+                Ok(get_connected_network_access(cfg).await?)
+            }
         }
     }
 }
@@ -243,11 +247,13 @@ impl Access for MockNetworkAccessor {
         })
     }
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
-        self.networks.get(&network.name).cloned().ok_or_else(|| {
-            AccessError::Unexpected(anyhow::anyhow!(
-                "network '{}' not configured in mock",
-                network.name
-            ))
-        })
+        self.networks
+            .get(&network.name)
+            .cloned()
+            .ok_or_else(|| AccessError::GetNetworkAccess {
+                source: GetNetworkAccessError::NetworkNotRunning {
+                    network: network.name.clone(),
+                },
+            })
     }
 }

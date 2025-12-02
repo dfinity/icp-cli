@@ -47,7 +47,7 @@ pub enum LoadNetworkFileError {
 }
 
 impl NetworkDirectory {
-    pub fn ensure_exists(&self) -> Result<(), crate::fs::Error> {
+    pub fn ensure_exists(&self) -> Result<(), crate::fs::IoError> {
         // Network root
         create_dir_all(&self.network_root)?;
 
@@ -65,7 +65,7 @@ impl NetworkDirectory {
             .with_read(async |root| {
                 json::load(&root.network_descriptor_path()).or_else(|err| match err {
                     // Default to empty
-                    json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+                    json::Error::Io { source } if source.kind() == ErrorKind::NotFound => Ok(None),
 
                     // Other
                     _ => Err(err.into()),
@@ -83,7 +83,7 @@ impl NetworkDirectory {
             .with_read(async |paths| {
                 json::load(&paths.descriptor_path()).or_else(|err| match err {
                     // Default to empty
-                    json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+                    json::Error::Io { source } if source.kind() == ErrorKind::NotFound => Ok(None),
 
                     // Other
                     _ => Err(err.into()),
@@ -300,7 +300,7 @@ pub enum CleanupNetworkDescriptorError {
     #[snafu(transparent)]
     LockFileError { source: LockError },
     #[snafu(transparent)]
-    DeleteFileError { source: crate::fs::Error },
+    DeleteFileError { source: crate::fs::IoError },
 }
 
 #[derive(Debug, Snafu)]
@@ -309,14 +309,14 @@ pub enum SavePidError {
     LockFileError { source: LockError },
 
     #[snafu(transparent)]
-    WritePid { source: crate::fs::Error },
+    WritePid { source: crate::fs::IoError },
 }
 
 #[derive(Debug, Snafu)]
 pub enum LoadPidError {
     #[snafu(display("failed to read PID from {path}"))]
     ReadPid {
-        source: crate::fs::Error,
+        source: crate::fs::IoError,
         path: PathBuf,
     },
     #[snafu(transparent)]

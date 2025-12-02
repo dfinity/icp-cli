@@ -251,6 +251,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn canister_with_recipe() {
         // This should now fail because "unknown_type" is not a valid recipe type
         let _ = validate_canister_yaml(indoc! {r#"

@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-// use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use reqwest::{Client, Method, Request};
 use sha2::{Digest, Sha256};

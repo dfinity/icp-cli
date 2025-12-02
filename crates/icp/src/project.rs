@@ -7,6 +7,7 @@ use std::{
 use anyhow::Context;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
+use snafu::Snafu;
 
 use crate::{
     Canister, Environment, LoadManifest, LoadPath, Network, Project,
@@ -30,16 +31,16 @@ pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
 pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum LoadPathError {
-    #[error("failed to read manifest at {0}")]
-    Read(String),
+    #[snafu(display("failed to read manifest at {path}"))]
+    Read { path: String },
 
-    #[error("failed to deserialize manifest at {0}")]
-    Deserialize(String),
+    #[snafu(display("failed to deserialize manifest at {path}"))]
+    Deserialize { path: String },
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Unexpected { source: anyhow::Error },
 }
 
 pub struct PathLoader;
@@ -51,62 +52,64 @@ where
 {
     async fn load(&self, path: &Path) -> Result<T, LoadPathError> {
         // Read file
-        let mbs = read(path).context(LoadPathError::Read(path.to_string()))?;
+        let mbs = read(path).context(LoadPathError::Read {
+            path: path.to_string(),
+        })?;
 
         // Deserialize YAML into any T
-        let m = serde_yaml::from_slice::<T>(&mbs)
-            .context(LoadPathError::Deserialize(path.to_string()))?;
-
+        let m = serde_yaml::from_slice::<T>(&mbs).context(LoadPathError::Deserialize {
+            path: path.to_string(),
+        })?;
         Ok(m)
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum EnvironmentError {
-    #[error("environment '{environment}' points to invalid network '{network}'")]
-    Network {
+    #[snafu(display("environment '{environment}' points to invalid network '{network}'"))]
+    InvalidNetwork {
         environment: String,
         network: String,
     },
 
-    #[error("environment '{environment}' points to invalid canister '{canister}'")]
-    Canister {
+    #[snafu(display("environment '{environment}' points to invalid canister '{canister}'"))]
+    InvalidCanister {
         environment: String,
         canister: String,
     },
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum LoadManifestError {
-    #[error("failed to locate project directory")]
+    #[snafu(display("failed to locate project directory"))]
     Locate,
 
-    #[error("failed to perform glob parsing")]
+    #[snafu(display("failed to perform glob parsing"))]
     Glob,
 
-    #[error("failed to load canister manifest")]
+    #[snafu(display("failed to load canister manifest"))]
     Canister,
 
-    #[error("failed to load {kind} manifest at: {path}")]
+    #[snafu(display("failed to load {kind} manifest at: {path}"))]
     Failed { kind: String, path: String },
 
-    #[error("failed to resolve canister recipe: {0}")]
-    Recipe(RecipeType),
+    #[snafu(display("failed to resolve canister recipe: {recipe_type:?}"))]
+    Recipe { recipe_type: RecipeType },
 
-    #[error("project contains two similarly named {kind}s: '{name}'")]
+    #[snafu(display("project contains two similarly named {kind}s: '{name}'"))]
     Duplicate { kind: String, name: String },
 
-    #[error("`{name}` is a reserved {kind} name.")]
+    #[snafu(display("`{name}` is a reserved {kind} name."))]
     Reserved { kind: String, name: String },
 
-    #[error("Could not locate a {kind} manifest at: '{path}'")]
+    #[snafu(display("Could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
-    #[error(transparent)]
-    Environment(#[from] EnvironmentError),
+    #[snafu(transparent)]
+    Environment { source: EnvironmentError },
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Unexpected { source: anyhow::Error },
 }
 
 pub struct ManifestLoader {
@@ -240,11 +243,14 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                     ),
 
                     // Recipe
-                    Instructions::Recipe { recipe } => self
-                        .recipe
-                        .resolve(recipe)
-                        .await
-                        .context(LoadManifestError::Recipe(recipe.recipe_type.clone()))?,
+                    Instructions::Recipe { recipe } => {
+                        self.recipe
+                            .resolve(recipe)
+                            .await
+                            .context(LoadManifestError::Recipe {
+                                recipe_type: recipe.recipe_type.clone(),
+                            })?
+                    }
                 };
 
                 // Check for duplicates
@@ -378,10 +384,12 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
                         // Embed network in environment
                         network: {
-                            let v = networks.get(&m.network).ok_or(EnvironmentError::Network {
-                                environment: m.name.to_owned(),
-                                network: m.network.to_owned(),
-                            })?;
+                            let v = networks.get(&m.network).ok_or(
+                                EnvironmentError::InvalidNetwork {
+                                    environment: m.name.to_owned(),
+                                    network: m.network.to_owned(),
+                                },
+                            )?;
 
                             v.to_owned()
                         },
@@ -402,7 +410,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
                                     for name in names {
                                         let v = canisters.get(name).ok_or(
-                                            EnvironmentError::Canister {
+                                            EnvironmentError::InvalidCanister {
                                                 environment: m.name.to_owned(),
                                                 canister: name.to_owned(),
                                             },
@@ -429,7 +437,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 name: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string(),
                 network: networks
                     .get(DEFAULT_LOCAL_NETWORK_NAME)
-                    .ok_or(EnvironmentError::Network {
+                    .ok_or(EnvironmentError::InvalidNetwork {
                         environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
                         network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
                     })?

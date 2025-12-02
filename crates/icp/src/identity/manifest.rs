@@ -32,7 +32,9 @@ impl IdentityDefaults {
 
         let defaults = json::load(&id_defaults_path).or_else(|err| match err {
             // Default fallback
-            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(Self::default()),
+            json::Error::Io { source } if source.kind() == ErrorKind::NotFound => {
+                Ok(Self::default())
+            }
 
             // Other
             _ => Err(err),
@@ -84,7 +86,9 @@ impl IdentityList {
 
         let list = json::load(&id_list_file).or_else(|err| match err {
             // Default fallback
-            json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(Self::default()),
+            json::Error::Io { source } if source.kind() == ErrorKind::NotFound => {
+                Ok(Self::default())
+            }
 
             // Other
             _ => Err(err),
@@ -148,7 +152,7 @@ pub enum WriteIdentityManifestError {
     WriteJsonError { source: json::Error },
 
     #[snafu(transparent)]
-    CreateDirectoryError { source: crate::fs::Error },
+    CreateDirectoryError { source: crate::fs::IoError },
 
     #[snafu(transparent)]
     DirectoryLockError { source: crate::fs::lock::LockError },

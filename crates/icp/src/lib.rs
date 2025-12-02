@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Context;
 use async_trait::async_trait;
 use serde::Serialize;
+use snafu::Snafu;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -100,19 +101,19 @@ impl Project {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum LoadError {
-    #[error("failed to locate project directory")]
+    #[snafu(display("failed to locate project directory"))]
     Locate,
 
-    #[error("failed to load path")]
+    #[snafu(display("failed to load path"))]
     Path,
 
-    #[error("failed to load the project manifest")]
+    #[snafu(display("failed to load the project manifest"))]
     Manifest,
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Unexpected { source: anyhow::Error },
 }
 
 #[async_trait]
@@ -179,8 +180,7 @@ impl Load for Loader {
     async fn exists(&self) -> Result<bool, LoadError> {
         match self.project_root_locate.locate() {
             Ok(_) => Ok(true),
-            Err(ProjectRootLocateError::NotFound(_)) => Ok(false),
-            Err(ProjectRootLocateError::Unexpected(e)) => Err(LoadError::Unexpected(e)),
+            Err(ProjectRootLocateError::NotFound { .. }) => Ok(false),
         }
     }
 }

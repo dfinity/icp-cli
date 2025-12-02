@@ -2500,7 +2500,6 @@ dependencies = [
 name = "icp"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "bip32 0.5.3",
  "camino",

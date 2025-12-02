@@ -124,7 +124,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     let configured_settings = if let CanisterSelection::Named(name) = &selections.canister {
         match ctx.project.load().await {
             Ok(p) => p.canisters[name].1.settings.clone(),
-            Err(LoadError::Locate) => <_>::default(),
+            Err(LoadError::Locate { .. }) => <_>::default(),
             Err(e) => bail!("failed to load project: {}", e),
         }
     } else {

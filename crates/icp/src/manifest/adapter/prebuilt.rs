@@ -55,18 +55,18 @@ impl fmt::Display for Adapter {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Error, Ok};
 
     use super::*;
 
     #[test]
-    fn path() -> Result<(), Error> {
+    fn path() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 path: canister.wasm
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 source: SourceField::Local(LocalSource {
                     path: "canister.wasm".into()
@@ -74,19 +74,18 @@ mod tests {
                 sha256: None,
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn path_with_sha256() -> Result<(), Error> {
+    fn path_with_sha256() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 path: canister.wasm
                 sha256: sha256
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 source: SourceField::Local(LocalSource {
                     path: "canister.wasm".into()
@@ -94,18 +93,17 @@ mod tests {
                 sha256: Some("sha256".to_string()),
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn url() -> Result<(), Error> {
+    fn url() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 url: http://example.com/canister.wasm
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 source: SourceField::Remote(RemoteSource {
                     url: "http://example.com/canister.wasm".to_string(),
@@ -113,19 +111,18 @@ mod tests {
                 sha256: None,
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn url_with_sha256() -> Result<(), Error> {
+    fn url_with_sha256() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 url: http://example.com/canister.wasm
                 sha256: sha256
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 source: SourceField::Remote(RemoteSource {
                     url: "http://example.com/canister.wasm".to_string(),
@@ -133,7 +130,5 @@ mod tests {
                 sha256: Some("sha256".to_string()),
             },
         );
-
-        Ok(())
     }
 }

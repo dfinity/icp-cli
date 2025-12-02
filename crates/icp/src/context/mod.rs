@@ -351,7 +351,7 @@ impl Context {
                     Err(GetAgentForEnvError::GetEnvironment {
                         source:
                             GetEnvironmentError::ProjectLoad {
-                                source: crate::LoadError::Locate,
+                                source: crate::LoadError::Locate { .. },
                             },
                     }) => Err(GetAgentError::NoProjectOrNetwork),
                     Err(e) => Err(e.into()),

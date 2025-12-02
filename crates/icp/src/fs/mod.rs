@@ -20,12 +20,6 @@ impl IoError {
     }
 }
 
-// impl Display for Error {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_fmt(format_args!("{}: {}", self.path, self.err))
-//     }
-// }
-
 pub fn create_dir_all(path: &Path) -> Result<(), IoError> {
     std::fs::create_dir_all(path).context(IoSnafu { path })
 }

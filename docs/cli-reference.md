@@ -18,6 +18,13 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
 * [`icp-cli canister settings sync`↴](#icp-cli-canister-settings-sync)
 * [`icp-cli canister show`↴](#icp-cli-canister-show)
+* [`icp-cli canister snapshot`↴](#icp-cli-canister-snapshot)
+* [`icp-cli canister snapshot create`↴](#icp-cli-canister-snapshot-create)
+* [`icp-cli canister snapshot delete`↴](#icp-cli-canister-snapshot-delete)
+* [`icp-cli canister snapshot download`↴](#icp-cli-canister-snapshot-download)
+* [`icp-cli canister snapshot list`↴](#icp-cli-canister-snapshot-list)
+* [`icp-cli canister snapshot load`↴](#icp-cli-canister-snapshot-load)
+* [`icp-cli canister snapshot upload`↴](#icp-cli-canister-snapshot-upload)
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
@@ -102,6 +109,7 @@ Perform canister operations against a network
 * `list` — List the canisters in an environment
 * `settings` — Commands to manage canister settings
 * `show` — Show a canister's details
+* `snapshot` — Manipulate canister snapshots
 * `start` — Start a canister on a network
 * `status` — Show the status of a canister
 * `stop` — Stop a canister on a network
@@ -344,6 +352,148 @@ Show a canister's details
 
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp-cli canister snapshot`
+
+Manipulate canister snapshots
+
+**Usage:** `icp-cli canister snapshot <COMMAND>`
+
+###### **Subcommands:**
+
+* `create` — 
+* `delete` — 
+* `download` — 
+* `list` — 
+* `load` — 
+* `upload` — 
+
+
+
+## `icp-cli canister snapshot create`
+
+**Usage:** `icp-cli canister snapshot create [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--replace <REPLACE>` — If a snapshot ID is specified, this snapshot will replace it and reuse the ID
+
+
+
+## `icp-cli canister snapshot delete`
+
+**Usage:** `icp-cli canister snapshot delete [OPTIONS] <CANISTER> <SNAPSHOT>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<SNAPSHOT>` — The ID of the snapshot to delete
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp-cli canister snapshot download`
+
+**Usage:** `icp-cli canister snapshot download [OPTIONS] --dir <DIR> <CANISTER> <SNAPSHOT>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<SNAPSHOT>` — The ID of the snapshot to download
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--dir <DIR>` — The directory to download the snapshot to
+* `-r`, `--resume` — Whether to resume the download if the previous snapshot download failed
+
+  Default value: `false`
+* `--concurrency <CONCURRENCY>` — The number of concurrent downloads to perform
+
+  Default value: `3`
+
+
+
+## `icp-cli canister snapshot list`
+
+**Usage:** `icp-cli canister snapshot list [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp-cli canister snapshot load`
+
+**Usage:** `icp-cli canister snapshot load [OPTIONS] <CANISTER> <SNAPSHOT>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<SNAPSHOT>` — The ID of the snapshot to load
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp-cli canister snapshot upload`
+
+**Usage:** `icp-cli canister snapshot upload [OPTIONS] --dir <DIR> <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--replace <REPLACE>` — If a snapshot ID is specified, this snapshot will replace it and reuse the ID
+* `--dir <DIR>` — The directory to upload the snapshot from
+* `-r`, `--resume <RESUME>` — The snapshot ID to resume uploading to
+* `--concurrency <CONCURRENCY>` — The number of concurrent uploads to perform
+
+  Default value: `3`
 
 
 

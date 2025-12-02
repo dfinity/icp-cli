@@ -16,8 +16,8 @@ bigdecimal.workspace = true
 bip32.workspace = true
 byte-unit.workspace = true
 camino-tempfile.workspace = true
-candid_parser.workspace = true
 candid.workspace = true
+candid_parser.workspace = true
 clap-markdown.workspace = true
 clap.workspace = true
 console.workspace = true
@@ -43,11 +43,13 @@ pkcs8.workspace = true
 rand.workspace = true
 reqwest.workspace = true
 sec1.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
-serde.workspace = true
 snafu.workspace = true
 sysinfo.workspace = true
+thiserror.workspace = true
+time.workspace = true
 tiny-bip39.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
@@ -62,6 +64,7 @@ icp = { workspace = true }
 nix = { version = "0.30.1", features = ["process", "signal"] }
 pocket-ic.workspace = true
 predicates = "3"
+regex = "1"
 rand.workspace = true
 serde_yaml.workspace = true
 serial_test = { version = "3.2.0", features = ["file_locks"] }

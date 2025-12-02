@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use snafu::prelude::*;
 
 pub(crate) mod adapter;
 pub(crate) mod canister;
@@ -25,13 +26,10 @@ pub enum Item<T> {
     Manifest(T),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum ProjectRootLocateError {
-    #[error("project manifest not found in {0}")]
-    NotFound(PathBuf),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(display("project manifest not found in {path}"))]
+    NotFound { path: PathBuf },
 }
 
 /// Trait for locating the project root directory containing the project manifest file (`icp.yaml`).
@@ -64,7 +62,9 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
         // Specified path
         if let Some(dir) = &self.dir {
             if !dir.join(PROJECT_MANIFEST).exists() {
-                return Err(ProjectRootLocateError::NotFound(dir.to_owned()));
+                return Err(ProjectRootLocateError::NotFound {
+                    path: dir.to_owned(),
+                });
             }
 
             return Ok(dir.to_owned());
@@ -80,7 +80,9 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
                     continue;
                 }
 
-                return Err(ProjectRootLocateError::NotFound(self.cwd.to_owned()));
+                return Err(ProjectRootLocateError::NotFound {
+                    path: self.cwd.to_owned(),
+                });
             }
 
             return Ok(dir);

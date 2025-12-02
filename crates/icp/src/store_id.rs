@@ -21,7 +21,7 @@ pub type IdMapping = BTreeMap<String, Principal>;
 fn load_mapping(fpath: &Path) -> Result<IdMapping, json::Error> {
     json::load(fpath).or_else(|err| match err {
         // Default to empty
-        json::Error::Io(err) if err.kind() == ErrorKind::NotFound => Ok(BTreeMap::new()),
+        json::Error::Io { source } if source.kind() == ErrorKind::NotFound => Ok(BTreeMap::new()),
 
         // Other
         _ => Err(err),
@@ -66,7 +66,7 @@ pub enum RegisterError {
 
     #[snafu(display("failed to create directory for canister id store at '{path}'"))]
     CreateDirAll {
-        source: crate::fs::Error,
+        source: crate::fs::IoError,
         path: PathBuf,
     },
 
@@ -107,7 +107,7 @@ pub enum CleanupError {
     ProjectRootLocate { source: ProjectRootLocateError },
 
     #[snafu(transparent)]
-    DeleteFile { source: crate::fs::Error },
+    DeleteFile { source: crate::fs::IoError },
 }
 
 /// Store of canister ID mappings for environments.

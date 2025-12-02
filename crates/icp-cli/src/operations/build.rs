@@ -24,7 +24,7 @@ pub enum BuildOperationError {
     MissingWasmOutput,
 
     #[snafu(display("failed to read wasm output file"))]
-    ReadWasmOutput { source: icp::fs::Error },
+    ReadWasmOutput { source: icp::fs::IoError },
 
     #[snafu(display("failed to save wasm artifact"))]
     SaveWasmArtifact {

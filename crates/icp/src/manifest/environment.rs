@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
+use snafu::prelude::*;
 
 use crate::{
     canister::Settings,
@@ -50,13 +51,10 @@ pub struct EnvironmentManifest {
     pub settings: Option<HashMap<String, Settings>>,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum ParseError {
-    #[error("Overriding the local environment is not supported.")]
+    #[snafu(display("Overriding the local environment is not supported."))]
     OverrideLocal,
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
 }
 
 impl TryFrom<EnvironmentInner> for EnvironmentManifest {

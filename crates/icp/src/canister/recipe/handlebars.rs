@@ -38,7 +38,7 @@ pub enum HandlebarsError {
     Unknown { recipe: String },
 
     #[error("failed to read local recipe template file")]
-    ReadFile { source: crate::fs::Error },
+    ReadFile { source: crate::fs::IoError },
 
     #[error("failed to decode UTF-8 string")]
     DecodeUtf8 { source: FromUtf8Error },

@@ -45,7 +45,7 @@ pub enum CreateFormat {
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: crate::fs::Error },
+    ReadFileError { source: crate::fs::IoError },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
     ParsePemError {
@@ -249,10 +249,10 @@ pub fn create_identity(
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
     #[snafu(display("failed to write file"))]
-    WriteFileError { source: crate::fs::Error },
+    WriteFileError { source: crate::fs::IoError },
 
     #[snafu(display("failed to create directory"))]
-    CreateDirectoryError { source: crate::fs::Error },
+    CreateDirectoryError { source: crate::fs::IoError },
 
     #[snafu(transparent)]
     LockError { source: crate::fs::lock::LockError },

@@ -293,7 +293,7 @@ pub(crate) enum LoadKeyError {
     },
 
     #[snafu(display("failed to read file"))]
-    ReadFileError { source: icp::fs::Error },
+    ReadFileError { source: icp::fs::IoError },
 
     #[snafu(display("expected 1 key block in PEM file `{path}`, found {count}"))]
     TooManyKeyBlocks { path: PathBuf, count: usize },
@@ -345,7 +345,7 @@ pub(crate) enum LoadKeyError {
 #[derive(Debug, Snafu)]
 pub(crate) enum DeriveKeyError {
     #[snafu(display("failed to read seed file"))]
-    ReadSeedFile { source: icp::fs::Error },
+    ReadSeedFile { source: icp::fs::IoError },
 
     #[snafu(display("failed to read seed phrase from terminal"))]
     ReadSeedPhraseFromTerminal { source: dialoguer::Error },

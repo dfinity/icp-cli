@@ -1,24 +1,20 @@
 use serde::Deserialize;
+use snafu::prelude::*;
 
 use crate::{fs::read, prelude::*};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error(transparent)]
-    Io(#[from] crate::fs::Error),
+    #[snafu(transparent)]
+    Io { source: crate::fs::IoError },
 
-    #[error("failed to parse yaml file at {path}")]
+    #[snafu(display("failed to parse yaml file at {path}"))]
     Parse {
+        source: serde_yaml::Error,
         path: PathBuf,
-
-        #[source]
-        err: serde_yaml::Error,
     },
 }
 
 pub fn load<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T, Error> {
-    serde_yaml::from_slice(&read(path)?).map_err(|err| Error::Parse {
-        path: path.into(),
-        err,
-    })
+    serde_yaml::from_slice::<T>(&read(path)?).context(ParseSnafu { path })
 }

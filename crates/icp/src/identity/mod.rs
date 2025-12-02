@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ic_agent::Identity;
+use snafu::prelude::*;
 
 use crate::{
     fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
@@ -37,7 +38,7 @@ impl IdentityPaths {
         self.dir.join(IDENTITY_DEFAULTS)
     }
 
-    pub fn ensure_identity_defaults_path(&self) -> Result<PathBuf, crate::fs::Error> {
+    pub fn ensure_identity_defaults_path(&self) -> Result<PathBuf, crate::fs::IoError> {
         crate::fs::create_dir_all(&self.dir)?;
         Ok(self.dir.join(IDENTITY_DEFAULTS))
     }
@@ -46,7 +47,7 @@ impl IdentityPaths {
         self.dir.join(IDENTITIES_LIST)
     }
 
-    pub fn ensure_identity_list_path(&self) -> Result<PathBuf, crate::fs::Error> {
+    pub fn ensure_identity_list_path(&self) -> Result<PathBuf, crate::fs::IoError> {
         crate::fs::create_dir_all(&self.dir)?;
         Ok(self.dir.join(IDENTITIES_LIST))
     }
@@ -55,7 +56,7 @@ impl IdentityPaths {
         self.dir.join(format!("keys/{name}.pem"))
     }
 
-    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, crate::fs::Error> {
+    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, crate::fs::IoError> {
         crate::fs::create_dir_all(&self.dir.join("keys"))?;
         Ok(self.dir.join(format!("keys/{name}.pem")))
     }
@@ -81,22 +82,22 @@ pub enum IdentitySelection {
     Named(String),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum LoadError {
-    #[error(transparent)]
-    LoadIdentityInContext(#[from] LoadIdentityInContextError),
+    #[snafu(transparent)]
+    LoadIdentityInContext { source: LoadIdentityInContextError },
 
-    #[error(transparent)]
-    LoadIdentity(#[from] LoadIdentityError),
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityError },
 
-    #[error(transparent)]
-    LoadIdentityManifest(#[from] LoadIdentityManifestError),
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
 
-    #[error(transparent)]
-    LockIdentityDirError(#[from] LockError),
+    #[snafu(transparent)]
+    LockIdentityDirError { source: LockError },
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Unexpected { source: anyhow::Error },
 }
 
 #[async_trait]
@@ -196,11 +197,12 @@ impl Load for MockIdentityLoader {
             IdentitySelection::Anonymous => Arc::new(ic_agent::identity::AnonymousIdentity),
 
             IdentitySelection::Named(name) => {
-                self.named.get(&name).map(Arc::clone).ok_or_else(|| {
-                    LoadError::LoadIdentity(LoadIdentityError::NoSuchIdentity {
-                        name: name.clone(),
-                    })
-                })?
+                self.named
+                    .get(&name)
+                    .map(Arc::clone)
+                    .ok_or_else(|| LoadError::LoadIdentity {
+                        source: LoadIdentityError::NoSuchIdentity { name: name.clone() },
+                    })?
             }
         })
     }

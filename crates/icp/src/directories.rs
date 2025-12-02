@@ -10,6 +10,7 @@ use crate::{
     prelude::*,
 };
 use directories::ProjectDirs;
+use snafu::prelude::*;
 
 /// Trait for accessing ICP CLI directories.
 pub trait Access: Sync + Send {
@@ -63,15 +64,15 @@ pub enum Directories {
 }
 
 /// Errors that can occur when working with directories.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum DirectoriesError {
     /// Failed to locate the user's home directory.
-    #[error("home directory could not be located")]
+    #[snafu(display("home directory could not be located"))]
     LocateHome,
 
     /// Directory paths contain non-UTF-8 characters.
-    #[error("user directories are non-UTF-8")]
-    Utf8(#[from] FromPathBufError),
+    #[snafu(display("user directories are non-UTF-8"))]
+    Utf8 { source: FromPathBufError },
 }
 
 /// Implementation of directory creation and management.
@@ -101,7 +102,7 @@ impl Directories {
         .ok_or(DirectoriesError::LocateHome)?;
 
         // Convert to utf8 paths
-        let dirs = DirectoriesInner::from_dirs(dirs)?;
+        let dirs = DirectoriesInner::from_dirs(dirs).context(Utf8Snafu)?;
 
         Ok(Self::Standard(dirs))
     }

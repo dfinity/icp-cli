@@ -63,7 +63,7 @@ pub async fn run_network(
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
     #[snafu(transparent)]
-    CreateDirFailed { source: crate::fs::Error },
+    CreateDirFailed { source: crate::fs::IoError },
 
     #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
     NoPocketIcPath,
@@ -177,13 +177,13 @@ async fn run_pocketic(
 #[derive(Debug, Snafu)]
 pub enum RunPocketIcError {
     #[snafu(display("failed to create dir"))]
-    CreateDirAll { source: crate::fs::Error },
+    CreateDirAll { source: crate::fs::IoError },
 
     #[snafu(display("failed to remove dir"))]
-    RemoveDirAll { source: crate::fs::Error },
+    RemoveDirAll { source: crate::fs::IoError },
 
     #[snafu(display("failed to remove file"))]
-    RemoveFile { source: crate::fs::Error },
+    RemoveFile { source: crate::fs::IoError },
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },

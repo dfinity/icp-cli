@@ -1,9 +1,8 @@
 use std::process::Stdio;
 
-use crate::prelude::*;
-use anyhow::Context;
 use async_trait::async_trait;
 use ic_agent::Agent;
+use snafu::prelude::*;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     join,
@@ -15,14 +14,20 @@ use crate::canister::{
     build::{self, Build, BuildError},
     sync::{self, Synchronize, SynchronizeError},
 };
+use crate::prelude::*;
 
 pub struct Script;
 
-fn shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
-    let words = shellwords::split(s).with_context(|| format!("Cannot parse command '{s}'."))?;
+fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
+    let words = shellwords::split(s).map_err(|e| ScriptError::Parse {
+        command: s.to_owned(),
+        reason: e.to_string(),
+    })?;
 
     if words.is_empty() {
-        anyhow::bail!("Command must include at least one element");
+        return Err(ScriptError::EmptyCommand {
+            command: s.to_owned(),
+        });
     }
 
     let mut cmd = Command::new("sh");
@@ -31,29 +36,40 @@ fn shell_command(s: &str, cwd: &Path) -> anyhow::Result<Command> {
     Ok(cmd)
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum ScriptError {
-    #[error("failed to parse command: '{command}'")]
-    Parse { command: String },
+    #[snafu(display("failed to parse command: '{command}'"))]
+    Parse { command: String, reason: String },
 
-    #[error("invalid command '{command}': {reason}")]
-    InvalidCommand { command: String, reason: String },
+    #[snafu(display("command must not be empty: '{command}'"))]
+    EmptyCommand { command: String },
 
-    #[error("failed to execute command '{command}'")]
-    Invoke { command: String },
+    #[snafu(display("failed to execute command '{command}'"))]
+    Invoke {
+        source: tokio::io::Error,
+        command: String,
+    },
 
-    #[error("command '{command}' failed with status code {code}")]
+    #[snafu(display("failed to join command futures"))]
+    Join { source: tokio::task::JoinError },
+
+    #[snafu(display("failed to get command status for '{command}'"))]
+    Child {
+        source: std::io::Error,
+        command: String,
+    },
+
+    #[snafu(display("command '{command}' failed with status code {code}"))]
     Status { command: String, code: String },
 }
 
-#[async_trait]
-impl Build for Script {
-    async fn build(
+impl Script {
+    async fn build_impl(
         &self,
         step: &build::Step,
         params: &build::Params,
         stdio: Option<Sender<String>>,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), ScriptError> {
         let build::Step::Script(adapter) = step else {
             panic!("expected script adapter");
         };
@@ -63,10 +79,7 @@ impl Build for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            let mut cmd =
-                shell_command(&input_cmd, params.path.as_ref()).context(ScriptError::Parse {
-                    command: input_cmd.to_owned(),
-                })?;
+            let mut cmd = shell_command(&input_cmd, params.path.as_ref())?;
 
             // Environment Variables
             cmd.env("ICP_WASM_OUTPUT_PATH", &params.output);
@@ -77,7 +90,7 @@ impl Build for Script {
             cmd.stderr(Stdio::piped());
 
             // Spawn
-            let mut child = cmd.spawn().context(ScriptError::Invoke {
+            let mut child = cmd.spawn().context(InvokeSnafu {
                 command: input_cmd.to_owned(),
             })?;
 
@@ -109,7 +122,7 @@ impl Build for Script {
                                 let _ = sender.send(line).await;
                             }
                         }
-                        Ok::<(), BuildError>(())
+                        Ok::<(), ScriptError>(())
                     }
                 }),
                 //
@@ -124,7 +137,7 @@ impl Build for Script {
                                 let _ = sender.send(line).await;
                             }
                         }
-                        Ok::<(), BuildError>(())
+                        Ok::<(), ScriptError>(())
                     }
                 }),
                 //
@@ -134,23 +147,19 @@ impl Build for Script {
                     child.wait().await
                 }),
             );
-            stdout??;
-            stderr??;
+            stdout.context(JoinSnafu)??;
+            stderr.context(JoinSnafu)??;
 
             // Status
-            let status =
-                status
-                    .context("failed to join futures")?
-                    .context(ScriptError::Invoke {
-                        command: input_cmd.to_owned(),
-                    })?;
+            let status = status.context(JoinSnafu)?.context(ChildSnafu {
+                command: input_cmd.to_owned(),
+            })?;
 
             if !status.success() {
                 return Err(ScriptError::Status {
                     command: input_cmd.to_owned(),
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-                }
-                .into());
+                });
             }
         }
 
@@ -159,14 +168,24 @@ impl Build for Script {
 }
 
 #[async_trait]
-impl Synchronize for Script {
-    async fn sync(
+impl Build for Script {
+    async fn build(
+        &self,
+        step: &build::Step,
+        params: &build::Params,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), BuildError> {
+        Ok(self.build_impl(step, params, stdio).await?)
+    }
+}
+
+impl Script {
+    async fn sync_impl(
         &self,
         step: &sync::Step,
         params: &sync::Params,
-        _: &Agent,
         stdio: Option<Sender<String>>,
-    ) -> Result<(), SynchronizeError> {
+    ) -> Result<(), ScriptError> {
         // Adapter
         let adapter = match step {
             sync::Step::Script(v) => v,
@@ -178,10 +197,7 @@ impl Synchronize for Script {
 
         // Iterate over configured commands
         for input_cmd in cmds {
-            let mut cmd =
-                shell_command(&input_cmd, params.path.as_ref()).context(ScriptError::Parse {
-                    command: input_cmd.to_owned(),
-                })?;
+            let mut cmd = shell_command(&input_cmd, params.path.as_ref())?;
 
             // Output
             cmd.stdin(Stdio::inherit());
@@ -189,7 +205,7 @@ impl Synchronize for Script {
             cmd.stderr(Stdio::piped());
 
             // Spawn
-            let mut child = cmd.spawn().context(ScriptError::Invoke {
+            let mut child = cmd.spawn().context(InvokeSnafu {
                 command: input_cmd.to_owned(),
             })?;
 
@@ -246,23 +262,32 @@ impl Synchronize for Script {
             );
 
             // Status
-            let status =
-                status
-                    .context("failed to join futures")?
-                    .context(ScriptError::Invoke {
-                        command: input_cmd.to_owned(),
-                    })?;
+            let status = status.context(JoinSnafu)?.context(ChildSnafu {
+                command: input_cmd.to_owned(),
+            })?;
 
             if !status.success() {
                 return Err(ScriptError::Status {
                     command: input_cmd.to_owned(),
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-                }
-                .into());
+                });
             }
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl Synchronize for Script {
+    async fn sync(
+        &self,
+        step: &sync::Step,
+        params: &sync::Params,
+        _: &Agent,
+        stdio: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
+        Ok(self.sync_impl(step, params, stdio).await?)
     }
 }
 
@@ -275,7 +300,7 @@ mod tests {
     use crate::{
         canister::{
             build::{self, Build, BuildError},
-            script::{Script, ScriptError},
+            script::Script,
         },
         manifest::adapter::script::{Adapter, CommandField},
     };
@@ -418,9 +443,6 @@ mod tests {
             .await;
 
         // Assert failure
-        assert!(matches!(
-            out,
-            Err(BuildError::Script(ScriptError::Status { .. })),
-        ));
+        assert!(matches!(out, Err(BuildError::Script { .. }),));
     }
 }

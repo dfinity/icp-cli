@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use snafu::prelude::*;
 
 use crate::{
     canister::{build, recipe::handlebars::HandlebarsError, sync},
@@ -15,14 +16,8 @@ pub trait Resolve: Sync + Send {
     async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError>;
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum ResolveError {
-    #[error("field '{field}' contains an invalid value")]
-    InvalidField { field: String },
-
-    #[error("field '{field}' is required")]
-    RequiredField { field: String },
-
-    #[error("failed to resolve handlebars template")]
+    #[snafu(display("failed to resolve handlebars template"))]
     Handlebars { source: HandlebarsError },
 }

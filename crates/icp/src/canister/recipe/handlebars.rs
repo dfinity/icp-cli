@@ -1,5 +1,6 @@
 use indoc::formatdoc;
 use serde::Deserialize;
+use snafu::prelude::*;
 use std::{str::FromStr, string::FromUtf8Error};
 use tracing::debug;
 
@@ -32,47 +33,41 @@ pub enum TemplateSource {
     Registry(String, String, String),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum HandlebarsError {
-    #[error("no recipe found for recipe type '{recipe}'")]
-    Unknown { recipe: String },
-
-    #[error("failed to read local recipe template file")]
+    #[snafu(display("failed to read local recipe template file"))]
     ReadFile { source: crate::fs::IoError },
 
-    #[error("failed to decode UTF-8 string")]
+    #[snafu(display("failed to decode UTF-8 string"))]
     DecodeUtf8 { source: FromUtf8Error },
 
-    #[error("failed to parse user-provided url")]
+    #[snafu(display("failed to parse user-provided url"))]
     UrlParse { source: ParseError },
 
-    #[error("failed to execute http request")]
+    #[snafu(display("failed to execute http request"))]
     HttpRequest { source: reqwest::Error },
 
-    #[error("request returned non-ok status-code")]
+    #[snafu(display("request returned non-ok status-code"))]
     HttpStatus { status: u16 },
 
-    #[error("the partrial template for partial '{partial}' appears to be invalid")]
-    PartialInvalid {
-        source: handlebars::TemplateError,
-        partial: String,
-        template: String,
-    },
-
-    #[error("the recipe template for recipe type '{recipe}' failed to be rendered")]
+    #[snafu(display("the recipe template for recipe type '{recipe}' failed to be rendered"))]
     Render {
         source: handlebars::RenderError,
         recipe: String,
         template: String,
     },
 
-    #[error("sha256 checksum mismatch for recipe template: expected {expected}, actual {actual}")]
+    #[snafu(display(
+        "sha256 checksum mismatch for recipe template: expected {expected}, actual {actual}"
+    ))]
     ChecksumMismatch { expected: String, actual: String },
 }
 
-#[async_trait]
-impl Resolve for Handlebars {
-    async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
+impl Handlebars {
+    async fn resolve_impl(
+        &self,
+        recipe: &Recipe,
+    ) -> Result<(build::Steps, sync::Steps), HandlebarsError> {
         // Find the template
         let tmpl = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
@@ -107,25 +102,19 @@ impl Resolve for Handlebars {
 
             // Attempt to load template from local file-system
             TemplateSource::LocalPath(path) => {
-                let bytes = read(&path).map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::ReadFile { source: err },
-                })?;
+                let bytes = read(&path).context(ReadFileSnafu)?;
 
                 // Verify the checksum if it's provided
                 if let Some(expected) = &recipe.sha256 {
-                    verify_checksum(&bytes, expected)
-                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
+                    verify_checksum(&bytes, expected)?;
                 }
 
-                parse_bytes_to_string(bytes)
-                    .map_err(|source| ResolveError::Handlebars { source: *source })?
+                parse_bytes_to_string(bytes)?
             }
 
             // Attempt to fetch template from remote resource url
             TemplateSource::RemoteUrl(u) => {
-                let u = Url::from_str(&u).map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::UrlParse { source: err },
-                })?;
+                let u = Url::from_str(&u).context(UrlParseSnafu)?;
 
                 debug!("Requesting template from: {u}");
 
@@ -133,30 +122,22 @@ impl Resolve for Handlebars {
                     .http_client
                     .execute(Request::new(Method::GET, u))
                     .await
-                    .map_err(|err| ResolveError::Handlebars {
-                        source: HandlebarsError::HttpRequest { source: err },
-                    })?;
+                    .context(HttpRequestSnafu)?;
 
                 if !resp.status().is_success() {
-                    return Err(ResolveError::Handlebars {
-                        source: HandlebarsError::HttpStatus {
-                            status: resp.status().as_u16(),
-                        },
+                    return Err(HandlebarsError::HttpStatus {
+                        status: resp.status().as_u16(),
                     });
                 }
 
-                let bytes = resp.bytes().await.map_err(|err| ResolveError::Handlebars {
-                    source: HandlebarsError::HttpRequest { source: err },
-                })?;
+                let bytes = resp.bytes().await.context(HttpRequestSnafu)?;
 
                 // Verify the checksum if it's provided
                 if let Some(expected) = &recipe.sha256 {
-                    verify_checksum(&bytes, expected)
-                        .map_err(|source| ResolveError::Handlebars { source: *source })?;
+                    verify_checksum(&bytes, expected)?;
                 }
 
-                parse_bytes_to_string(bytes.into())
-                    .map_err(|source| ResolveError::Handlebars { source: *source })?
+                parse_bytes_to_string(bytes.into())?
             }
         };
 
@@ -182,12 +163,9 @@ impl Resolve for Handlebars {
         // Render the template to YAML
         let out = reg
             .render_template(&tmpl, &recipe.configuration)
-            .map_err(|err| ResolveError::Handlebars {
-                source: HandlebarsError::Render {
-                    source: err,
-                    recipe: recipe.recipe_type.clone().into(),
-                    template: tmpl.to_owned(),
-                },
+            .context(RenderSnafu {
+                recipe: recipe.recipe_type.clone(),
+                template: tmpl.to_owned(),
             })?;
 
         // Read the rendered YAML canister manifest
@@ -214,6 +192,15 @@ impl Resolve for Handlebars {
             "#, recipe.recipe_type}
             ),
         }
+    }
+}
+
+#[async_trait]
+impl Resolve for Handlebars {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
+        self.resolve_impl(recipe)
+            .await
+            .context(super::HandlebarsSnafu)
     }
 }
 
@@ -244,7 +231,7 @@ impl HelperDef for ReplaceHelper {
 }
 
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), Box<HandlebarsError>> {
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> {
     let actual = hex::encode({
         let mut h = Sha256::new();
         h.update(bytes);
@@ -252,16 +239,16 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), Box<HandlebarsErr
     });
 
     if actual != expected {
-        return Err(Box::new(HandlebarsError::ChecksumMismatch {
+        return Err(HandlebarsError::ChecksumMismatch {
             expected: expected.to_string(),
             actual,
-        }));
+        });
     }
 
     Ok(())
 }
 
 /// Helper function to parse bytes into a UTF-8 string
-fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, Box<HandlebarsError>> {
-    String::from_utf8(bytes).map_err(|err| Box::new(HandlebarsError::DecodeUtf8 { source: err }))
+fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, HandlebarsError> {
+    String::from_utf8(bytes).context(DecodeUtf8Snafu)
 }

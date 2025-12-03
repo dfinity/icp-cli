@@ -62,9 +62,10 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
         // Specified path
         if let Some(dir) = &self.dir {
             if !dir.join(PROJECT_MANIFEST).exists() {
-                return Err(ProjectRootLocateError::NotFound {
+                return NotFoundSnafu {
                     path: dir.to_owned(),
-                });
+                }
+                .fail();
             }
 
             return Ok(dir.to_owned());
@@ -80,9 +81,10 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
                     continue;
                 }
 
-                return Err(ProjectRootLocateError::NotFound {
+                return NotFoundSnafu {
                     path: self.cwd.to_owned(),
-                });
+                }
+                .fail();
             }
 
             return Ok(dir);

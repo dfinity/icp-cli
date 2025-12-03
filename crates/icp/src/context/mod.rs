@@ -187,17 +187,19 @@ impl Context {
     ) -> Result<(PathBuf, Canister), GetEnvCanisterError> {
         let p = self.project.load().await?;
         let Some((path, canister)) = p.get_canister(canister_name) else {
-            return Err(GetEnvCanisterError::CanisterNotFoundInProject {
+            return CanisterNotFoundInProjectSnafu {
                 canister_name: canister_name.to_owned(),
-            });
+            }
+            .fail();
         };
 
         let env = self.get_environment(environment).await?;
         if !env.contains_canister(canister_name) {
-            return Err(GetEnvCanisterError::CanisterNotInEnv {
+            return CanisterNotInEnvSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
-            });
+            }
+            .fail();
         }
         Ok((path.clone(), canister.clone()))
     }
@@ -221,10 +223,11 @@ impl Context {
                 };
 
                 if !env.canisters.contains_key(canister_name) {
-                    return Err(GetCanisterIdForEnvError::CanisterNotFoundInEnv {
+                    return CanisterNotFoundInEnvSnafu {
                         canister_name: canister_name.to_owned(),
                         environment_name: environment.name().to_owned(),
-                    });
+                    }
+                    .fail();
                 }
 
                 // Lookup the canister id
@@ -263,10 +266,11 @@ impl Context {
         };
 
         if !env.canisters.contains_key(canister_name) {
-            return Err(SetCanisterIdForEnvError::SetCanisterNotFoundInEnv {
+            return SetCanisterNotFoundInEnvSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
-            });
+            }
+            .fail();
         }
 
         // Register the canister id

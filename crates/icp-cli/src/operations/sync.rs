@@ -122,7 +122,7 @@ pub(crate) async fn sync_many(
     }
 
     if found_error {
-        return Err(SyncOperationError);
+        return SyncOperationSnafu.fail();
     }
 
     Ok(())

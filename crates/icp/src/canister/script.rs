@@ -27,7 +27,8 @@ fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
     if words.is_empty() {
         return EmptyCommandSnafu {
             command: s.to_owned(),
-        }.fail();
+        }
+        .fail();
     }
 
     let mut cmd = Command::new("sh");
@@ -159,7 +160,8 @@ impl Script {
                 return StatusSnafu {
                     command: input_cmd.to_owned(),
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-                }.fail();
+                }
+                .fail();
             }
         }
 
@@ -270,7 +272,8 @@ impl Script {
                 return StatusSnafu {
                     command: input_cmd.to_owned(),
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-                }.fail();
+                }
+                .fail();
             }
         }
 

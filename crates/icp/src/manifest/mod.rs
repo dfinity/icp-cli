@@ -64,7 +64,8 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
             if !dir.join(PROJECT_MANIFEST).exists() {
                 return NotFoundSnafu {
                     path: dir.to_owned(),
-                }.fail();
+                }
+                .fail();
             }
 
             return Ok(dir.to_owned());
@@ -82,7 +83,8 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
 
                 return NotFoundSnafu {
                     path: self.cwd.to_owned(),
-                }.fail();
+                }
+                .fail();
             }
 
             return Ok(dir);

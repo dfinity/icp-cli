@@ -101,7 +101,8 @@ pub async fn get_managed_network_access(
                 network: pdesc.network,
                 port: pdesc.gateway.port,
                 project_dir: pdesc.project_dir,
-            }.fail();
+            }
+            .fail();
         }
     }
 

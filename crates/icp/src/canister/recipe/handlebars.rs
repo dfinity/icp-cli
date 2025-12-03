@@ -127,7 +127,8 @@ impl Handlebars {
                 if !resp.status().is_success() {
                     return HttpStatusSnafu {
                         status: resp.status().as_u16(),
-                    }.fail();
+                    }
+                    .fail();
                 }
 
                 let bytes = resp.bytes().await.context(HttpRequestSnafu)?;
@@ -242,7 +243,8 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> 
         return ChecksumMismatchSnafu {
             expected: expected.to_string(),
             actual,
-        }.fail();
+        }
+        .fail();
     }
 
     Ok(())

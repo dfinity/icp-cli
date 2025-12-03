@@ -124,7 +124,8 @@ impl CreateOperation {
             CreateCanisterResponse::Err(err) => {
                 return CreateCanisterSnafu {
                     message: err.format_error(self.inner.cycles),
-                }.fail();
+                }
+                .fail();
             }
         };
 

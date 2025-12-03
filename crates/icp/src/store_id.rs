@@ -154,7 +154,8 @@ impl Access for AccessImpl {
                 env: env.to_owned(),
                 canister_name: canister_name.to_owned(),
                 id: existing_id,
-            }.fail();
+            }
+            .fail();
         }
 
         // Store JSON
@@ -274,7 +275,8 @@ pub(crate) mod mock {
                     env: env.to_owned(),
                     canister_name: canister_name.to_owned(),
                     id: existing_cid,
-                }.fail();
+                }
+                .fail();
             }
 
             Ok(())

@@ -149,12 +149,14 @@ pub async fn mint_cycles(
                 return InsufficientFundsSnafu {
                     required,
                     available,
-                }.fail();
+                }
+                .fail();
             }
             err => {
                 return TransferFailedSnafu {
                     message: format!("{:?}", err),
-                }.fail();
+                }
+                .fail();
             }
         },
     };

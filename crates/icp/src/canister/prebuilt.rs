@@ -123,7 +123,8 @@ impl Prebuilt {
                 return ChecksumMismatchSnafu {
                     expected: expected.to_owned(),
                     actual,
-                }.fail();
+                }
+                .fail();
             }
         }
 

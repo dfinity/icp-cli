@@ -189,7 +189,8 @@ impl Context {
         let Some((path, canister)) = p.get_canister(canister_name) else {
             return CanisterNotFoundInProjectSnafu {
                 canister_name: canister_name.to_owned(),
-            }.fail();
+            }
+            .fail();
         };
 
         let env = self.get_environment(environment).await?;
@@ -197,7 +198,8 @@ impl Context {
             return CanisterNotInEnvSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
-            }.fail();
+            }
+            .fail();
         }
         Ok((path.clone(), canister.clone()))
     }
@@ -224,7 +226,8 @@ impl Context {
                     return CanisterNotFoundInEnvSnafu {
                         canister_name: canister_name.to_owned(),
                         environment_name: environment.name().to_owned(),
-                    }.fail();
+                    }
+                    .fail();
                 }
 
                 // Lookup the canister id
@@ -266,7 +269,8 @@ impl Context {
             return SetCanisterNotFoundInEnvSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
-            }.fail();
+            }
+            .fail();
         }
 
         // Register the canister id

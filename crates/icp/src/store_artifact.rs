@@ -106,7 +106,8 @@ impl Access for ArtifactStore {
                 if !artifact.exists() {
                     return LookupArtifactNotFoundSnafu {
                         name: name.to_owned(),
-                    }.fail();
+                    }
+                    .fail();
                 }
 
                 // Load artifact

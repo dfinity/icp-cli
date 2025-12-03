@@ -460,7 +460,8 @@ async fn mint_cycles_to_account(
         eprintln!("Failed to notify mint cycles: {err:?}");
         return SeedTokensSnafu {
             error: format!("Failed to notify mint cycles: {err:?}"),
-        }.fail();
+        }
+        .fail();
     }
 
     if let NotifyMintResponse::Ok(ok) = mint_result.0 {

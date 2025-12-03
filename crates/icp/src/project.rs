@@ -260,7 +260,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         return DuplicateSnafu {
                             kind: "canister".to_string(),
                             name: e.key().to_owned(),
-                        }.fail();
+                        }
+                        .fail();
                     }
 
                     // Ok
@@ -303,7 +304,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         return NotFoundSnafu {
                             kind: "network".to_string(),
                             path: path.to_string(),
-                        }.fail();
+                        }
+                        .fail();
                     }
                     let loader = PathLoader;
                     loader.load(&path).await.context(LoadNetworkSnafu)?
@@ -318,13 +320,15 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         return ReservedSnafu {
                             kind: "network".to_string(),
                             name: m.name.to_string(),
-                        }.fail();
+                        }
+                        .fail();
                     }
 
                     return DuplicateSnafu {
                         kind: "network".to_string(),
                         name: e.key().to_owned(),
-                    }.fail();
+                    }
+                    .fail();
                 }
 
                 // Ok
@@ -348,7 +352,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         return NotFoundSnafu {
                             kind: "environment".to_string(),
                             path: path.to_string(),
-                        }.fail();
+                        }
+                        .fail();
                     }
                     let loader = PathLoader;
                     loader.load(&path).await.context(LoadEnvironmentSnafu)?
@@ -362,7 +367,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                     return DuplicateSnafu {
                         kind: "environment".to_string(),
                         name: e.key().to_owned(),
-                    }.fail();
+                    }
+                    .fail();
                 }
 
                 // Ok
@@ -376,7 +382,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                                 InvalidNetworkSnafu {
                                     environment: m.name.to_owned(),
                                     network: m.network.to_owned(),
-                                }.build(),
+                                }
+                                .build(),
                             )?;
 
                             v.to_owned()
@@ -401,7 +408,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                                             InvalidCanisterSnafu {
                                                 environment: m.name.to_owned(),
                                                 canister: name.to_owned(),
-                                            }.build(),
+                                            }
+                                            .build(),
                                         )?;
 
                                         cs.insert(name.to_owned(), v.to_owned());
@@ -429,7 +437,8 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         InvalidNetworkSnafu {
                             environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
                             network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
-                        }.build(),
+                        }
+                        .build(),
                     )?
                     .to_owned(),
                 canisters: canisters.clone(),

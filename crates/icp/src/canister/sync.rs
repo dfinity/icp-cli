@@ -5,10 +5,11 @@ use candid::Principal;
 use ic_agent::Agent;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    canister::{script::ScriptError, sync},
+    canister::{assets::AssetsError, script::ScriptError, sync},
     manifest::adapter::{assets, script},
     prelude::*,
 };
@@ -58,13 +59,13 @@ pub struct Params {
     pub cid: Principal,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum SynchronizeError {
-    #[error(transparent)]
-    Script(#[from] ScriptError),
+    #[snafu(transparent)]
+    Script { source: ScriptError },
 
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Assets { source: AssetsError },
 }
 
 #[async_trait]

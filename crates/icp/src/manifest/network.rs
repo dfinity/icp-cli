@@ -40,20 +40,23 @@ pub struct Gateway {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Error, anyhow};
     use indoc::indoc;
 
     use super::*;
 
     /// Validates network yaml against the schema and deserializes it to a manifest
-    fn validate_network_yaml(s: &str) -> Result<NetworkManifest, Error> {
+    fn validate_network_yaml(s: &str) -> NetworkManifest {
         let schema = serde_json::from_str::<serde_json::Value>(include_str!(
             "../../../../docs/schemas/network-yaml-schema.json"
-        ))?;
-        let network_yaml = serde_yaml::from_str::<serde_json::Value>(s)?;
+        ))
+        .expect("failed to deserialize network.yaml schema");
+        let network_yaml = serde_yaml::from_str::<serde_json::Value>(s)
+            .expect("failed to deserialize network.yaml");
 
         // Build & reuse
-        let validator = jsonschema::options().build(&schema)?;
+        let validator = jsonschema::options()
+            .build(&schema)
+            .expect("failed to build jsonschema validator");
 
         // Iterate over errors
         for error in validator.iter_errors(&network_yaml) {
@@ -62,17 +65,18 @@ mod tests {
 
         assert!(validator.is_valid(&network_yaml));
 
-        Ok(serde_yaml::from_str::<NetworkManifest>(s)?)
+        serde_yaml::from_str::<NetworkManifest>(s)
+            .expect("failed to deserialize NetworkManifest from yaml")
     }
 
     #[test]
-    fn connected_network() -> Result<(), Error> {
+    fn connected_network() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
                 name: my-network
                 mode: connected
                 url: https://ic0.app
-            "#})?,
+            "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
@@ -81,42 +85,34 @@ mod tests {
                 }),
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn just_a_name_fails() -> Result<(), Error> {
+    fn just_a_name_fails() {
         match serde_yaml::from_str::<NetworkManifest>(r#"name: my-network"#) {
             // No Error
             Ok(_) => {
-                return Err(anyhow!(
-                    "an incomplete network definition should result in an error"
-                ));
+                panic!("an incomplete network definition should result in an error");
             }
 
             // Wrong Error
             Err(err) => {
                 if !format!("{err}").starts_with("missing field `mode`") {
-                    return Err(anyhow!(
-                        "an incomplete network definition resulted in the wrong error: {err}"
-                    ));
+                    panic!("an incomplete network definition resulted in the wrong error: {err}");
                 };
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn connected_network_with_key() -> Result<(), Error> {
+    fn connected_network_with_key() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
-                name: my-network
-                mode: connected
-                url: https://ic0.app
-                root-key: the-key
-            "#})?,
+                    name: my-network
+                    mode: connected
+                    url: https://ic0.app
+                    root-key: the-key
+                "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
@@ -125,35 +121,31 @@ mod tests {
                 }),
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn managed_network() -> Result<(), Error> {
+    fn managed_network() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
-                name: my-network
-                mode: managed
-            "#})?,
+                    name: my-network
+                    mode: managed
+                "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed { gateway: None })
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn managed_network_with_host() -> Result<(), Error> {
+    fn managed_network_with_host() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
-                name: my-network
-                mode: managed
-                gateway:
-                  host: localhost
-            "#})?,
+                    name: my-network
+                    mode: managed
+                    gateway:
+                      host: localhost
+                "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
@@ -164,20 +156,18 @@ mod tests {
                 })
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn managed_network_with_port() -> Result<(), Error> {
+    fn managed_network_with_port() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
-                name: my-network
-                mode: managed
-                gateway:
-                  host: localhost
-                  port: 8000
-            "#})?,
+                    name: my-network
+                    mode: managed
+                    gateway:
+                      host: localhost
+                      port: 8000
+                "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
@@ -188,7 +178,5 @@ mod tests {
                 })
             },
         );
-
-        Ok(())
     }
 }

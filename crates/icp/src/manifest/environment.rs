@@ -70,7 +70,7 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
 
         // Name
         if name == DEFAULT_LOCAL_ENVIRONMENT_NAME {
-            return Err(ParseError::OverrideLocal);
+            return OverrideLocalSnafu.fail();
         }
 
         // Network
@@ -111,18 +111,17 @@ impl<'de> Deserialize<'de> for EnvironmentManifest {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Error, anyhow};
-
     use super::*;
 
     #[test]
-    fn empty() -> Result<(), Error> {
+    fn empty() {
         assert_eq!(
             serde_yaml::from_str::<EnvironmentManifest>(
                 r#"
                 name: my-environment
                 "#
-            )?,
+            )
+            .expect("failed to deserialize EnvironmentManifest from yaml"),
             EnvironmentManifest {
                 name: "my-environment".to_string(),
                 network: "local".to_string(),
@@ -130,30 +129,22 @@ mod tests {
                 settings: None,
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn override_local() -> Result<(), Error> {
+    fn override_local() {
         match serde_yaml::from_str::<EnvironmentManifest>(r#"name: local"#) {
             // No Error
             Ok(_) => {
-                return Err(anyhow!(
-                    "an environment named local should result in an error"
-                ));
+                panic!("an environment named local should result in an error");
             }
 
             // Wrong Error
             Err(err) => {
                 if !format!("{err}").starts_with("Overriding the local environment") {
-                    return Err(anyhow!(
-                        "an environment named local resulted in the wrong error: {err}"
-                    ));
+                    panic!("an environment named local resulted in the wrong error: {err}");
                 };
             }
         };
-
-        Ok(())
     }
 }

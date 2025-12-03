@@ -104,9 +104,10 @@ impl Access for ArtifactStore {
                 let artifact = store.artifact_by_name(name);
                 // Not Found
                 if !artifact.exists() {
-                    return Err(LookupArtifactError::LookupArtifactNotFound {
+                    return LookupArtifactNotFoundSnafu {
                         name: name.to_owned(),
-                    });
+                    }
+                    .fail();
                 }
 
                 // Load artifact

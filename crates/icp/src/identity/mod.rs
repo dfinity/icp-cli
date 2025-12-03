@@ -95,9 +95,6 @@ pub enum LoadError {
 
     #[snafu(transparent)]
     LockIdentityDirError { source: LockError },
-
-    #[snafu(transparent)]
-    Unexpected { source: anyhow::Error },
 }
 
 #[async_trait]

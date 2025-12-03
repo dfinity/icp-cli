@@ -1,34 +1,54 @@
 use std::{env::current_dir, sync::Arc};
 
+use console::Term;
+use snafu::prelude::*;
+
 use crate::canister::assets::Assets;
 use crate::canister::build::Builder;
 use crate::canister::prebuilt::Prebuilt;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::script::Script;
 use crate::canister::sync::Syncer;
+use crate::context::Context;
 use crate::directories::{Access as _, Directories};
+use crate::store_artifact::ArtifactStore;
 use crate::{
     Lazy, Loader, ProjectLoaders, agent, canister, identity, manifest, network, prelude::*,
     project, store_id,
 };
-use anyhow::Error;
-use console::Term;
 
-use crate::context::Context;
-use crate::store_artifact::ArtifactStore;
+#[derive(Debug, Snafu)]
+pub enum ContextInitError {
+    #[snafu(display("failed to initialize directories"))]
+    Directories {
+        source: crate::directories::DirectoriesError,
+    },
+
+    #[snafu(display("failed to get current working directory"))]
+    Cwd { source: std::io::Error },
+
+    #[snafu(display("failed to convert path to UTF-8"))]
+    Utf8Path { source: FromPathBufError },
+
+    #[snafu(display("failed to lock identity directory"))]
+    IdentityDirectory { source: crate::fs::lock::LockError },
+}
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     term: Term,
     debug: bool,
-) -> Result<Context, Error> {
+) -> Result<Context, ContextInitError> {
     // Setup global directory structure
-    let dirs = Arc::new(Directories::new()?);
+    let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
 
     // Project Root
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        current_dir()?.try_into()?, // cwd
-        project_root_override,      // dir
+        current_dir()
+            .context(CwdSnafu)?
+            .try_into()
+            .context(Utf8PathSnafu)?, // cwd
+        project_root_override, // dir
     ));
 
     // Canister ID Store
@@ -83,7 +103,7 @@ pub fn initialize(
 
     // Identity loader
     let idload = Arc::new(identity::Loader {
-        dir: dirs.identity()?,
+        dir: dirs.identity().context(IdentityDirectorySnafu)?,
     });
 
     // Network accessor

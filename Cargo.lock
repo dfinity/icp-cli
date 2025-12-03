@@ -2500,7 +2500,6 @@ dependencies = [
 name = "icp"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "bip32 0.5.3",
  "camino",
@@ -2545,7 +2544,6 @@ dependencies = [
  "snafu",
  "strum 0.27.2",
  "sysinfo",
- "thiserror 2.0.17",
  "time",
  "tiny-bip39 2.0.0",
  "tokio",

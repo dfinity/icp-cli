@@ -1,9 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::Context;
 use async_trait::async_trait;
 use serde::Serialize;
-use snafu::Snafu;
+use snafu::prelude::*;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -104,16 +103,13 @@ impl Project {
 #[derive(Debug, Snafu)]
 pub enum LoadError {
     #[snafu(display("failed to locate project directory"))]
-    Locate,
+    Locate { source: ProjectRootLocateError },
 
     #[snafu(display("failed to load path"))]
-    Path,
+    Path { source: project::LoadPathError },
 
     #[snafu(display("failed to load the project manifest"))]
-    Manifest,
-
-    #[snafu(transparent)]
-    Unexpected { source: anyhow::Error },
+    Manifest { source: project::LoadManifestError },
 }
 
 #[async_trait]
@@ -147,10 +143,7 @@ impl Load for Loader {
     async fn load(&self) -> Result<Project, LoadError> {
         debug!("Loading project");
         // Locate project root
-        let pdir = self
-            .project_root_locate
-            .locate()
-            .context(LoadError::Locate)?;
+        let pdir = self.project_root_locate.locate().context(LocateSnafu)?;
 
         debug!("Located icp project in {pdir}");
 
@@ -160,7 +153,7 @@ impl Load for Loader {
             .path
             .load(&pdir.join(PROJECT_MANIFEST))
             .await
-            .context(LoadError::Path)?;
+            .context(PathSnafu)?;
 
         debug!("Loaded project manifest: {m:#?}");
 
@@ -170,7 +163,7 @@ impl Load for Loader {
             .manifest
             .load(&m)
             .await
-            .context(LoadError::Manifest)?;
+            .context(ManifestSnafu)?;
 
         debug!("Rendered project definition: {p:#?}");
 
@@ -515,7 +508,11 @@ pub struct NoProjectLoader;
 #[async_trait]
 impl Load for NoProjectLoader {
     async fn load(&self) -> Result<Project, LoadError> {
-        Err(LoadError::Locate)
+        Err(LoadError::Locate {
+            source: ProjectRootLocateError::NotFound {
+                path: "/some/path".into(),
+            },
+        })
     }
 
     async fn exists(&self) -> Result<bool, LoadError> {

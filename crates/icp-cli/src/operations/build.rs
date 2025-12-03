@@ -65,7 +65,7 @@ pub(crate) async fn build(
     }
 
     if !wasm_output_path.exists() {
-        return Err(BuildOperationError::MissingWasmOutput);
+        return MissingWasmOutputSnafu.fail();
     }
 
     let wasm = icp::fs::read(&wasm_output_path).context(ReadWasmOutputSnafu)?;

@@ -1,15 +1,19 @@
+use camino_tempfile::Utf8TempDir;
 use candid::Principal;
+use notify::Watcher;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
     InstanceConfig, InstanceId, RawTime, SubnetConfigSet, Topology,
 };
 use reqwest::Url;
+use serde::Deserialize;
 use snafu::prelude::*;
-use std::process::Stdio;
+use std::{io::ErrorKind, process::Stdio};
 use time::OffsetDateTime;
+use tokio::process::Child;
 
-use crate::prelude::*;
+use crate::{network::Port, prelude::*};
 
 #[allow(dead_code)]
 pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
@@ -102,6 +106,133 @@ pub fn spawn_pocketic(
 
     eprintln!("Starting PocketIC...");
     cmd.spawn().expect("Could not start PocketIC.")
+}
+
+pub async fn spawn_pocketic_launcher(
+    pocketic_launcher_path: &Path,
+    stdout_file: &Path,
+    stderr_file: &Path,
+    background: bool,
+    port: &Port,
+    state_dir: &Path,
+) -> (Child, PocketIcInstance) {
+    let mut cmd = tokio::process::Command::new(pocketic_launcher_path);
+    cmd.args(["--state-dir", state_dir.as_str()]);
+
+    if let Port::Fixed(port) = port {
+        cmd.args(["--port", &port.to_string()]);
+    }
+    if background {
+        cmd.args([
+            "--stdout-file",
+            stdout_file.as_str(),
+            "--stderr-file",
+            stderr_file.as_str(),
+        ]);
+    }
+    let status_dir = Utf8TempDir::new().unwrap();
+    cmd.args(["--status-dir", status_dir.path().as_str()]);
+    let watcher = wait_for_single_line_file(&status_dir.path().join("status.json")).unwrap();
+    let child = cmd.spawn().expect("Could not start PocketIC launcher.");
+    let status_content = watcher
+        .await
+        .expect("Failed to read PocketIC launcher status.");
+    let launcher_status: LauncherStatus =
+        serde_json::from_str(&status_content).expect("Failed to parse PocketIC launcher status.");
+    assert_eq!(
+        launcher_status.v, "1",
+        "unexpected PocketIC launcher status version"
+    );
+    (
+        child,
+        PocketIcInstance {
+            admin: PocketIcAdminInterface::new(
+                Url::parse(&format!("http://localhost:{}", launcher_status.config_port)).unwrap(),
+            ),
+            gateway_port: launcher_status.gateway_port,
+            instance_id: launcher_status.instance_id,
+            effective_canister_id: launcher_status.default_effective_canister_id,
+            root_key: launcher_status.root_key,
+        },
+    )
+}
+
+#[derive(Debug, Snafu)]
+pub enum WaitForFileError {
+    #[snafu(display("failed to watch file changes at path {path}"))]
+    Watch {
+        source: notify::Error,
+        path: PathBuf,
+    },
+
+    #[snafu(display("failed to read event for file {path}"))]
+    ReadEvent {
+        source: notify::Error,
+        path: PathBuf,
+    },
+
+    #[snafu(transparent)]
+    ReadFile { source: crate::fs::IoError },
+}
+
+/// Waits for a file to be created and have a full line of content. Call the function before initing the external process,
+/// then await the future after the init.
+fn wait_for_single_line_file(
+    path: &Path,
+) -> Result<impl Future<Output = Result<String, WaitForFileError>> + use<>, WaitForFileError> {
+    let dir = path.parent().unwrap();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut tx = Some(tx);
+    let mut watcher = notify::recommended_watcher({
+        let path = path.to_path_buf();
+        let dir = dir.to_path_buf();
+        move |res: notify::Result<notify::Event>| match res {
+            Ok(event) => {
+                if event.kind.is_modify() {
+                    let content_res = crate::fs::read_to_string(&path);
+                    match content_res {
+                        Ok(content) => {
+                            if content.ends_with('\n')
+                                && let Some(tx) = tx.take()
+                            {
+                                let _ = tx.send(Ok(content));
+                            }
+                        }
+                        Err(e) if e.kind() == ErrorKind::NotFound => {}
+                        Err(e) => {
+                            if let Some(tx) = tx.take() {
+                                let _ = tx.send(Err(e.into()));
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(tx) = tx.take() {
+                    let _ = tx.send(Err(e).context(ReadEventSnafu { path: &dir }));
+                }
+            }
+        }
+    })
+    .context(WatchSnafu { path: &dir })?;
+    watcher
+        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
+        .context(WatchSnafu { path: &dir })?;
+    Ok(async {
+        let _watcher = watcher;
+        let res = rx.await;
+        res.unwrap()
+    })
+}
+
+#[derive(Deserialize)]
+struct LauncherStatus {
+    v: String,
+    instance_id: usize,
+    config_port: u16,
+    gateway_port: u16,
+    root_key: String,
+    default_effective_canister_id: Principal,
 }
 
 pub struct PocketIcAdminInterface {

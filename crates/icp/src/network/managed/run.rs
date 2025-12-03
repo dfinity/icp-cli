@@ -18,12 +18,12 @@ use pocket_ic::{
 use reqwest::Url;
 use snafu::prelude::*;
 use std::{env::var, fs::read_to_string, io::Write, process::ExitStatus, time::Duration};
-use sysinfo::Pid;
+use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
 
 use crate::{
-    fs::{create_dir_all, lock::LockError, remove_dir_all, remove_file},
+    fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
         Managed, NetworkDirectory, Port,
         RunNetworkError::NoPocketIcPath,
@@ -31,7 +31,7 @@ use crate::{
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::pocketic::{
             CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
-            default_instance_config, spawn_pocketic,
+            spawn_pocketic_launcher,
         },
     },
     prelude::*,
@@ -44,12 +44,16 @@ pub async fn run_network(
     seed_accounts: impl Iterator<Item = Principal> + Clone,
     background: bool,
 ) -> Result<(), RunNetworkError> {
-    let pocketic_path = PathBuf::from(var("ICP_POCKET_IC_PATH").ok().ok_or(NoPocketIcPath)?);
+    let pocketic_launcher_path = PathBuf::from(
+        var("ICP_POCKET_IC_LAUNCHER_PATH")
+            .ok()
+            .ok_or(NoPocketIcPath)?,
+    );
 
     nd.ensure_exists()?;
 
-    run_pocketic(
-        &pocketic_path,
+    run_pocketic_launcher(
+        &pocketic_launcher_path,
         config,
         &nd,
         project_root,
@@ -65,7 +69,7 @@ pub enum RunNetworkError {
     #[snafu(transparent)]
     CreateDirFailed { source: crate::fs::IoError },
 
-    #[snafu(display("ICP_POCKET_IC_PATH environment variable is not set"))]
+    #[snafu(display("ICP_POCKET_IC_LAUNCHER_PATH environment variable is not set"))]
     NoPocketIcPath,
 
     #[snafu(transparent)]
@@ -75,8 +79,8 @@ pub enum RunNetworkError {
     RunPocketIc { source: RunPocketIcError },
 }
 
-async fn run_pocketic(
-    pocketic_path: &Path,
+async fn run_pocketic_launcher(
+    pocketic_launcher_path: &Path,
     config: &Managed,
     nd: &NetworkDirectory,
     project_root: &Path,
@@ -96,40 +100,49 @@ async fn run_pocketic(
                 .as_ref()
                 .map(|lock| lock.claim_port())
                 .transpose()?;
-            eprintln!("PocketIC path: {pocketic_path}");
+            eprintln!("PocketIC launcher path: {pocketic_launcher_path}");
 
             create_dir_all(&root.pocketic_dir()).context(CreateDirAllSnafu)?;
 
-            let port_file = root.pocketic_port_file();
-            if port_file.exists() {
-                remove_file(&port_file).context(RemoveDirAllSnafu)?;
-            }
-            eprintln!("Port file: {port_file}");
+            // let port_file = root.pocketic_port_file();
+            // if port_file.exists() {
+            //     remove_file(&port_file).context(RemoveDirAllSnafu)?;
+            // }
+            // eprintln!("Port file: {port_file}");
 
             if root.state_dir().exists() {
                 remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
-            let mut child = spawn_pocketic(
-                pocketic_path,
-                &port_file,
+            // let mut child = spawn_pocketic(
+            //     pocketic_path,
+            //     &port_file,
+            //     &root.pocketic_stdout_file(),
+            //     &root.pocketic_stderr_file(),
+            //     background,
+            // );
+            let (child, instance) = spawn_pocketic_launcher(
+                pocketic_launcher_path,
                 &root.pocketic_stdout_file(),
                 &root.pocketic_stderr_file(),
                 background,
-            );
-            let pocketic_port = wait_for_port(&port_file, &mut child).await?;
-            eprintln!("PocketIC started on port {pocketic_port}");
-            let instance = initialize_pocketic(
-                pocketic_port,
                 &config.gateway.port,
                 &root.state_dir(),
-                seed_accounts,
             )
-            .await?;
-            let port = instance.gateway_port;
-
+            .await;
+            // let pocketic_port = wait_for_port(&port_file, &mut child).await?;
+            eprintln!("PocketIC started on port {}", instance.gateway_port);
+            // let instance = initialize_pocketic(
+            //     pocketic_port,
+            //     &config.gateway.port,
+            //     &root.state_dir(),
+            //     seed_accounts,
+            // )
+            // .await?;
+            // let port = instance.gateway_port;
+            seed_instance(&instance, seed_accounts).await?;
             let gateway = NetworkDescriptorGatewayPort {
-                port,
+                port: instance.gateway_port,
                 fixed: matches!(config.gateway.port, Port::Fixed(_)),
             };
             let default_effective_canister_id = instance.effective_canister_id;
@@ -152,7 +165,7 @@ async fn run_pocketic(
                 &descriptor,
             )
             .await?;
-            Ok((child, port, port_claim))
+            Ok((child, instance.gateway_port, port_claim))
         })
         .await??;
     if background {
@@ -165,13 +178,22 @@ async fn run_pocketic(
         eprintln!("Press Ctrl-C to exit.");
 
         let _ = wait_for_shutdown(&mut child).await;
-        let _ = child.kill().await;
+        let pid = child.id().unwrap() as usize;
+        send_sigint(pid.into());
         let _ = child.wait().await;
 
         let _ = nd.cleanup_project_network_descriptor().await;
         let _ = nd.cleanup_port_descriptor(Some(port)).await;
     }
     Ok(())
+}
+
+fn send_sigint(pid: Pid) {
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+    if let Some(process) = system.process(pid) {
+        process.kill_with(Signal::Interrupt);
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -290,20 +312,20 @@ pub enum WaitForPortError {
     ChildExited { source: ChildExitError },
 }
 
-async fn initialize_pocketic(
-    pocketic_port: u16,
-    gateway_bind_port: &Port,
-    state_dir: &Path,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
-) -> Result<PocketIcInstance, InitializePocketicError> {
-    let instance_config = default_instance_config(state_dir);
-    let gateway_port = match gateway_bind_port {
-        Port::Fixed(port) => Some(*port),
-        Port::Random => None,
-    };
+// async fn initialize_pocketic(
+//     pocketic_port: u16,
+//     gateway_bind_port: &Port,
+//     state_dir: &Path,
+//     seed_accounts: impl Iterator<Item = Principal> + Clone,
+// ) -> Result<PocketIcInstance, InitializePocketicError> {
+//     let instance_config = default_instance_config(state_dir);
+//     let gateway_port = match gateway_bind_port {
+//         Port::Fixed(port) => Some(*port),
+//         Port::Random => None,
+//     };
 
-    initialize_instance(pocketic_port, instance_config, gateway_port, seed_accounts).await
-}
+//     initialize_instance(pocketic_port, instance_config, gateway_port, seed_accounts).await
+// }
 
 pub async fn initialize_instance(
     pocketic_port: u16,
@@ -380,6 +402,41 @@ pub async fn initialize_instance(
         root_key,
     };
     Ok(props)
+}
+
+pub async fn seed_instance(
+    instance: &PocketIcInstance,
+    seed_accounts: impl Iterator<Item = Principal> + Clone,
+) -> Result<(), InitializePocketicError> {
+    eprintln!("Seeding ICP and TCYCLES account balances");
+    let pocket_ic_client = PocketIc::new_from_existing_instance(
+        instance.admin.base_url.clone(),
+        instance.instance_id,
+        None,
+    );
+    let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&pocket_ic_client).await?;
+    let seed_icp = join_all(
+        seed_accounts
+            .clone()
+            .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic
+            .map(|account| mint_icp_to_account(&pocket_ic_client, account, 100_000_000_000_000u64)),
+    );
+    let seed_cycles = join_all(seed_accounts.map(|account| {
+        mint_cycles_to_account(
+            &pocket_ic_client,
+            account,
+            1_000_000_000_000_000u128, // 1k TCYCLES
+            icp_xdr_conversion_rate,
+        )
+    }));
+    let (seed_icp_results, seed_cycles_results) = join(seed_icp, seed_cycles).await;
+    seed_icp_results
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    seed_cycles_results
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(())
 }
 
 #[derive(Debug, Snafu)]

@@ -95,7 +95,7 @@ impl Prebuilt {
 
                 // Check for success
                 if !status.is_success() {
-                    return Err(PrebuiltError::HttpStatus { status });
+                    return HttpStatusSnafu { status }.fail();
                 }
 
                 // Read response body
@@ -120,10 +120,10 @@ impl Prebuilt {
 
             // Verify Checksum
             if &actual != expected {
-                return Err(PrebuiltError::ChecksumMismatch {
+                return ChecksumMismatchSnafu {
                     expected: expected.to_owned(),
                     actual,
-                });
+                }.fail();
             }
         }
 

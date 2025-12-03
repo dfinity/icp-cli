@@ -108,7 +108,7 @@ pub async fn mint_cycles(
             .to_u64()
             .ok_or(MintCyclesError::IcpAmountOverflow)?
     } else {
-        return Err(MintCyclesError::NoAmountSpecified);
+        return NoAmountSpecifiedSnafu.fail();
     };
 
     // Prepare transfer to CMC
@@ -146,15 +146,15 @@ pub async fn mint_cycles(
                 let required =
                     BigDecimal::new((icp_e8s_to_deposit + ICP_LEDGER_BLOCK_FEE_E8S).into(), 8);
                 let available = BigDecimal::new(balance.e8s().into(), 8);
-                return Err(MintCyclesError::InsufficientFunds {
+                return InsufficientFundsSnafu {
                     required,
                     available,
-                });
+                }.fail();
             }
             err => {
-                return Err(MintCyclesError::TransferFailed {
+                return TransferFailedSnafu {
                     message: format!("{:?}", err),
-                });
+                }.fail();
             }
         },
     };

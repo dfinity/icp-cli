@@ -150,11 +150,11 @@ impl Access for AccessImpl {
 
         // Insert the new canister ID
         if let Some(existing_id) = mapping.insert(canister_name.to_owned(), canister_id) {
-            return Err(RegisterError::AlreadyRegistered {
+            return AlreadyRegisteredSnafu {
                 env: env.to_owned(),
                 canister_name: canister_name.to_owned(),
                 id: existing_id,
-            });
+            }.fail();
         }
 
         // Store JSON
@@ -270,11 +270,11 @@ pub(crate) mod mock {
             let mapping = store.entry(env.to_owned()).or_insert_with(BTreeMap::new);
 
             if let Some(existing_cid) = mapping.insert(canister_name.to_owned(), canister_id) {
-                return Err(RegisterError::AlreadyRegistered {
+                return AlreadyRegisteredSnafu {
                     env: env.to_owned(),
                     canister_name: canister_name.to_owned(),
                     id: existing_cid,
-                });
+                }.fail();
             }
 
             Ok(())

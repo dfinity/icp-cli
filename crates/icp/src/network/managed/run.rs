@@ -244,7 +244,7 @@ pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutEr
         }
 
         if start_time.elapsed().as_secs() > 30 {
-            return Err(WaitForPortTimeoutError);
+            return WaitForPortTimeoutSnafu.fail();
         }
         sleep(Duration::from_millis(100)).await;
     }
@@ -458,9 +458,9 @@ async fn mint_cycles_to_account(
     })?;
     if let NotifyMintResponse::Err(err) = mint_result.0 {
         eprintln!("Failed to notify mint cycles: {err:?}");
-        return Err(InitializePocketicError::SeedTokens {
+        return SeedTokensSnafu {
             error: format!("Failed to notify mint cycles: {err:?}"),
-        });
+        }.fail();
     }
 
     if let NotifyMintResponse::Ok(ok) = mint_result.0 {

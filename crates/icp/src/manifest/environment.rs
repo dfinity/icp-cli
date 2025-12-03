@@ -70,7 +70,7 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
 
         // Name
         if name == DEFAULT_LOCAL_ENVIRONMENT_NAME {
-            return Err(ParseError::OverrideLocal);
+            return OverrideLocalSnafu.fail();
         }
 
         // Network

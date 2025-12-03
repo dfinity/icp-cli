@@ -25,9 +25,9 @@ fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
     })?;
 
     if words.is_empty() {
-        return Err(ScriptError::EmptyCommand {
+        return EmptyCommandSnafu {
             command: s.to_owned(),
-        });
+        }.fail();
     }
 
     let mut cmd = Command::new("sh");
@@ -156,10 +156,10 @@ impl Script {
             })?;
 
             if !status.success() {
-                return Err(ScriptError::Status {
+                return StatusSnafu {
                     command: input_cmd.to_owned(),
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-                });
+                }.fail();
             }
         }
 
@@ -267,10 +267,10 @@ impl Script {
             })?;
 
             if !status.success() {
-                return Err(ScriptError::Status {
+                return StatusSnafu {
                     command: input_cmd.to_owned(),
                     code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-                });
+                }.fail();
             }
         }
 

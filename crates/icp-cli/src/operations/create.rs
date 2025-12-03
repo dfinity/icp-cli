@@ -122,9 +122,9 @@ impl CreateOperation {
         let cid = match resp {
             CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
             CreateCanisterResponse::Err(err) => {
-                return Err(CreateOperationError::CreateCanister {
+                return CreateCanisterSnafu {
                     message: err.format_error(self.inner.cycles),
-                });
+                }.fail();
             }
         };
 
@@ -206,7 +206,7 @@ async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOp
 
     // Check if any subnets are available
     if resp.is_empty() {
-        return Err(CreateOperationError::NoAvailableSubnets);
+        return NoAvailableSubnetsSnafu.fail();
     }
 
     Ok(resp)

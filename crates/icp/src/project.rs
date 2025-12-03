@@ -257,10 +257,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 match canisters.entry(m.name.to_owned()) {
                     // Duplicate
                     Entry::Occupied(e) => {
-                        return Err(LoadManifestError::Duplicate {
+                        return DuplicateSnafu {
                             kind: "canister".to_string(),
                             name: e.key().to_owned(),
-                        });
+                        }.fail();
                     }
 
                     // Ok
@@ -300,10 +300,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Item::Path(path) => {
                     let path = pdir.join(path);
                     if !path.exists() || !path.is_file() {
-                        return Err(LoadManifestError::NotFound {
+                        return NotFoundSnafu {
                             kind: "network".to_string(),
                             path: path.to_string(),
-                        });
+                        }.fail();
                     }
                     let loader = PathLoader;
                     loader.load(&path).await.context(LoadNetworkSnafu)?
@@ -315,16 +315,16 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 // Duplicate
                 Entry::Occupied(e) => {
                     if default_network_names.contains(&m.name) {
-                        return Err(LoadManifestError::Reserved {
+                        return ReservedSnafu {
                             kind: "network".to_string(),
                             name: m.name.to_string(),
-                        });
+                        }.fail();
                     }
 
-                    return Err(LoadManifestError::Duplicate {
+                    return DuplicateSnafu {
                         kind: "network".to_string(),
                         name: e.key().to_owned(),
-                    });
+                    }.fail();
                 }
 
                 // Ok
@@ -345,10 +345,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Item::Path(path) => {
                     let path = pdir.join(path);
                     if !path.exists() || !path.is_file() {
-                        return Err(LoadManifestError::NotFound {
+                        return NotFoundSnafu {
                             kind: "environment".to_string(),
                             path: path.to_string(),
-                        });
+                        }.fail();
                     }
                     let loader = PathLoader;
                     loader.load(&path).await.context(LoadEnvironmentSnafu)?
@@ -359,10 +359,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
             match environments.entry(m.name.to_owned()) {
                 // Duplicate
                 Entry::Occupied(e) => {
-                    return Err(LoadManifestError::Duplicate {
+                    return DuplicateSnafu {
                         kind: "environment".to_string(),
                         name: e.key().to_owned(),
-                    });
+                    }.fail();
                 }
 
                 // Ok
@@ -373,10 +373,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         // Embed network in environment
                         network: {
                             let v = networks.get(&m.network).ok_or(
-                                EnvironmentError::InvalidNetwork {
+                                InvalidNetworkSnafu {
                                     environment: m.name.to_owned(),
                                     network: m.network.to_owned(),
-                                },
+                                }.build(),
                             )?;
 
                             v.to_owned()
@@ -398,10 +398,10 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
                                     for name in names {
                                         let v = canisters.get(name).ok_or(
-                                            EnvironmentError::InvalidCanister {
+                                            InvalidCanisterSnafu {
                                                 environment: m.name.to_owned(),
                                                 canister: name.to_owned(),
-                                            },
+                                            }.build(),
                                         )?;
 
                                         cs.insert(name.to_owned(), v.to_owned());
@@ -425,10 +425,12 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 name: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string(),
                 network: networks
                     .get(DEFAULT_LOCAL_NETWORK_NAME)
-                    .ok_or(EnvironmentError::InvalidNetwork {
-                        environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
-                        network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
-                    })?
+                    .ok_or(
+                        InvalidNetworkSnafu {
+                            environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
+                            network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
+                        }.build(),
+                    )?
                     .to_owned(),
                 canisters: canisters.clone(),
             });

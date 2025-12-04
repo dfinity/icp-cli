@@ -232,7 +232,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await?;
 
     // Sync the selected canisters
-    let _ = ctx.term.write_line("\n\nSyncing canisters:");
 
     // Prepare list of canisters with their info for syncing
     let env = ctx
@@ -265,16 +264,25 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .filter(|(_, _, info)| !info.sync.steps.is_empty())
         .collect();
 
-    if !sync_canisters.is_empty() {
-        sync_many(
-            ctx.syncer.clone(),
-            agent.clone(),
-            Arc::new(ctx.term.clone()),
-            sync_canisters,
-            ctx.debug,
-        )
-        .await?;
+    if sync_canisters.is_empty() {
+        let _ = ctx
+            .term
+            .write_line("No canisters have sync steps configured");
+        return Ok(());
     }
+
+    let _ = ctx.term.write_line("\n\nSyncing canisters:");
+
+    sync_many(
+        ctx.syncer.clone(),
+        agent.clone(),
+        Arc::new(ctx.term.clone()),
+        sync_canisters,
+        ctx.debug,
+    )
+    .await?;
+
+    let _ = ctx.term.write_line("\nCanisters synced successfully");
 
     Ok(())
 }

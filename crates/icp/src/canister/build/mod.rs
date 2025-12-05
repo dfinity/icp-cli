@@ -27,7 +27,7 @@ use crate::{
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum Step {
+pub enum BuildStep {
     /// Represents a canister built using a custom script or command.
     /// This variant allows for flexible build processes defined by the user.
     Script(script::Adapter),
@@ -38,14 +38,14 @@ pub enum Step {
     Prebuilt(prebuilt::Adapter),
 }
 
-impl fmt::Display for Step {
+impl fmt::Display for BuildStep {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                Step::Script(v) => format!("(script)\n{v}"),
-                Step::Prebuilt(v) => format!("(pre-built)\n{v}"),
+                BuildStep::Script(v) => format!("(script)\n{v}"),
+                BuildStep::Prebuilt(v) => format!("(pre-built)\n{v}"),
             }
         )
     }
@@ -54,9 +54,9 @@ impl fmt::Display for Step {
 /// Describes how the canister should be built into WebAssembly,
 /// including the adapters and build steps responsible for the build.
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct Steps {
+pub struct BuildSteps {
     #[serde(deserialize_with = "non_empty_vec")]
-    pub steps: Vec<Step>,
+    pub steps: Vec<BuildStep>,
 }
 
 pub struct Params {
@@ -76,7 +76,7 @@ pub enum BuildError {
 pub trait Build: Sync + Send {
     async fn build(
         &self,
-        step: &build::Step,
+        step: &build::BuildStep,
         params: &Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError>;
@@ -91,13 +91,13 @@ pub struct Builder {
 impl Build for Builder {
     async fn build(
         &self,
-        step: &build::Step,
+        step: &build::BuildStep,
         params: &Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
         match step {
-            build::Step::Prebuilt(_) => self.prebuilt.build(step, params, stdio).await,
-            build::Step::Script(_) => self.script.build(step, params, stdio).await,
+            build::BuildStep::Prebuilt(_) => self.prebuilt.build(step, params, stdio).await,
+            build::BuildStep::Script(_) => self.script.build(step, params, stdio).await,
         }
     }
 }
@@ -112,7 +112,7 @@ pub struct UnimplementedMockBuilder;
 impl Build for UnimplementedMockBuilder {
     async fn build(
         &self,
-        _step: &build::Step,
+        _step: &build::BuildStep,
         _params: &Params,
         _stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {

@@ -67,11 +67,11 @@ pub enum ScriptError {
 impl Script {
     async fn build_impl(
         &self,
-        step: &build::Step,
+        step: &build::BuildStep,
         params: &build::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), ScriptError> {
-        let build::Step::Script(adapter) = step else {
+        let build::BuildStep::Script(adapter) = step else {
             panic!("expected script adapter");
         };
 
@@ -173,7 +173,7 @@ impl Script {
 impl Build for Script {
     async fn build(
         &self,
-        step: &build::Step,
+        step: &build::BuildStep,
         params: &build::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
@@ -324,7 +324,7 @@ mod tests {
 
         Script
             .build(
-                &build::Step::Script(v),
+                &build::BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -360,7 +360,7 @@ mod tests {
 
         Script
             .build(
-                &build::Step::Script(v),
+                &build::BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -388,7 +388,7 @@ mod tests {
 
         let out = Script
             .build(
-                &build::Step::Script(v),
+                &build::BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -412,7 +412,7 @@ mod tests {
 
         let out = Script
             .build(
-                &build::Step::Script(v),
+                &build::BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -436,7 +436,7 @@ mod tests {
 
         let out = Script
             .build(
-                &build::Step::Script(v),
+                &build::BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),

@@ -8,7 +8,7 @@ use tokio::sync::mpsc::Sender;
 use url::Url;
 
 use crate::{
-    canister::build::{Build, BuildError, Params, Step},
+    canister::build::{Build, BuildError, BuildStep, Params},
     fs::{read, write},
     manifest::adapter::prebuilt::SourceField,
 };
@@ -48,11 +48,11 @@ pub enum PrebuiltError {
 impl Prebuilt {
     async fn build_impl(
         &self,
-        step: &Step,
+        step: &BuildStep,
         params: &Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), PrebuiltError> {
-        let Step::Prebuilt(adapter) = step else {
+        let BuildStep::Prebuilt(adapter) = step else {
             panic!("expected prebuilt adapter");
         };
 
@@ -149,7 +149,7 @@ impl Prebuilt {
 impl Build for Prebuilt {
     async fn build(
         &self,
-        step: &Step,
+        step: &BuildStep,
         params: &Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {

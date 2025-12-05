@@ -6,7 +6,7 @@ use tracing::debug;
 
 use crate::{
     canister::{
-        build,
+        build::BuildSteps,
         recipe::{Resolve, ResolveError},
         sync,
     },
@@ -67,7 +67,7 @@ impl Handlebars {
     async fn resolve_impl(
         &self,
         recipe: &Recipe,
-    ) -> Result<(build::Steps, sync::Steps), HandlebarsError> {
+    ) -> Result<(BuildSteps, sync::Steps), HandlebarsError> {
         // Find the template
         let tmpl = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
@@ -173,7 +173,7 @@ impl Handlebars {
         // Recipes can only render buid/sync
         #[derive(Deserialize)]
         struct BuildSyncHelper {
-            build: build::Steps,
+            build: BuildSteps,
             #[serde(default)]
             sync: sync::Steps,
         }
@@ -198,7 +198,7 @@ impl Handlebars {
 
 #[async_trait]
 impl Resolve for Handlebars {
-    async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, sync::Steps), ResolveError> {
         self.resolve_impl(recipe)
             .await
             .context(super::HandlebarsSnafu)

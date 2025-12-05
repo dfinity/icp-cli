@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
 use crate::{
-    canister::{Settings, build, sync},
+    canister::{Settings, build::BuildSteps, sync},
     manifest::recipe::Recipe,
 };
 
@@ -16,7 +16,7 @@ pub enum Instructions {
     BuildSync {
         /// The build configuration specifying how to compile the canister's source
         /// code into a WebAssembly module, including the adapter to use.
-        build: build::Steps,
+        build: BuildSteps,
 
         /// The configuration specifying how to sync the canister
         sync: Option<sync::Steps>,
@@ -152,7 +152,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         #[derive(Deserialize)]
                         #[serde(deny_unknown_fields)]
                         struct BuildSyncHelper {
-                            build: build::Steps,
+                            build: BuildSteps,
                             sync: Option<sync::Steps>,
                         }
 
@@ -189,6 +189,7 @@ mod tests {
     use indoc::indoc;
     use std::collections::HashMap;
 
+    use crate::canister::build::BuildStep;
     use crate::manifest::{
         adapter::{
             assets,
@@ -519,8 +520,8 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
-                    build: build::Steps {
-                        steps: vec![build::Step::Prebuilt(prebuilt::Adapter {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
                             source: SourceField::Remote(RemoteSource {
                                 url: "http://example.com/hello_world.wasm".to_string()
                             }),
@@ -578,8 +579,8 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
-                    build: build::Steps {
-                        steps: vec![build::Step::Script(script::Adapter {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
                             command: script::CommandField::Command("dosomething.sh".to_string()),
                         })]
                     },

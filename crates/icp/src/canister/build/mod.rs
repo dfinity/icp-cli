@@ -1,13 +1,12 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{canister::script::ScriptError, manifest::canister::BuildStep, prelude::*};
+use crate::{manifest::canister::BuildStep, prelude::*};
 
 mod prebuilt;
+mod script;
 
 pub struct Params {
     pub path: PathBuf,
@@ -17,7 +16,7 @@ pub struct Params {
 #[derive(Debug, Snafu)]
 pub enum BuildError {
     #[snafu(transparent)]
-    Script { source: ScriptError },
+    Script { source: script::ScriptError },
     #[snafu(transparent)]
     Prebuilt { source: prebuilt::PrebuiltError },
 }
@@ -32,9 +31,7 @@ pub trait Build: Sync + Send {
     ) -> Result<(), BuildError>;
 }
 
-pub struct Builder {
-    pub script: Arc<dyn Build>,
-}
+pub struct Builder;
 
 #[async_trait]
 impl Build for Builder {
@@ -46,7 +43,7 @@ impl Build for Builder {
     ) -> Result<(), BuildError> {
         match step {
             BuildStep::Prebuilt(adapter) => Ok(prebuilt::build(adapter, params, stdio).await?),
-            BuildStep::Script(_) => self.script.build(step, params, stdio).await,
+            BuildStep::Script(adapter) => Ok(script::build(adapter, params, stdio).await?),
         }
     }
 }

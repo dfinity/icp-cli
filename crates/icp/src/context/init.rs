@@ -70,9 +70,7 @@ pub fn initialize(
     let cscript = Arc::new(Script);
 
     // Canister builder
-    let builder = Arc::new(Builder {
-        script: cscript.to_owned(),
-    });
+    let builder = Arc::new(Builder);
 
     // Canister syncer
     let syncer = Arc::new(Syncer {

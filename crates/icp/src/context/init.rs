@@ -5,7 +5,6 @@ use snafu::prelude::*;
 
 use crate::canister::assets::Assets;
 use crate::canister::build::Builder;
-use crate::canister::prebuilt::Prebuilt;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::script::Script;
 use crate::canister::sync::Syncer;
@@ -67,13 +66,11 @@ pub fn initialize(
     let cload = Arc::new(canister::PathLoader);
 
     // Builders/Syncers
-    let cprebuilt = Arc::new(Prebuilt);
     let cassets = Arc::new(Assets);
     let cscript = Arc::new(Script);
 
     // Canister builder
     let builder = Arc::new(Builder {
-        prebuilt: cprebuilt.to_owned(),
         script: cscript.to_owned(),
     });
 

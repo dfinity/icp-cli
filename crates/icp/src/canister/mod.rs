@@ -11,7 +11,6 @@ use crate::{LoadPath, fs::read, manifest::CanisterManifest, prelude::*};
 
 pub mod assets;
 pub mod build;
-pub mod prebuilt;
 pub mod recipe;
 pub mod script;
 pub mod sync;

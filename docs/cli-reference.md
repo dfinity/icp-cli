@@ -689,24 +689,22 @@ Create a new ICP project from a template
 
 Under the hood templates are generated with `cargo-generate`. See the cargo-generate docs for a guide on how to write your own templates: https://docs.rs/cargo-generate/0.23.7/cargo_generate/
 
-**Usage:** `icp-cli new [OPTIONS] --name <NAME> [AUTO_PATH] [SUBFOLDER]`
+**Usage:** `icp-cli new [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 
-* `<AUTO_PATH>` — Auto attempt to use as either `--git` or `--favorite`. If either is specified explicitly, use as subfolder
-* `<SUBFOLDER>` — Specifies the subfolder within the template repository to be used as the actual template
+* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given
 
 ###### **Options:**
 
-* `-g`, `--git <GIT>` — Git repository to clone template from. Can be a URL (like `https://github.com/dfinity/icp-cli-project-template`), a path (relative or absolute), or an `owner/repo` abbreviated GitHub URL (like `dfinity/icp-cli-project-template`).
+* `--subfolder <SUBFOLDER>` — Specifies the subfolder within the template repository to be used as the actual template
+* `-g`, `--git <GIT>` — Git repository to clone template from. Can be a URL (like `https://github.com/dfinity/icp-cli-project-template`), a path (relative or absolute)
 
-   Note that icp-cli will first attempt to interpret the `owner/repo` form as a relative path and only try a GitHub URL if the local path doesn't exist.
+  Default value: `https://github.com/raymondk/icp-cli-templates`
 * `-b`, `--branch <BRANCH>` — Branch to use when installing from git
 * `-t`, `--tag <TAG>` — Tag to use when installing from git
 * `-r`, `--revision <REVISION>` — Git revision to use when installing from git (e.g. a commit hash)
 * `-p`, `--path <PATH>` — Local path to copy the template from. Can not be specified together with --git
-* `--favorite <FAVORITE>` — Generate a favorite template as defined in the config. In case the favorite is undefined, use in place of the `--git` option, otherwise specifies the subfolder
-* `-n`, `--name <NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given
 * `-f`, `--force` — Don't convert the project name to kebab-case before creating the directory. Note that `icp-cli` won't overwrite an existing directory, even if `--force` is given
 * `-q`, `--quiet` — Opposite of verbose, suppresses errors & warning in output Conflicts with --debug, and requires the use of --continue-on-error
 * `--continue-on-error` — Continue if errors in templates are encountered

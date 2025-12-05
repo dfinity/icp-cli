@@ -26,7 +26,7 @@ use crate::{
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum Step {
+pub enum SyncStep {
     /// Represents a canister synced using a custom script or command.
     /// This variant allows for flexible sync processes defined by the user.
     Script(script::Adapter),
@@ -35,14 +35,14 @@ pub enum Step {
     Assets(assets::Adapter),
 }
 
-impl fmt::Display for Step {
+impl fmt::Display for SyncStep {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                Step::Script(v) => format!("script {v}"),
-                Step::Assets(v) => format!("assets {v}"),
+                SyncStep::Script(v) => format!("script {v}"),
+                SyncStep::Assets(v) => format!("assets {v}"),
             }
         )
     }
@@ -50,8 +50,8 @@ impl fmt::Display for Step {
 
 /// Describes how to synchronize the canister state after deployment.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct Steps {
-    pub steps: Vec<Step>,
+pub struct SyncSteps {
+    pub steps: Vec<SyncStep>,
 }
 
 pub struct Params {
@@ -72,7 +72,7 @@ pub enum SynchronizeError {
 pub trait Synchronize: Sync + Send {
     async fn sync(
         &self,
-        step: &sync::Step,
+        step: &sync::SyncStep,
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
@@ -88,14 +88,14 @@ pub struct Syncer {
 impl Synchronize for Syncer {
     async fn sync(
         &self,
-        step: &sync::Step,
+        step: &sync::SyncStep,
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
     ) -> Result<(), SynchronizeError> {
         match step {
-            sync::Step::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
-            sync::Step::Script(_) => self.script.sync(step, params, agent, stdio).await,
+            sync::SyncStep::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
+            sync::SyncStep::Script(_) => self.script.sync(step, params, agent, stdio).await,
         }
     }
 }
@@ -110,7 +110,7 @@ pub struct UnimplementedMockSyncer;
 impl Synchronize for UnimplementedMockSyncer {
     async fn sync(
         &self,
-        _step: &sync::Step,
+        _step: &sync::SyncStep,
         _params: &Params,
         _agent: &Agent,
         _stdio: Option<Sender<String>>,

@@ -10,7 +10,7 @@ use snafu::prelude::*;
 
 use crate::{
     Canister, Environment, LoadManifest, LoadPath, Network, Project,
-    canister::{self, recipe, sync::Steps},
+    canister::{self, recipe, sync::SyncSteps},
     fs::read,
     is_glob,
     manifest::{
@@ -241,7 +241,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         build.to_owned(),
                         match sync {
                             Some(sync) => sync.to_owned(),
-                            None => Steps::default(),
+                            None => SyncSteps::default(),
                         },
                     ),
 

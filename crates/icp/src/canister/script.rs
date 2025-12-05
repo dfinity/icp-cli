@@ -64,13 +64,13 @@ pub enum ScriptError {
 impl Script {
     async fn sync_impl(
         &self,
-        step: &sync::Step,
+        step: &sync::SyncStep,
         params: &sync::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), ScriptError> {
         // Adapter
         let adapter = match step {
-            sync::Step::Script(v) => v,
+            sync::SyncStep::Script(v) => v,
             _ => panic!("expected script adapter"),
         };
 
@@ -165,7 +165,7 @@ impl Script {
 impl Synchronize for Script {
     async fn sync(
         &self,
-        step: &sync::Step,
+        step: &sync::SyncStep,
         params: &sync::Params,
         _: &Agent,
         stdio: Option<Sender<String>>,

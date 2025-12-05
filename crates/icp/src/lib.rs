@@ -49,7 +49,7 @@ pub struct Canister {
     pub build: BuildSteps,
 
     /// The configuration specifying how to sync the canister
-    pub sync: sync::Steps,
+    pub sync: sync::SyncSteps,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -236,7 +236,7 @@ impl MockProjectLoader {
     /// - Environment: "default" (uses local network, includes backend canister)
     pub fn minimal() -> Self {
         use crate::{
-            canister::sync::Steps as SyncSteps,
+            canister::sync::SyncSteps,
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
             manifest::canister::{BuildStep, BuildSteps},
             network::{Configuration, Managed},
@@ -311,7 +311,7 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            canister::sync::Steps as SyncSteps,
+            canister::sync::SyncSteps,
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
             manifest::canister::{BuildStep, BuildSteps},
             network::{Configuration, Connected, Gateway, Managed, Port},

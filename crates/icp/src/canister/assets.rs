@@ -4,7 +4,7 @@ use ic_utils::canister::CanisterBuilderError;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::canister::sync::{Params, Step, Synchronize, SynchronizeError};
+use crate::canister::sync::{Params, SyncStep, Synchronize, SynchronizeError};
 
 pub struct Assets;
 
@@ -20,13 +20,13 @@ pub enum AssetsError {
 impl Assets {
     async fn sync_impl(
         &self,
-        step: &Step,
+        step: &SyncStep,
         params: &Params,
         agent: &Agent,
     ) -> Result<(), AssetsError> {
         // Adapter
         let adapter = match step {
-            Step::Assets(v) => v,
+            SyncStep::Assets(v) => v,
             _ => panic!("expected assets adapter"),
         };
 
@@ -74,7 +74,7 @@ impl Assets {
 impl Synchronize for Assets {
     async fn sync(
         &self,
-        step: &Step,
+        step: &SyncStep,
         params: &Params,
         agent: &Agent,
         _: Option<Sender<String>>,

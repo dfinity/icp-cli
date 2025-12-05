@@ -137,7 +137,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         #[serde(deny_unknown_fields)]
                         struct BuildSyncHelper {
                             build: BuildSteps,
-                            sync: Option<sync::Steps>,
+                            sync: Option<sync::SyncSteps>,
                         }
 
                         let helper: BuildSyncHelper = serde_yaml::from_value(
@@ -180,7 +180,7 @@ pub enum Instructions {
         build: BuildSteps,
 
         /// The configuration specifying how to sync the canister
-        sync: Option<sync::Steps>,
+        sync: Option<sync::SyncSteps>,
     },
 }
 
@@ -628,8 +628,8 @@ mod tests {
                             command: script::CommandField::Command("dosomething.sh".to_string()),
                         })]
                     },
-                    sync: Some(sync::Steps {
-                        steps: vec![sync::Step::Assets(assets::Adapter {
+                    sync: Some(sync::SyncSteps {
+                        steps: vec![sync::SyncStep::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),
                         })]
                     }),

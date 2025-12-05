@@ -3,7 +3,7 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::canister::{Settings, sync};
+use crate::canister::Settings;
 
 use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
@@ -137,7 +137,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         #[serde(deny_unknown_fields)]
                         struct BuildSyncHelper {
                             build: BuildSteps,
-                            sync: Option<sync::SyncSteps>,
+                            sync: Option<SyncSteps>,
                         }
 
                         let helper: BuildSyncHelper = serde_yaml::from_value(
@@ -180,7 +180,7 @@ pub enum Instructions {
         build: BuildSteps,
 
         /// The configuration specifying how to sync the canister
-        sync: Option<sync::SyncSteps>,
+        sync: Option<SyncSteps>,
     },
 }
 
@@ -226,6 +226,46 @@ impl fmt::Display for BuildStep {
 pub struct BuildSteps {
     #[serde(deserialize_with = "non_empty_vec")]
     pub steps: Vec<BuildStep>,
+}
+
+/// Identifies the type of adapter used to sync the canister,
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: script
+/// command: echo "synchronizing canister"
+/// ```
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum SyncStep {
+    /// Represents a canister synced using a custom script or command.
+    /// This variant allows for flexible sync processes defined by the user.
+    Script(adapter::script::Adapter),
+
+    /// Represents syncing of an assets canister
+    Assets(adapter::assets::Adapter),
+}
+
+impl fmt::Display for SyncStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SyncStep::Script(v) => format!("script {v}"),
+                SyncStep::Assets(v) => format!("assets {v}"),
+            }
+        )
+    }
+}
+
+/// Describes how to synchronize the canister state after deployment.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct SyncSteps {
+    pub steps: Vec<SyncStep>,
 }
 
 #[cfg(test)]
@@ -628,8 +668,8 @@ mod tests {
                             command: script::CommandField::Command("dosomething.sh".to_string()),
                         })]
                     },
-                    sync: Some(sync::SyncSteps {
-                        steps: vec![sync::SyncStep::Assets(assets::Adapter {
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),
                         })]
                     }),

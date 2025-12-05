@@ -4,8 +4,8 @@ use ic_utils::canister::CanisterBuilderError;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::canister::sync::{Params, SyncStep, Synchronize, SynchronizeError};
-
+use crate::canister::sync::{Params, Synchronize, SynchronizeError};
+use crate::manifest::canister::SyncStep;
 pub struct Assets;
 
 #[derive(Debug, Snafu)]

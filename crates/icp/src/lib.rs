@@ -7,9 +7,10 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{
-    canister::{Settings, sync},
+    canister::Settings,
     manifest::{
-        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError, canister::BuildSteps,
+        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
+        canister::{BuildSteps, SyncSteps},
         project::ProjectManifest,
     },
     network::Configuration,
@@ -49,7 +50,7 @@ pub struct Canister {
     pub build: BuildSteps,
 
     /// The configuration specifying how to sync the canister
-    pub sync: sync::SyncSteps,
+    pub sync: SyncSteps,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -236,9 +237,8 @@ impl MockProjectLoader {
     /// - Environment: "default" (uses local network, includes backend canister)
     pub fn minimal() -> Self {
         use crate::{
-            canister::sync::SyncSteps,
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
-            manifest::canister::{BuildStep, BuildSteps},
+            manifest::canister::{BuildStep, BuildSteps, SyncSteps},
             network::{Configuration, Managed},
         };
 
@@ -311,9 +311,8 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            canister::sync::SyncSteps,
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
-            manifest::canister::{BuildStep, BuildSteps},
+            manifest::canister::{BuildStep, BuildSteps, SyncSteps},
             network::{Configuration, Connected, Gateway, Managed, Port},
         };
 

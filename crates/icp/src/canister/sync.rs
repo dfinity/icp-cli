@@ -1,58 +1,14 @@
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{
-    canister::{assets::AssetsError, script::ScriptError, sync},
-    manifest::adapter::{assets, script},
-    prelude::*,
-};
-
-/// Identifies the type of adapter used to sync the canister,
-/// along with its configuration.
-///
-/// The adapter type is specified via the `type` field in the YAML file.
-/// For example:
-///
-/// ```yaml
-/// type: script
-/// command: echo "synchronizing canister"
-/// ```
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum SyncStep {
-    /// Represents a canister synced using a custom script or command.
-    /// This variant allows for flexible sync processes defined by the user.
-    Script(script::Adapter),
-
-    /// Represents syncing of an assets canister
-    Assets(assets::Adapter),
-}
-
-impl fmt::Display for SyncStep {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                SyncStep::Script(v) => format!("script {v}"),
-                SyncStep::Assets(v) => format!("assets {v}"),
-            }
-        )
-    }
-}
-
-/// Describes how to synchronize the canister state after deployment.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct SyncSteps {
-    pub steps: Vec<SyncStep>,
-}
+use crate::canister::{assets::AssetsError, script::ScriptError};
+use crate::manifest::canister::SyncStep;
+use crate::prelude::*;
 
 pub struct Params {
     pub path: PathBuf,
@@ -72,7 +28,7 @@ pub enum SynchronizeError {
 pub trait Synchronize: Sync + Send {
     async fn sync(
         &self,
-        step: &sync::SyncStep,
+        step: &SyncStep,
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
@@ -88,14 +44,14 @@ pub struct Syncer {
 impl Synchronize for Syncer {
     async fn sync(
         &self,
-        step: &sync::SyncStep,
+        step: &SyncStep,
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
     ) -> Result<(), SynchronizeError> {
         match step {
-            sync::SyncStep::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
-            sync::SyncStep::Script(_) => self.script.sync(step, params, agent, stdio).await,
+            SyncStep::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
+            SyncStep::Script(_) => self.script.sync(step, params, agent, stdio).await,
         }
     }
 }
@@ -110,7 +66,7 @@ pub struct UnimplementedMockSyncer;
 impl Synchronize for UnimplementedMockSyncer {
     async fn sync(
         &self,
-        _step: &sync::SyncStep,
+        _step: &SyncStep,
         _params: &Params,
         _agent: &Agent,
         _stdio: Option<Sender<String>>,

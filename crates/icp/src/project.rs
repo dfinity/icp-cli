@@ -10,12 +10,14 @@ use snafu::prelude::*;
 
 use crate::{
     Canister, Environment, LoadManifest, LoadPath, Network, Project,
-    canister::{self, recipe, sync::SyncSteps},
+    canister::{self, recipe},
     fs::read,
     is_glob,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, Item, ProjectRootLocate, ProjectRootLocateError,
-        canister::Instructions, environment::CanisterSelection, project::ProjectManifest,
+        canister::{Instructions, SyncSteps},
+        environment::CanisterSelection,
+        project::ProjectManifest,
         recipe::RecipeType,
     },
     network::{Configuration, Connected, Gateway, Managed, Port},

@@ -11,6 +11,7 @@ use tokio::{
 };
 
 use crate::canister::sync::{self, Synchronize, SynchronizeError};
+use crate::manifest::canister::SyncStep;
 use crate::prelude::*;
 
 pub struct Script;
@@ -64,13 +65,13 @@ pub enum ScriptError {
 impl Script {
     async fn sync_impl(
         &self,
-        step: &sync::SyncStep,
+        step: &SyncStep,
         params: &sync::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), ScriptError> {
         // Adapter
         let adapter = match step {
-            sync::SyncStep::Script(v) => v,
+            SyncStep::Script(v) => v,
             _ => panic!("expected script adapter"),
         };
 
@@ -165,7 +166,7 @@ impl Script {
 impl Synchronize for Script {
     async fn sync(
         &self,
-        step: &sync::SyncStep,
+        step: &SyncStep,
         params: &sync::Params,
         _: &Agent,
         stdio: Option<Sender<String>>,

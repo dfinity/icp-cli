@@ -2,8 +2,11 @@ use async_trait::async_trait;
 use snafu::prelude::*;
 
 use crate::{
-    canister::{recipe::handlebars::HandlebarsError, sync},
-    manifest::{canister::BuildSteps, recipe::Recipe},
+    canister::recipe::handlebars::HandlebarsError,
+    manifest::{
+        canister::{BuildSteps, SyncSteps},
+        recipe::Recipe,
+    },
 };
 
 pub mod handlebars;
@@ -13,8 +16,7 @@ pub mod handlebars;
 #[async_trait]
 pub trait Resolve: Sync + Send {
     #[allow(clippy::result_large_err)]
-    async fn resolve(&self, recipe: &Recipe)
-    -> Result<(BuildSteps, sync::SyncSteps), ResolveError>;
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError>;
 }
 
 #[derive(Debug, Snafu)]

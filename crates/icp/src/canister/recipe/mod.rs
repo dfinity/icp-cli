@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use snafu::prelude::*;
 
 use crate::{
-    canister::{build::BuildSteps, recipe::handlebars::HandlebarsError, sync},
-    manifest::recipe::Recipe,
+    canister::{recipe::handlebars::HandlebarsError, sync},
+    manifest::{canister::BuildSteps, recipe::Recipe},
 };
 
 pub mod handlebars;

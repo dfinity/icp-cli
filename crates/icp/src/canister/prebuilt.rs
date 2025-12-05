@@ -8,9 +8,9 @@ use tokio::sync::mpsc::Sender;
 use url::Url;
 
 use crate::{
-    canister::build::{Build, BuildError, BuildStep, Params},
+    canister::build::{Build, BuildError, Params},
     fs::{read, write},
-    manifest::adapter::prebuilt::SourceField,
+    manifest::{adapter::prebuilt::SourceField, canister::BuildStep},
 };
 
 // TODO(or.ricon): Put an http client in the struct

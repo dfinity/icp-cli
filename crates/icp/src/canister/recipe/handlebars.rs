@@ -6,12 +6,14 @@ use tracing::debug;
 
 use crate::{
     canister::{
-        build::BuildSteps,
         recipe::{Resolve, ResolveError},
         sync,
     },
     fs::read,
-    manifest::recipe::{Recipe, RecipeType},
+    manifest::{
+        canister::BuildSteps,
+        recipe::{Recipe, RecipeType},
+    },
     prelude::*,
 };
 use async_trait::async_trait;

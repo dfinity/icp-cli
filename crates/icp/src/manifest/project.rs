@@ -28,10 +28,10 @@ mod tests {
     use indoc::indoc;
 
     use crate::{
-        canister::{Settings, build},
+        canister::Settings,
         manifest::{
             adapter::script,
-            canister::Instructions,
+            canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
             network::{Managed, Mode},
         },
@@ -136,8 +136,8 @@ mod tests {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
-                        build: build::BuildSteps {
-                            steps: vec![build::BuildStep::Script(script::Adapter {
+                        build: BuildSteps {
+                            steps: vec![BuildStep::Script(script::Adapter {
                                 command: script::CommandField::Command(
                                     "dosomething.sh".to_string()
                                 )
@@ -192,8 +192,8 @@ mod tests {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     instructions: Instructions::BuildSync {
-                        build: build::BuildSteps {
-                            steps: vec![build::BuildStep::Script(script::Adapter {
+                        build: BuildSteps {
+                            steps: vec![BuildStep::Script(script::Adapter {
                                 command: script::CommandField::Command(
                                     "dosomething.sh".to_string()
                                 )
@@ -226,8 +226,8 @@ mod tests {
                         name: "my-canister".to_string(),
                         settings: Settings::default(),
                         instructions: crate::manifest::canister::Instructions::BuildSync {
-                            build: build::BuildSteps {
-                                steps: vec![build::BuildStep::Script(script::Adapter {
+                            build: BuildSteps {
+                                steps: vec![BuildStep::Script(script::Adapter {
                                     command: script::CommandField::Command(
                                         "dosomething.sh".to_string()
                                     )

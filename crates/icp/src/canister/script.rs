@@ -14,6 +14,7 @@ use crate::canister::{
     build::{self, Build, BuildError},
     sync::{self, Synchronize, SynchronizeError},
 };
+use crate::manifest::canister::BuildStep;
 use crate::prelude::*;
 
 pub struct Script;
@@ -67,11 +68,11 @@ pub enum ScriptError {
 impl Script {
     async fn build_impl(
         &self,
-        step: &build::BuildStep,
+        step: &BuildStep,
         params: &build::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), ScriptError> {
-        let build::BuildStep::Script(adapter) = step else {
+        let BuildStep::Script(adapter) = step else {
             panic!("expected script adapter");
         };
 
@@ -173,7 +174,7 @@ impl Script {
 impl Build for Script {
     async fn build(
         &self,
-        step: &build::BuildStep,
+        step: &BuildStep,
         params: &build::Params,
         stdio: Option<Sender<String>>,
     ) -> Result<(), BuildError> {
@@ -296,17 +297,13 @@ impl Synchronize for Script {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use std::io::Read;
 
     use camino_tempfile::NamedUtf8TempFile;
 
-    use crate::{
-        canister::{
-            build::{self, Build, BuildError},
-            script::Script,
-        },
-        manifest::adapter::script::{Adapter, CommandField},
-    };
+    use crate::manifest::adapter::script::{Adapter, CommandField};
 
     #[tokio::test]
     async fn single_command() {
@@ -324,7 +321,7 @@ mod tests {
 
         Script
             .build(
-                &build::BuildStep::Script(v),
+                &BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -360,7 +357,7 @@ mod tests {
 
         Script
             .build(
-                &build::BuildStep::Script(v),
+                &BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -388,7 +385,7 @@ mod tests {
 
         let out = Script
             .build(
-                &build::BuildStep::Script(v),
+                &BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -412,7 +409,7 @@ mod tests {
 
         let out = Script
             .build(
-                &build::BuildStep::Script(v),
+                &BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),
@@ -436,7 +433,7 @@ mod tests {
 
         let out = Script
             .build(
-                &build::BuildStep::Script(v),
+                &BuildStep::Script(v),
                 &build::Params {
                     path: "/".into(),
                     output: "/".into(),

@@ -1,27 +1,11 @@
+use std::fmt;
+
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::{
-    canister::{Settings, build::BuildSteps, sync},
-    manifest::recipe::Recipe,
-};
+use crate::canister::{Settings, sync};
 
-#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
-#[serde(untagged)]
-pub enum Instructions {
-    Recipe {
-        recipe: Recipe,
-    },
-
-    BuildSync {
-        /// The build configuration specifying how to compile the canister's source
-        /// code into a WebAssembly module, including the adapter to use.
-        build: BuildSteps,
-
-        /// The configuration specifying how to sync the canister
-        sync: Option<sync::Steps>,
-    },
-}
+use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
@@ -183,13 +167,73 @@ impl<'de> Deserialize<'de> for CanisterManifest {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[serde(untagged)]
+pub enum Instructions {
+    Recipe {
+        recipe: Recipe,
+    },
+
+    BuildSync {
+        /// The build configuration specifying how to compile the canister's source
+        /// code into a WebAssembly module, including the adapter to use.
+        build: BuildSteps,
+
+        /// The configuration specifying how to sync the canister
+        sync: Option<sync::Steps>,
+    },
+}
+
+/// Identifies the type of adapter used to build the canister,
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: script
+/// command: do_something.sh
+/// ```
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum BuildStep {
+    /// Represents a canister built using a custom script or command.
+    /// This variant allows for flexible build processes defined by the user.
+    Script(adapter::script::Adapter),
+
+    /// Represents a pre-built canister.
+    /// This variant allows for retrieving a canister WASM from various sources.
+    #[serde(rename = "pre-built")]
+    Prebuilt(adapter::prebuilt::Adapter),
+}
+
+impl fmt::Display for BuildStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BuildStep::Script(v) => format!("(script)\n{v}"),
+                BuildStep::Prebuilt(v) => format!("(pre-built)\n{v}"),
+            }
+        )
+    }
+}
+
+/// Describes how the canister should be built into WebAssembly,
+/// including the adapters and build steps responsible for the build.
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct BuildSteps {
+    #[serde(deserialize_with = "non_empty_vec")]
+    pub steps: Vec<BuildStep>,
+}
+
 #[cfg(test)]
 mod tests {
     use core::panic;
     use indoc::indoc;
     use std::collections::HashMap;
 
-    use crate::canister::build::BuildStep;
     use crate::manifest::{
         adapter::{
             assets,

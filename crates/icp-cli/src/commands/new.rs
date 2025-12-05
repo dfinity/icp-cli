@@ -36,7 +36,7 @@ pub struct IcpGenerateArgs {
 
     /// Directory to create / project name; if the name isn't in kebab-case, it will be converted
     /// to kebab-case unless `--force` is given.
-    #[arg(long, short, value_parser = validate_name, help_heading = heading::OUTPUT_PARAMETERS)]
+    #[arg(value_parser = validate_name)]
     pub name: String,
 
     /// Don't convert the project name to kebab-case before creating the directory. Note that
@@ -46,12 +46,7 @@ pub struct IcpGenerateArgs {
 
     /// Opposite of verbose, suppresses errors & warning in output
     /// Conflicts with --debug, and requires the use of --continue-on-error
-    #[arg(
-        long,
-        short,
-        action,
-        requires = "continue_on_error"
-    )]
+    #[arg(long, short, action, requires = "continue_on_error")]
     pub quiet: bool,
 
     /// Continue if errors in templates are encountered
@@ -151,22 +146,16 @@ impl From<IcpGenerateArgs> for GenerateArgs {
 
 #[derive(Default, Debug, Clone, Args)]
 pub struct IcpTemplatePath {
-    /// Auto attempt to use as either `--git` or `--favorite`. If either is specified explicitly,
-    /// use as subfolder.
-    #[arg(required_unless_present_any(&["SpecificPath"]))]
-    pub auto_path: Option<String>,
-
     /// Specifies the subfolder within the template repository to be used as the actual template.
-    #[arg()]
+    #[arg(long)]
     pub subfolder: Option<String>,
 
     /// Git repository to clone template from. Can be a URL (like
-    /// `https://github.com/dfinity/icp-cli-project-template`), a path (relative or absolute), or an
-    /// `owner/repo` abbreviated GitHub URL (like `dfinity/icp-cli-project-template`).
-    ///
-    /// Note that icp-cli will first attempt to interpret the `owner/repo` form as a
-    /// relative path and only try a GitHub URL if the local path doesn't exist.
-    #[arg(short, long, group("SpecificPath"), help_heading = heading::TEMPLATE_SELECTION)]
+    /// `https://github.com/dfinity/icp-cli-project-template`), a path (relative or absolute).
+    // TODO `--git` doesn't seem to support `owner/repo` like the docs say
+    //      see https://github.com/cargo-generate/cargo-generate/issues/1603
+    //TODO Change the default to a dfinity repo
+    #[arg(short, long, group("SpecificPath"), default_value = "https://github.com/raymondk/icp-cli-templates", help_heading = heading::TEMPLATE_SELECTION)]
     pub git: Option<String>,
 
     /// Branch to use when installing from git
@@ -182,26 +171,21 @@ pub struct IcpTemplatePath {
     pub revision: Option<String>,
 
     /// Local path to copy the template from. Can not be specified together with --git.
-    #[arg(short, long, group("SpecificPath"), help_heading = heading::TEMPLATE_SELECTION)]
+    #[arg(short, long, group("SpecificPath"), conflicts_with = "git", help_heading = heading::TEMPLATE_SELECTION)]
     pub path: Option<String>,
-
-    /// Generate a favorite template as defined in the config. In case the favorite is undefined,
-    /// use in place of the `--git` option, otherwise specifies the subfolder
-    #[arg(long, group("SpecificPath"), help_heading = heading::TEMPLATE_SELECTION)]
-    pub favorite: Option<String>,
 }
 
 impl From<IcpTemplatePath> for TemplatePath {
     fn from(f: IcpTemplatePath) -> Self {
         Self {
-            auto_path: f.auto_path,
-            subfolder: f.subfolder,
-            git: f.git,
+            // cargo-generate uses the auto_path as a subfolder if --git is specified
+            auto_path: f.subfolder,
+            // If path is specified we assume clap set the default value for git
+            git: if f.path.is_some() { None } else { f.git },
             branch: f.branch,
             tag: f.tag,
             revision: f.revision,
             path: f.path,
-            favorite: f.favorite,
             ..TemplatePath::default()
         }
     }

@@ -5,7 +5,6 @@ use snafu::prelude::*;
 
 use crate::canister::build::Builder;
 use crate::canister::recipe::handlebars::Handlebars;
-use crate::canister::script::Script;
 use crate::canister::sync::Syncer;
 use crate::context::Context;
 use crate::directories::{Access as _, Directories};
@@ -64,16 +63,11 @@ pub fn initialize(
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
 
-    // Builders/Syncers
-    let cscript = Arc::new(Script);
-
     // Canister builder
     let builder = Arc::new(Builder);
 
     // Canister syncer
-    let syncer = Arc::new(Syncer {
-        script: cscript.to_owned(),
-    });
+    let syncer = Arc::new(Syncer);
 
     // Project Loaders
     let ploaders = ProjectLoaders {

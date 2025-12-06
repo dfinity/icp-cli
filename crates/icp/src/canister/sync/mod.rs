@@ -18,7 +18,7 @@ pub struct Params {
 #[derive(Debug, Snafu)]
 pub enum SynchronizeError {
     #[snafu(transparent)]
-    Script { source: script::ScriptError },
+    Script { source: super::script::ScriptError },
 
     #[snafu(transparent)]
     Assets { source: assets::AssetsError },

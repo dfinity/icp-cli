@@ -11,6 +11,7 @@ use crate::{LoadPath, fs::read, manifest::CanisterManifest, prelude::*};
 
 pub mod build;
 pub mod recipe;
+mod script;
 pub mod sync;
 
 /// Canister settings, such as compute and memory allocation.

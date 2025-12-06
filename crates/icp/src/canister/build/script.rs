@@ -1,162 +1,23 @@
-use std::process::Stdio;
-
-use snafu::prelude::*;
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    join,
-    process::Command,
-    sync::mpsc::Sender,
-};
+use tokio::sync::mpsc::Sender;
 
 use crate::manifest::adapter::script::Adapter;
-use crate::prelude::*;
 
 use super::Params;
 
-#[derive(Debug, Snafu)]
-pub enum ScriptError {
-    #[snafu(display("failed to parse command: '{command}'"))]
-    Parse { command: String, reason: String },
-
-    #[snafu(display("command must not be empty: '{command}'"))]
-    EmptyCommand { command: String },
-
-    #[snafu(display("failed to execute command '{command}'"))]
-    Invoke {
-        source: tokio::io::Error,
-        command: String,
-    },
-
-    #[snafu(display("failed to join command futures"))]
-    Join { source: tokio::task::JoinError },
-
-    #[snafu(display("failed to get command status for '{command}'"))]
-    Child {
-        source: std::io::Error,
-        command: String,
-    },
-
-    #[snafu(display("command '{command}' failed with status code {code}"))]
-    Status { command: String, code: String },
-}
+use super::super::script::{ScriptError, execute};
 
 pub(super) async fn build(
     adapter: &Adapter,
     params: &Params,
     stdio: Option<Sender<String>>,
 ) -> Result<(), ScriptError> {
-    // Normalize `command` field based on whether it's a single command or multiple.
-    let cmds = adapter.command.as_vec();
-
-    // Iterate over configured commands
-    for input_cmd in cmds {
-        let mut cmd = shell_command(&input_cmd, params.path.as_ref())?;
-
-        // Environment Variables
-        cmd.env("ICP_WASM_OUTPUT_PATH", &params.output);
-
-        // Output
-        cmd.stdin(Stdio::inherit());
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
-
-        // Spawn
-        let mut child = cmd.spawn().context(InvokeSnafu {
-            command: input_cmd.to_owned(),
-        })?;
-
-        // Stdio handles
-        let (stdout, stderr) = (
-            child.stdout.take().unwrap(), //
-            child.stderr.take().unwrap(), //
-        );
-
-        // Create buffered line readers
-        let (mut stdout, mut stderr) = (
-            BufReader::new(stdout).lines(), //
-            BufReader::new(stderr).lines(), //
-        );
-
-        // Spawn command and handle stdio
-        // We need to join! as opposed to try_join! even if we only care about the result of the task
-        // because we want to make sure we finish  reading all of the output
-        let (stdout, stderr, status) = join!(
-            //
-            // Stdout
-            tokio::spawn({
-                // Clone the stdio sender for use in the stdout handling task
-                let stdio = stdio.clone();
-
-                async move {
-                    while let Ok(Some(line)) = stdout.next_line().await {
-                        if let Some(sender) = &stdio {
-                            let _ = sender.send(line).await;
-                        }
-                    }
-                    Ok::<(), ScriptError>(())
-                }
-            }),
-            //
-            // Stderr
-            tokio::spawn({
-                // Clone the stdio sender for use in the stderr handling task
-                let stdio = stdio.clone();
-
-                async move {
-                    while let Ok(Some(line)) = stderr.next_line().await {
-                        if let Some(sender) = &stdio {
-                            let _ = sender.send(line).await;
-                        }
-                    }
-                    Ok::<(), ScriptError>(())
-                }
-            }),
-            //
-            // Status
-            tokio::spawn(async move {
-                //
-                child.wait().await
-            }),
-        );
-        stdout.context(JoinSnafu)??;
-        stderr.context(JoinSnafu)??;
-
-        // Status
-        let status = status.context(JoinSnafu)?.context(ChildSnafu {
-            command: input_cmd.to_owned(),
-        })?;
-
-        if !status.success() {
-            return StatusSnafu {
-                command: input_cmd.to_owned(),
-                code: status.code().map_or("N/A".to_string(), |c| c.to_string()),
-            }
-            .fail();
-        }
-    }
-
-    Ok(())
-}
-
-// TODO(lwshang): this helper and the above function are mostly duplicated in "sync - script"
-// Find a better place to share them so DRY principle is followed.
-fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
-    let words = shellwords::split(s).map_err(|e| ScriptError::Parse {
-        command: s.to_owned(),
-        reason: e.to_string(),
-    })?;
-
-    if words.is_empty() {
-        return EmptyCommandSnafu {
-            command: s.to_owned(),
-        }
-        .fail();
-    }
-
-    let mut cmd = Command::new("sh");
-    cmd.args(["-c", s]);
-    cmd.current_dir(cwd);
-    Ok(cmd)
+    execute(
+        adapter,
+        params.path.as_ref(),
+        &[("ICP_WASM_OUTPUT_PATH", params.output.as_ref())],
+        stdio,
+    )
+    .await
 }
 
 #[cfg(test)]

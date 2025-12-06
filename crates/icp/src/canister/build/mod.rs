@@ -16,7 +16,7 @@ pub struct Params {
 #[derive(Debug, Snafu)]
 pub enum BuildError {
     #[snafu(transparent)]
-    Script { source: script::ScriptError },
+    Script { source: super::script::ScriptError },
     #[snafu(transparent)]
     Prebuilt { source: prebuilt::PrebuiltError },
 }

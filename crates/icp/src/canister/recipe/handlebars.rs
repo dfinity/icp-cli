@@ -1,24 +1,25 @@
-use indoc::formatdoc;
-use serde::Deserialize;
-use snafu::prelude::*;
 use std::{str::FromStr, string::FromUtf8Error};
-use tracing::debug;
 
-use crate::{
-    canister::{
-        build,
-        recipe::{Resolve, ResolveError},
-        sync,
-    },
-    fs::read,
-    manifest::recipe::{Recipe, RecipeType},
-    prelude::*,
-};
 use async_trait::async_trait;
 use handlebars::{Context, Helper, HelperDef, HelperResult, Output};
+use indoc::formatdoc;
 use reqwest::{Method, Request, Url};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use snafu::prelude::*;
+use tracing::debug;
 use url::ParseError;
+
+use crate::{
+    fs::read,
+    manifest::{
+        canister::{BuildSteps, SyncSteps},
+        recipe::{Recipe, RecipeType},
+    },
+    prelude::*,
+};
+
+use super::{Resolve, ResolveError};
 
 pub struct Handlebars {
     /// Http client for fetching remote recipe templates
@@ -67,7 +68,7 @@ impl Handlebars {
     async fn resolve_impl(
         &self,
         recipe: &Recipe,
-    ) -> Result<(build::Steps, sync::Steps), HandlebarsError> {
+    ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
         // Find the template
         let tmpl = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
@@ -173,9 +174,9 @@ impl Handlebars {
         // Recipes can only render buid/sync
         #[derive(Deserialize)]
         struct BuildSyncHelper {
-            build: build::Steps,
+            build: BuildSteps,
             #[serde(default)]
-            sync: sync::Steps,
+            sync: SyncSteps,
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
@@ -198,7 +199,7 @@ impl Handlebars {
 
 #[async_trait]
 impl Resolve for Handlebars {
-    async fn resolve(&self, recipe: &Recipe) -> Result<(build::Steps, sync::Steps), ResolveError> {
+    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         self.resolve_impl(recipe)
             .await
             .context(super::HandlebarsSnafu)

@@ -3,11 +3,8 @@ use std::{env::current_dir, sync::Arc};
 use console::Term;
 use snafu::prelude::*;
 
-use crate::canister::assets::Assets;
 use crate::canister::build::Builder;
-use crate::canister::prebuilt::Prebuilt;
 use crate::canister::recipe::handlebars::Handlebars;
-use crate::canister::script::Script;
 use crate::canister::sync::Syncer;
 use crate::context::Context;
 use crate::directories::{Access as _, Directories};
@@ -66,22 +63,11 @@ pub fn initialize(
     // Canister loader
     let cload = Arc::new(canister::PathLoader);
 
-    // Builders/Syncers
-    let cprebuilt = Arc::new(Prebuilt);
-    let cassets = Arc::new(Assets);
-    let cscript = Arc::new(Script);
-
     // Canister builder
-    let builder = Arc::new(Builder {
-        prebuilt: cprebuilt.to_owned(),
-        script: cscript.to_owned(),
-    });
+    let builder = Arc::new(Builder);
 
     // Canister syncer
-    let syncer = Arc::new(Syncer {
-        assets: cassets.to_owned(),
-        script: cscript.to_owned(),
-    });
+    let syncer = Arc::new(Syncer);
 
     // Project Loaders
     let ploaders = ProjectLoaders {

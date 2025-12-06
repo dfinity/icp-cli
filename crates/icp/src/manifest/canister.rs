@@ -1,27 +1,11 @@
+use std::fmt;
+
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::{
-    canister::{Settings, build, sync},
-    manifest::recipe::Recipe,
-};
+use crate::canister::Settings;
 
-#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
-#[serde(untagged)]
-pub enum Instructions {
-    Recipe {
-        recipe: Recipe,
-    },
-
-    BuildSync {
-        /// The build configuration specifying how to compile the canister's source
-        /// code into a WebAssembly module, including the adapter to use.
-        build: build::Steps,
-
-        /// The configuration specifying how to sync the canister
-        sync: Option<sync::Steps>,
-    },
-}
+use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
@@ -152,8 +136,8 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         #[derive(Deserialize)]
                         #[serde(deny_unknown_fields)]
                         struct BuildSyncHelper {
-                            build: build::Steps,
-                            sync: Option<sync::Steps>,
+                            build: BuildSteps,
+                            sync: Option<SyncSteps>,
                         }
 
                         let helper: BuildSyncHelper = serde_yaml::from_value(
@@ -181,6 +165,107 @@ impl<'de> Deserialize<'de> for CanisterManifest {
 
         d.deserialize_map(CanisterManifestVisitor)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[serde(untagged)]
+pub enum Instructions {
+    Recipe {
+        recipe: Recipe,
+    },
+
+    BuildSync {
+        /// The build configuration specifying how to compile the canister's source
+        /// code into a WebAssembly module, including the adapter to use.
+        build: BuildSteps,
+
+        /// The configuration specifying how to sync the canister
+        sync: Option<SyncSteps>,
+    },
+}
+
+/// Identifies the type of adapter used to build the canister,
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: script
+/// command: do_something.sh
+/// ```
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum BuildStep {
+    /// Represents a canister built using a custom script or command.
+    /// This variant allows for flexible build processes defined by the user.
+    Script(adapter::script::Adapter),
+
+    /// Represents a pre-built canister.
+    /// This variant allows for retrieving a canister WASM from various sources.
+    #[serde(rename = "pre-built")]
+    Prebuilt(adapter::prebuilt::Adapter),
+}
+
+impl fmt::Display for BuildStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BuildStep::Script(v) => format!("(script)\n{v}"),
+                BuildStep::Prebuilt(v) => format!("(pre-built)\n{v}"),
+            }
+        )
+    }
+}
+
+/// Describes how the canister should be built into WebAssembly,
+/// including the adapters and build steps responsible for the build.
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct BuildSteps {
+    #[serde(deserialize_with = "non_empty_vec")]
+    pub steps: Vec<BuildStep>,
+}
+
+/// Identifies the type of adapter used to sync the canister,
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: script
+/// command: echo "synchronizing canister"
+/// ```
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum SyncStep {
+    /// Represents a canister synced using a custom script or command.
+    /// This variant allows for flexible sync processes defined by the user.
+    Script(adapter::script::Adapter),
+
+    /// Represents syncing of an assets canister
+    Assets(adapter::assets::Adapter),
+}
+
+impl fmt::Display for SyncStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SyncStep::Script(v) => format!("script {v}"),
+                SyncStep::Assets(v) => format!("assets {v}"),
+            }
+        )
+    }
+}
+
+/// Describes how to synchronize the canister state after deployment.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct SyncSteps {
+    pub steps: Vec<SyncStep>,
 }
 
 #[cfg(test)]
@@ -519,8 +604,8 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
-                    build: build::Steps {
-                        steps: vec![build::Step::Prebuilt(prebuilt::Adapter {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
                             source: SourceField::Remote(RemoteSource {
                                 url: "http://example.com/hello_world.wasm".to_string()
                             }),
@@ -578,13 +663,13 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
                 instructions: Instructions::BuildSync {
-                    build: build::Steps {
-                        steps: vec![build::Step::Script(script::Adapter {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
                             command: script::CommandField::Command("dosomething.sh".to_string()),
                         })]
                     },
-                    sync: Some(sync::Steps {
-                        steps: vec![sync::Step::Assets(assets::Adapter {
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),
                         })]
                     }),

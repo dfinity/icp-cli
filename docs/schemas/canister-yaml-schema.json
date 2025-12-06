@@ -89,6 +89,54 @@
       ],
       "type": "object"
     },
+    "BuildStep": {
+      "description": "Identifies the type of adapter used to build the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: do_something.sh\n```",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Adapter",
+          "description": "Represents a canister built using a custom script or command.\nThis variant allows for flexible build processes defined by the user.",
+          "properties": {
+            "type": {
+              "const": "script",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Adapter2",
+          "description": "Represents a pre-built canister.\nThis variant allows for retrieving a canister WASM from various sources.",
+          "properties": {
+            "type": {
+              "const": "pre-built",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BuildSteps": {
+      "description": "Describes how the canister should be built into WebAssembly,\nincluding the adapters and build steps responsible for the build.",
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/BuildStep"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "type": "object"
+    },
     "LocalSource": {
       "properties": {
         "path": {
@@ -210,40 +258,7 @@
       },
       "type": "object"
     },
-    "Step": {
-      "description": "Identifies the type of adapter used to build the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: do_something.sh\n```",
-      "oneOf": [
-        {
-          "$ref": "#/$defs/Adapter",
-          "description": "Represents a canister built using a custom script or command.\nThis variant allows for flexible build processes defined by the user.",
-          "properties": {
-            "type": {
-              "const": "script",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "type": "object"
-        },
-        {
-          "$ref": "#/$defs/Adapter2",
-          "description": "Represents a pre-built canister.\nThis variant allows for retrieving a canister WASM from various sources.",
-          "properties": {
-            "type": {
-              "const": "pre-built",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "Step2": {
+    "SyncStep": {
       "description": "Identifies the type of adapter used to sync the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: echo \"synchronizing canister\"\n```",
       "oneOf": [
         {
@@ -276,27 +291,12 @@
         }
       ]
     },
-    "Steps": {
-      "description": "Describes how the canister should be built into WebAssembly,\nincluding the adapters and build steps responsible for the build.",
-      "properties": {
-        "steps": {
-          "items": {
-            "$ref": "#/$defs/Step"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "steps"
-      ],
-      "type": "object"
-    },
-    "Steps2": {
+    "SyncSteps": {
       "description": "Describes how to synchronize the canister state after deployment.",
       "properties": {
         "steps": {
           "items": {
-            "$ref": "#/$defs/Step2"
+            "$ref": "#/$defs/SyncStep"
           },
           "type": "array"
         }
@@ -324,13 +324,13 @@
     {
       "properties": {
         "build": {
-          "$ref": "#/$defs/Steps",
+          "$ref": "#/$defs/BuildSteps",
           "description": "The build configuration specifying how to compile the canister's source\ncode into a WebAssembly module, including the adapter to use."
         },
         "sync": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Steps2"
+              "$ref": "#/$defs/SyncSteps"
             },
             {
               "type": "null"

@@ -7,9 +7,11 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{
-    canister::{Settings, build, sync},
+    canister::Settings,
     manifest::{
-        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError, project::ProjectManifest,
+        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
+        canister::{BuildSteps, SyncSteps},
+        project::ProjectManifest,
     },
     network::Configuration,
     prelude::*,
@@ -45,10 +47,10 @@ pub struct Canister {
 
     /// The build configuration specifying how to compile the canister's source
     /// code into a WebAssembly module, including the adapter to use.
-    pub build: build::Steps,
+    pub build: BuildSteps,
 
     /// The configuration specifying how to sync the canister
-    pub sync: sync::Steps,
+    pub sync: SyncSteps,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -235,9 +237,8 @@ impl MockProjectLoader {
     /// - Environment: "default" (uses local network, includes backend canister)
     pub fn minimal() -> Self {
         use crate::{
-            canister::build::{Step as BuildStep, Steps as BuildSteps},
-            canister::sync::Steps as SyncSteps,
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
+            manifest::canister::{BuildStep, BuildSteps, SyncSteps},
             network::{Configuration, Managed},
         };
 
@@ -310,9 +311,8 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            canister::build::{Step as BuildStep, Steps as BuildSteps},
-            canister::sync::Steps as SyncSteps,
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
+            manifest::canister::{BuildStep, BuildSteps, SyncSteps},
             network::{Configuration, Connected, Gateway, Managed, Port},
         };
 

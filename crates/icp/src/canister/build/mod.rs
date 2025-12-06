@@ -3,7 +3,8 @@ use async_trait::async_trait;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{manifest::canister::BuildStep, prelude::*};
+use crate::manifest::canister::BuildStep;
+use crate::prelude::*;
 
 mod prebuilt;
 mod script;

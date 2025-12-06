@@ -1,12 +1,9 @@
 use async_trait::async_trait;
 use snafu::prelude::*;
 
-use crate::{
-    canister::recipe::handlebars::HandlebarsError,
-    manifest::{
-        canister::{BuildSteps, SyncSteps},
-        recipe::Recipe,
-    },
+use crate::manifest::{
+    canister::{BuildSteps, SyncSteps},
+    recipe::Recipe,
 };
 
 pub mod handlebars;
@@ -22,5 +19,5 @@ pub trait Resolve: Sync + Send {
 #[derive(Debug, Snafu)]
 pub enum ResolveError {
     #[snafu(display("failed to resolve handlebars template"))]
-    Handlebars { source: HandlebarsError },
+    Handlebars { source: handlebars::HandlebarsError },
 }

@@ -11,7 +11,6 @@ use tracing::debug;
 use url::ParseError;
 
 use crate::{
-    canister::recipe::{Resolve, ResolveError},
     fs::read,
     manifest::{
         canister::{BuildSteps, SyncSteps},
@@ -19,6 +18,8 @@ use crate::{
     },
     prelude::*,
 };
+
+use super::{Resolve, ResolveError};
 
 pub struct Handlebars {
     /// Http client for fetching remote recipe templates

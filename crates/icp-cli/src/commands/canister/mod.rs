@@ -8,6 +8,7 @@ pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod settings;
 pub(crate) mod show;
+pub(crate) mod snapshot;
 pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
@@ -40,6 +41,10 @@ pub(crate) enum Command {
 
     /// Show a canister's details
     Show(show::ShowArgs),
+
+    /// Manipulate canister snapshots
+    #[command(subcommand)]
+    Snapshot(snapshot::Command),
 
     /// Start a canister on a network
     Start(start::StartArgs),

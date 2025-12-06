@@ -43,28 +43,25 @@ impl fmt::Display for Adapter {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Error, Ok};
-
     use super::*;
 
     #[test]
-    fn dir() -> Result<(), Error> {
+    fn dir() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 dir: dist
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 dir: DirField::Dir("dist".to_string())
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn dirs() -> Result<(), Error> {
+    fn dirs() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
@@ -73,7 +70,8 @@ mod tests {
                   - dir-2
                   - dir-3
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 dir: DirField::Dirs(vec![
                     "dir-1".to_string(),
@@ -82,7 +80,5 @@ mod tests {
                 ])
             },
         );
-
-        Ok(())
     }
 }

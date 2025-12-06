@@ -4,10 +4,9 @@ use std::{
     vec,
 };
 
-use anyhow::Context;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
-use snafu::Snafu;
+use snafu::prelude::*;
 
 use crate::{
     Canister, Environment, LoadManifest, LoadPath, Network, Project,
@@ -15,8 +14,9 @@ use crate::{
     fs::read,
     is_glob,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, Item, ProjectRootLocate, canister::Instructions,
-        environment::CanisterSelection, project::ProjectManifest, recipe::RecipeType,
+        CANISTER_MANIFEST, CanisterManifest, Item, ProjectRootLocate, ProjectRootLocateError,
+        canister::Instructions, environment::CanisterSelection, project::ProjectManifest,
+        recipe::RecipeType,
     },
     network::{Configuration, Connected, Gateway, Managed, Port},
     prelude::*,
@@ -33,14 +33,14 @@ pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
 #[derive(Debug, Snafu)]
 pub enum LoadPathError {
-    #[snafu(display("failed to read manifest at {path}"))]
-    Read { path: String },
+    #[snafu(display("failed to read manifest"))]
+    Read { source: crate::fs::IoError },
 
     #[snafu(display("failed to deserialize manifest at {path}"))]
-    Deserialize { path: String },
-
-    #[snafu(transparent)]
-    Unexpected { source: anyhow::Error },
+    Deserialize {
+        source: serde_yaml::Error,
+        path: String,
+    },
 }
 
 pub struct PathLoader;
@@ -52,12 +52,10 @@ where
 {
     async fn load(&self, path: &Path) -> Result<T, LoadPathError> {
         // Read file
-        let mbs = read(path).context(LoadPathError::Read {
-            path: path.to_string(),
-        })?;
+        let mbs = read(path).context(ReadSnafu)?;
 
         // Deserialize YAML into any T
-        let m = serde_yaml::from_slice::<T>(&mbs).context(LoadPathError::Deserialize {
+        let m = serde_yaml::from_slice::<T>(&mbs).context(DeserializeSnafu {
             path: path.to_string(),
         })?;
         Ok(m)
@@ -82,19 +80,34 @@ pub enum EnvironmentError {
 #[derive(Debug, Snafu)]
 pub enum LoadManifestError {
     #[snafu(display("failed to locate project directory"))]
-    Locate,
+    Locate { source: ProjectRootLocateError },
 
     #[snafu(display("failed to perform glob parsing"))]
-    Glob,
+    GlobParse { source: glob::PatternError },
+
+    #[snafu(display("failed to get glob iter"))]
+    GlobIter { source: glob::GlobError },
+
+    #[snafu(display("failed to convert path to UTF-8"))]
+    Utf8Path { source: FromPathBufError },
 
     #[snafu(display("failed to load canister manifest"))]
-    Canister,
+    LoadCanister { source: canister::LoadPathError },
+
+    #[snafu(display("failed to load network manifest"))]
+    LoadNetwork { source: LoadPathError },
+
+    #[snafu(display("failed to load environment manifest"))]
+    LoadEnvironment { source: LoadPathError },
 
     #[snafu(display("failed to load {kind} manifest at: {path}"))]
     Failed { kind: String, path: String },
 
     #[snafu(display("failed to resolve canister recipe: {recipe_type:?}"))]
-    Recipe { recipe_type: RecipeType },
+    Recipe {
+        source: recipe::ResolveError,
+        recipe_type: RecipeType,
+    },
 
     #[snafu(display("project contains two similarly named {kind}s: '{name}'"))]
     Duplicate { kind: String, name: String },
@@ -102,14 +115,11 @@ pub enum LoadManifestError {
     #[snafu(display("`{name}` is a reserved {kind} name."))]
     Reserved { kind: String, name: String },
 
-    #[snafu(display("Could not locate a {kind} manifest at: '{path}'"))]
+    #[snafu(display("could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
-
-    #[snafu(transparent)]
-    Unexpected { source: anyhow::Error },
 }
 
 pub struct ManifestLoader {
@@ -161,10 +171,7 @@ fn default_networks() -> Vec<Network> {
 impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoader {
     async fn load(&self, m: &ProjectManifest) -> Result<Project, LoadManifestError> {
         // Locate project root
-        let pdir = self
-            .project_root_locate
-            .locate()
-            .context(LoadManifestError::Locate)?;
+        let pdir = self.project_root_locate.locate().context(LocateSnafu)?;
 
         // Canisters
         let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();
@@ -179,20 +186,16 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         // Glob pattern
                         true => {
                             // Resolve glob
-                            let paths = glob::glob(pdir.join(pattern).as_str())
-                                .context(LoadManifestError::Glob)?;
+                            let paths =
+                                glob::glob(pdir.join(pattern).as_str()).context(GlobParseSnafu)?;
 
-                            // Extract paths
-                            let paths = paths
-                                .collect::<Result<Vec<_>, _>>()
-                                .context(LoadManifestError::Glob)?;
-
-                            // Convert to utf-8
-                            paths
-                                .into_iter()
-                                .map(PathBuf::try_from)
-                                .collect::<Result<Vec<_>, _>>()
-                                .context(LoadManifestError::Glob)?
+                            let mut v = vec![];
+                            for p in paths {
+                                let path = p.context(GlobIterSnafu)?;
+                                let utf8_path = PathBuf::try_from(path).context(Utf8PathSnafu)?;
+                                v.push(utf8_path);
+                            }
+                            v
                         }
                     };
 
@@ -214,7 +217,7 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                             self.canister
                                 .load(&p.join(CANISTER_MANIFEST))
                                 .await
-                                .context(LoadManifestError::Canister)?,
+                                .context(LoadCanisterSnafu)?,
                         ));
                     }
 
@@ -244,12 +247,9 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
                     // Recipe
                     Instructions::Recipe { recipe } => {
-                        self.recipe
-                            .resolve(recipe)
-                            .await
-                            .context(LoadManifestError::Recipe {
-                                recipe_type: recipe.recipe_type.clone(),
-                            })?
+                        self.recipe.resolve(recipe).await.context(RecipeSnafu {
+                            recipe_type: recipe.recipe_type.clone(),
+                        })?
                     }
                 };
 
@@ -257,10 +257,11 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 match canisters.entry(m.name.to_owned()) {
                     // Duplicate
                     Entry::Occupied(e) => {
-                        return Err(LoadManifestError::Duplicate {
+                        return DuplicateSnafu {
                             kind: "canister".to_string(),
                             name: e.key().to_owned(),
-                        });
+                        }
+                        .fail();
                     }
 
                     // Ok
@@ -300,19 +301,14 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Item::Path(path) => {
                     let path = pdir.join(path);
                     if !path.exists() || !path.is_file() {
-                        return Err(LoadManifestError::NotFound {
+                        return NotFoundSnafu {
                             kind: "network".to_string(),
                             path: path.to_string(),
-                        });
+                        }
+                        .fail();
                     }
                     let loader = PathLoader;
-                    loader
-                        .load(&path)
-                        .await
-                        .context(LoadManifestError::Failed {
-                            kind: "network".to_string(),
-                            path: path.to_string(),
-                        })?
+                    loader.load(&path).await.context(LoadNetworkSnafu)?
                 }
                 Item::Manifest(ms) => ms.clone(),
             };
@@ -321,16 +317,18 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 // Duplicate
                 Entry::Occupied(e) => {
                     if default_network_names.contains(&m.name) {
-                        return Err(LoadManifestError::Reserved {
+                        return ReservedSnafu {
                             kind: "network".to_string(),
                             name: m.name.to_string(),
-                        });
+                        }
+                        .fail();
                     }
 
-                    return Err(LoadManifestError::Duplicate {
+                    return DuplicateSnafu {
                         kind: "network".to_string(),
                         name: e.key().to_owned(),
-                    });
+                    }
+                    .fail();
                 }
 
                 // Ok
@@ -351,19 +349,14 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 Item::Path(path) => {
                     let path = pdir.join(path);
                     if !path.exists() || !path.is_file() {
-                        return Err(LoadManifestError::NotFound {
+                        return NotFoundSnafu {
                             kind: "environment".to_string(),
                             path: path.to_string(),
-                        });
+                        }
+                        .fail();
                     }
                     let loader = PathLoader;
-                    loader
-                        .load(&path)
-                        .await
-                        .context(LoadManifestError::Failed {
-                            kind: "environment".to_string(),
-                            path: path.to_string(),
-                        })?
+                    loader.load(&path).await.context(LoadEnvironmentSnafu)?
                 }
                 Item::Manifest(ms) => ms.clone(),
             };
@@ -371,10 +364,11 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
             match environments.entry(m.name.to_owned()) {
                 // Duplicate
                 Entry::Occupied(e) => {
-                    return Err(LoadManifestError::Duplicate {
+                    return DuplicateSnafu {
                         kind: "environment".to_string(),
                         name: e.key().to_owned(),
-                    });
+                    }
+                    .fail();
                 }
 
                 // Ok
@@ -385,10 +379,11 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                         // Embed network in environment
                         network: {
                             let v = networks.get(&m.network).ok_or(
-                                EnvironmentError::InvalidNetwork {
+                                InvalidNetworkSnafu {
                                     environment: m.name.to_owned(),
                                     network: m.network.to_owned(),
-                                },
+                                }
+                                .build(),
                             )?;
 
                             v.to_owned()
@@ -410,10 +405,11 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
 
                                     for name in names {
                                         let v = canisters.get(name).ok_or(
-                                            EnvironmentError::InvalidCanister {
+                                            InvalidCanisterSnafu {
                                                 environment: m.name.to_owned(),
                                                 canister: name.to_owned(),
-                                            },
+                                            }
+                                            .build(),
                                         )?;
 
                                         cs.insert(name.to_owned(), v.to_owned());
@@ -437,10 +433,13 @@ impl LoadManifest<ProjectManifest, Project, LoadManifestError> for ManifestLoade
                 name: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string(),
                 network: networks
                     .get(DEFAULT_LOCAL_NETWORK_NAME)
-                    .ok_or(EnvironmentError::InvalidNetwork {
-                        environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
-                        network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
-                    })?
+                    .ok_or(
+                        InvalidNetworkSnafu {
+                            environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
+                            network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
+                        }
+                        .build(),
+                    )?
                     .to_owned(),
                 canisters: canisters.clone(),
             });

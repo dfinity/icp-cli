@@ -78,10 +78,11 @@ pub(crate) async fn set_binding_env_vars_many(
         .collect();
 
     if !missing_canisters.is_empty() {
-        return Err(BindingEnvVarsOperationError::CanisterNotCreated {
+        return CanisterNotCreatedSnafu {
             environment: environment_name.to_owned(),
             canister_names: missing_canisters,
-        });
+        }
+        .fail();
     }
 
     let binding_vars = canister_list

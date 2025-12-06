@@ -25,7 +25,6 @@ pub struct ProjectManifest {
 mod tests {
     use std::collections::HashMap;
 
-    use anyhow::{Error, anyhow};
     use indoc::indoc;
 
     use crate::{
@@ -41,14 +40,18 @@ mod tests {
     use super::*;
 
     /// Validates project yaml against the schema and deserializes it to a manifest
-    fn validate_project_yaml(s: &str) -> Result<ProjectManifest, Error> {
+    fn validate_project_yaml(s: &str) -> ProjectManifest {
         let schema = serde_json::from_str::<serde_json::Value>(include_str!(
             "../../../../docs/schemas/icp-yaml-schema.json"
-        ))?;
-        let project_yaml = serde_yaml::from_str::<serde_json::Value>(s)?;
+        ))
+        .expect("failed to deserialize project.yaml schema");
+        let project_yaml = serde_yaml::from_str::<serde_json::Value>(s)
+            .expect("failed to deserialize project.yaml");
 
         // Build & reuse
-        let validator = jsonschema::options().build(&schema)?;
+        let validator = jsonschema::options()
+            .build(&schema)
+            .expect("failed to build jsonschema validator");
 
         // Iterate over errors
         for error in validator.iter_errors(&project_yaml) {
@@ -57,83 +60,77 @@ mod tests {
 
         assert!(validator.is_valid(&project_yaml));
 
-        Ok(serde_yaml::from_str::<ProjectManifest>(s)?)
+        serde_yaml::from_str::<ProjectManifest>(s).expect("failed to deserialize project.yaml")
     }
 
     #[test]
-    fn validate_manifest_against_schema() -> Result<(), Error> {
+    fn validate_manifest_against_schema() {
         let _ = validate_project_yaml(indoc! {r#"
-            canisters:
-              - name: my-canister
+                canisters:
+                  - name: my-canister
 
-                build:
-                  steps:
-                    - type: pre-built
-                      path: ../icp-pre-built/dist/hello_world.wasm
-                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+                    build:
+                      steps:
+                        - type: pre-built
+                          path: ../icp-pre-built/dist/hello_world.wasm
+                          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 
-                settings:
-                  environment_variables:
-                    var-1: value-1
-                    var-2: value-2
-                    var-3: value-3
+                    settings:
+                      environment_variables:
+                        var-1: value-1
+                        var-2: value-2
+                        var-3: value-3
 
-        "#})?;
-
-        Ok(())
+            "#});
     }
 
     #[test]
-    fn validate_canister_list_manifest() -> Result<(), Error> {
+    fn validate_canister_list_manifest() {
         let _ = validate_project_yaml(indoc! {r#"
-            canisters:
-              - name: my-canister
-                build:
-                  steps:
-                    - type: pre-built
-                      path: ../icp-pre-built/dist/hello_world.wasm
-                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+                canisters:
+                  - name: my-canister
+                    build:
+                      steps:
+                        - type: pre-built
+                          path: ../icp-pre-built/dist/hello_world.wasm
+                          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 
-                settings:
-                  environment_variables:
-                    var-1: value-1
-                    var-2: value-2
-                    var-3: value-3
-              - path/to/directory/
+                    settings:
+                      environment_variables:
+                        var-1: value-1
+                        var-2: value-2
+                        var-3: value-3
+                  - path/to/directory/
 
-            environments:
-              - zoblamcouche
+                environments:
+                  - zoblamcouche
 
-        "#})?;
-
-        Ok(())
+            "#});
     }
 
     #[test]
-    fn empty() -> Result<(), Error> {
+    fn empty() {
         assert_eq!(
-            serde_yaml::from_str::<ProjectManifest>(r#""#)?,
+            serde_yaml::from_str::<ProjectManifest>(r#""#).unwrap(),
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn canister() -> Result<(), Error> {
+    fn canister() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                canisters:
-                  - name: my-canister
-                    build:
-                      steps:
-                        - type: script
-                          command: dosomething.sh
-            "#})?,
+                    canisters:
+                      - name: my-canister
+                        build:
+                          steps:
+                            - type: script
+                              command: dosomething.sh
+                "#}),
             ProjectManifest {
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
@@ -153,49 +150,43 @@ mod tests {
                 environments: vec![],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn project_with_invalid_canister_should_fail() -> Result<(), Error> {
+    fn project_with_invalid_canister_should_fail() {
         // This canister is invalid because
         match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
-            canisters:
-              - name: my-canister
-                build:
-                  steps: []
-        "#})
+                canisters:
+                  - name: my-canister
+                    build:
+                      steps: []
+            "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "A project manifest with an invalid canister manifest should be invalid"
-                ));
+                panic!("A project manifest with an invalid canister manifest should be invalid");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains("data did not match any variant of untagged enum Item") {
-                    return Err(anyhow!(
+                    panic!(
                         "expected 'data did not match any variant of untagged enum Item' error but got: {err}"
-                    ));
+                    );
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn canisters_in_list() -> Result<(), Error> {
+    fn canisters_in_list() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                canisters:
-                  - name: my-canister
-                    build:
-                      steps:
-                        - type: script
-                          command: dosomething.sh
-            "#})?,
+                    canisters:
+                      - name: my-canister
+                        build:
+                          steps:
+                            - type: script
+                              command: dosomething.sh
+                "#}),
             ProjectManifest {
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
@@ -215,22 +206,20 @@ mod tests {
                 environments: vec![],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn canisters_mixed() -> Result<(), Error> {
+    fn canisters_mixed() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                canisters:
-                  - name: my-canister
-                    build:
-                      steps:
-                        - type: script
-                          command: dosomething.sh
-                  - canisters/*
-            "#})?,
+                    canisters:
+                      - name: my-canister
+                        build:
+                          steps:
+                            - type: script
+                              command: dosomething.sh
+                      - canisters/*
+                "#}),
             ProjectManifest {
                 canisters: vec![
                     Item::Manifest(CanisterManifest {
@@ -253,18 +242,16 @@ mod tests {
                 environments: vec![],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn networks() -> Result<(), Error> {
+    fn networks() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                networks:
-                  - name: my-network
-                    mode: managed
-            "#})?,
+                    networks:
+                      - name: my-network
+                        mode: managed
+                "#}),
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![Item::Manifest(NetworkManifest {
@@ -274,19 +261,17 @@ mod tests {
                 environments: vec![],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn environment() -> Result<(), Error> {
+    fn environment() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                environments:
-                  - name: my-environment
-                    network: my-network
-                    canisters: [my-canister]
-            "#})?,
+                    environments:
+                      - name: my-environment
+                        network: my-network
+                        canisters: [my-canister]
+                "#}),
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![],
@@ -298,19 +283,17 @@ mod tests {
                 })],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn environment_in_list() -> Result<(), Error> {
+    fn environment_in_list() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                environments:
-                  - name: my-environment
-                    network: my-network
-                    canisters: [my-canister]
-            "#})?,
+                    environments:
+                      - name: my-environment
+                        network: my-network
+                        canisters: [my-canister]
+                "#}),
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![],
@@ -322,21 +305,19 @@ mod tests {
                 })],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn environment_canister_selection() -> Result<(), Error> {
+    fn environment_canister_selection() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                environments:
-                  - name: environment-1
-                    canisters: []
-                  - name: environment-2
-                    canisters: [my-canister]
-                  - name: environment-3
-            "#})?,
+                    environments:
+                      - name: environment-1
+                        canisters: []
+                      - name: environment-2
+                        canisters: [my-canister]
+                      - name: environment-3
+                "#}),
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![],
@@ -362,22 +343,20 @@ mod tests {
                 ],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn environment_settings() -> Result<(), Error> {
+    fn environment_settings() {
         assert_eq!(
             validate_project_yaml(indoc! {r#"
-                environments:
-                  - name: my-environment
-                    settings:
-                      canister-1:
-                        compute_allocation: 1
-                      canister-2:
-                        compute_allocation: 2
-            "#})?,
+                    environments:
+                      - name: my-environment
+                        settings:
+                          canister-1:
+                            compute_allocation: 1
+                          canister-2:
+                            compute_allocation: 2
+                "#}),
             ProjectManifest {
                 canisters: vec![],
                 networks: vec![],
@@ -404,18 +383,12 @@ mod tests {
                 })],
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn invalid() -> Result<(), Error> {
+    fn invalid() {
         if serde_yaml::from_str::<ProjectManifest>(r#"invalid-content"#).is_ok() {
-            return Err(anyhow!(
-                "expected invalid manifest to fail deserializeation"
-            ));
+            panic!("expected invalid manifest to fail deserializeation");
         }
-
-        Ok(())
     }
 }

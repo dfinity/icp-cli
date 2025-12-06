@@ -43,45 +43,41 @@ impl fmt::Display for Adapter {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Error;
-
     use super::*;
 
     #[test]
-    fn command() -> Result<(), Error> {
+    fn command() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 command: echo hi
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 command: CommandField::Command("echo hi".to_string()),
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn command_multiline() -> Result<(), Error> {
+    fn command_multiline() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
                 command: |
                   echo hi
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 command: CommandField::Command("echo hi\n".to_string()),
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn commands() -> Result<(), Error> {
+    fn commands() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
                 r#"
@@ -89,7 +85,8 @@ mod tests {
                   - echo hi
                   - echo bye
                 "#
-            )?,
+            )
+            .expect("failed to deserialize Adapter from yaml"),
             Adapter {
                 command: CommandField::Commands(vec![
                     "echo hi".to_string(),
@@ -97,7 +94,5 @@ mod tests {
                 ]),
             },
         );
-
-        Ok(())
     }
 }

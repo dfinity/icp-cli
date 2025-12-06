@@ -2,20 +2,14 @@ use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use ic_agent::{Agent, AgentError, Identity};
-use snafu::Snafu;
+use snafu::prelude::*;
 
 use crate::prelude::*;
 
 #[derive(Debug, Snafu)]
 pub enum CreateAgentError {
-    #[snafu(transparent)]
-    Agent {
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
-    },
-
-    #[snafu(transparent)]
-    Unexpected { source: anyhow::Error },
+    #[snafu(display("failed to create agent"))]
+    Agent { source: AgentError },
 }
 
 #[async_trait]
@@ -28,17 +22,11 @@ pub struct Creator;
 #[async_trait]
 impl Create for Creator {
     async fn create(&self, id: Arc<dyn Identity>, url: &str) -> Result<Agent, CreateAgentError> {
-        let b = Agent::builder();
+        let b = Agent::builder()
+            .with_url(url)
+            .with_arc_identity(id)
+            .with_ingress_expiry(Duration::from_secs(4 * MINUTE));
 
-        // Url
-        let b = b.with_url(url);
-
-        // Identity
-        let b = b.with_arc_identity(id);
-
-        // Ingress Expiration
-        let b = b.with_ingress_expiry(Duration::from_secs(4 * MINUTE));
-
-        Ok(b.build()?)
+        Ok(b.build().context(AgentSnafu)?)
     }
 }

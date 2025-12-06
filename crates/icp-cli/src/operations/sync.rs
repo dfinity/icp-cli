@@ -6,19 +6,17 @@ use icp::{
     canister::sync::{Params, Synchronize, SynchronizeError},
     prelude::PathBuf,
 };
-use snafu::Snafu;
+use snafu::prelude::*;
 use std::sync::Arc;
 
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
 #[derive(Debug, Snafu)]
-pub enum SyncOperationError {
-    #[snafu(display("synchronization error: {source}"))]
-    Synchronize { source: SynchronizeError },
-}
+#[snafu(display("one or more canisters failed to sync"))]
+pub struct SyncOperationError;
 
 /// Synchronizes a single canister using its configured sync steps
-pub(crate) async fn sync_canister(
+async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
     _term: &Term,
@@ -26,7 +24,7 @@ pub(crate) async fn sync_canister(
     canister_id: Principal,
     canister_info: &Canister,
     pb: &mut MultiStepProgressBar,
-) -> Result<(), SyncOperationError> {
+) -> Result<(), SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
 
     for (i, step) in canister_info.sync.steps.iter().enumerate() {
@@ -52,9 +50,7 @@ pub(crate) async fn sync_canister(
         // Ensure background receiver drains all messages
         pb.end_step().await;
 
-        if let Err(e) = sync_result {
-            return Err(SyncOperationError::Synchronize { source: e });
-        }
+        sync_result?;
     }
 
     Ok(())
@@ -126,11 +122,7 @@ pub(crate) async fn sync_many(
     }
 
     if found_error {
-        return Err(SyncOperationError::Synchronize {
-            source: SynchronizeError::Unexpected(anyhow::anyhow!(
-                "One or more canisters failed to sync"
-            )),
-        });
+        return SyncOperationSnafu.fail();
     }
 
     Ok(())

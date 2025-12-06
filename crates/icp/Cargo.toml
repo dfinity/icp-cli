@@ -5,7 +5,6 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-anyhow = { workspace = true }
 async-trait = { workspace = true }
 bip32 = { workspace = true }
 camino = { workspace = true }
@@ -49,7 +48,6 @@ slog = { workspace = true }
 snafu = { workspace = true }
 strum = { workspace = true }
 sysinfo = { workspace = true }
-thiserror = { workspace = true }
 time = { workspace = true }
 tiny-bip39 = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

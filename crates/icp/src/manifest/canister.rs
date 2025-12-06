@@ -185,10 +185,9 @@ impl<'de> Deserialize<'de> for CanisterManifest {
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
     use indoc::indoc;
     use std::collections::HashMap;
-
-    use anyhow::{Error, anyhow};
 
     use crate::manifest::{
         adapter::{
@@ -206,35 +205,38 @@ mod tests {
     const ARRAY_NOT_EMPTY: &str = "Array must not be empty";
 
     /// Validates project yaml against the schema and deserializes it to a manifest
-    fn validate_canister_yaml(s: &str) -> Result<CanisterManifest, Error> {
+    fn validate_canister_yaml(s: &str) -> CanisterManifest {
         let schema = serde_json::from_str::<serde_json::Value>(include_str!(
             "../../../../docs/schemas/canister-yaml-schema.json"
-        ))?;
-        let project_yaml = serde_yaml::from_str::<serde_json::Value>(s)?;
+        ))
+        .expect("failed to deserialize canister.yaml schema");
+        let canister_yaml = serde_yaml::from_str::<serde_json::Value>(s)
+            .expect("failed to deserialize canister.yaml");
 
         // Build & reuse
-        let validator = jsonschema::options().build(&schema)?;
+        let validator = jsonschema::options()
+            .build(&schema)
+            .expect("failed to build jsonschema validator");
 
         // Iterate over errors
-        for error in validator.iter_errors(&project_yaml) {
+        for error in validator.iter_errors(&canister_yaml) {
             eprintln!("--------- Error ----------");
             eprintln!("{error:#?}");
             eprintln!("--------------------------");
         }
 
-        assert!(validator.is_valid(&project_yaml));
+        assert!(validator.is_valid(&canister_yaml));
 
-        Ok(serde_yaml::from_str::<CanisterManifest>(s)?)
+        serde_yaml::from_str::<CanisterManifest>(s)
+            .expect("failed to deserialize CanisterManifest from yaml")
     }
 
     #[test]
-    fn empty() -> Result<(), Error> {
+    fn empty() {
         match serde_yaml::from_str::<CanisterManifest>(r#"name: my-canister"#) {
             // No Error
             Ok(_) => {
-                return Err(anyhow!(
-                    "an empty canister manifest should result in an error"
-                ));
+                panic!("an empty canister manifest should result in an error");
             }
 
             // Wrong Error
@@ -242,18 +244,15 @@ mod tests {
                 if !format!("{err}")
                     .starts_with("Canister my-canister must have a `recipe` or a `build` section")
                 {
-                    return Err(anyhow!(
-                        "an empty canister manifest resulted in the wrong error: {err}"
-                    ));
+                    panic!("an empty canister manifest resulted in the wrong error: {err}");
                 };
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn canister_with_recipe() -> Result<(), Error> {
+    #[should_panic]
+    fn canister_with_recipe() {
         // This should now fail because "unknown_type" is not a valid recipe type
         let _ = validate_canister_yaml(indoc! {r#"
             name: my-canister
@@ -263,25 +262,21 @@ mod tests {
                 field: value
 
         "#});
-
-        Ok(())
     }
 
     #[test]
-    fn canister_with_build() -> Result<(), Error> {
+    fn canister_with_build() {
         validate_canister_yaml(indoc! {r#"
             name: my-canister
             build:
               steps:
                 - type: script
                   command: dosomething.sh
-        "#})?;
-
-        Ok(())
+        "#});
     }
 
     #[test]
-    fn invalid_manifest_mix_recipe_and_build() -> Result<(), Error> {
+    fn invalid_manifest_mix_recipe_and_build() {
         match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
                 name: my-canister
                 recipe:
@@ -294,25 +289,19 @@ mod tests {
         "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "You should not be able to have a recipe and build steps at the same time"
-                ));
+                panic!("You should not be able to have a recipe and build steps at the same time");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains(CANNOT_HAVE_BOTH) {
-                    return Err(anyhow!(
-                        "expected '{CANNOT_HAVE_BOTH}' error but got: {err}"
-                    ));
+                    panic!("expected '{CANNOT_HAVE_BOTH}' error but got: {err}");
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn invalid_manifest_build_with_unrecognized_fields() -> Result<(), Error> {
+    fn invalid_manifest_build_with_unrecognized_fields() {
         match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
                 name: my-canister
                 build:
@@ -323,25 +312,21 @@ mod tests {
         "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "We don't allow unrecognized fields in a canister definition"
-                ));
+                panic!("We don't allow unrecognized fields in a canister definition");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains("Canister my-canister failed to parse build/sync") {
-                    return Err(anyhow!(
+                    panic!(
                         "expected 'Canister my-canister failed to parse build/sync' error but got: {err}"
-                    ));
+                    );
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn invalid_manifest_recipe_with_unrecognized_fields() -> Result<(), Error> {
+    fn invalid_manifest_recipe_with_unrecognized_fields() {
         match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
                 name: my-canister
                 recipe:
@@ -350,90 +335,74 @@ mod tests {
         "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "We don't allow unrecognized fields in a canister definition"
-                ));
+                panic!("We don't allow unrecognized fields in a canister definition");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains("Unrecognized fields in canister `my-canister`") {
-                    return Err(anyhow!(
+                    panic!(
                         "expected 'Unrecognized fields in canister `my-canister`' error but got: {err}"
-                    ));
+                    );
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn invalid_manifest_mix_bad_recipe_and_build() -> Result<(), Error> {
+    fn invalid_manifest_mix_bad_recipe_and_build() {
         match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
-                name: my-canister
-                recipe:
-                  type: INVALID
-                build:
-                  steps:
-                    - type: pre-built
-                      url: http://example.com/hello_world.wasm
-                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-        "#})
+                    name: my-canister
+                    recipe:
+                      type: INVALID
+                    build:
+                      steps:
+                        - type: pre-built
+                          url: http://example.com/hello_world.wasm
+                          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+            "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "You should not be able to have a recipe and build steps at the same time"
-                ));
+                panic!("You should not be able to have a recipe and build steps at the same time");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains(CANNOT_HAVE_BOTH) {
-                    return Err(anyhow!(
-                        "expected '{CANNOT_HAVE_BOTH}' error but got: {err}"
-                    ));
+                    panic!("expected '{CANNOT_HAVE_BOTH}' error but got: {err}");
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn invalid_manifest_mix_recipe_and_bad_build() -> Result<(), Error> {
+    fn invalid_manifest_mix_recipe_and_bad_build() {
         match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
-                name: my-canister
-                recipe:
-                  type: file://template
-                build:
-                  invalid: INVALID
-        "#})
+                    name: my-canister
+                    recipe:
+                      type: file://template
+                    build:
+                      invalid: INVALID
+            "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "You should not be able to have a recipe and build steps at the same time"
-                ));
+                panic!("You should not be able to have a recipe and build steps at the same time");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains(CANNOT_HAVE_BOTH) {
-                    return Err(anyhow!(
-                        "expected '{CANNOT_HAVE_BOTH}' error but got: {err}"
-                    ));
+                    panic!("expected '{CANNOT_HAVE_BOTH}' error but got: {err}");
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn recipe() -> Result<(), Error> {
+    fn recipe() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
-                name: my-canister
-                recipe:
-                  type: file://my-recipe
-            "#})?,
+                    name: my-canister
+                    recipe:
+                      type: file://my-recipe
+                "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
@@ -446,21 +415,19 @@ mod tests {
                 },
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn recipe_with_configuration() -> Result<(), Error> {
+    fn recipe_with_configuration() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
-                name: my-canister
-                recipe:
-                  type: http://my-recipe
-                  configuration:
-                    key-1: value-1
-                    key-2: value-2
-            "#})?,
+                    name: my-canister
+                    recipe:
+                      type: http://my-recipe
+                      configuration:
+                        key-1: value-1
+                        key-2: value-2
+                "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
@@ -476,19 +443,17 @@ mod tests {
                 },
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn recipe_with_sha256() -> Result<(), Error> {
+    fn recipe_with_sha256() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
-                name: my-canister
-                recipe:
-                  type: "@dfinity/dummy"
-                  sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
-            "#})?,
+                    name: my-canister
+                    recipe:
+                      type: "@dfinity/dummy"
+                      sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+                "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
@@ -508,21 +473,19 @@ mod tests {
                 },
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn recipe_with_settings() -> Result<(), Error> {
+    fn recipe_with_settings() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
-                name: my-canister
-                settings:
-                  compute_allocation: 3
-                  memory_allocation: 4294967296
-                recipe:
-                  type: file://my-recipe
-            "#})?,
+                    name: my-canister
+                    settings:
+                      compute_allocation: 3
+                      memory_allocation: 4294967296
+                    recipe:
+                      type: file://my-recipe
+                "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings {
@@ -539,21 +502,19 @@ mod tests {
                 },
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn build_steps() -> Result<(), Error> {
+    fn build_steps() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
-                name: my-canister
-                build:
-                  steps:
-                    - type: pre-built
-                      url: http://example.com/hello_world.wasm
-                      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-            "#})?,
+                    name: my-canister
+                    build:
+                      steps:
+                        - type: pre-built
+                          url: http://example.com/hello_world.wasm
+                          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+                "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
@@ -573,40 +534,34 @@ mod tests {
                 },
             },
         );
-
-        Ok(())
     }
 
     #[test]
-    fn empty_steps_is_not_allowed() -> Result<(), Error> {
+    fn empty_steps_is_not_allowed() {
         match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
-                name: my-canister
-                build:
-                  steps: []
-                sync:
-                  steps:
-                    - type: assets
-                      dir: dist
-        "#})
+                    name: my-canister
+                    build:
+                      steps: []
+                    sync:
+                      steps:
+                        - type: assets
+                          dir: dist
+            "#})
         {
             Ok(_) => {
-                return Err(anyhow!(
-                    "You should not be able to have a recipe and build steps at the same time"
-                ));
+                panic!("You should not be able to have a recipe and build steps at the same time");
             }
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains(ARRAY_NOT_EMPTY) {
-                    return Err(anyhow!("expected '{ARRAY_NOT_EMPTY}' error but got: {err}"));
+                    panic!("expected '{ARRAY_NOT_EMPTY}' error but got: {err}");
                 }
             }
         };
-
-        Ok(())
     }
 
     #[test]
-    fn sync_steps() -> Result<(), Error> {
+    fn sync_steps() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
                 name: my-canister
@@ -618,7 +573,7 @@ mod tests {
                   steps:
                     - type: assets
                       dir: dist
-            "#})?,
+            "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
@@ -636,7 +591,5 @@ mod tests {
                 },
             },
         );
-
-        Ok(())
     }
 }

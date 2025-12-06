@@ -8,6 +8,7 @@ pub(crate) mod deploy;
 pub(crate) mod environment;
 pub(crate) mod identity;
 pub(crate) mod network;
+pub(crate) mod new;
 pub(crate) mod project;
 pub(crate) mod sync;
 pub(crate) mod token;
@@ -40,6 +41,13 @@ pub(crate) enum Command {
     /// Launch and manage local test networks
     #[command(subcommand)]
     Network(network::Command),
+
+    /// Create a new ICP project from a template
+    ///
+    /// Under the hood templates are generated with `cargo-generate`.
+    /// See the cargo-generate docs for a guide on how to write your own templates:
+    /// https://docs.rs/cargo-generate/0.23.7/cargo_generate/
+    New(new::IcpGenerateArgs),
 
     /// Display information about the current project
     #[clap(hide = true)] // TODO: figure out how to structure the commands later

@@ -3,10 +3,11 @@ use std::{fmt, sync::Arc};
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{Sender, error::SendError};
+use snafu::prelude::*;
+use tokio::sync::mpsc::Sender;
 
 use crate::{
-    canister::{build, script::ScriptError},
+    canister::{build, prebuilt::PrebuiltError, script::ScriptError},
     manifest::{
         adapter::{prebuilt, script},
         serde_helpers::non_empty_vec,
@@ -63,19 +64,12 @@ pub struct Params {
     pub output: PathBuf,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum BuildError {
-    #[error(transparent)]
-    Script(#[from] ScriptError),
-
-    #[error("failed to send build output")]
-    SendOutput(#[from] SendError<String>),
-
-    #[error("failed to join futures")]
-    JoinError(#[from] tokio::task::JoinError),
-
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    #[snafu(transparent)]
+    Script { source: ScriptError },
+    #[snafu(transparent)]
+    Prebuilt { source: PrebuiltError },
 }
 
 #[async_trait]

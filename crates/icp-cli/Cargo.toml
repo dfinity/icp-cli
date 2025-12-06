@@ -55,6 +55,9 @@ tokio.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
 url.workspace = true
+cargo-generate = "0.23.7"
+anstyle = "1.0.13"
+regex = "1.12.2"
 
 [dev-dependencies]
 assert_cmd = "2"

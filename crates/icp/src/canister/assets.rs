@@ -1,21 +1,29 @@
-use anyhow::Context;
 use async_trait::async_trait;
 use ic_agent::Agent;
+use ic_utils::canister::CanisterBuilderError;
+use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
 use crate::canister::sync::{Params, Step, Synchronize, SynchronizeError};
 
 pub struct Assets;
 
-#[async_trait]
-impl Synchronize for Assets {
-    async fn sync(
+#[derive(Debug, Snafu)]
+pub enum AssetsError {
+    #[snafu(display("failed to build canister client"))]
+    Client { source: CanisterBuilderError },
+
+    #[snafu(display("failed to synchronize assets canister"))]
+    Sync { source: ic_asset::error::SyncError },
+}
+
+impl Assets {
+    async fn sync_impl(
         &self,
         step: &Step,
         params: &Params,
         agent: &Agent,
-        _: Option<Sender<String>>,
-    ) -> Result<(), SynchronizeError> {
+    ) -> Result<(), AssetsError> {
         // Adapter
         let adapter = match step {
             Step::Assets(v) => v,
@@ -27,7 +35,7 @@ impl Synchronize for Assets {
             .with_canister_id(params.cid)
             .with_agent(agent)
             .build()
-            .context("failed to build canister client")?;
+            .context(ClientSnafu)?;
 
         // Normalize `dir` field based on whether it's a single dir or multiple.
         let dirs = adapter.dir.as_vec();
@@ -56,8 +64,21 @@ impl Synchronize for Assets {
             None,      // progress
         )
         .await
-        .context("failed to synchronize assets canister")?;
+        .context(SyncSnafu)?;
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl Synchronize for Assets {
+    async fn sync(
+        &self,
+        step: &Step,
+        params: &Params,
+        agent: &Agent,
+        _: Option<Sender<String>>,
+    ) -> Result<(), SynchronizeError> {
+        Ok(self.sync_impl(step, params, agent).await?)
     }
 }

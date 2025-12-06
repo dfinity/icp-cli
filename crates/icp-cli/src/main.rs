@@ -24,8 +24,40 @@ mod progress;
 mod telemetry;
 mod version;
 
+/// Styles from <https://github.com/rust-lang/cargo/blob/master/src/cargo/util/style.rs>
+mod style {
+    use anstyle::*;
+    use clap::builder::Styles;
+
+    const HEADER: Style = AnsiColor::Green.on_default().effects(Effects::BOLD);
+    const USAGE: Style = AnsiColor::Green.on_default().effects(Effects::BOLD);
+    const LITERAL: Style = AnsiColor::Cyan.on_default().effects(Effects::BOLD);
+    const PLACEHOLDER: Style = AnsiColor::Cyan.on_default();
+    const ERROR: Style = AnsiColor::Red.on_default().effects(Effects::BOLD);
+    const VALID: Style = AnsiColor::Cyan.on_default().effects(Effects::BOLD);
+    const INVALID: Style = AnsiColor::Yellow.on_default().effects(Effects::BOLD);
+
+    pub const STYLES: Styles = {
+        Styles::styled()
+            .header(HEADER)
+            .usage(USAGE)
+            .literal(LITERAL)
+            .placeholder(PLACEHOLDER)
+            .error(ERROR)
+            .valid(VALID)
+            .invalid(INVALID)
+            .error(ERROR)
+    };
+}
+
 #[derive(Parser)]
-#[command(version = icp_cli_version_str())]
+#[command(
+    version = icp_cli_version_str(),
+    arg_required_else_help(true),
+    about,
+    next_line_help(false),
+    styles(style::STYLES),
+)]
 struct Cli {
     #[arg(
         long,
@@ -349,6 +381,13 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
         },
+
+        // New
+        Command::New(args) => {
+            commands::new::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
 
         // Project
         Command::Project(cmd) => match cmd {

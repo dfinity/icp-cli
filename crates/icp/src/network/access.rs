@@ -97,11 +97,12 @@ pub async fn get_managed_network_access(
             .context(NoPortDescriptorSnafu { port })?;
 
         if desc.id != pdesc.id {
-            return Err(GetNetworkAccessError::NetworkRunningOtherProject {
+            return NetworkRunningOtherProjectSnafu {
                 network: pdesc.network,
                 port: pdesc.gateway.port,
                 project_dir: pdesc.project_dir,
-            });
+            }
+            .fail();
         }
     }
 

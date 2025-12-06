@@ -3,7 +3,6 @@ use std::{env::current_dir, sync::Arc};
 use console::Term;
 use snafu::prelude::*;
 
-use crate::canister::assets::Assets;
 use crate::canister::build::Builder;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::script::Script;
@@ -66,7 +65,6 @@ pub fn initialize(
     let cload = Arc::new(canister::PathLoader);
 
     // Builders/Syncers
-    let cassets = Arc::new(Assets);
     let cscript = Arc::new(Script);
 
     // Canister builder
@@ -74,7 +72,6 @@ pub fn initialize(
 
     // Canister syncer
     let syncer = Arc::new(Syncer {
-        assets: cassets.to_owned(),
         script: cscript.to_owned(),
     });
 

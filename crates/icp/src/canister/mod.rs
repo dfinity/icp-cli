@@ -9,7 +9,6 @@ use snafu::prelude::*;
 
 use crate::{LoadPath, fs::read, manifest::CanisterManifest, prelude::*};
 
-pub mod assets;
 pub mod build;
 pub mod recipe;
 pub mod script;

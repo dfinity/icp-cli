@@ -6,9 +6,11 @@ use ic_agent::Agent;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::canister::{assets::AssetsError, script::ScriptError};
+use crate::canister::script::ScriptError;
 use crate::manifest::canister::SyncStep;
 use crate::prelude::*;
+
+mod assets;
 
 pub struct Params {
     pub path: PathBuf,
@@ -21,7 +23,7 @@ pub enum SynchronizeError {
     Script { source: ScriptError },
 
     #[snafu(transparent)]
-    Assets { source: AssetsError },
+    Assets { source: assets::AssetsError },
 }
 
 #[async_trait]
@@ -36,7 +38,6 @@ pub trait Synchronize: Sync + Send {
 }
 
 pub struct Syncer {
-    pub assets: Arc<dyn Synchronize>,
     pub script: Arc<dyn Synchronize>,
 }
 
@@ -50,7 +51,7 @@ impl Synchronize for Syncer {
         stdio: Option<Sender<String>>,
     ) -> Result<(), SynchronizeError> {
         match step {
-            SyncStep::Assets(_) => self.assets.sync(step, params, agent, stdio).await,
+            SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(_) => self.script.sync(step, params, agent, stdio).await,
         }
     }

@@ -292,21 +292,6 @@ pub enum WaitForPortError {
     ChildExited { source: ChildExitError },
 }
 
-// async fn initialize_pocketic(
-//     pocketic_port: u16,
-//     gateway_bind_port: &Port,
-//     state_dir: &Path,
-//     seed_accounts: impl Iterator<Item = Principal> + Clone,
-// ) -> Result<PocketIcInstance, InitializePocketicError> {
-//     let instance_config = default_instance_config(state_dir);
-//     let gateway_port = match gateway_bind_port {
-//         Port::Fixed(port) => Some(*port),
-//         Port::Random => None,
-//     };
-
-//     initialize_instance(pocketic_port, instance_config, gateway_port, seed_accounts).await
-// }
-
 pub async fn initialize_instance(
     pocketic_port: u16,
     instance_config: InstanceConfig,

@@ -45,7 +45,7 @@ pub async fn run_network(
     background: bool,
 ) -> Result<(), RunNetworkError> {
     let pocketic_launcher_path = PathBuf::from(
-        var("ICP_POCKET_IC_LAUNCHER_PATH")
+        var("ICP_CLI_NETWORK_LAUNCHER_PATH")
             .ok()
             .ok_or(NoPocketIcPath)?,
     );
@@ -69,7 +69,7 @@ pub enum RunNetworkError {
     #[snafu(transparent)]
     CreateDirFailed { source: crate::fs::IoError },
 
-    #[snafu(display("ICP_POCKET_IC_LAUNCHER_PATH environment variable is not set"))]
+    #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
     NoPocketIcPath,
 
     #[snafu(transparent)]

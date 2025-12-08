@@ -73,15 +73,15 @@ pub struct PocketIcInstance {
     pub root_key: String,
 }
 
-pub async fn spawn_pocketic_launcher(
-    pocketic_launcher_path: &Path,
+pub async fn spawn_network_launcher(
+    network_launcher_path: &Path,
     stdout_file: &Path,
     stderr_file: &Path,
     background: bool,
     port: &Port,
     state_dir: &Path,
 ) -> (Child, PocketIcInstance) {
-    let mut cmd = tokio::process::Command::new(pocketic_launcher_path);
+    let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args(["--state-dir", state_dir.as_str()]);
     if let Port::Fixed(port) = port {
         cmd.args(["--gateway-port", &port.to_string()]);
@@ -101,15 +101,15 @@ pub async fn spawn_pocketic_launcher(
         cmd.stderr(Stdio::inherit());
     }
     let watcher = wait_for_single_line_file(&status_dir.path().join("status.json")).unwrap();
-    let child = cmd.spawn().expect("Could not start PocketIC launcher.");
+    let child = cmd.spawn().expect("Could not start network launcher.");
     let status_content = watcher
         .await
-        .expect("Failed to read PocketIC launcher status.");
+        .expect("Failed to read network launcher status.");
     let launcher_status: LauncherStatus =
-        serde_json::from_str(&status_content).expect("Failed to parse PocketIC launcher status.");
+        serde_json::from_str(&status_content).expect("Failed to parse network launcher status.");
     assert_eq!(
         launcher_status.v, "1",
-        "unexpected PocketIC launcher status version"
+        "unexpected network launcher status version"
     );
     (
         child,

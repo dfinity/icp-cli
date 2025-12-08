@@ -31,7 +31,7 @@ use crate::{
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::pocketic::{
             CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
-            spawn_pocketic_launcher,
+            spawn_network_launcher,
         },
     },
     prelude::*,
@@ -52,7 +52,7 @@ pub async fn run_network(
 
     nd.ensure_exists()?;
 
-    run_pocketic_launcher(
+    run_network_launcher(
         &pocketic_launcher_path,
         config,
         &nd,
@@ -79,8 +79,8 @@ pub enum RunNetworkError {
     RunPocketIc { source: RunPocketIcError },
 }
 
-async fn run_pocketic_launcher(
-    pocketic_launcher_path: &Path,
+async fn run_network_launcher(
+    network_launcher_path: &Path,
     config: &Managed,
     nd: &NetworkDirectory,
     project_root: &Path,
@@ -100,7 +100,7 @@ async fn run_pocketic_launcher(
                 .as_ref()
                 .map(|lock| lock.claim_port())
                 .transpose()?;
-            eprintln!("PocketIC launcher path: {pocketic_launcher_path}");
+            eprintln!("Network launcher path: {network_launcher_path}");
 
             create_dir_all(&root.pocketic_dir()).context(CreateDirAllSnafu)?;
 
@@ -109,8 +109,8 @@ async fn run_pocketic_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            let (child, instance) = spawn_pocketic_launcher(
-                pocketic_launcher_path,
+            let (child, instance) = spawn_network_launcher(
+                network_launcher_path,
                 &root.pocketic_stdout_file(),
                 &root.pocketic_stderr_file(),
                 background,

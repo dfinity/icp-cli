@@ -44,7 +44,7 @@ pub async fn run_network(
     seed_accounts: impl Iterator<Item = Principal> + Clone,
     background: bool,
 ) -> Result<(), RunNetworkError> {
-    let pocketic_launcher_path = PathBuf::from(
+    let network_launcher_path = PathBuf::from(
         var("ICP_CLI_NETWORK_LAUNCHER_PATH")
             .ok()
             .ok_or(NoPocketIcPath)?,
@@ -53,7 +53,7 @@ pub async fn run_network(
     nd.ensure_exists()?;
 
     run_network_launcher(
-        &pocketic_launcher_path,
+        &network_launcher_path,
         config,
         &nd,
         project_root,

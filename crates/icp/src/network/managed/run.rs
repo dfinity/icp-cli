@@ -104,23 +104,11 @@ async fn run_pocketic_launcher(
 
             create_dir_all(&root.pocketic_dir()).context(CreateDirAllSnafu)?;
 
-            // let port_file = root.pocketic_port_file();
-            // if port_file.exists() {
-            //     remove_file(&port_file).context(RemoveDirAllSnafu)?;
-            // }
-            // eprintln!("Port file: {port_file}");
-
             if root.state_dir().exists() {
                 remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
-            // let mut child = spawn_pocketic(
-            //     pocketic_path,
-            //     &port_file,
-            //     &root.pocketic_stdout_file(),
-            //     &root.pocketic_stderr_file(),
-            //     background,
-            // );
+
             let (child, instance) = spawn_pocketic_launcher(
                 pocketic_launcher_path,
                 &root.pocketic_stdout_file(),
@@ -130,16 +118,8 @@ async fn run_pocketic_launcher(
                 &root.state_dir(),
             )
             .await;
-            // let pocketic_port = wait_for_port(&port_file, &mut child).await?;
             eprintln!("PocketIC started on port {}", instance.gateway_port);
-            // let instance = initialize_pocketic(
-            //     pocketic_port,
-            //     &config.gateway.port,
-            //     &root.state_dir(),
-            //     seed_accounts,
-            // )
-            // .await?;
-            // let port = instance.gateway_port;
+
             seed_instance(&instance, seed_accounts).await?;
             let gateway = NetworkDescriptorGatewayPort {
                 port: instance.gateway_port,

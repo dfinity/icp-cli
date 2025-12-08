@@ -33,7 +33,7 @@ mod tests {
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
-            network::{Managed, Mode},
+            network::{Managed, ManagedMode, Mode},
         },
     };
 
@@ -256,7 +256,9 @@ mod tests {
                 canisters: vec![],
                 networks: vec![Item::Manifest(NetworkManifest {
                     name: "my-network".to_string(),
-                    configuration: Mode::Managed(Managed { gateway: None })
+                    configuration: Mode::Managed(Managed {
+                        mode: ManagedMode::Launcher { gateway: None }
+                    }),
                 })],
                 environments: vec![],
             },

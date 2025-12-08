@@ -71,7 +71,28 @@ impl Default for Gateway {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Managed {
-    pub gateway: Gateway,
+    #[serde(flatten)]
+    pub mode: ManagedMode,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(untagged)]
+pub enum ManagedMode {
+    Image {
+        image: String,
+        port_mapping: Vec<String>,
+    },
+    Launcher {
+        gateway: Gateway,
+    },
+}
+
+impl Default for ManagedMode {
+    fn default() -> Self {
+        ManagedMode::Launcher {
+            gateway: Gateway::default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -134,16 +155,30 @@ impl From<ManifestConnected> for Connected {
 impl From<Mode> for Configuration {
     fn from(value: Mode) -> Self {
         match value {
-            Mode::Managed(managed) => {
-                let gateway: Gateway = match managed.gateway {
-                    Some(g) => g.into(),
-                    None => Gateway::default(),
-                };
-
-                Configuration::Managed {
-                    managed: Managed { gateway },
+            Mode::Managed(managed) => match managed.mode {
+                crate::manifest::network::ManagedMode::Launcher { gateway } => {
+                    let gateway: Gateway = match gateway {
+                        Some(g) => g.into(),
+                        None => Gateway::default(),
+                    };
+                    Configuration::Managed {
+                        managed: Managed {
+                            mode: ManagedMode::Launcher { gateway },
+                        },
+                    }
                 }
-            }
+                crate::manifest::network::ManagedMode::Image {
+                    image,
+                    port_mapping,
+                } => Configuration::Managed {
+                    managed: Managed {
+                        mode: ManagedMode::Image {
+                            image,
+                            port_mapping,
+                        },
+                    },
+                },
+            },
             Mode::Connected(connected) => Configuration::Connected {
                 connected: connected.into(),
             },

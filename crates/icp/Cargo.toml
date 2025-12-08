@@ -5,8 +5,10 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+async-dropper = { workspace = true }
 async-trait = { workspace = true }
 bip32 = { workspace = true }
+bollard = { workspace = true }
 camino = { workspace = true }
 camino-tempfile = { workspace = true }
 candid = { workspace = true }

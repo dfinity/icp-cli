@@ -19,7 +19,27 @@ pub enum Mode {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub struct Managed {
-    pub gateway: Option<Gateway>,
+    #[serde(flatten)]
+    pub mode: ManagedMode,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(untagged, rename_all_fields = "kebab-case")]
+pub enum ManagedMode {
+    Image {
+        image: String,
+        #[serde(default)]
+        port_mapping: Vec<String>,
+    },
+    Launcher {
+        gateway: Option<Gateway>,
+    },
+}
+
+impl Default for ManagedMode {
+    fn default() -> Self {
+        ManagedMode::Launcher { gateway: None }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
@@ -165,7 +185,9 @@ mod tests {
                 "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Mode::Managed(Managed { gateway: None })
+                configuration: Mode::Managed(Managed {
+                    mode: ManagedMode::Launcher { gateway: None }
+                })
             },
         );
     }
@@ -182,10 +204,12 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    gateway: Some(Gateway {
-                        host: Some("localhost".to_string()),
-                        port: None,
-                    })
+                    mode: ManagedMode::Launcher {
+                        gateway: Some(Gateway {
+                            host: Some("localhost".to_string()),
+                            port: None,
+                        })
+                    }
                 })
             },
         );
@@ -204,10 +228,12 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    gateway: Some(Gateway {
-                        host: Some("localhost".to_string()),
-                        port: Some(8000)
-                    })
+                    mode: ManagedMode::Launcher {
+                        gateway: Some(Gateway {
+                            host: Some("localhost".to_string()),
+                            port: Some(8000)
+                        })
+                    }
                 })
             },
         );

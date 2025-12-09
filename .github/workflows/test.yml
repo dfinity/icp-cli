@@ -104,7 +104,7 @@ jobs:
           echo "Downloading $URL"
           curl -L "$URL" -o icp-cli-network-launcher.tar.gz
           tar -xzf icp-cli-network-launcher.tar.gz
-          sudo mv -r icp-cli-network-launcher "$DEST"
+          sudo mv icp-cli-network-launcher "$DEST"
 
           echo "Installed network launcher to $DEST"
           echo "ICP_CLI_NETWORK_LAUNCHER_PATH=$DEST/icp-cli-network-launcher" >> "$GITHUB_ENV"

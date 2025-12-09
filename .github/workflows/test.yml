@@ -72,9 +72,9 @@ jobs:
             target/
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: install pocket-ic
+      - name: install network launcher
         run: |
-          VERSION=10.0.0
+          VERSION=10.0.0+97ad9167
           OS=""
           ARCH=""
 
@@ -97,18 +97,17 @@ jobs:
               exit 1
               ;;
           esac
-
-          URL="https://github.com/dfinity/pocketic/releases/download/$VERSION/pocket-ic-${ARCH}-${OS}.gz"
-          DEST="/usr/local/bin/pocket-ic"
+          PERCENT_VERSION=$(jq -sRr @uri <<<"$VERSION")
+          URL="https://github.com/dfinity/icp-cli-network-launcher/releases/download/${PERCENT_VERSION}/icp-cli-network-launcher-${ARCH}-${OS}-${PERCENT_VERSION}.tar.gz"
+          DEST="/opt/icp-cli-network-launcher"
 
           echo "Downloading $URL"
-          curl -L "$URL" -o pocket-ic.gz
-          gunzip -f pocket-ic.gz
-          chmod +x pocket-ic
-          sudo mv pocket-ic "$DEST"
+          curl -L "$URL" -o icp-cli-network-launcher.tar.gz
+          tar -xzf icp-cli-network-launcher.tar.gz
+          sudo mv -r icp-cli-network-launcher "$DEST"
 
-          echo "Installed pocket-ic to $DEST"
-          echo "ICP_POCKET_IC_PATH=$DEST" >> "$GITHUB_ENV"
+          echo "Installed network launcher to $DEST"
+          echo "ICP_CLI_NETWORK_LAUNCHER_PATH=$DEST/icp-cli-network-launcher" >> "$GITHUB_ENV"
 
       - name: Run ${{ matrix.test }}
         run: cargo test --test ${{ matrix.test }}

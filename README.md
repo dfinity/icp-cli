@@ -102,7 +102,7 @@ The tests require pocket-ic for running the local network. See the setup instruc
 The `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable should point to
 the path of the `icp-cli-network-launcher` binary.
 
-You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases/tag/v10.0.0+97ad9167).
+You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases/tag/v11.0.0).
 
 To run the tests, it's necessary to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
 Here is one way to do that:

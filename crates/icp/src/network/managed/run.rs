@@ -133,7 +133,7 @@ async fn run_network_launcher(
                 network_dir: root.root_dir().to_path_buf(),
                 gateway,
                 default_effective_canister_id,
-                network_url: instance.admin.base_url.to_string(),
+                pocketic_config_url: instance.admin.base_url.to_string(),
                 pocketic_instance_id: instance.instance_id,
                 pid: Some(child.id().unwrap()),
                 root_key: instance.root_key,

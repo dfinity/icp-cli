@@ -20,7 +20,7 @@ pub struct NetworkDescriptorModel {
     pub network_dir: PathBuf,
     pub gateway: NetworkDescriptorGatewayPort,
     pub default_effective_canister_id: Principal,
-    pub network_url: String,
+    pub pocketic_config_url: String,
     pub pocketic_instance_id: usize,
     pub pid: Option<u32>,
     pub root_key: String,

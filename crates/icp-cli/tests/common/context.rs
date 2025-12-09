@@ -299,7 +299,7 @@ impl TestContext {
             .to_string();
 
         let pocketic_url = network_descriptor
-            .get("pocketic-url")
+            .get("pocketic-config-url")
             .and_then(|pu| pu.as_str())
             .expect("network descriptor does not contain pocketic url")
             .to_string();

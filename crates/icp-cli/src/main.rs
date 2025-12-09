@@ -222,12 +222,6 @@ async fn main() -> Result<(), Error> {
                 }
             },
 
-            commands::canister::Command::Show(args) => {
-                commands::canister::show::exec(&ctx, &args)
-                    .instrument(trace_span)
-                    .await?
-            }
-
             commands::canister::Command::Start(args) => {
                 commands::canister::start::exec(&ctx, &args)
                     .instrument(trace_span)

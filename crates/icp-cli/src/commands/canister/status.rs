@@ -9,21 +9,30 @@ use crate::commands::args;
 pub(crate) struct StatusArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
+
+    #[arg(short, long)]
+    pub quiet: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
 
-    let agent = ctx
-        .get_agent(
-            &selections.identity,
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
             &selections.network,
             &selections.environment,
         )
         .await?;
-    let cid = ctx
-        .get_canister_id(
-            &selections.canister,
+
+    if args.quiet {
+        let _ = ctx.term.write_line(&format!("{cid}"));
+        return Ok(());
+    }
+
+    let agent = ctx
+        .get_agent(
+            &selections.identity,
             &selections.network,
             &selections.environment,
         )
@@ -36,12 +45,13 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     let (result,) = mgmt.canister_status(&cid).await?;
 
     // Status printout
-    print_status(&result);
+    print_status(&cid, &result);
 
     Ok(())
 }
 
-pub(crate) fn print_status(result: &CanisterStatusResult) {
+pub(crate) fn print_status(canister_id: &Principal, result: &CanisterStatusResult) {
+    eprintln!("Canister id: {canister_id}");
     eprintln!("Canister Status Report:");
     eprintln!("  Status: {:?}", result.status);
 

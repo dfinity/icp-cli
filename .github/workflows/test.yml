@@ -74,7 +74,7 @@ jobs:
 
       - name: install network launcher
         run: |
-          VERSION=10.0.0+97ad9167
+          VERSION=v10.0.0+97ad9167
           OS=""
           ARCH=""
 

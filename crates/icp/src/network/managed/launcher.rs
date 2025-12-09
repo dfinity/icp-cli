@@ -82,7 +82,12 @@ pub async fn spawn_network_launcher(
     state_dir: &Path,
 ) -> (Child, PocketIcInstance) {
     let mut cmd = tokio::process::Command::new(network_launcher_path);
-    cmd.args(["--state-dir", state_dir.as_str()]);
+    cmd.args([
+        "--interface-version",
+        "1.0.0",
+        "--state-dir",
+        state_dir.as_str(),
+    ]);
     if let Port::Fixed(port) = port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }

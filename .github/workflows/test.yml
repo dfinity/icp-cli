@@ -97,7 +97,7 @@ jobs:
               exit 1
               ;;
           esac
-          PERCENT_VERSION=$(jq -sRr @uri <<<"$VERSION")
+          PERCENT_VERSION=$(printf '%s' "$VERSION" |jq -sRr @uri)
           URL="https://github.com/dfinity/icp-cli-network-launcher/releases/download/${PERCENT_VERSION}/icp-cli-network-launcher-${ARCH}-${OS}-${PERCENT_VERSION}.tar.gz"
           DEST="/opt/icp-cli-network-launcher"
 

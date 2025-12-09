@@ -58,6 +58,12 @@ async fn canister_top_up() {
 
     let canister_balance = ctx.pocketic().cycle_balance(canister_id).await;
 
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["identity", "new", "financially-challenged"])
+        .assert()
+        .success();
+
     // top up with more cycles than available
     ctx.icp()
         .current_dir(&project_dir)
@@ -67,12 +73,14 @@ async fn canister_top_up() {
             "my-canister",
             "--environment",
             "my-environment",
+            "--identity",
+            "financially-challenged",
             "--amount",
-            &format!("{}", 123_456 * TRILLION),
+            &format!("{}", 10 * TRILLION),
         ])
         .assert()
         .stderr(contains(
-            "failed to top up: Insufficient cycles. Requested: 123456.000000000000T cycles",
+            "failed to top up: Insufficient cycles. Requested: 10.000000000000T cycles",
         ))
         .failure();
 

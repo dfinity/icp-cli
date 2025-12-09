@@ -332,7 +332,7 @@ async fn network_run_and_stop_background() {
     );
 
     let pid_contents = read_to_string(&pid_file_path).expect("Failed to read PID file");
-    let background_pocketic_pid: Pid = pid_contents
+    let background_launcher_pid: Pid = pid_contents
         .trim()
         .parse()
         .expect("PID file should contain a valid process ID");
@@ -357,7 +357,7 @@ async fn network_run_and_stop_background() {
         .success()
         .stdout(contains(format!(
             "Stopping background network (PID: {})",
-            background_pocketic_pid
+            background_launcher_pid
         )))
         .stdout(contains("Network stopped successfully"));
 
@@ -367,11 +367,11 @@ async fn network_run_and_stop_background() {
         "PID file should be removed after stopping"
     );
 
-    // Verify pocketic process is no longer running
+    // Verify launcher process is no longer running
     let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[background_pocketic_pid]), true);
+    system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
     assert!(
-        system.process(background_pocketic_pid).is_none(),
+        system.process(background_launcher_pid).is_none(),
         "Process should no longer be running"
     );
 

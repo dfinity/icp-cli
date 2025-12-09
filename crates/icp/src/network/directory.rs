@@ -196,13 +196,13 @@ impl NetworkRootPaths {
         self.network_root.join("state")
     }
 
-    /// Subdirectory for PocketIC-related files (but not the state directory)
-    pub fn pocketic_dir(&self) -> PathBuf {
-        self.network_root.join("pocket-ic")
+    /// Subdirectory for network-launcher-related files (but not the state directory)
+    pub fn launcher_dir(&self) -> PathBuf {
+        self.network_root.join("network-launcher")
     }
 
     /// When running a network in the background, we store the PID of the background controlling `icp` process here.
-    /// This does _not_ contain pocket-ic processess.
+    /// This does _not_ contain launcher/pocket-ic processess.
     pub fn background_network_runner_pid_file(&self) -> PathBuf {
         self.network_root.join("background_network_runner.pid")
     }
@@ -212,17 +212,17 @@ impl NetworkRootPaths {
     /// If the file exists, PocketIC assumes this means another PocketIC instance
     /// is running, and exits with exit code(0).
     pub fn pocketic_port_file(&self) -> PathBuf {
-        self.pocketic_dir().join("port")
+        self.launcher_dir().join("port")
     }
 
     /// PocketIC writes its stdout to this file.
     pub fn pocketic_stdout_file(&self) -> PathBuf {
-        self.pocketic_dir().join("stdout.log")
+        self.launcher_dir().join("stdout.log")
     }
 
     /// PocketIC writes its stderr to this file.
     pub fn pocketic_stderr_file(&self) -> PathBuf {
-        self.pocketic_dir().join("stderr.log")
+        self.launcher_dir().join("stderr.log")
     }
 }
 

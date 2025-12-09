@@ -31,9 +31,8 @@ icp help
 
 ### Add pocket-ic and motoko tools to the path
 
-To launch a local network you will also need to set the `ICP_POCKET_IC_PATH` environment variable.
-You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases).
-At least version 10.0.0 of pocket-ic is required.
+To launch a local network you will also need to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
+You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases).
 
 ```bash
 # for eg for a mac with apple sillicon:
@@ -100,18 +99,17 @@ The tests require pocket-ic for running the local network. See the setup instruc
 
 #### Setup
 
-The `ICP_POCKET_IC_PATH` environment variable should point to
-the path of the `pocket-ic` binary.
+The `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable should point to
+the path of the `icp-cli-network-launcher` binary.
 
-You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases/tag/10.0.0).
-At least version 10.0.0 of pocket-ic is required.
+You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases/tag/v10.0.0+97ad9167).
 
-To run the tests, it's necessary to set the `ICP_POCKET_IC_PATH` environment variable.
+To run the tests, it's necessary to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
 Here is one way to do that:
 
 ```
 # Export the path to the pocket-ic binary
-export ICP_POCKET_IC_PATH="<yourpath>/pocket-ic"
+export ICP_CLI_NETWORK_LAUNCHER_PATH="<yourpath>/icp-cli-network-launcher"
 
 # Run tests
 cargo test

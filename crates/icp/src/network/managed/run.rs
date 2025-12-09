@@ -29,7 +29,7 @@ use crate::{
         RunNetworkError::NoPocketIcPath,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
-        managed::pocketic::{
+        managed::launcher::{
             CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
             spawn_network_launcher,
         },
@@ -102,7 +102,7 @@ async fn run_network_launcher(
                 .transpose()?;
             eprintln!("Network launcher path: {network_launcher_path}");
 
-            create_dir_all(&root.pocketic_dir()).context(CreateDirAllSnafu)?;
+            create_dir_all(&root.launcher_dir()).context(CreateDirAllSnafu)?;
 
             if root.state_dir().exists() {
                 remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
@@ -133,7 +133,7 @@ async fn run_network_launcher(
                 network_dir: root.root_dir().to_path_buf(),
                 gateway,
                 default_effective_canister_id,
-                pocketic_url: instance.admin.base_url.to_string(),
+                network_url: instance.admin.base_url.to_string(),
                 pocketic_instance_id: instance.instance_id,
                 pid: Some(child.id().unwrap()),
                 root_key: instance.root_key,
@@ -293,12 +293,12 @@ pub enum WaitForPortError {
 }
 
 pub async fn initialize_instance(
-    pocketic_port: u16,
+    pocketic_config_port: u16,
     instance_config: InstanceConfig,
     gateway_port: Option<u16>,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
 ) -> Result<PocketIcInstance, InitializePocketicError> {
-    let pic_url = format!("http://localhost:{pocketic_port}")
+    let pic_url = format!("http://localhost:{pocketic_config_port}")
         .parse::<Url>()
         .unwrap();
     let pic = PocketIcAdminInterface::new(pic_url.clone());

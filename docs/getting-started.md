@@ -226,8 +226,7 @@ Now that you have your first canister running, explore:
 
 **Network connection fails**
 - Verify `icp network run` is running in another terminal
-- Check that `ICP_POCKET_IC_PATH` is set correctly. It should point directly to your
-pocket-ic binary. You can download pocket-ic from [github](https://github.com/dfinity/pocketic/releases)
+- Check that `ICP_CLI_NETWORK_LAUNCHER_PATH` is set correctly. It should point directly to your icp-cli-network-launcher binary. You can download the launcher from [github](https://github.com/dfinity/icp-cli-network-launcher/releases)
 
 **Canister deployment fails**
 - Verify that the local network is healthy: `icp network ping`

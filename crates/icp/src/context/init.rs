@@ -10,8 +10,7 @@ use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::store_artifact::ArtifactStore;
 use crate::{
-    Lazy, Loader, ProjectLoaders, agent, canister, identity, manifest, network, prelude::*,
-    project, store_id,
+    Lazy, Loader, agent, canister, identity, manifest, network, prelude::*, project, store_id,
 };
 
 #[derive(Debug, Snafu)]
@@ -69,19 +68,15 @@ pub fn initialize(
     // Canister syncer
     let syncer = Arc::new(Syncer);
 
-    // Project Loaders
-    let ploaders = ProjectLoaders {
-        path: Arc::new(project::PathLoader),
-        manifest: Arc::new(project::ManifestLoader {
+    // Project loader
+    let pload = Loader {
+        project_root_locate: project_root_locate.clone(),
+        path_loader: Arc::new(project::PathLoader),
+        manifest_loader: Arc::new(project::ManifestLoader {
             project_root_locate: project_root_locate.clone(),
             recipe,
             canister: cload,
         }),
-    };
-
-    let pload = Loader {
-        project_root_locate: project_root_locate.clone(),
-        project: ploaders,
     };
 
     let pload = Lazy::new(pload);

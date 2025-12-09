@@ -130,14 +130,11 @@ pub trait LoadManifest<M, T, E>: Sync + Send {
     async fn load(&self, m: &M) -> Result<T, E>;
 }
 
-pub struct ProjectLoaders {
-    pub path: Arc<dyn LoadPath<ProjectManifest, project::LoadPathError>>,
-    pub manifest: Arc<dyn LoadManifest<ProjectManifest, Project, project::LoadManifestError>>,
-}
-
 pub struct Loader {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
-    pub project: ProjectLoaders,
+    pub path_loader: Arc<dyn LoadPath<ProjectManifest, project::LoadPathError>>,
+    pub manifest_loader:
+        Arc<dyn LoadManifest<ProjectManifest, Project, project::LoadManifestError>>,
 }
 
 #[async_trait]
@@ -151,8 +148,7 @@ impl Load for Loader {
 
         // Load project manifest
         let m = self
-            .project
-            .path
+            .path_loader
             .load(&pdir.join(PROJECT_MANIFEST))
             .await
             .context(PathSnafu)?;
@@ -160,12 +156,7 @@ impl Load for Loader {
         debug!("Loaded project manifest: {m:#?}");
 
         // Load project
-        let p = self
-            .project
-            .manifest
-            .load(&m)
-            .await
-            .context(ManifestSnafu)?;
+        let p = self.manifest_loader.load(&m).await.context(ManifestSnafu)?;
 
         debug!("Rendered project definition: {p:#?}");
 

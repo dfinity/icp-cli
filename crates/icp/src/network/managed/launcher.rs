@@ -3,8 +3,7 @@ use candid::Principal;
 use notify::Watcher;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
-    InstanceConfig, InstanceId, RawTime, SubnetConfigSet, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, InstanceConfig, InstanceId, RawTime, Topology,
 };
 use reqwest::Url;
 use serde::Deserialize;
@@ -14,56 +13,6 @@ use time::OffsetDateTime;
 use tokio::process::Child;
 
 use crate::{network::Port, prelude::*};
-
-pub fn default_instance_config(state_dir: &Path) -> InstanceConfig {
-    InstanceConfig {
-        // State directory
-        state_dir: Some(state_dir.to_path_buf().into()),
-
-        // Replica logging level
-        log_level: Some("ERROR".to_string()),
-
-        // Special features
-        icp_features: Some(IcpFeatures {
-            // Enable with default feature configuration
-            icp_token: Some(IcpFeaturesConfig::DefaultConfig),
-
-            // Same as above
-            cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
-
-            // Same as above
-            cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
-
-            // Same as above
-            registry: Some(IcpFeaturesConfig::DefaultConfig),
-
-            // Same as above
-            ii: Some(IcpFeaturesConfig::DefaultConfig),
-
-            // The rest of the features are disabled for now
-            nns_governance: None,
-            sns: None,
-            nns_ui: None,
-            // do not use ..default() here so we notice if new features are available
-        }),
-
-        subnet_config_set: (SubnetConfigSet {
-            application: 1,
-
-            // The rest of the subnets are disabled by default
-            ..Default::default()
-        })
-        .into(),
-
-        icp_config: Some(IcpConfig {
-            // Required to enable environment variables
-            beta_features: Some(IcpConfigFlag::Enabled),
-            ..Default::default()
-        }),
-
-        ..Default::default()
-    }
-}
 
 pub struct PocketIcInstance {
     pub admin: PocketIcAdminInterface,
@@ -87,6 +36,7 @@ pub async fn spawn_network_launcher(
         "1.0.0",
         "--state-dir",
         state_dir.as_str(),
+        "--ii",
     ]);
     if let Port::Fixed(port) = port {
         cmd.args(["--gateway-port", &port.to_string()]);
@@ -150,7 +100,7 @@ pub enum WaitForFileError {
 
 /// Waits for a file to be created and have a full line of content. Call the function before initing the external process,
 /// then await the future after the init.
-fn wait_for_single_line_file(
+pub fn wait_for_single_line_file(
     path: &Path,
 ) -> Result<impl Future<Output = Result<String, WaitForFileError>> + use<>, WaitForFileError> {
     let dir = path.parent().unwrap();
@@ -198,14 +148,45 @@ fn wait_for_single_line_file(
     })
 }
 
+/// Call the function before initing the external process, then await the future after the init.
+pub fn wait_for_launcher_status(
+    status_dir: &Path,
+) -> Result<
+    impl Future<Output = Result<LauncherStatus, WaitForLauncherStatusError>> + use<>,
+    WaitForFileError,
+> {
+    let status_file = status_dir.join("status.json");
+    let watcher = wait_for_single_line_file(&status_file)?;
+    Ok(async move {
+        let status_content = watcher.await.context(WaitForFileSnafu)?;
+        let launcher_status: LauncherStatus =
+            serde_json::from_str(&status_content).context(DeserializeSnafu)?;
+        ensure!(
+            launcher_status.v == "1",
+            BadVersionSnafu {
+                expected: "1",
+                found: &launcher_status.v
+            }
+        );
+        Ok(launcher_status)
+    })
+}
+
+#[derive(Debug, Snafu)]
+pub enum WaitForLauncherStatusError {
+    WaitForFile { source: WaitForFileError },
+    Deserialize { source: serde_json::Error },
+    BadVersion { expected: String, found: String },
+}
+
 #[derive(Deserialize)]
-struct LauncherStatus {
-    v: String,
-    instance_id: usize,
-    config_port: u16,
-    gateway_port: u16,
-    root_key: String,
-    default_effective_canister_id: Principal,
+pub struct LauncherStatus {
+    pub v: String,
+    pub instance_id: usize,
+    pub config_port: u16,
+    pub gateway_port: u16,
+    pub root_key: String,
+    pub default_effective_canister_id: Principal,
 }
 
 pub struct PocketIcAdminInterface {

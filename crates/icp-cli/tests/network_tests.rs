@@ -314,7 +314,7 @@ async fn network_run_and_stop_background() {
         .args(["network", "run", "my-network", "--background"])
         .assert()
         .success()
-        .stderr(contains("Created instance with id")); // part of network start output
+        .stderr(contains("Seeding ICP and TCYCLES")); // part of network start output
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
 

@@ -17,7 +17,7 @@ use pocket_ic::{
 };
 use reqwest::Url;
 use snafu::prelude::*;
-use std::{env::var, fs::read_to_string, io::Write, process::ExitStatus, time::Duration};
+use std::{env::var, io::Write, process::ExitStatus, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use uuid::Uuid;
@@ -26,7 +26,7 @@ use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
         Managed, NetworkDirectory, Port,
-        RunNetworkError::NoPocketIcPath,
+        RunNetworkError::NoLauncherPath,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::launcher::{
@@ -47,7 +47,7 @@ pub async fn run_network(
     let network_launcher_path = PathBuf::from(
         var("ICP_CLI_NETWORK_LAUNCHER_PATH")
             .ok()
-            .ok_or(NoPocketIcPath)?,
+            .ok_or(NoLauncherPath)?,
     );
 
     nd.ensure_exists()?;
@@ -70,7 +70,7 @@ pub enum RunNetworkError {
     CreateDirFailed { source: crate::fs::IoError },
 
     #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
-    NoPocketIcPath,
+    NoLauncherPath,
 
     #[snafu(transparent)]
     LockFileError { source: LockError },
@@ -118,7 +118,10 @@ async fn run_network_launcher(
                 &root.state_dir(),
             )
             .await;
-            eprintln!("PocketIC started on port {}", instance.gateway_port);
+            if background {
+                // background means we're using stdio files - otherwise the launcher already prints this
+                eprintln!("Network started on port {}", instance.gateway_port);
+            }
 
             seed_instance(&instance, seed_accounts).await?;
             let gateway = NetworkDescriptorGatewayPort {
@@ -234,24 +237,6 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     )
 }
 
-pub async fn wait_for_port_file(path: &Path) -> Result<u16, WaitForPortTimeoutError> {
-    let start_time = std::time::Instant::now();
-
-    loop {
-        if let Ok(contents) = read_to_string(path)
-            && contents.ends_with('\n')
-            && let Ok(port) = contents.trim().parse::<u16>()
-        {
-            return Ok(port);
-        }
-
-        if start_time.elapsed().as_secs() > 30 {
-            return WaitForPortTimeoutSnafu.fail();
-        }
-        sleep(Duration::from_millis(100)).await;
-    }
-}
-
 #[derive(Debug, Snafu)]
 #[snafu(display("timeout waiting for port file"))]
 pub struct WaitForPortTimeoutError;
@@ -270,16 +255,6 @@ pub async fn notice_child_exit(child: &mut Child) -> ChildExitError {
 #[snafu(display("Child process exited early with status {status}"))]
 pub struct ChildExitError {
     pub status: ExitStatus,
-}
-
-/// Waits for a child process to populate a port number in a file.
-/// Exits early if the child exits or the user interrupts.
-pub async fn wait_for_port(path: &Path, child: &mut Child) -> Result<u16, WaitForPortError> {
-    tokio::select! {
-        res = wait_for_port_file(path) => res.map_err(WaitForPortError::from),
-        _ = ctrl_c() => Err(WaitForPortError::Interrupted),
-        err = notice_child_exit(child) => Err(WaitForPortError::ChildExited { source: err }),
-    }
 }
 
 #[derive(Debug, Snafu)]
@@ -371,7 +346,7 @@ pub async fn initialize_instance(
 
 pub async fn seed_instance(
     instance: &PocketIcInstance,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
+    seed_accounts: impl IntoIterator<Item = Principal> + Clone,
 ) -> Result<(), InitializePocketicError> {
     eprintln!("Seeding ICP and TCYCLES account balances");
     let pocket_ic_client = PocketIc::new_from_existing_instance(
@@ -383,10 +358,11 @@ pub async fn seed_instance(
     let seed_icp = join_all(
         seed_accounts
             .clone()
+            .into_iter()
             .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic
             .map(|account| mint_icp_to_account(&pocket_ic_client, account, 100_000_000_000_000u64)),
     );
-    let seed_cycles = join_all(seed_accounts.map(|account| {
+    let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
         mint_cycles_to_account(
             &pocket_ic_client,
             account,

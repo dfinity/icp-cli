@@ -9,10 +9,13 @@ use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
 use icp::{
-    network::managed::run::{initialize_instance, wait_for_port_file},
+    network::managed::{
+        launcher::{PocketIcAdminInterface, PocketIcInstance, wait_for_launcher_status},
+        run::seed_instance,
+    },
     prelude::*,
 };
-use pocket_ic::{common::rest::InstanceConfig, nonblocking::PocketIc};
+use pocket_ic::nonblocking::PocketIc;
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork};
@@ -140,10 +143,12 @@ impl TestContext {
     pub(crate) async fn start_network_with_config(
         &self,
         project_dir: &Path,
-        configuration: InstanceConfig,
+        flags: &[&str],
     ) -> ChildGuard {
-        let pocketic_path =
-            PathBuf::from(env::var("ICP_POCKET_IC_PATH").expect("ICP_POCKET_IC_PATH must be set"));
+        let launcher_path = PathBuf::from(
+            env::var("ICP_CLI_NETWORK_LAUNCHER_PATH")
+                .expect("ICP_CLI_NETWORK_LAUNCHER_PATH must be set"),
+        );
 
         // Create network directory structure
         let network_dir = project_dir
@@ -159,15 +164,13 @@ impl TestContext {
         let state_dir = pocketic_dir.join("state");
         create_dir_all(&state_dir).expect("Failed to create state directory");
 
-        let port_file = pocketic_dir.join("port");
-
-        eprintln!("Starting PocketIC with cusotm configuration");
+        eprintln!("Starting network with custom configuration");
 
         // Spawn PocketIC
-        let mut cmd = std::process::Command::new(&pocketic_path);
-        cmd.arg("--port-file");
-        cmd.arg(&port_file);
-        cmd.args(["--ttl", "2592000", "--log-levels", "error"]);
+        let mut cmd = std::process::Command::new(&launcher_path);
+        cmd.args(["--interface-version=1.0.0", "--status-dir"]);
+        cmd.arg(&pocketic_dir);
+        cmd.args(flags);
         cmd.stdout(std::process::Stdio::inherit());
         cmd.stderr(std::process::Stdio::inherit());
 
@@ -176,22 +179,29 @@ impl TestContext {
             use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
-
-        let child = cmd.spawn().expect("failed to spawn PocketIC");
-        let pocketic_pid = child.id();
+        let watcher =
+            wait_for_launcher_status(&pocketic_dir).expect("Failed to watch launcher status");
+        let child = cmd.spawn().expect("failed to spawn launcher");
+        let launcher_pid = child.id();
 
         // Wait for port file using the function from icp-network
-        let pocketic_port = wait_for_port_file(&port_file)
-            .await
-            .expect("Timeout waiting for port file");
-        eprintln!("PocketIC started on port {pocketic_port}");
+        let status = watcher.await.expect("Timeout waiting for port file");
+        let gateway_port = status.gateway_port;
+        eprintln!("Gateway started on port {gateway_port}");
 
+        let instance = PocketIcInstance {
+            admin: PocketIcAdminInterface::new(
+                Url::parse(&format!("http://localhost:{}/", status.config_port)).unwrap(),
+            ),
+            gateway_port,
+            instance_id: status.instance_id,
+            effective_canister_id: status.default_effective_canister_id,
+            root_key: status.root_key,
+        };
         // Initialize PocketIC instance with custom config
-        let instance = initialize_instance(
-            pocketic_port,
-            configuration,
-            None,                                    // Random gateway port
-            std::iter::once(Principal::anonymous()), // Seed anonymous account only for tests
+        seed_instance(
+            &instance,
+            [Principal::anonymous()], // Seed anonymous account only for tests
         )
         .await
         .expect("Failed to initialize PocketIC instance");
@@ -208,9 +218,9 @@ impl TestContext {
                 "fixed": false
             },
             "default-effective-canister-id": instance.effective_canister_id.to_string(),
-            "pocketic-url": format!("http://localhost:{}", pocketic_port),
+            "pocketic-config-url": instance.admin.base_url,
             "pocketic-instance-id": instance.instance_id,
-            "pid": pocketic_pid,
+            "pid": launcher_pid,
             "root-key": instance.root_key,
         });
         fs::write(
@@ -221,7 +231,7 @@ impl TestContext {
 
         // Connect PocketIc client
         let pocketic = PocketIc::new_from_existing_instance(
-            format!("http://localhost:{pocketic_port}").parse().unwrap(),
+            instance.admin.base_url.clone(),
             instance.instance_id,
             None,
         );

@@ -155,7 +155,7 @@ pub struct IcpTemplatePath {
     // TODO `--git` doesn't seem to support `owner/repo` like the docs say
     //      see https://github.com/cargo-generate/cargo-generate/issues/1603
     //TODO Change the default to a dfinity repo
-    #[arg(short, long, group("SpecificPath"), default_value = "https://github.com/raymondk/icp-cli-templates", help_heading = heading::TEMPLATE_SELECTION)]
+    #[arg(short, long, group("SpecificPath"), default_value = "https://github.com/dfinity/icp-cli-templates", help_heading = heading::TEMPLATE_SELECTION)]
     pub git: Option<String>,
 
     /// Branch to use when installing from git

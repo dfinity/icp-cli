@@ -700,7 +700,7 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 * `--subfolder <SUBFOLDER>` — Specifies the subfolder within the template repository to be used as the actual template
 * `-g`, `--git <GIT>` — Git repository to clone template from. Can be a URL (like `https://github.com/dfinity/icp-cli-project-template`), a path (relative or absolute)
 
-  Default value: `https://github.com/raymondk/icp-cli-templates`
+  Default value: `https://github.com/dfinity/icp-cli-templates`
 * `-b`, `--branch <BRANCH>` — Branch to use when installing from git
 * `-t`, `--tag <TAG>` — Tag to use when installing from git
 * `-r`, `--revision <REVISION>` — Git revision to use when installing from git (e.g. a commit hash)

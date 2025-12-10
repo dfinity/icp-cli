@@ -4,7 +4,7 @@ use clap::{ArgAction, Args};
 use console::Term;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
-use icp::LoadError;
+use icp::ProjectLoadError;
 use icp::context::{CanisterSelection, Context};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -124,7 +124,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     let configured_settings = if let CanisterSelection::Named(name) = &selections.canister {
         match ctx.project.load().await {
             Ok(p) => p.canisters[name].1.settings.clone(),
-            Err(LoadError::Locate { .. }) => <_>::default(),
+            Err(ProjectLoadError::Locate { .. }) => <_>::default(),
             Err(e) => bail!("failed to load project: {}", e),
         }
     } else {

@@ -1,6 +1,4 @@
-use icp::manifest::{
-    CanisterManifest, EnvironmentManifest, NetworkManifest, project::ProjectManifest,
-};
+use icp::manifest::{CanisterManifest, EnvironmentManifest, NetworkManifest, ProjectManifest};
 
 macro_rules! generate_schemas {
     ($base:expr, $($t:ty => $filename:expr),+ $(,)?) => {{

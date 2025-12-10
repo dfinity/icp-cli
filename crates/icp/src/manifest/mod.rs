@@ -9,7 +9,7 @@ pub(crate) mod adapter;
 pub(crate) mod canister;
 pub(crate) mod environment;
 pub(crate) mod network;
-pub mod project;
+pub(crate) mod project;
 pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 

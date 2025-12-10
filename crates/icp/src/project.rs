@@ -7,11 +7,10 @@ use crate::{
     canister::recipe,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
-        NetworkManifest, ProjectRootLocateError,
+        NetworkManifest, ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
-        project::ProjectManifest,
         recipe::RecipeType,
     },
     network::{Configuration, Connected, Gateway, Managed, Port},

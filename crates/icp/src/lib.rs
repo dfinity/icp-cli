@@ -7,11 +7,11 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{
-    canister::Settings,
+    canister::{Settings, recipe::Resolve},
     manifest::{
-        PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
+        LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
-        project::ProjectManifest,
+        load_manifest_from_path,
     },
     network::Configuration,
     prelude::*,
@@ -107,11 +107,11 @@ pub enum LoadError {
     #[snafu(display("failed to locate project directory"))]
     Locate { source: ProjectRootLocateError },
 
-    #[snafu(display("failed to load path"))]
-    Path { source: project::LoadPathError },
+    #[snafu(display("failed to load project manifest"))]
+    ProjectManifest { source: LoadManifestFromPathError },
 
-    #[snafu(display("failed to load the project manifest"))]
-    Manifest { source: project::LoadManifestError },
+    #[snafu(display("failed to load project"))]
+    Project { source: project::LoadManifestError },
 }
 
 #[async_trait]
@@ -120,21 +120,9 @@ pub trait Load: Sync + Send {
     async fn exists(&self) -> Result<bool, LoadError>;
 }
 
-#[async_trait]
-pub trait LoadPath<M, E>: Sync + Send {
-    async fn load(&self, path: &Path) -> Result<M, E>;
-}
-
-#[async_trait]
-pub trait LoadManifest<M, T, E>: Sync + Send {
-    async fn load(&self, m: &M) -> Result<T, E>;
-}
-
 pub struct Loader {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
-    pub path_loader: Arc<dyn LoadPath<ProjectManifest, project::LoadPathError>>,
-    pub manifest_loader:
-        Arc<dyn LoadManifest<ProjectManifest, Project, project::LoadManifestError>>,
+    pub recipe: Arc<dyn Resolve>,
 }
 
 #[async_trait]
@@ -147,16 +135,16 @@ impl Load for Loader {
         debug!("Located icp project in {pdir}");
 
         // Load project manifest
-        let m = self
-            .path_loader
-            .load(&pdir.join(PROJECT_MANIFEST))
+        let m = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
             .await
-            .context(PathSnafu)?;
+            .context(ProjectManifestSnafu)?;
 
         debug!("Loaded project manifest: {m:#?}");
 
-        // Load project
-        let p = self.manifest_loader.load(&m).await.context(ManifestSnafu)?;
+        // Consolidate manifest into project
+        let p = project::consolidate_manifest(&pdir, self.recipe.as_ref(), &m)
+            .await
+            .context(ProjectSnafu)?;
 
         debug!("Rendered project definition: {p:#?}");
 

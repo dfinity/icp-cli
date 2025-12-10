@@ -8,10 +8,9 @@ use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::sync::Syncer;
 use crate::context::Context;
 use crate::directories::{Access as _, Directories};
+use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
-use crate::{
-    Lazy, Loader, agent, canister, identity, manifest, network, prelude::*, project, store_id,
-};
+use crate::{Lazy, Loader, agent, identity, manifest, network, store_id};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -59,9 +58,6 @@ pub fn initialize(
     // Recipes
     let recipe = Arc::new(Handlebars { http_client });
 
-    // Canister loader
-    let cload = Arc::new(canister::PathLoader);
-
     // Canister builder
     let builder = Arc::new(Builder);
 
@@ -71,12 +67,7 @@ pub fn initialize(
     // Project loader
     let pload = Loader {
         project_root_locate: project_root_locate.clone(),
-        path_loader: Arc::new(project::PathLoader),
-        manifest_loader: Arc::new(project::ManifestLoader {
-            project_root_locate: project_root_locate.clone(),
-            recipe,
-            canister: cload,
-        }),
+        recipe,
     };
 
     let pload = Lazy::new(pload);

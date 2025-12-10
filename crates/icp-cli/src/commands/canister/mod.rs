@@ -3,7 +3,6 @@ use clap::Subcommand;
 pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;
-pub(crate) mod info;
 pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod settings;
@@ -23,9 +22,6 @@ pub(crate) enum Command {
 
     /// Delete a canister from a network
     Delete(delete::DeleteArgs),
-
-    /// Display a canister's information
-    Info(info::InfoArgs),
 
     /// Install a built WASM to a canister on a network
     Install(install::InstallArgs),

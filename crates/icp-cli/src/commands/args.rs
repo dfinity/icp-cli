@@ -8,25 +8,6 @@ use icp::identity::IdentitySelection;
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
 #[derive(Args, Debug)]
-pub(crate) struct CanisterEnvironmentArgs {
-    /// Name or principal of canister to target
-    /// When using a name an environment must be specified
-    pub(crate) canister: Canister,
-
-    #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
-}
-
-impl CanisterEnvironmentArgs {
-    /// Convert arguments into selection enums for canister and environment
-    pub(crate) fn selections(&self) -> (CanisterSelection, EnvironmentSelection) {
-        let canister_selection: CanisterSelection = self.canister.clone().into();
-        let environment_selection: EnvironmentSelection = self.environment.clone().into();
-        (canister_selection, environment_selection)
-    }
-}
-
-#[derive(Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
     /// Name or principal of canister to target

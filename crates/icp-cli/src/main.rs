@@ -184,12 +184,6 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
-            commands::canister::Command::Info(args) => {
-                commands::canister::info::exec(&ctx, &args)
-                    .instrument(trace_span)
-                    .await?
-            }
-
             commands::canister::Command::Install(args) => {
                 commands::canister::install::exec(&ctx, &args)
                     .instrument(trace_span)

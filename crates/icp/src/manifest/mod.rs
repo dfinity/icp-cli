@@ -21,12 +21,12 @@ pub use {
 pub const PROJECT_MANIFEST: &str = "icp.yaml";
 pub const CANISTER_MANIFEST: &str = "canister.yaml";
 
-/// An manifest item that can either be a path to another manifest file or the manifest itself.
-///
-/// The valid path specifications are:
-/// - CanisterManifest: path or glob pattern to the directory containing "canister.yaml"
-/// - NetworkManifest: path to network manifest
-/// - EnvironmentManifest: path to environment manifest
+// An manifest item that can either be a path to another manifest file or the manifest itself.
+//
+// The valid path specifications are:
+// - CanisterManifest: path or glob pattern to the directory containing "canister.yaml"
+// - NetworkManifest: path to network manifest
+// - EnvironmentManifest: path to environment manifest
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {

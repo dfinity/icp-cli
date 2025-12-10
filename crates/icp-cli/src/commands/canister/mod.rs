@@ -36,7 +36,10 @@ pub(crate) enum Command {
     /// Start a canister on a network
     Start(start::StartArgs),
 
-    /// Show the status of a canister
+    /// Show the status of a canister. By default this queries the
+    /// status endpoint of the management canister. If the caller is not
+    /// a controller, falls back on fetching public information from the
+    /// state tree.
     Status(status::StatusArgs),
 
     /// Stop a canister on a network

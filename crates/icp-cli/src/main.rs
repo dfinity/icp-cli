@@ -50,6 +50,10 @@ mod style {
     };
 }
 
+mod heading {
+    pub const GLOBAL_PARAMETERS: &str = "Common Parameters";
+}
+
 #[derive(Parser)]
 #[command(
     version = icp_cli_version_str(),
@@ -59,15 +63,17 @@ mod style {
     styles(style::STYLES),
 )]
 struct Cli {
+    /// Directory to use as your project root directory.
+    /// If not specified the directory structure is traversed up until an icp.yaml file is found
     #[arg(
         long,
         global = true,
-        help = "Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found"
+        help_heading = heading::GLOBAL_PARAMETERS
     )]
     project_root_override: Option<PathBuf>,
 
     /// Enable debug logging
-    #[arg(long, default_value = "false", global = true)]
+    #[arg(long, default_value = "false", global = true, help_heading = heading::GLOBAL_PARAMETERS)]
     debug: bool,
 
     /// Generate markdown documentation for all commands and exit

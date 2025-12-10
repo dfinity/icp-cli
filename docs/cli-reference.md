@@ -104,7 +104,7 @@ Perform canister operations against a network
 * `list` — List the canisters in an environment
 * `settings` — Commands to manage canister settings
 * `start` — Start a canister on a network
-* `status` — Show the status of a canister
+* `status` — Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
 * `stop` — Stop a canister on a network
 * `top-up` — Top up a canister with cycles
 
@@ -333,7 +333,7 @@ Start a canister on a network
 
 ## `icp-cli canister status`
 
-Show the status of a canister
+Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
 
 **Usage:** `icp-cli canister status [OPTIONS] [CANISTER]`
 
@@ -350,6 +350,7 @@ Show the status of a canister
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
+* `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
 
 
 

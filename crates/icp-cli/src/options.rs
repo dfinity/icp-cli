@@ -6,10 +6,15 @@ use icp::project::{
 };
 use url::Url;
 
+mod heading {
+    pub const NETWORK_PARAMETERS: &str = "Network Selection Parameters";
+    pub const IDENITTY_PARAMETERS: &str = "Identity Selection Parameters";
+}
+
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct IdentityOpt {
     /// The user identity to run this command as.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = heading::IDENITTY_PARAMETERS)]
     identity: Option<String>,
 }
 
@@ -37,7 +42,8 @@ pub(crate) struct EnvironmentOpt {
         env = "ICP_ENVIRONMENT",
         global(true),
         group = "environment-select",
-        group = "network-select"
+        group = "network-select",
+        help_heading = heading::NETWORK_PARAMETERS,
     )]
     environment: Option<String>,
 
@@ -46,7 +52,8 @@ pub(crate) struct EnvironmentOpt {
         long,
         global(true),
         group = "environment-select",
-        group = "network-select"
+        group = "network-select",
+        help_heading = heading::NETWORK_PARAMETERS,
     )]
     ic: bool,
 }
@@ -82,11 +89,11 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOpt {
     /// Name of the network to target, conflicts with environment argument
-    #[arg(long, env = "ICP_NETWORK", group = "network-select")]
+    #[arg(long, env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS)]
     network: Option<String>,
 
     /// Shorthand for --network=mainnet
-    #[arg(long, group = "network-select")]
+    #[arg(long, group = "network-select", help_heading = heading::NETWORK_PARAMETERS)]
     mainnet: bool,
 }
 

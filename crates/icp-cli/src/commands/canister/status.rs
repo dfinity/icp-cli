@@ -1,10 +1,12 @@
 use clap::Args;
 use ic_agent::export::Principal;
-use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
+use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
 };
+use serde::Serialize;
+use std::fmt::Write;
 
 use crate::{commands::args, options};
 
@@ -24,14 +26,22 @@ pub(crate) struct StatusArgs {
     pub(crate) identity: options::IdentityOpt,
 
     /// Only print the canister ids
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with_all = ["json_format"])]
     pub id_only: bool,
 
     /// Format output in json
     #[arg(long = "json")]
     pub json_format: bool,
+
+    /// Show the only the public information.
+    /// Skips trying to get the status from the management canister and
+    /// looks up public information from the state tree.
+    #[arg(short, long)]
+    pub public: bool,
 }
 
+/// Fetch the list of canister ids from the id_store
+/// This will throw an error if the canisters have not been created yet
 async fn get_principals(
     ctx: &Context,
     canister: Option<args::Canister>,
@@ -39,6 +49,7 @@ async fn get_principals(
     network: &NetworkSelection,
 ) -> Result<Vec<Principal>, anyhow::Error> {
     let mut cids = Vec::<Principal>::new();
+
     match canister {
         Some(canister) => {
             let canister_selection: CanisterSelection = canister.clone().into();
@@ -61,6 +72,7 @@ async fn get_principals(
             }
         }
     };
+
     Ok(cids)
 }
 
@@ -106,34 +118,178 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     for cid in cids.iter() {
         // Retrieve canister status from management canister
         let (result,) = mgmt.canister_status(cid).await?;
-        // Status printout
-        print_status(cid, &result);
+
+        let output = match args.json_format {
+            true => {
+                let status = CliCanisterStatusResult {
+                    id: cid.to_owned(),
+                    status: SerializableCanisterStatusResult::from(&result),
+                };
+                serde_json::to_string(&status).expect("Serializing status result to json failed")
+            }
+            false => build_output(cid, &result).expect("Failed to build canister status output"),
+        };
+
+        ctx.term
+            .write_line(output.trim())
+            .expect("Failed to write output to the terminal");
     }
 
     Ok(())
 }
 
-pub(crate) fn print_status(canister_id: &Principal, result: &CanisterStatusResult) {
-    eprintln!("Canister id: {canister_id}");
-    eprintln!("Canister Status Report:");
-    eprintln!("  Status: {:?}", result.status);
+#[derive(Serialize)]
+struct CliCanisterStatusResult {
+    id: Principal,
+
+    status: SerializableCanisterStatusResult,
+}
+
+/// Serializable wrapper for CanisterStatusResult that converts Nat fields to String
+#[derive(Serialize)]
+struct SerializableCanisterStatusResult {
+    status: String,
+    settings: SerializableCanisterSettings,
+    module_hash: Option<String>,
+    memory_size: String,
+    cycles: String,
+    reserved_cycles: String,
+    idle_cycles_burned_per_day: String,
+    query_stats: SerializableQueryStats,
+}
+
+#[derive(Serialize)]
+struct SerializableCanisterSettings {
+    controllers: Vec<String>,
+    compute_allocation: String,
+    memory_allocation: String,
+    freezing_threshold: String,
+    reserved_cycles_limit: String,
+    wasm_memory_limit: String,
+    wasm_memory_threshold: String,
+    log_visibility: SerializableLogVisibility,
+    environment_variables: Vec<EnvironmentVariable>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", content = "value")]
+enum SerializableLogVisibility {
+    Controllers,
+    Public,
+    AllowedViewers(Vec<String>),
+}
+
+#[derive(Serialize)]
+struct SerializableQueryStats {
+    num_calls_total: String,
+    num_instructions_total: String,
+    request_payload_bytes_total: String,
+    response_payload_bytes_total: String,
+}
+
+impl SerializableCanisterStatusResult {
+    fn from(result: &CanisterStatusResult) -> Self {
+        Self {
+            status: format!("{:?}", result.status),
+            settings: SerializableCanisterSettings::from(&result.settings),
+            module_hash: result.module_hash.as_ref().map(|hash| {
+                format!(
+                    "0x{}",
+                    hash.iter().map(|b| format!("{b:02x}")).collect::<String>()
+                )
+            }),
+            memory_size: result.memory_size.to_string(),
+            cycles: result.cycles.to_string(),
+            reserved_cycles: result.reserved_cycles.to_string(),
+            idle_cycles_burned_per_day: result.idle_cycles_burned_per_day.to_string(),
+            query_stats: SerializableQueryStats::from(&result.query_stats),
+        }
+    }
+}
+
+impl SerializableCanisterSettings {
+    fn from(settings: &ic_management_canister_types::DefiniteCanisterSettings) -> Self {
+        Self {
+            controllers: settings.controllers.iter().map(|p| p.to_string()).collect(),
+            compute_allocation: settings.compute_allocation.to_string(),
+            memory_allocation: settings.memory_allocation.to_string(),
+            freezing_threshold: settings.freezing_threshold.to_string(),
+            reserved_cycles_limit: settings.reserved_cycles_limit.to_string(),
+            wasm_memory_limit: settings.wasm_memory_limit.to_string(),
+            wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
+            log_visibility: SerializableLogVisibility::from(&settings.log_visibility),
+            environment_variables: settings.environment_variables.clone(),
+        }
+    }
+}
+
+impl SerializableLogVisibility {
+    fn from(visibility: &LogVisibility) -> Self {
+        match visibility {
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
+            LogVisibility::AllowedViewers(viewers) => {
+                Self::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
+            }
+        }
+    }
+}
+
+impl SerializableQueryStats {
+    fn from(stats: &ic_management_canister_types::QueryStats) -> Self {
+        Self {
+            num_calls_total: stats.num_calls_total.to_string(),
+            num_instructions_total: stats.num_instructions_total.to_string(),
+            request_payload_bytes_total: stats.request_payload_bytes_total.to_string(),
+            response_payload_bytes_total: stats.response_payload_bytes_total.to_string(),
+        }
+    }
+}
+
+fn build_output(
+    canister_id: &Principal,
+    result: &CanisterStatusResult,
+) -> Result<String, anyhow::Error> {
+    let mut buf = String::new();
+
+    writeln!(&mut buf, "Canister Id: {canister_id}")?;
+    writeln!(&mut buf, "Canister Status Report:")?;
+    writeln!(&mut buf, "  Status: {:?}", result.status)?;
 
     let settings = &result.settings;
     let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    eprintln!("  Controllers: {}", controllers.join(", "));
-    eprintln!("  Compute allocation: {}", settings.compute_allocation);
-    eprintln!("  Memory allocation: {}", settings.memory_allocation);
-    eprintln!("  Freezing threshold: {}", settings.freezing_threshold);
+    writeln!(&mut buf, "  Controllers: {}", controllers.join(", "))?;
+    writeln!(
+        &mut buf,
+        "  Compute allocation: {}",
+        settings.compute_allocation
+    )?;
+    writeln!(
+        &mut buf,
+        "  Memory allocation: {}",
+        settings.memory_allocation
+    )?;
+    writeln!(
+        &mut buf,
+        "  Freezing threshold: {}",
+        settings.freezing_threshold
+    )?;
 
-    eprintln!(
+    writeln!(
+        &mut buf,
         "  Reserved cycles limit: {}",
         settings.reserved_cycles_limit
-    );
-    eprintln!("  Wasm memory limit: {}", settings.wasm_memory_limit);
-    eprintln!(
+    )?;
+    writeln!(
+        &mut buf,
+        "  Wasm memory limit: {}",
+        settings.wasm_memory_limit
+    )?;
+    writeln!(
+        &mut buf,
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
-    );
+    )?;
 
     let log_visibility = match &settings.log_visibility {
         LogVisibility::Controllers => "Controllers".to_string(),
@@ -148,45 +304,56 @@ pub(crate) fn print_status(canister_id: &Principal, result: &CanisterStatusResul
             }
         }
     };
-    eprintln!("  Log visibility: {log_visibility}");
+    writeln!(&mut buf, "  Log visibility: {log_visibility}")?;
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
     if settings.environment_variables.is_empty() {
-        eprintln!("  Environment Variables: N/A",);
+        writeln!(&mut buf, "  Environment Variables: N/A",)?;
     } else {
-        eprintln!("  Environment Variables:");
+        writeln!(&mut buf, "  Environment Variables:")?;
         for v in &settings.environment_variables {
-            eprintln!("    Name: {}, Value: {}", v.name, v.value);
+            writeln!(&mut buf, "    Name: {}, Value: {}", v.name, v.value)?;
         }
     }
 
     match &result.module_hash {
         Some(hash) => {
             let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-            eprintln!("  Module hash: 0x{hex_string}");
+            writeln!(&mut buf, "  Module hash: 0x{hex_string}")?;
         }
-        None => eprintln!("  Module hash: <none>"),
+        None => {
+            writeln!(&mut buf, "  Module hash: <none>")?;
+        }
     }
 
-    eprintln!("  Memory size: {}", result.memory_size);
-    eprintln!("  Cycles: {}", result.cycles);
-    eprintln!("  Reserved cycles: {}", result.reserved_cycles);
-    eprintln!(
+    writeln!(&mut buf, "  Memory size: {}", result.memory_size)?;
+    writeln!(&mut buf, "  Cycles: {}", result.cycles)?;
+    writeln!(&mut buf, "  Reserved cycles: {}", result.reserved_cycles)?;
+    writeln!(
+        &mut buf,
         "  Idle cycles burned per day: {}",
         result.idle_cycles_burned_per_day
-    );
+    )?;
 
     let stats = &result.query_stats;
-    eprintln!("  Query stats:");
-    eprintln!("    Calls: {}", stats.num_calls_total);
-    eprintln!("    Instructions: {}", stats.num_instructions_total);
-    eprintln!(
+    writeln!(&mut buf, "  Query stats:")?;
+    writeln!(&mut buf, "    Calls: {}", stats.num_calls_total)?;
+    writeln!(
+        &mut buf,
+        "    Instructions: {}",
+        stats.num_instructions_total
+    )?;
+    writeln!(
+        &mut buf,
         "    Req payload bytes: {}",
         stats.request_payload_bytes_total
-    );
-    eprintln!(
+    )?;
+    writeln!(
+        &mut buf,
         "    Res payload bytes: {}",
         stats.response_payload_bytes_total
-    );
+    )?;
+
+    Ok(buf)
 }

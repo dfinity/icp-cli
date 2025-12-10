@@ -81,8 +81,8 @@ fn canister_stop() {
         ])
         .assert()
         .success()
-        .stderr(
-            starts_with("Canister Status Report:")
+        .stdout(
+            starts_with("Canister Id:")
                 .and(contains("Status: Stopped"))
                 .and(contains("Controllers: 2vxsx-fae")),
         );

@@ -228,7 +228,7 @@ pub async fn consolidate_manifest(
                 Entry::Vacant(e) => {
                     e.insert((
                         //
-                        // Caniser root
+                        // Canister root
                         cdir,
                         //
                         // Canister

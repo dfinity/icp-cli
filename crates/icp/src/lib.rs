@@ -84,12 +84,7 @@ impl Environment {
     }
 }
 
-/// The complete project definition
-///
-/// Includes definitions from all manifest files:
-/// - canisters: recipes are resolved
-/// - netoworks: default networks are added
-/// - environments: validated so that referenced canisters and networks exist
+/// Consolidated project definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub dir: PathBuf,

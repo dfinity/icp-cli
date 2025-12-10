@@ -115,6 +115,7 @@ pub enum LoadManifestFromPathError {
     },
 }
 
+/// Loads a manifest of type `T` from the specified file path.
 pub async fn load_manifest_from_path<T>(path: &Path) -> Result<T, LoadManifestFromPathError>
 where
     T: for<'de> Deserialize<'de>,

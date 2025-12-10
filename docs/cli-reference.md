@@ -335,11 +335,11 @@ Start a canister on a network
 
 Show the status of a canister
 
-**Usage:** `icp-cli canister status [OPTIONS] <CANISTER>`
+**Usage:** `icp-cli canister status [OPTIONS] [CANISTER]`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — An optional canister name or principal to target. When using a name, an enviroment must be specified
 
 ###### **Options:**
 
@@ -348,7 +348,8 @@ Show the status of a canister
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `-q`, `--quiet`
+* `-i`, `--id-only` — Only print the canister ids
+* `--json` — Format output in json
 
 
 

@@ -1,32 +1,94 @@
 use clap::Args;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, LogVisibility};
-use icp::context::Context;
+use icp::{
+    context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
+    identity::IdentitySelection,
+};
 
-use crate::commands::args;
+use crate::{commands::args, options};
 
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
-    #[command(flatten)]
-    pub(crate) cmd_args: args::CanisterCommandArgs,
+    /// An optional canister name or principal to target.
+    /// When using a name, an enviroment must be specified
+    pub(crate) canister: Option<args::Canister>,
 
+    #[command(flatten)]
+    pub(crate) network: options::NetworkOpt,
+
+    #[command(flatten)]
+    pub(crate) environment: options::EnvironmentOpt,
+
+    #[command(flatten)]
+    pub(crate) identity: options::IdentityOpt,
+
+    /// Only print the canister ids
     #[arg(short, long)]
-    pub quiet: bool,
+    pub id_only: bool,
+
+    /// Format output in json
+    #[arg(long = "json")]
+    pub json_format: bool,
+}
+
+async fn get_principals(
+    ctx: &Context,
+    canister: Option<args::Canister>,
+    environment: &EnvironmentSelection,
+    network: &NetworkSelection,
+) -> Result<Vec<Principal>, anyhow::Error> {
+    let mut cids = Vec::<Principal>::new();
+    match canister {
+        Some(canister) => {
+            let canister_selection: CanisterSelection = canister.clone().into();
+            let cid = ctx
+                .get_canister_id(&canister_selection, network, environment)
+                .await?;
+            cids.push(cid);
+        }
+        None => {
+            let env = ctx.get_environment(environment).await?;
+            for (_, c) in env.canisters.values() {
+                let cid = ctx
+                    .get_canister_id(
+                        &CanisterSelection::Named(c.name.clone()),
+                        network,
+                        environment,
+                    )
+                    .await?;
+                cids.push(cid);
+            }
+        }
+    };
+    Ok(cids)
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow::Error> {
-    let selections = args.cmd_args.selections();
+    struct Selection {
+        environment: EnvironmentSelection,
+        network: NetworkSelection,
+        identity: IdentitySelection,
+    }
 
-    let cid = ctx
-        .get_canister_id(
-            &selections.canister,
-            &selections.network,
-            &selections.environment,
-        )
-        .await?;
+    let selections = Selection {
+        environment: args.environment.clone().into(),
+        network: args.network.clone().into(),
+        identity: args.identity.clone().into(),
+    };
 
-    if args.quiet {
-        let _ = ctx.term.write_line(&format!("{cid}"));
+    let cids = get_principals(
+        ctx,
+        args.canister.clone(),
+        &selections.environment,
+        &selections.network,
+    )
+    .await?;
+
+    if args.id_only {
+        for cid in cids.iter() {
+            let _ = ctx.term.write_line(&format!("{cid}"));
+        }
         return Ok(());
     }
 
@@ -41,11 +103,12 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-    // Retrieve canister status from management canister
-    let (result,) = mgmt.canister_status(&cid).await?;
-
-    // Status printout
-    print_status(&cid, &result);
+    for cid in cids.iter() {
+        // Retrieve canister status from management canister
+        let (result,) = mgmt.canister_status(cid).await?;
+        // Status printout
+        print_status(cid, &result);
+    }
 
     Ok(())
 }

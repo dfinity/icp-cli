@@ -5,7 +5,6 @@ use snafu::prelude::*;
 use crate::{
     Canister, Environment, Network, Project,
     canister::recipe,
-    is_glob,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
         NetworkManifest, ProjectRootLocateError,
@@ -117,6 +116,10 @@ fn default_networks() -> Vec<Network> {
             },
         },
     ]
+}
+
+fn is_glob(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
 /// Turns the ProjectManifest into a Project struct

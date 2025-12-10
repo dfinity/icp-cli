@@ -34,10 +34,6 @@ const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";
 const DATA_DIR: &str = "data";
 
-fn is_glob(s: &str) -> bool {
-    s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Canister {
     pub name: String,

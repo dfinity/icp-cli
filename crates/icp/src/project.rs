@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
-    sync::Arc,
-    vec,
-};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use snafu::prelude::*;
 
@@ -12,7 +8,7 @@ use crate::{
     is_glob,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
-        NetworkManifest, ProjectRootLocate, ProjectRootLocateError,
+        NetworkManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
@@ -33,18 +29,6 @@ pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
 #[derive(Debug, Snafu)]
-pub enum LoadPathError {
-    #[snafu(display("failed to read manifest"))]
-    Read { source: crate::fs::IoError },
-
-    #[snafu(display("failed to deserialize manifest at {path}"))]
-    Deserialize {
-        source: serde_yaml::Error,
-        path: String,
-    },
-}
-
-#[derive(Debug, Snafu)]
 pub enum EnvironmentError {
     #[snafu(display("environment '{environment}' points to invalid network '{network}'"))]
     InvalidNetwork {
@@ -60,7 +44,7 @@ pub enum EnvironmentError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LoadManifestError {
+pub enum ConsolidateManifestError {
     #[snafu(display("failed to locate project directory"))]
     Locate { source: ProjectRootLocateError },
 
@@ -102,11 +86,6 @@ pub enum LoadManifestError {
 
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
-}
-
-pub struct ManifestLoader {
-    pub project_root_locate: Arc<dyn ProjectRootLocate>,
-    pub recipe: Arc<dyn recipe::Resolve>,
 }
 
 /// The local and mainnet networks are included by default
@@ -152,7 +131,7 @@ pub async fn consolidate_manifest(
     pdir: &Path,
     recipe_resolver: &dyn recipe::Resolve,
     m: &ProjectManifest,
-) -> Result<Project, LoadManifestError> {
+) -> Result<Project, ConsolidateManifestError> {
     // Canisters
     let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();
 

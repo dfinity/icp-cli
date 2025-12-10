@@ -75,7 +75,7 @@ pub struct Context {
     pub artifacts: Arc<dyn crate::store_artifact::Access>,
 
     /// Project loader
-    pub project: Arc<dyn crate::Load>,
+    pub project: Arc<dyn crate::ProjectLoad>,
 
     /// Identity loader
     identity: Arc<dyn crate::identity::Load>,
@@ -355,7 +355,7 @@ impl Context {
                     Err(GetAgentForEnvError::GetEnvironment {
                         source:
                             GetEnvironmentError::ProjectLoad {
-                                source: crate::LoadError::Locate { .. },
+                                source: crate::ProjectLoadError::Locate { .. },
                             },
                     }) => Err(GetAgentError::NoProjectOrNetwork),
                     Err(e) => Err(e.into()),
@@ -453,7 +453,7 @@ pub enum GetIdentityError {
 #[derive(Debug, Snafu)]
 pub enum GetEnvironmentError {
     #[snafu(transparent)]
-    ProjectLoad { source: crate::LoadError },
+    ProjectLoad { source: crate::ProjectLoadError },
 
     #[snafu(display("environment '{}' not found in project", name))]
     EnvironmentNotFound { name: String },
@@ -462,7 +462,7 @@ pub enum GetEnvironmentError {
 #[derive(Debug, Snafu)]
 pub enum GetNetworkError {
     #[snafu(transparent)]
-    ProjectLoad { source: crate::LoadError },
+    ProjectLoad { source: crate::ProjectLoadError },
 
     #[snafu(display("network '{}' not found in project", name))]
     NetworkNotFound { name: String },
@@ -577,7 +577,7 @@ pub enum GetAgentForUrlError {
 #[derive(Debug, Snafu)]
 pub enum GetAgentError {
     #[snafu(transparent)]
-    ProjectExists { source: crate::LoadError },
+    ProjectExists { source: crate::ProjectLoadError },
 
     #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,
@@ -626,7 +626,7 @@ pub enum GetIdsByEnvironmentError {
 #[derive(Debug, Snafu)]
 pub enum GetEnvCanisterError {
     #[snafu(transparent)]
-    ProjectLoad { source: crate::LoadError },
+    ProjectLoad { source: crate::ProjectLoadError },
 
     #[snafu(transparent)]
     GetEnvironment { source: GetEnvironmentError },

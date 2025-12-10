@@ -88,6 +88,12 @@ impl Environment {
     }
 }
 
+/// The complete project definition
+///
+/// Includes definitions from all manifest files:
+/// - canisters: recipes are resolved
+/// - netoworks: default networks are added
+/// - environments: validated so that referenced canisters and networks exist
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub dir: PathBuf,
@@ -103,7 +109,7 @@ impl Project {
 }
 
 #[derive(Debug, Snafu)]
-pub enum LoadError {
+pub enum ProjectLoadError {
     #[snafu(display("failed to locate project directory"))]
     Locate { source: ProjectRootLocateError },
 
@@ -111,23 +117,25 @@ pub enum LoadError {
     ProjectManifest { source: LoadManifestFromPathError },
 
     #[snafu(display("failed to load project"))]
-    Project { source: project::LoadManifestError },
+    Project {
+        source: project::ConsolidateManifestError,
+    },
 }
 
 #[async_trait]
-pub trait Load: Sync + Send {
-    async fn load(&self) -> Result<Project, LoadError>;
-    async fn exists(&self) -> Result<bool, LoadError>;
+pub trait ProjectLoad: Sync + Send {
+    async fn load(&self) -> Result<Project, ProjectLoadError>;
+    async fn exists(&self) -> Result<bool, ProjectLoadError>;
 }
 
-pub struct Loader {
+pub struct ProjectLoadImpl {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub recipe: Arc<dyn Resolve>,
 }
 
 #[async_trait]
-impl Load for Loader {
-    async fn load(&self) -> Result<Project, LoadError> {
+impl ProjectLoad for ProjectLoadImpl {
+    async fn load(&self) -> Result<Project, ProjectLoadError> {
         debug!("Loading project");
         // Locate project root
         let pdir = self.project_root_locate.locate().context(LocateSnafu)?;
@@ -151,7 +159,7 @@ impl Load for Loader {
         Ok(p)
     }
 
-    async fn exists(&self) -> Result<bool, LoadError> {
+    async fn exists(&self) -> Result<bool, ProjectLoadError> {
         match self.project_root_locate.locate() {
             Ok(_) => Ok(true),
             Err(ProjectRootLocateError::NotFound { .. }) => Ok(false),
@@ -168,8 +176,8 @@ impl<T, V> Lazy<T, V> {
 }
 
 #[async_trait]
-impl<T: Load> Load for Lazy<T, Project> {
-    async fn load(&self) -> Result<Project, LoadError> {
+impl<T: ProjectLoad> ProjectLoad for Lazy<T, Project> {
+    async fn load(&self) -> Result<Project, ProjectLoadError> {
         if let Some(v) = self.1.lock().await.as_ref() {
             return Ok(v.to_owned());
         }
@@ -184,7 +192,7 @@ impl<T: Load> Load for Lazy<T, Project> {
         Ok(v)
     }
 
-    async fn exists(&self) -> Result<bool, LoadError> {
+    async fn exists(&self) -> Result<bool, ProjectLoadError> {
         if self.1.lock().await.as_ref().is_some() {
             return Ok(true);
         }
@@ -468,12 +476,12 @@ impl MockProjectLoader {
 
 #[cfg(test)]
 #[async_trait]
-impl Load for MockProjectLoader {
-    async fn load(&self) -> Result<Project, LoadError> {
+impl ProjectLoad for MockProjectLoader {
+    async fn load(&self) -> Result<Project, ProjectLoadError> {
         Ok(self.project.clone())
     }
 
-    async fn exists(&self) -> Result<bool, LoadError> {
+    async fn exists(&self) -> Result<bool, ProjectLoadError> {
         Ok(true)
     }
 }
@@ -485,16 +493,16 @@ pub struct NoProjectLoader;
 
 #[cfg(test)]
 #[async_trait]
-impl Load for NoProjectLoader {
-    async fn load(&self) -> Result<Project, LoadError> {
-        Err(LoadError::Locate {
+impl ProjectLoad for NoProjectLoader {
+    async fn load(&self) -> Result<Project, ProjectLoadError> {
+        Err(ProjectLoadError::Locate {
             source: ProjectRootLocateError::NotFound {
                 path: "/some/path".into(),
             },
         })
     }
 
-    async fn exists(&self) -> Result<bool, LoadError> {
+    async fn exists(&self) -> Result<bool, ProjectLoadError> {
         Ok(false)
     }
 }

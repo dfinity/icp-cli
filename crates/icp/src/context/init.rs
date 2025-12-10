@@ -10,7 +10,7 @@ use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
-use crate::{Lazy, Loader, agent, identity, manifest, network, store_id};
+use crate::{Lazy, ProjectLoadImpl, agent, identity, manifest, network, store_id};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -65,7 +65,7 @@ pub fn initialize(
     let syncer = Arc::new(Syncer);
 
     // Project loader
-    let pload = Loader {
+    let pload = ProjectLoadImpl {
         project_root_locate: project_root_locate.clone(),
         recipe,
     };

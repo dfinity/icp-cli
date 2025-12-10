@@ -186,7 +186,7 @@ pub async fn consolidate_manifest(
 
             Item::Manifest(m) => vec![(
                 //
-                // Caniser root
+                // Canister root
                 pdir.to_owned(),
                 //
                 // Canister manifest

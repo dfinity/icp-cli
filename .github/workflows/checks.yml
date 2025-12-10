@@ -128,7 +128,7 @@ jobs:
 
   icp-yaml-schema:
     #
-    # generate the icp yaml schema file and check if it is up to date
+    # generate config schemas and check if they are up to date
     #
     name: icp-yaml-schema:required
     needs: compile
@@ -151,7 +151,7 @@ jobs:
             target/
           key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: generate icp.yaml schema
+      - name: generate schemas
         run: ./scripts/generate-config-schemas.sh
 
       - name: Check for uncommitted changes
@@ -159,7 +159,7 @@ jobs:
           if [[ -n "$(git status --porcelain)" ]]; then
             echo "❌ The schema docs are not up to date"
             echo ""
-            echo " Run ./scripts/generate-config-schema.sh to update them"
+            echo " Run ./scripts/generate-config-schemas.sh to update them"
             echo ""
             git status --porcelain
             exit 1

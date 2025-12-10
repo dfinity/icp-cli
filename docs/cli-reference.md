@@ -10,14 +10,12 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli canister call`↴](#icp-cli-canister-call)
 * [`icp-cli canister create`↴](#icp-cli-canister-create)
 * [`icp-cli canister delete`↴](#icp-cli-canister-delete)
-* [`icp-cli canister info`↴](#icp-cli-canister-info)
 * [`icp-cli canister install`↴](#icp-cli-canister-install)
 * [`icp-cli canister list`↴](#icp-cli-canister-list)
 * [`icp-cli canister settings`↴](#icp-cli-canister-settings)
 * [`icp-cli canister settings show`↴](#icp-cli-canister-settings-show)
 * [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
 * [`icp-cli canister settings sync`↴](#icp-cli-canister-settings-sync)
-* [`icp-cli canister show`↴](#icp-cli-canister-show)
 * [`icp-cli canister start`↴](#icp-cli-canister-start)
 * [`icp-cli canister status`↴](#icp-cli-canister-status)
 * [`icp-cli canister stop`↴](#icp-cli-canister-stop)
@@ -40,6 +38,8 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli network run`↴](#icp-cli-network-run)
 * [`icp-cli network stop`↴](#icp-cli-network-stop)
 * [`icp-cli new`↴](#icp-cli-new)
+* [`icp-cli project`↴](#icp-cli-project)
+* [`icp-cli project show`↴](#icp-cli-project-show)
 * [`icp-cli sync`↴](#icp-cli-sync)
 * [`icp-cli token`↴](#icp-cli-token)
 * [`icp-cli token balance`↴](#icp-cli-token-balance)
@@ -59,6 +59,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * `identity` — Manage your identities
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
+* `project` — Display information about the current project
 * `sync` — Synchronize canisters
 * `token` — Perform token transactions
 
@@ -99,11 +100,9 @@ Perform canister operations against a network
 * `call` — Make a canister call
 * `create` — Create a canister on a network
 * `delete` — Delete a canister from a network
-* `info` — Display a canister's information
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
 * `settings` — Commands to manage canister settings
-* `show` — Show a canister's details
 * `start` — Start a canister on a network
 * `status` — Show the status of a canister
 * `stop` — Stop a canister on a network
@@ -168,26 +167,6 @@ Create a canister on a network
 Delete a canister from a network
 
 **Usage:** `icp-cli canister delete [OPTIONS] <CANISTER>`
-
-###### **Arguments:**
-
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
-
-###### **Options:**
-
-* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
-* `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
-* `--identity <IDENTITY>` — The user identity to run this command as
-
-
-
-## `icp-cli canister info`
-
-Display a canister's information
-
-**Usage:** `icp-cli canister info [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -332,23 +311,6 @@ Synchronize a canister's settings with those defined in the project
 
 
 
-## `icp-cli canister show`
-
-Show a canister's details
-
-**Usage:** `icp-cli canister show [OPTIONS] <CANISTER>`
-
-###### **Arguments:**
-
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
-
-###### **Options:**
-
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--ic` — Shorthand for --environment=ic
-
-
-
 ## `icp-cli canister start`
 
 Start a canister on a network
@@ -386,6 +348,7 @@ Show the status of a canister
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `-q`, `--quiet`
 
 
 
@@ -718,6 +681,34 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 * `--force-git-init` — Will enforce a fresh git init on the generated project
 * `-o`, `--overwrite` — Allow the template to overwrite existing files in the destination
 * `--skip-submodules` — Skip downloading git submodules (if there are any)
+
+
+
+## `icp-cli project`
+
+Display information about the current project
+
+**Usage:** `icp-cli project <COMMAND>`
+
+###### **Subcommands:**
+
+* `show` — Outputs the project's effective yaml configuration
+
+
+
+## `icp-cli project show`
+
+Outputs the project's effective yaml configuration.
+
+The effective yaml configuration includes:
+
+- implicit networks
+
+- implicit environments
+
+- processed recipes
+
+**Usage:** `icp-cli project show`
 
 
 

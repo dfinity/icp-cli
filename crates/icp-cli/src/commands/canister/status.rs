@@ -118,16 +118,16 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     for cid in cids.iter() {
         // Retrieve canister status from management canister
         let (result,) = mgmt.canister_status(cid).await?;
+        let status = CliCanisterStatusResult {
+            id: cid.to_owned(),
+            status: SerializableCanisterStatusResult::from(&result),
+        };
 
         let output = match args.json_format {
             true => {
-                let status = CliCanisterStatusResult {
-                    id: cid.to_owned(),
-                    status: SerializableCanisterStatusResult::from(&result),
-                };
                 serde_json::to_string(&status).expect("Serializing status result to json failed")
             }
-            false => build_output(cid, &result).expect("Failed to build canister status output"),
+            false => build_output(&status).expect("Failed to build canister status output"),
         };
 
         ctx.term
@@ -142,6 +142,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 struct CliCanisterStatusResult {
     id: Principal,
 
+    #[serde(flatten)]
     status: SerializableCanisterStatusResult,
 }
 
@@ -171,7 +172,7 @@ struct SerializableCanisterSettings {
     environment_variables: Vec<EnvironmentVariable>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(tag = "type", content = "value")]
 enum SerializableLogVisibility {
     Controllers,
@@ -246,19 +247,20 @@ impl SerializableQueryStats {
     }
 }
 
-fn build_output(
-    canister_id: &Principal,
-    result: &CanisterStatusResult,
-) -> Result<String, anyhow::Error> {
+fn build_output(result: &CliCanisterStatusResult) -> Result<String, anyhow::Error> {
     let mut buf = String::new();
+    let status = &result.status;
 
-    writeln!(&mut buf, "Canister Id: {canister_id}")?;
+    writeln!(&mut buf, "Canister Id: {}", result.id)?;
     writeln!(&mut buf, "Canister Status Report:")?;
-    writeln!(&mut buf, "  Status: {:?}", result.status)?;
+    writeln!(&mut buf, "  Status: {:?}", status.status)?;
 
-    let settings = &result.settings;
-    let controllers: Vec<String> = settings.controllers.iter().map(|p| p.to_string()).collect();
-    writeln!(&mut buf, "  Controllers: {}", controllers.join(", "))?;
+    let settings = &status.settings;
+    writeln!(
+        &mut buf,
+        "  Controllers: {}",
+        settings.controllers.join(", ")
+    )?;
     writeln!(
         &mut buf,
         "  Compute allocation: {}",
@@ -291,14 +293,13 @@ fn build_output(
         settings.wasm_memory_threshold
     )?;
 
-    let log_visibility = match &settings.log_visibility {
-        LogVisibility::Controllers => "Controllers".to_string(),
-        LogVisibility::Public => "Public".to_string(),
-        LogVisibility::AllowedViewers(viewers) => {
+    let log_visibility = match settings.log_visibility.clone() {
+        SerializableLogVisibility::Controllers => "Controllers".to_string(),
+        SerializableLogVisibility::Public => "Public".to_string(),
+        SerializableLogVisibility::AllowedViewers(mut viewers) => {
             if viewers.is_empty() {
                 "Allowed viewers list is empty".to_string()
             } else {
-                let mut viewers: Vec<_> = viewers.iter().map(Principal::to_text).collect();
                 viewers.sort();
                 format!("Allowed viewers: {}", viewers.join(", "))
             }
@@ -317,26 +318,22 @@ fn build_output(
         }
     }
 
-    match &result.module_hash {
-        Some(hash) => {
-            let hex_string: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-            writeln!(&mut buf, "  Module hash: 0x{hex_string}")?;
-        }
-        None => {
-            writeln!(&mut buf, "  Module hash: <none>")?;
-        }
-    }
+    writeln!(
+        &mut buf,
+        "  Module hash: {}",
+        status.module_hash.clone().unwrap_or("<none>".to_string())
+    )?;
 
-    writeln!(&mut buf, "  Memory size: {}", result.memory_size)?;
-    writeln!(&mut buf, "  Cycles: {}", result.cycles)?;
-    writeln!(&mut buf, "  Reserved cycles: {}", result.reserved_cycles)?;
+    writeln!(&mut buf, "  Memory size: {}", status.memory_size)?;
+    writeln!(&mut buf, "  Cycles: {}", status.cycles)?;
+    writeln!(&mut buf, "  Reserved cycles: {}", status.reserved_cycles)?;
     writeln!(
         &mut buf,
         "  Idle cycles burned per day: {}",
-        result.idle_cycles_burned_per_day
+        status.idle_cycles_burned_per_day
     )?;
 
-    let stats = &result.query_stats;
+    let stats = &status.query_stats;
     writeln!(&mut buf, "  Query stats:")?;
     writeln!(&mut buf, "    Calls: {}", stats.num_calls_total)?;
     writeln!(

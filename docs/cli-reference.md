@@ -104,7 +104,7 @@ Perform canister operations against a network
 * `list` — List the canisters in an environment
 * `settings` — Commands to manage canister settings
 * `start` — Start a canister on a network
-* `status` — Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
+* `status` — Show the status of canister(s)
 * `stop` — Stop a canister on a network
 * `top-up` — Top up a canister with cycles
 
@@ -230,7 +230,7 @@ Commands to manage canister settings
 
 ###### **Subcommands:**
 
-* `show` — Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
+* `show` — Show the status of a canister
 * `update` — Change a canister's settings to specified values
 * `sync` — Synchronize a canister's settings with those defined in the project
 
@@ -238,7 +238,9 @@ Commands to manage canister settings
 
 ## `icp-cli canister settings show`
 
-Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
+Show the status of a canister.
+
+By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
 
 **Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
 
@@ -336,7 +338,9 @@ Start a canister on a network
 
 ## `icp-cli canister status`
 
-Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
+Show the status of canister(s).
+
+By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
 
 **Usage:** `icp-cli canister status [OPTIONS] [CANISTER]`
 

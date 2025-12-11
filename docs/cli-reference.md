@@ -230,7 +230,7 @@ Commands to manage canister settings
 
 ###### **Subcommands:**
 
-* `show` — Display a canister's settings
+* `show` — Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
 * `update` — Change a canister's settings to specified values
 * `sync` — Synchronize a canister's settings with those defined in the project
 
@@ -238,13 +238,13 @@ Commands to manage canister settings
 
 ## `icp-cli canister settings show`
 
-Display a canister's settings
+Show the status of a canister. By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree
 
 **Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — canister name or principal to target. When using a name, an enviroment must be specified
 
 ###### **Options:**
 
@@ -253,6 +253,9 @@ Display a canister's settings
 * `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `-i`, `--id-only` — Only print the canister ids
+* `--json` — Format output in json
+* `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
 
 
 

@@ -20,9 +20,15 @@ const E_NOT_A_CONTROLLER: &str = "IC0512";
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
     /// An optional canister name or principal to target.
-    /// When using a name, an enviroment must be specified
+    /// When using a name, an enviroment must be specified.
     pub(crate) canister: Option<args::Canister>,
 
+    #[command(flatten)]
+    pub(crate) options: StatusArgsOptions,
+}
+
+#[derive(Debug, Args, Clone)]
+pub(crate) struct StatusArgsOptions {
     #[command(flatten)]
     pub(crate) network: options::NetworkOpt,
 
@@ -159,9 +165,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     }
 
     let selections = Selection {
-        environment: args.environment.clone().into(),
-        network: args.network.clone().into(),
-        identity: args.identity.clone().into(),
+        environment: args.options.environment.clone().into(),
+        network: args.options.network.clone().into(),
+        identity: args.options.identity.clone().into(),
     };
 
     let cids = get_principals(
@@ -172,7 +178,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     )
     .await?;
 
-    if args.id_only {
+    if args.options.id_only {
         for cid in cids.iter() {
             let _ = ctx.term.write_line(&format!("{cid}"));
         }
@@ -191,12 +197,12 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     for cid in cids.iter() {
-        let output = match args.public {
+        let output = match args.options.public {
             true => {
                 // We construct the status out of the state tree
                 let status = build_public_status(&agent, cid.to_owned()).await?;
 
-                match args.json_format {
+                match args.options.json_format {
                     true => serde_json::to_string(&status)
                         .expect("Serializing status result to json failed"),
                     false => build_public_output(&status)
@@ -210,7 +216,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                         let status =
                             SerializableCanisterStatusResult::from(cid.to_owned(), &result);
 
-                        match args.json_format {
+                        match args.options.json_format {
                             true => serde_json::to_string(&status)
                                 .expect("Serializing status result to json failed"),
                             false => build_output(&status)
@@ -234,7 +240,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                         // We got E_NOT_A_CONTROLLER so we fallback on fetching the public status
                         let status = build_public_status(&agent, cid.to_owned()).await?;
 
-                        match args.json_format {
+                        match args.options.json_format {
                             true => serde_json::to_string(&status)
                                 .expect("Serializing status result to json failed"),
                             false => build_public_output(&status)

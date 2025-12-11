@@ -129,7 +129,7 @@ async fn run_network_launcher(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()
                     .unwrap(),
-                &hex::decode(&instance.root_key).unwrap(),
+                &instance.root_key,
                 seed_accounts,
             )
             .await?;

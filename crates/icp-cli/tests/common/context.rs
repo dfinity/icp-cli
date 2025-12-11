@@ -202,7 +202,7 @@ impl TestContext {
             &format!("http://localhost:{}", instance.gateway_port)
                 .parse()
                 .unwrap(),
-            &hex::decode(&instance.root_key).unwrap(),
+            &instance.root_key,
             [Principal::anonymous()], // Seed anonymous account only for tests
         )
         .await
@@ -343,7 +343,7 @@ impl TestContext {
             .with_url(self.gateway_url.get().unwrap().as_str())
             .build()
             .unwrap();
-        agent.set_root_key(hex::decode(self.root_key.get().unwrap()).unwrap());
+        agent.set_root_key(self.root_key.get().unwrap().clone());
         agent
     }
 }

@@ -101,11 +101,8 @@ pub async fn get_managed_network_access(
         }
     }
 
-    // Specify root-key
-    let root_key = hex::decode(desc.root_key).map_err(|source| DecodeRootKey { source })?;
-
     Ok(NetworkAccess {
-        root_key: Some(root_key),
+        root_key: Some(desc.root_key),
         url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
     })
 }
@@ -113,12 +110,7 @@ pub async fn get_managed_network_access(
 pub async fn get_connected_network_access(
     connected: &Connected,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
-    let root_key = connected
-        .root_key
-        .as_ref()
-        .map(hex::decode)
-        .transpose()
-        .map_err(|err| DecodeRootKey { source: err })?;
+    let root_key = connected.root_key.clone();
 
     Ok(NetworkAccess {
         root_key,

@@ -12,11 +12,11 @@ Before you begin, ensure you have the following installed:
 
 ### Required
 - **Rust**: Install using [rustup](https://rustup.rs/)
-- **dfx**: Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install)
+- **Network launcher**: Download and unzip the [icp-cli network launcher](https://github.com/dfinity/icp-cli-network-launcher/releases)
 
 ### Language-Specific Requirements
 - **For Rust canisters**: `rustup target add wasm32-unknown-unknown`
-- **For Motoko canisters**: Motoko compiler (`moc`) - included with dfx
+- **For Motoko canisters**: Motoko compiler (`moc`) - included with [dfx](https://internetcomputer.org/docs/building-apps/getting-started/install)
 
 ## Installation
 
@@ -42,13 +42,11 @@ icp help
 Configure the tools that ICP CLI depends on:
 
 ```bash
-# Ensure dfx is installed and cache is populated
-dfx cache install
-
-# Export path to pocket-ic for local network support
-export ICP_POCKET_IC_PATH="$(dfx cache show)/pocket-ic"
+# Export path to network launcher for local network support
+export ICP_CLI_NETWORK_LAUNCHER_PATH="path/to/the/icp-cli-network-launcher"
 
 # Add Motoko compiler to PATH (if building Motoko canisters)
+dfx cache install
 export PATH=$(dfx cache show):$PATH
 ```
 

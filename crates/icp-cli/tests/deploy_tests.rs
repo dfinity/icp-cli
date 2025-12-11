@@ -256,7 +256,7 @@ async fn canister_create_colocates_canisters() {
 
     // Start network
     let _g = ctx
-        .start_network_with_config(
+        .start_network_with_flags(
             &project_dir,
             &[
                 "--subnet=application",

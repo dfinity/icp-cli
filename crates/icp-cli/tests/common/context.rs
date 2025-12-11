@@ -139,10 +139,10 @@ impl TestContext {
     }
 
     /// Start a network with a custom number of application subnets.
-    /// This bypasses the CLI and directly spawns PocketIC with the specified configuration.
+    /// This bypasses the CLI and directly spawns the launcher with the specified flags.
     /// Calling this method more than once will panic.
     /// Calling this method after calling [TestContext::start_network_in] will panic.
-    pub(crate) async fn start_network_with_config(
+    pub(crate) async fn start_network_with_flags(
         &self,
         project_dir: &Path,
         flags: &[&str],
@@ -160,18 +160,18 @@ impl TestContext {
             .join("local");
         create_dir_all(&network_dir).expect("Failed to create network directory");
 
-        let pocketic_dir = network_dir.join("pocketic");
-        create_dir_all(&pocketic_dir).expect("Failed to create pocketic directory");
+        let launcher_dir = network_dir.join("network-launcher");
+        create_dir_all(&launcher_dir).expect("Failed to create network launcher directory");
 
-        let state_dir = pocketic_dir.join("state");
+        let state_dir = network_dir.join("state");
         create_dir_all(&state_dir).expect("Failed to create state directory");
 
-        eprintln!("Starting network with custom configuration");
+        eprintln!("Starting network with custom flags");
 
-        // Spawn PocketIC
+        // Spawn launcher
         let mut cmd = std::process::Command::new(&launcher_path);
         cmd.args(["--interface-version=1.0.0", "--status-dir"]);
-        cmd.arg(&pocketic_dir);
+        cmd.arg(&launcher_dir);
         cmd.args(flags);
         cmd.stdout(std::process::Stdio::inherit());
         cmd.stderr(std::process::Stdio::inherit());
@@ -182,7 +182,7 @@ impl TestContext {
             cmd.process_group(0);
         }
         let watcher =
-            wait_for_launcher_status(&pocketic_dir).expect("Failed to watch launcher status");
+            wait_for_launcher_status(&launcher_dir).expect("Failed to watch launcher status");
         let child = cmd.spawn().expect("failed to spawn launcher");
         let launcher_pid = child.id();
 
@@ -193,12 +193,10 @@ impl TestContext {
 
         let instance = NetworkInstance {
             gateway_port,
-            pocketic_config_port: status.config_port,
-            pocketic_instance_id: status.instance_id,
             effective_canister_id: status.default_effective_canister_id,
             root_key: status.root_key,
         };
-        // Initialize PocketIC instance with custom config
+        // Initialize network instance
         seed_instance(
             &format!("http://localhost:{}", instance.gateway_port)
                 .parse()
@@ -207,7 +205,7 @@ impl TestContext {
             [Principal::anonymous()], // Seed anonymous account only for tests
         )
         .await
-        .expect("Failed to initialize PocketIC instance");
+        .expect("Failed to initialize network instance");
 
         // Build and write network descriptor
         let descriptor_path = network_dir.join("descriptor.json");
@@ -221,8 +219,6 @@ impl TestContext {
                 "fixed": false
             },
             "default-effective-canister-id": instance.effective_canister_id.to_string(),
-            "pocketic-config-url": format!("http://localhost:{}/instances/{}/", instance.pocketic_config_port, instance.pocketic_instance_id),
-            "pocketic-instance-id": instance.pocketic_instance_id,
             "pid": launcher_pid,
             "root-key": instance.root_key,
         });
@@ -310,24 +306,9 @@ impl TestContext {
             .expect("network descriptor does not contain root key")
             .to_string();
 
-        let pocketic_url = network_descriptor
-            .get("pocketic-config-url")
-            .and_then(|pu| pu.as_str())
-            .expect("network descriptor does not contain pocketic url")
-            .to_string();
-        let pocketic_url = Url::parse(&pocketic_url).expect("invalid pocketic url");
-
-        let pocketic_instance_id = network_descriptor
-            .get("pocketic-instance-id")
-            .and_then(|pii| pii.as_u64())
-            .expect("network descriptor does not contain pocketic instance id")
-            as usize;
-
         TestNetwork {
             gateway_port,
             root_key,
-            pocketic_url,
-            pocketic_instance_id,
         }
     }
 

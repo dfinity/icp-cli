@@ -190,7 +190,7 @@ impl NetworkRootPaths {
         self.network_root.join("descriptor.json")
     }
 
-    /// The path to the state directory. Be careful that PocketIC is not running before attempting
+    /// The path to the state directory. Be careful that the network is not running before attempting
     /// to read or write this location.
     pub fn state_dir(&self) -> PathBuf {
         self.network_root.join("state")
@@ -207,21 +207,13 @@ impl NetworkRootPaths {
         self.network_root.join("background_network_runner.pid")
     }
 
-    /// PocketIC expects this file not to exist when launching it.
-    /// PocketIC populates it with the port number, and deletes the file when it exits.
-    /// If the file exists, PocketIC assumes this means another PocketIC instance
-    /// is running, and exits with exit code(0).
-    pub fn pocketic_port_file(&self) -> PathBuf {
-        self.launcher_dir().join("port")
-    }
-
-    /// PocketIC writes its stdout to this file.
-    pub fn pocketic_stdout_file(&self) -> PathBuf {
+    /// icp-cli may write the network's stdout to this file.
+    pub fn network_stdout_file(&self) -> PathBuf {
         self.launcher_dir().join("stdout.log")
     }
 
-    /// PocketIC writes its stderr to this file.
-    pub fn pocketic_stderr_file(&self) -> PathBuf {
+    /// icp-cli may write the network's stderr to this file.
+    pub fn network_stderr_file(&self) -> PathBuf {
         self.launcher_dir().join("stderr.log")
     }
 }

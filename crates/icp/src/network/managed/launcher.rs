@@ -1,7 +1,6 @@
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::Watcher;
-use reqwest::Url;
 use serde::Deserialize;
 use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio};
@@ -11,8 +10,6 @@ use crate::{network::Port, prelude::*};
 
 pub struct NetworkInstance {
     pub gateway_port: u16,
-    pub pocketic_config_port: u16,
-    pub pocketic_instance_id: usize,
     pub effective_canister_id: Principal,
     pub root_key: String,
 }
@@ -39,7 +36,7 @@ pub async fn spawn_network_launcher(
     let status_dir = Utf8TempDir::new().unwrap();
     cmd.args(["--status-dir", status_dir.path().as_str()]);
     if background {
-        eprintln!("For background mode, PocketIC output will be redirected:");
+        eprintln!("For background mode, network output will be redirected:");
         eprintln!("  stdout: {}", stdout_file);
         eprintln!("  stderr: {}", stderr_file);
         let stdout = std::fs::File::create(stdout_file).expect("Failed to create stdout file.");
@@ -64,9 +61,7 @@ pub async fn spawn_network_launcher(
     (
         child,
         NetworkInstance {
-            pocketic_config_port: launcher_status.config_port,
             gateway_port: launcher_status.gateway_port,
-            pocketic_instance_id: launcher_status.instance_id,
             effective_canister_id: launcher_status.default_effective_canister_id,
             root_key: launcher_status.root_key,
         },
@@ -180,22 +175,6 @@ pub struct LauncherStatus {
     pub gateway_port: u16,
     pub root_key: String,
     pub default_effective_canister_id: Principal,
-}
-
-pub struct PocketIcAdminInterface {
-    pub base_url: Url,
-}
-
-#[derive(Debug, Snafu)]
-pub enum CreateInstanceError {
-    #[snafu(
-        display("failed to create PocketIC instance: {message}"),
-        context(suffix(InstanceSnafu))
-    )]
-    Create { message: String },
-
-    #[snafu(transparent)]
-    Reqwest { source: reqwest::Error },
 }
 
 #[derive(Debug, Snafu)]

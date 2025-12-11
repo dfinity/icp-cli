@@ -1,5 +1,3 @@
-use std::env;
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 mod artifacts;
@@ -93,21 +91,5 @@ fn define_git_sha() {
 fn main() {
     define_icp_cli_version();
     define_git_sha();
-
-    // Process artifacts: download and embed them
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
-
-    let artifacts_source_path = PathBuf::from(&manifest_dir).join("artifacts/source.json");
-    let output_dir = PathBuf::from(out_dir);
-    
-    // Cache directory is at workspace root target/icp-cli-artifact-cache
-    // manifest_dir is at crates/icp-cli, so go up 2 levels to workspace root
-    let cache_dir = PathBuf::from(&manifest_dir)
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("Failed to find workspace root")
-        .join("target/icp-cli-artifact-cache");
-
-    artifacts::process_artifacts(&artifacts_source_path, &output_dir, &cache_dir);
+    artifacts::bundle_artifacts();
 }

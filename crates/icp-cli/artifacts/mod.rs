@@ -33,9 +33,10 @@
 //! Note: Hyphens in artifact names become underscores in function names.
 
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -169,7 +170,7 @@ fn generate_artifacts_code(artifact_names: &[String], cache_dir: &Path) -> Strin
 }
 
 /// Main function to process artifacts: download them and generate Rust code
-pub fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir: &Path) {
+fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir: &Path) {
     println!("cargo:rerun-if-changed={}", artifacts_source_path.display());
 
     // Read the artifacts source JSON file
@@ -227,6 +228,27 @@ pub fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_
         "cargo:warning=Generated artifacts code at: {}",
         output_path.display()
     );
+}
+
+/// High-level function to bundle artifacts during build.
+/// 
+/// This reads environment variables to determine paths and calls `process_artifacts`.
+pub fn bundle_artifacts() {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
+
+    let artifacts_source_path = PathBuf::from(&manifest_dir).join("artifacts/source.json");
+    let output_dir = PathBuf::from(out_dir);
+    
+    // Cache directory is at workspace root target/icp-cli-artifact-cache
+    // manifest_dir is at crates/icp-cli, so go up 2 levels to workspace root
+    let cache_dir = PathBuf::from(&manifest_dir)
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("Failed to find workspace root")
+        .join("target/icp-cli-artifact-cache");
+
+    process_artifacts(&artifacts_source_path, &output_dir, &cache_dir);
 }
 
 #[cfg(test)]

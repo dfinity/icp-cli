@@ -70,8 +70,7 @@ pub async fn spawn_network_launcher(
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
     }
-    let watcher = wait_for_launcher_status(&status_dir.path().join("status.json"))
-        .context(WatchStatusDirSnafu)?;
+    let watcher = wait_for_launcher_status(status_dir.as_ref()).context(WatchStatusDirSnafu)?;
     let child = cmd.spawn().context(SpawnLauncherSnafu {
         network_launcher_path,
     })?;

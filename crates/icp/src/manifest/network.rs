@@ -29,7 +29,26 @@ pub struct Connected {
     pub url: String,
 
     /// The root key of this network
-    pub root_key: Option<String>,
+    pub root_key: Option<RootKey>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(try_from = "String", into = "String")]
+pub struct RootKey(pub Vec<u8>);
+
+impl TryFrom<String> for RootKey {
+    type Error = hex::FromHexError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let bytes = hex::decode(value)?;
+        Ok(RootKey(bytes))
+    }
+}
+
+impl From<RootKey> for String {
+    fn from(root_key: RootKey) -> Self {
+        hex::encode(root_key.0)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
@@ -117,7 +136,7 @@ mod tests {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
                     url: "https://ic0.app".to_string(),
-                    root_key: Some("the-key".to_string())
+                    root_key: Some(RootKey::try_from("deadbeef".to_string()).unwrap())
                 }),
             },
         );

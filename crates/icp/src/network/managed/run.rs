@@ -242,10 +242,6 @@ async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
     )
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(display("timeout waiting for port file"))]
-pub struct WaitForPortTimeoutError;
-
 /// Yields immediately if the child exits.
 pub async fn notice_child_exit(child: &mut Child) -> ChildExitError {
     loop {
@@ -266,8 +262,6 @@ pub struct ChildExitError {
 pub enum WaitForPortError {
     #[snafu(display("Interrupted"))]
     Interrupted,
-    #[snafu(transparent)]
-    PortFile { source: WaitForPortTimeoutError },
     #[snafu(transparent)]
     ChildExited { source: ChildExitError },
 }

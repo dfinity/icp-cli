@@ -19,7 +19,8 @@ pub struct NetworkDescriptorModel {
     pub network_dir: PathBuf,
     pub gateway: NetworkDescriptorGatewayPort,
     pub pid: Option<u32>,
-    pub root_key: String,
+    #[serde(with = "hex::serde")]
+    pub root_key: Vec<u8>,
 }
 
 impl NetworkDescriptorModel {

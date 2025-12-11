@@ -10,7 +10,7 @@ use crate::{network::Port, prelude::*};
 
 pub struct NetworkInstance {
     pub gateway_port: u16,
-    pub root_key: String,
+    pub root_key: Vec<u8>,
 }
 
 pub async fn spawn_network_launcher(
@@ -61,7 +61,7 @@ pub async fn spawn_network_launcher(
         child,
         NetworkInstance {
             gateway_port: launcher_status.gateway_port,
-            root_key: launcher_status.root_key,
+            root_key: hex::decode(&launcher_status.root_key).unwrap(),
         },
     )
 }

@@ -166,7 +166,7 @@ fn deploy_to_other_projects_network() {
         environments:
           - name: environment-1
             network: network-a
-    "#};
+    "#, root_key = hex::encode(&root_key)};
 
     write_string(
         &projb.join("icp.yaml"), // path

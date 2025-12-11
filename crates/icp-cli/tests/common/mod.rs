@@ -59,7 +59,7 @@ pub(crate) fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httpte
 // after starting the network.
 pub(crate) struct TestNetwork {
     pub(crate) gateway_port: u16,
-    pub(crate) root_key: String,
+    pub(crate) root_key: Vec<u8>,
 }
 
 pub(crate) struct ChildGuard {

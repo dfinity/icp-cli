@@ -25,7 +25,7 @@ pub(crate) struct TestContext {
     asset_dir: PathBuf,
     os_path: OsString,
     gateway_url: OnceCell<Url>,
-    root_key: OnceCell<String>,
+    root_key: OnceCell<Vec<u8>>,
 }
 
 impl TestContext {
@@ -193,7 +193,7 @@ impl TestContext {
 
         let instance = NetworkInstance {
             gateway_port,
-            root_key: status.root_key,
+            root_key: hex::decode(&status.root_key).unwrap(),
         };
         // Initialize network instance
         seed_instance(
@@ -218,7 +218,7 @@ impl TestContext {
                 "fixed": false
             },
             "pid": launcher_pid,
-            "root-key": instance.root_key,
+            "root-key": hex::encode(&instance.root_key),
         });
         fs::write(
             &descriptor_path,
@@ -303,6 +303,7 @@ impl TestContext {
             .and_then(|rk| rk.as_str())
             .expect("network descriptor does not contain root key")
             .to_string();
+        let root_key = hex::decode(root_key).unwrap();
 
         TestNetwork {
             gateway_port,

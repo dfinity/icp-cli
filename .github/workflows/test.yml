@@ -73,6 +73,8 @@ jobs:
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: install network launcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=v11.0.0
           OS=""
@@ -102,7 +104,7 @@ jobs:
           DEST="/opt/icp-cli-network-launcher"
 
           echo "Downloading $URL"
-          curl -L "$URL" -o icp-cli-network-launcher.tar.gz
+          curl -L "$URL" -H "Authorization: Bearer ${GITHUB_TOKEN}" -o icp-cli-network-launcher.tar.gz
           tar -xzf icp-cli-network-launcher.tar.gz
           sudo mv icp-cli-network-launcher-${ARCH}-${OS}-${VERSION} "$DEST"
 

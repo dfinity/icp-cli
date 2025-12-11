@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use clap::Args;
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
@@ -8,8 +8,14 @@ use icp::{
 };
 use serde::Serialize;
 use std::fmt::Write;
+use tracing::debug;
 
 use crate::{commands::args, options};
+
+/// Error code returned by the replica if the target canister is not found
+const E_CANISTER_NOT_FOUND: &str = "IC0301";
+/// Error code returned by the replica if the caller is not a controller
+const E_NOT_A_CONTROLLER: &str = "IC0512";
 
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
@@ -84,7 +90,8 @@ async fn read_state_tree_canister_controllers(
     let controllers = match agent.read_state_canister_controllers(cid).await {
         Ok(controllers) => controllers,
         Err(AgentError::LookupPathAbsent(_)) => {
-            return Ok(None);
+            debug!("Couldn't find a path to the controllers in the state tree for {cid}");
+            return Err(anyhow!("Canister {cid} was not found."));
         }
         Err(AgentError::InvalidCborData(_)) => {
             return Err(anyhow!(
@@ -210,8 +217,21 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                                 .expect("Failed to build canister status output"),
                         }
                     }
-                    Err(_) => {
-                        // If there was an error, fallback on the public status
+                    Err(AgentError::UncertifiedReject {
+                        reject,
+                        operation: _,
+                    }) => {
+                        if reject.error_code.as_deref() == Some(E_CANISTER_NOT_FOUND) {
+                            // The canister does not exist
+                            bail!("Canister {cid} was not found.");
+                        }
+
+                        if reject.error_code.as_deref() != Some(E_NOT_A_CONTROLLER) {
+                            // We don't know this error code
+                            bail!("Error looking up canister {cid}: {:?}", reject.error_code);
+                        }
+
+                        // We got E_NOT_A_CONTROLLER so we fallback on fetching the public status
                         let status = build_public_status(&agent, cid.to_owned()).await?;
 
                         match args.json_format {
@@ -220,6 +240,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                             false => build_public_output(&status)
                                 .expect("Failed to build canister status output"),
                         }
+                    }
+                    Err(e) => {
+                        bail!("Unknown error fetching canister {cid} status: {e}");
                     }
                 }
             }
@@ -363,7 +386,7 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
 
     writeln!(&mut buf, "Canister Id: {}", result.id)?;
     writeln!(&mut buf, "Canister Status Report:")?;
-    writeln!(&mut buf, "  Status: {:?}", &result.status)?;
+    writeln!(&mut buf, "  Status: {}", &result.status)?;
 
     let settings = &result.settings;
     writeln!(

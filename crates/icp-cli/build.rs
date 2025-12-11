@@ -61,10 +61,8 @@ fn get_git_version() -> Result<String, std::io::Error> {
 /// or the latest git tag plus sha of current git HEAD at time of build,
 /// or let the cargo.toml version.
 fn define_icp_cli_version() {
-    // option_env! automatically detect changes and trigger rebuilds.
-    // "cargo:rerun-if-env-changed" is not needed here.
-    // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-env-changed
-    if let Some(v) = option_env!("ICP_CLI_VERSION") {
+    println!("cargo:rerun-if-env-changed=ICP_CLI_VERSION");
+    if let Ok(v) = std::env::var("ICP_CLI_VERSION") {
         // If the version is passed in the environment, use that.
         // Used by the release process in .github/workflows/publish.yml
         println!("cargo:rustc-env=CARGO_PKG_VERSION={v}");

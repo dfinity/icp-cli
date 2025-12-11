@@ -54,7 +54,7 @@ async fn token_balance() {
 
     // mint icp to identity
     clients::ledger(&ctx)
-        .mint_icp(identity, None, 123456780_u128)
+        .acquire_icp(identity, None, 123456780_u128)
         .await;
 
     ctx.icp()
@@ -94,7 +94,7 @@ async fn token_transfer() {
     // Initial balance
     let icp_ledger = clients::ledger(&ctx);
     icp_ledger
-        .mint_icp(alice_principal, None, 1_000_000_000_u128)
+        .acquire_icp(alice_principal, None, 1_000_000_000_u128)
         .await; // 10 ICP
     assert_eq!(
         icp_ledger.balance_of(alice_principal, None).await,

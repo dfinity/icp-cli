@@ -13,7 +13,7 @@ For now, you have to build icp-cli locally in order to use it.
 ### Prerequisites
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
-- **pocket-ic**: Download [pocket-ic](https://github.com/dfinity/pocketic/releases) in order to run a local network. pocket-ic v10 or above is required.
+- **Network launcher**: Download [icp-cli-network-launcher](https://github.com/dfinity/icp-cli-network-launcher/releases) in order to run a local network.
 - **dfx**: (__Required only if you want the motoko tools__) Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install).
 
 ### Building
@@ -29,21 +29,19 @@ export PATH=$(pwd)/target/debug:$PATH
 icp help
 ```
 
-### Add pocket-ic and motoko tools to the path
+### Add network launcher and motoko tools to the path
 
-To launch a local network you will also need to set the `ICP_POCKET_IC_PATH` environment variable.
-You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases).
-At least version 10.0.0 of pocket-ic is required.
+To launch a local network you will also need to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
+You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases).
 
 ```bash
 # for eg for a mac with apple sillicon:
-wget https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-arm64-darwin.gz -O pocket-ic.gz
-gunzip pocket-ic.gz
-chmod +x pocket-ic
-export ICP_POCKET_IC_PATH="$(pwd)/pocket-ic"
+wget https://github.com/dfinity/icp-cli-network-launcher/releases/download/v11.0.0/icp-cli-network-launcher-arm64-darwin-v11.0.0.tar.gz -O icp-cli-network-launcher-arm64-darwin-v11.0.0.tar.gz
+gunzip icp-cli-network-launcher-arm64-darwin-v11.0.0.tar.gz
+export ICP_CLI_NETWORK_LAUNCHER_PATH="$(pwd)/icp-cli-network-launcher-arm64-darwin-v11.0.0/icp-cli-network-launcher"
 ```
 
-Note: The binary of pocket-ic must be named `pocket-ic` or `pocket-ic-server`.
+Note: The network launcher binary must not end up in a different directory than the pocket-ic binary.
 
 ### [Optional] Add motoko tools to the path
 
@@ -96,22 +94,21 @@ The compiled binary will be available at `target/debug/icp` (or `target/release/
 
 #### Prerequisites for Testing
 
-The tests require pocket-ic for running the local network. See the setup instructions below.
+The tests require the network launcher for running the local network. See the setup instructions below.
 
 #### Setup
 
-The `ICP_POCKET_IC_PATH` environment variable should point to
-the path of the `pocket-ic` binary.
+The `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable should point to
+the path of the `icp-cli-network-launcher` binary.
 
-You can download the correct version for your machine from [github](https://github.com/dfinity/pocketic/releases/tag/10.0.0).
-At least version 10.0.0 of pocket-ic is required.
+You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases/tag/v11.0.0).
 
-To run the tests, it's necessary to set the `ICP_POCKET_IC_PATH` environment variable.
+To run the tests, it's necessary to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
 Here is one way to do that:
 
 ```
-# Export the path to the pocket-ic binary
-export ICP_POCKET_IC_PATH="<yourpath>/pocket-ic"
+# Export the path to the network launcher binary
+export ICP_CLI_NETWORK_LAUNCHER_PATH="<yourpath>/icp-cli-network-launcher"
 
 # Run tests
 cargo test

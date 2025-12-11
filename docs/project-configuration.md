@@ -257,7 +257,7 @@ There are two types of networks:
 - external - A remote network that is hosted, this could be mainnet or a remote instance of pocket-ic serving as a long lived testnet.
 
 You can define your own networks but there are two implict networks defined:
-- local - A managed network that is spun up with pocket-ic and typically used for local development.
+- local - A managed network that is spun up with the network launcher and typically used for local development.
 - mainnet - The mainnet, production network.
 
 

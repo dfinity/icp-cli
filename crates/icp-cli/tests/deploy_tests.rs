@@ -1,9 +1,8 @@
 use indoc::{formatdoc, indoc};
-use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet};
 use predicates::{ord::eq, str::PredicateStrExt};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, network::managed::pocketic::default_instance_config, prelude::*};
+use icp::{fs::write_string, prelude::*};
 
 mod common;
 
@@ -257,16 +256,13 @@ async fn canister_create_colocates_canisters() {
 
     // Start network
     let _g = ctx
-        .start_network_with_config(
+        .start_network_with_flags(
             &project_dir,
-            InstanceConfig {
-                subnet_config_set: (SubnetConfigSet {
-                    application: 3,
-                    ..Default::default()
-                })
-                .into(),
-                ..default_instance_config(&ctx.state_dir(&project_dir))
-            },
+            &[
+                "--subnet=application",
+                "--subnet=application",
+                "--subnet=application",
+            ],
         )
         .await;
 

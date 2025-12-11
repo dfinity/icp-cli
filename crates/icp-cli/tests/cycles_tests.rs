@@ -44,7 +44,7 @@ async fn cycles_balance() {
 
     // Mint ICP to cycles, specify ICP amount
     clients::ledger(&ctx)
-        .mint_icp(identity, None, 123456789_u64)
+        .acquire_icp(identity, None, 123456789_u64)
         .await;
     ctx.icp()
         .current_dir(&project_dir)
@@ -67,7 +67,7 @@ async fn cycles_balance() {
         .use_new_random_identity();
 
     clients::ledger(&ctx)
-        .mint_icp(identity, None, 123456789_u64)
+        .acquire_icp(identity, None, 123456789_u64)
         .await;
     ctx.icp()
         .current_dir(&project_dir)
@@ -125,7 +125,7 @@ async fn cycles_mint_with_explicit_network() {
     // Create identity and mint ICP
     let identity = clients::icp(&ctx, &project_dir, None).use_new_random_identity();
     clients::ledger(&ctx)
-        .mint_icp(identity, None, 123456789_u64)
+        .acquire_icp(identity, None, 123456789_u64)
         .await;
 
     // Run mint command with explicit --network flag

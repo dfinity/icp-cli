@@ -51,12 +51,12 @@ jsonschema = "0.33.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 lazy_static = "1.5.0"
 mockall = "0.13.1"
+notify = "8.2.0"
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 pem = "3.0.5"
 phf = { version = "0.13.1", features = ["macros"] }
 pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
-pocket-ic = "10.0.0"
 rand = "0.9.1"
 scrypt = "0.11.0"
 sec1 = { version = "0.7.3", features = ["pkcs8"] }

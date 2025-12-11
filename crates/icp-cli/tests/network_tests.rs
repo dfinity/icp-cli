@@ -1,13 +1,12 @@
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
-    internet_identity::INTERNET_IDENTITY_PRINCIPAL, nns_root::NNS_ROOT_PRINCIPAL,
-    registry::REGISTRY_PRINCIPAL,
+    internet_identity::INTERNET_IDENTITY_PRINCIPAL, registry::REGISTRY_PRINCIPAL,
 };
 use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
-    str::{PredicateStrExt, contains},
+    str::{PredicateStrExt, contains, is_match},
 };
 use serial_test::file_serial;
 use sysinfo::{Pid, ProcessesToUpdate, System};
@@ -167,7 +166,7 @@ fn deploy_to_other_projects_network() {
         environments:
           - name: environment-1
             network: network-a
-    "#};
+    "#, root_key = hex::encode(&root_key)};
 
     write_string(
         &projb.join("icp.yaml"), // path
@@ -258,7 +257,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .current_dir(&project_dir)
         .args(["token", "balance", "--environment", "my-environment"])
         .assert()
-        .stdout(contains("Balance: 1000000000.00000000 ICP"))
+        .stdout(is_match(r"Balance: \d{9}\.\d{8} ICP").unwrap())
         .success();
 
     // Identities created before starting should have a large seeded ICP balance
@@ -314,7 +313,7 @@ async fn network_run_and_stop_background() {
         .args(["network", "run", "my-network", "--background"])
         .assert()
         .success()
-        .stderr(contains("Created instance with id")); // part of network start output
+        .stderr(contains("Seeding ICP and TCYCLES")); // part of network start output
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
 
@@ -332,7 +331,7 @@ async fn network_run_and_stop_background() {
     );
 
     let pid_contents = read_to_string(&pid_file_path).expect("Failed to read PID file");
-    let background_pocketic_pid: Pid = pid_contents
+    let background_launcher_pid: Pid = pid_contents
         .trim()
         .parse()
         .expect("PID file should contain a valid process ID");
@@ -357,7 +356,7 @@ async fn network_run_and_stop_background() {
         .success()
         .stdout(contains(format!(
             "Stopping background network (PID: {})",
-            background_pocketic_pid
+            background_launcher_pid
         )))
         .stdout(contains("Network stopped successfully"));
 
@@ -367,11 +366,11 @@ async fn network_run_and_stop_background() {
         "PID file should be removed after stopping"
     );
 
-    // Verify pocketic process is no longer running
+    // Verify launcher process is no longer running
     let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[background_pocketic_pid]), true);
+    system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
     assert!(
-        system.process(background_pocketic_pid).is_none(),
+        system.process(background_launcher_pid).is_none(),
         "Process should no longer be running"
     );
 
@@ -404,41 +403,32 @@ async fn network_starts_with_canisters_preset() {
     let _guard = ctx.start_network_in(&project_dir, "my-network");
     ctx.ping_until_healthy(&project_dir, "my-network");
 
-    let pocket_ic = ctx.pocketic();
-    let controller = Some(NNS_ROOT_PRINCIPAL);
+    let agent = ctx.agent();
 
     // ICP ledger
-    let icp_ledger_status = pocket_ic
-        .canister_status(ICP_LEDGER_PRINCIPAL, controller)
+    agent
+        .read_state_canister_module_hash(ICP_LEDGER_PRINCIPAL)
         .await
         .unwrap();
-    assert!(icp_ledger_status.module_hash.is_some());
 
     // Cycles ledger
-    let cycles_ledger_status = pocket_ic
-        .canister_status(CYCLES_LEDGER_PRINCIPAL, controller)
+    agent
+        .read_state_canister_module_hash(CYCLES_LEDGER_PRINCIPAL)
         .await
         .unwrap();
-    assert!(cycles_ledger_status.module_hash.is_some());
-
     // Cycles minting
-    let cycles_minting_status = pocket_ic
-        .canister_status(CYCLES_MINTING_CANISTER_PRINCIPAL, controller)
+    agent
+        .read_state_canister_module_hash(CYCLES_MINTING_CANISTER_PRINCIPAL)
         .await
         .unwrap();
-    assert!(cycles_minting_status.module_hash.is_some());
-
     // Registry
-    let registry_status = pocket_ic
-        .canister_status(REGISTRY_PRINCIPAL, controller)
+    agent
+        .read_state_canister_module_hash(REGISTRY_PRINCIPAL)
         .await
         .unwrap();
-    assert!(registry_status.module_hash.is_some());
-
     // Internet identity
-    let internet_identity_status = pocket_ic
-        .canister_status(INTERNET_IDENTITY_PRINCIPAL, controller)
+    agent
+        .read_state_canister_module_hash(INTERNET_IDENTITY_PRINCIPAL)
         .await
         .unwrap();
-    assert!(internet_identity_status.module_hash.is_some());
 }

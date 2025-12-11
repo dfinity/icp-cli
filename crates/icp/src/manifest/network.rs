@@ -29,7 +29,27 @@ pub struct Connected {
     pub url: String,
 
     /// The root key of this network
-    pub root_key: Option<String>,
+    #[schemars(with = "Option<String>", regex(pattern = "^[0-9a-f]{266}$"))]
+    pub root_key: Option<RootKey>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(try_from = "String", into = "String")]
+pub struct RootKey(pub Vec<u8>);
+
+impl TryFrom<String> for RootKey {
+    type Error = hex::FromHexError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let bytes = hex::decode(value)?;
+        Ok(RootKey(bytes))
+    }
+}
+
+impl From<RootKey> for String {
+    fn from(root_key: RootKey) -> Self {
+        hex::encode(root_key.0)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
@@ -106,18 +126,31 @@ mod tests {
 
     #[test]
     fn connected_network_with_key() {
+        #[rustfmt::skip] // https://github.com/rust-lang/rustfmt/issues/6747
         assert_eq!(
             validate_network_yaml(indoc! {r#"
                     name: my-network
                     mode: connected
                     url: https://ic0.app
-                    root-key: the-key
+                    root-key: "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020\
+                      10361008b52b4994f94c7ce4be1c1542d7c81dc79fea17d49efe8fa42e8566373581d4b969c4\
+                      a59e96a0ef51b711fe5027ec01601182519d0a788f4bfe388e593b97cd1d7e44904de7942243\
+                      0bca686ac8c21305b3397b5ba4d7037d17877312fb7ee34"
                 "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
                     url: "https://ic0.app".to_string(),
-                    root_key: Some("the-key".to_string())
+                    root_key: Some(
+                        RootKey::try_from(
+                            "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010\
+                            361008b52b4994f94c7ce4be1c1542d7c81dc79fea17d49efe8fa42e8566373581d4b9\
+                            69c4a59e96a0ef51b711fe5027ec01601182519d0a788f4bfe388e593b97cd1d7e4490\
+                            4de79422430bca686ac8c21305b3397b5ba4d7037d17877312fb7ee34"
+                                .to_string()
+                        )
+                        .unwrap()
+                    )
                 }),
             },
         );

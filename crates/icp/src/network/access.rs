@@ -1,20 +1,13 @@
-use ic_agent::export::Principal;
 use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
 
 use crate::{
-    network::{
-        Connected, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey,
-        directory::LoadNetworkFileError,
-    },
+    network::{Connected, NetworkDirectory, directory::LoadNetworkFileError},
     prelude::*,
 };
 
 #[derive(Clone)]
 pub struct NetworkAccess {
-    /// Effective canister ID corresponding to a subnet
-    pub default_effective_canister_id: Option<Principal>,
-
     /// Network's root-key
     pub root_key: Option<Vec<u8>>,
 
@@ -25,7 +18,6 @@ pub struct NetworkAccess {
 impl NetworkAccess {
     pub fn new(url: &Url) -> Self {
         Self {
-            default_effective_canister_id: None,
             root_key: None,
             url: url.clone(),
         }
@@ -40,9 +32,6 @@ impl NetworkAccess {
 
 #[derive(Debug, Snafu)]
 pub enum GetNetworkAccessError {
-    #[snafu(display("failed to decode root key"))]
-    DecodeRootKey { source: hex::FromHexError },
-
     #[snafu(display("failed to load port {port} descriptor"))]
     LoadPortDescriptor {
         port: u16,
@@ -106,15 +95,8 @@ pub async fn get_managed_network_access(
         }
     }
 
-    // Specify effective canister ID
-    let default_effective_canister_id = Some(desc.default_effective_canister_id);
-
-    // Specify root-key
-    let root_key = hex::decode(desc.root_key).map_err(|source| DecodeRootKey { source })?;
-
     Ok(NetworkAccess {
-        default_effective_canister_id,
-        root_key: Some(root_key),
+        root_key: Some(desc.root_key),
         url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
     })
 }
@@ -122,15 +104,9 @@ pub async fn get_managed_network_access(
 pub async fn get_connected_network_access(
     connected: &Connected,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
-    let root_key = connected
-        .root_key
-        .as_ref()
-        .map(hex::decode)
-        .transpose()
-        .map_err(|err| DecodeRootKey { source: err })?;
+    let root_key = connected.root_key.clone();
 
     Ok(NetworkAccess {
-        default_effective_canister_id: None,
         root_key,
         url: Url::parse(&connected.url).context(ParseUrlSnafu {
             url: connected.url.clone(),

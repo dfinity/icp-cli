@@ -198,13 +198,29 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             }
             false => {
                 // Retrieve canister status from management canister
-                let (result,) = mgmt.canister_status(cid).await?;
-                let status = SerializableCanisterStatusResult::from(cid.to_owned(), &result);
+                match mgmt.canister_status(cid).await {
+                    Ok((result,)) => {
+                        let status =
+                            SerializableCanisterStatusResult::from(cid.to_owned(), &result);
 
-                match args.json_format {
-                    true => serde_json::to_string(&status)
-                        .expect("Serializing status result to json failed"),
-                    false => build_output(&status).expect("Failed to build canister status output"),
+                        match args.json_format {
+                            true => serde_json::to_string(&status)
+                                .expect("Serializing status result to json failed"),
+                            false => build_output(&status)
+                                .expect("Failed to build canister status output"),
+                        }
+                    }
+                    Err(_) => {
+                        // If there was an error, fallback on the public status
+                        let status = build_public_status(&agent, cid.to_owned()).await?;
+
+                        match args.json_format {
+                            true => serde_json::to_string(&status)
+                                .expect("Serializing status result to json failed"),
+                            false => build_public_output(&status)
+                                .expect("Failed to build canister status output"),
+                        }
+                    }
                 }
             }
         };

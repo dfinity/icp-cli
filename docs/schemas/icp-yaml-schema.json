@@ -210,6 +210,7 @@
       "properties": {
         "root-key": {
           "description": "The root key of this network",
+          "pattern": "^[0-9a-f]{266}$",
           "type": [
             "string",
             "null"

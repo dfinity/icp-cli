@@ -296,7 +296,6 @@ async fn test_get_agent_for_env_uses_environment_network() {
                 .with_network(
                     "local",
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: None,
                         url: Url::parse("http://localhost:8000").unwrap(),
                     },
@@ -304,7 +303,6 @@ async fn test_get_agent_for_env_uses_environment_network() {
                 .with_network(
                     "staging",
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: Some(staging_root_key.clone()),
                         url: Url::parse("http://staging:9000").unwrap(),
                     },
@@ -377,7 +375,6 @@ async fn test_get_agent_for_network_success() {
         network: Arc::new(MockNetworkAccessor::new().with_network(
             "local",
             NetworkAccess {
-                default_effective_canister_id: None,
                 root_key: Some(root_key.clone()),
                 url: Url::parse("http://localhost:8000").unwrap(),
             },
@@ -583,7 +580,6 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
         network: Arc::new(MockNetworkAccessor::new().with_network(
             DEFAULT_LOCAL_NETWORK_NAME,
             NetworkAccess {
-                default_effective_canister_id: None,
                 root_key: Some(local_root_key.clone()),
                 url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
             },
@@ -648,7 +644,6 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
         network: Arc::new(MockNetworkAccessor::new().with_network(
             DEFAULT_LOCAL_NETWORK_NAME,
             NetworkAccess {
-                default_effective_canister_id: None,
                 root_key: Some(custom_root_key.clone()),
                 url: Url::parse("http://localhost:9000").unwrap(), // Custom port
             },
@@ -729,7 +724,6 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                 .with_network(
                     DEFAULT_LOCAL_NETWORK_NAME,
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: None,
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     },
@@ -737,7 +731,6 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                 .with_network(
                     "custom",
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: Some(custom_root_key.clone()),
                         url: Url::parse("http://localhost:7000").unwrap(),
                     },
@@ -770,7 +763,6 @@ async fn test_get_agent_explicit_network_inside_project() {
                 .with_network(
                     DEFAULT_LOCAL_NETWORK_NAME,
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: None,
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     },
@@ -778,7 +770,6 @@ async fn test_get_agent_explicit_network_inside_project() {
                 .with_network(
                     "staging",
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: Some(staging_root_key.clone()),
                         url: Url::parse("http://localhost:8001").unwrap(),
                     },
@@ -812,7 +803,6 @@ async fn test_get_agent_explicit_environment_inside_project() {
                 .with_network(
                     DEFAULT_LOCAL_NETWORK_NAME,
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: None,
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     },
@@ -820,7 +810,6 @@ async fn test_get_agent_explicit_environment_inside_project() {
                 .with_network(
                     "staging",
                     NetworkAccess {
-                        default_effective_canister_id: None,
                         root_key: Some(staging_root_key.clone()),
                         url: Url::parse("http://localhost:8001").unwrap(),
                     },

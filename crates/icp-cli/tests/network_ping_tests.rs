@@ -21,8 +21,8 @@ fn ping_network() {
     let _child_guard = ctx.start_network_in(&project_dir, "my-network");
 
     let network_descriptor = ctx.wait_for_network_descriptor(&project_dir, "my-network");
-    let expected_root_key = hex::decode(&network_descriptor.root_key)
-        .expect("Failed to decode root key from hex")
+    let expected_root_key = network_descriptor
+        .root_key
         .into_iter()
         .map(|byte| Value::Number(serde_json::Number::from(byte)))
         .collect::<Vec<Value>>();

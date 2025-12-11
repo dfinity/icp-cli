@@ -1,20 +1,18 @@
 use candid::{Decode, Encode, Principal};
+use ic_agent::Agent;
 use icp_canister_interfaces::registry::{
     GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL,
 };
-use pocket_ic::nonblocking::PocketIc;
 
 use crate::common::TestContext;
 
-pub(crate) struct Client<'a> {
-    pic: &'a PocketIc,
+pub(crate) struct Client {
+    agent: Agent,
 }
 
-impl<'a> Client<'a> {
-    pub(crate) fn new(ctx: &'a TestContext) -> Self {
-        Self {
-            pic: ctx.pocketic(),
-        }
+impl Client {
+    pub(crate) fn new(ctx: &TestContext) -> Self {
+        Self { agent: ctx.agent() }
     }
 
     pub(crate) async fn get_subnet_for_canister(&self, canister: Principal) -> Principal {
@@ -23,13 +21,9 @@ impl<'a> Client<'a> {
         };
         let bytes = Encode!(&arg).unwrap();
         let result = &self
-            .pic
-            .query_call(
-                REGISTRY_PRINCIPAL,
-                Principal::anonymous(),
-                "get_subnet_for_canister",
-                bytes,
-            )
+            .agent
+            .query(&REGISTRY_PRINCIPAL, "get_subnet_for_canister")
+            .with_arg(bytes)
             .await
             .unwrap();
         Decode!(result, GetSubnetForCanisterResult)

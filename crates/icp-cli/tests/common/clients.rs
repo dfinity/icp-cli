@@ -16,18 +16,18 @@ pub(crate) fn icp(
     icp_cli::Client::new(ctx, current_dir.into(), environment)
 }
 
-pub(crate) fn ledger(ctx: &TestContext) -> ledger::Client<'_> {
+pub(crate) fn ledger(ctx: &TestContext) -> ledger::Client {
     ledger::Client::new(ctx)
 }
 
-pub(crate) fn cycles_ledger(ctx: &TestContext) -> cycles_ledger::Client<'_> {
+pub(crate) fn cycles_ledger(ctx: &TestContext) -> cycles_ledger::Client {
     cycles_ledger::Client::new(ctx)
 }
 
-pub(crate) fn registry(ctx: &TestContext) -> registry::Client<'_> {
+pub(crate) fn registry(ctx: &TestContext) -> registry::Client {
     registry::Client::new(ctx)
 }
 
-pub(crate) fn cmc(ctx: &TestContext) -> cmc::Client<'_> {
+pub(crate) fn cmc(ctx: &TestContext) -> cmc::Client {
     cmc::Client::new(ctx)
 }

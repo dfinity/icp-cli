@@ -1,0 +1,10 @@
+{
+    "candid_ui": {
+        "url": "https://github.com/dfinity/candid/releases/download/2025-12-10/candid_ui.wasm",
+        "sha256": "359e217aed87044d24155df974fb4501dec02f676b9651f040a8dfe1ac0c9ed1"
+    },
+    "proxy": {
+        "url": "https://github.com/dfinity/proxy-canister/releases/download/v0.1.0-beta.1/proxy.wasm",
+        "sha256": "9e5abf27930b06df7f50c4baa1ec71b7e53408cb81849054fc51a1825eb6c5a4"
+    }
+}

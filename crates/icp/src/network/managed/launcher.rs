@@ -15,6 +15,26 @@ pub struct NetworkInstance {
     pub pocketic_instance_id: Option<usize>,
 }
 
+#[derive(Debug, Snafu)]
+pub enum SpawnNetworkLauncherError {
+    #[snafu(display("failed to create status directory"))]
+    CreateStatusDir { source: std::io::Error },
+    #[snafu(display("failed to create stdio log at {path}"))]
+    CreateStdioFile {
+        source: std::io::Error,
+        path: PathBuf,
+    },
+    #[snafu(display("failed to watch status directory"))]
+    WatchStatusDir { source: WaitForFileError },
+    #[snafu(display("failed to spawn network launcher {network_launcher_path}"))]
+    SpawnLauncher {
+        source: std::io::Error,
+        network_launcher_path: PathBuf,
+    },
+    #[snafu(display("failed to watch launcher status file"))]
+    WatchForStatusFile { source: WaitForLauncherStatusError },
+}
+
 pub async fn spawn_network_launcher(
     network_launcher_path: &Path,
     stdout_file: &Path,
@@ -22,7 +42,7 @@ pub async fn spawn_network_launcher(
     background: bool,
     port: &Port,
     state_dir: &Path,
-) -> (Child, NetworkInstance) {
+) -> Result<(Child, NetworkInstance), SpawnNetworkLauncherError> {
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
@@ -34,32 +54,29 @@ pub async fn spawn_network_launcher(
     if let Port::Fixed(port) = port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }
-    let status_dir = Utf8TempDir::new().unwrap();
+    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     cmd.args(["--status-dir", status_dir.path().as_str()]);
     if background {
         eprintln!("For background mode, network output will be redirected:");
         eprintln!("  stdout: {}", stdout_file);
         eprintln!("  stderr: {}", stderr_file);
-        let stdout = std::fs::File::create(stdout_file).expect("Failed to create stdout file.");
-        let stderr = std::fs::File::create(stderr_file).expect("Failed to create stderr file.");
+        let stdout = std::fs::File::create(stdout_file)
+            .context(CreateStdioFileSnafu { path: &stdout_file })?;
+        let stderr = std::fs::File::create(stderr_file)
+            .context(CreateStdioFileSnafu { path: &stderr_file })?;
         cmd.stdout(Stdio::from(stdout));
         cmd.stderr(Stdio::from(stderr));
     } else {
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
     }
-    let watcher = wait_for_single_line_file(&status_dir.path().join("status.json")).unwrap();
-    let child = cmd.spawn().expect("Could not start network launcher.");
-    let status_content = watcher
-        .await
-        .expect("Failed to read network launcher status.");
-    let launcher_status: LauncherStatus =
-        serde_json::from_str(&status_content).expect("Failed to parse network launcher status.");
-    assert_eq!(
-        launcher_status.v, "1",
-        "unexpected network launcher status version"
-    );
-    (
+    let watcher = wait_for_launcher_status(&status_dir.path().join("status.json"))
+        .context(WatchStatusDirSnafu)?;
+    let child = cmd.spawn().context(SpawnLauncherSnafu {
+        network_launcher_path,
+    })?;
+    let launcher_status = watcher.await.context(WatchForStatusFileSnafu)?;
+    Ok((
         child,
         NetworkInstance {
             gateway_port: launcher_status.gateway_port,
@@ -67,7 +84,7 @@ pub async fn spawn_network_launcher(
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
-    )
+    ))
 }
 
 #[derive(Debug, Snafu)]

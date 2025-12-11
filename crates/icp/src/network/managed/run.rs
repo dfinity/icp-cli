@@ -119,7 +119,7 @@ async fn run_network_launcher(
                 &config.gateway.port,
                 &root.state_dir(),
             )
-            .await;
+            .await?;
             if background {
                 // background means we're using stdio files - otherwise the launcher already prints this
                 eprintln!("Network started on port {}", instance.gateway_port);
@@ -215,6 +215,11 @@ pub enum RunNetworkLauncherError {
     #[snafu(transparent)]
     SavePid {
         source: crate::network::directory::SavePidError,
+    },
+
+    #[snafu(transparent)]
+    SpawnLauncher {
+        source: crate::network::managed::launcher::SpawnNetworkLauncherError,
     },
 }
 

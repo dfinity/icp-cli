@@ -1,5 +1,7 @@
 use std::process::{Command, Stdio};
 
+mod artifacts;
+
 /// Gets a git tag with the least number of revs between HEAD of current branch and the tag,
 /// and combines is with SHA of the HEAD commit. Example of expected output: `0.12.0-beta.1-b9ace030`
 fn get_git_version() -> Result<String, std::io::Error> {
@@ -87,6 +89,11 @@ fn define_git_sha() {
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=artifacts/mod.rs");
+    println!("cargo:rerun-if-changed=artifacts/source.json");
+
     define_icp_cli_version();
     define_git_sha();
+    artifacts::bundle_artifacts();
 }

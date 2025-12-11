@@ -1,2 +1,2 @@
-pub mod pocketic;
+pub mod launcher;
 pub mod run;

@@ -16,6 +16,7 @@ use crate::{
     version::{git_sha, icp_cli_version_str},
 };
 
+mod artifacts;
 mod commands;
 mod logging;
 pub(crate) mod operations;

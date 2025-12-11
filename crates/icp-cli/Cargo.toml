@@ -63,7 +63,6 @@ camino-tempfile = "1"
 indoc.workspace = true
 icp = { workspace = true }
 nix = { version = "0.30.1", features = ["process", "signal"] }
-pocket-ic.workspace = true
 predicates = "3"
 rand.workspace = true
 serde_yaml.workspace = true
@@ -72,3 +71,10 @@ uuid.workspace = true
 
 [lints]
 workspace = true
+
+[build-dependencies]
+hex.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

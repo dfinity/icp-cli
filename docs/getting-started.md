@@ -12,11 +12,11 @@ Before you begin, ensure you have the following installed:
 
 ### Required
 - **Rust**: Install using [rustup](https://rustup.rs/)
-- **dfx**: Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install)
+- **Network launcher**: Download and unzip the [icp-cli network launcher](https://github.com/dfinity/icp-cli-network-launcher/releases)
 
 ### Language-Specific Requirements
 - **For Rust canisters**: `rustup target add wasm32-unknown-unknown`
-- **For Motoko canisters**: Motoko compiler (`moc`) - included with dfx
+- **For Motoko canisters**: Motoko compiler (`moc`) - included with [dfx](https://internetcomputer.org/docs/building-apps/getting-started/install)
 
 ## Installation
 
@@ -42,13 +42,11 @@ icp help
 Configure the tools that ICP CLI depends on:
 
 ```bash
-# Ensure dfx is installed and cache is populated
-dfx cache install
-
-# Export path to pocket-ic for local network support
-export ICP_POCKET_IC_PATH="$(dfx cache show)/pocket-ic"
+# Export path to network launcher for local network support
+export ICP_CLI_NETWORK_LAUNCHER_PATH="path/to/the/icp-cli-network-launcher"
 
 # Add Motoko compiler to PATH (if building Motoko canisters)
+dfx cache install
 export PATH=$(dfx cache show):$PATH
 ```
 
@@ -226,8 +224,7 @@ Now that you have your first canister running, explore:
 
 **Network connection fails**
 - Verify `icp network run` is running in another terminal
-- Check that `ICP_POCKET_IC_PATH` is set correctly. It should point directly to your
-pocket-ic binary. You can download pocket-ic from [github](https://github.com/dfinity/pocketic/releases)
+- Check that `ICP_CLI_NETWORK_LAUNCHER_PATH` is set correctly. It should point directly to your icp-cli-network-launcher binary. You can download the launcher from [github](https://github.com/dfinity/icp-cli-network-launcher/releases)
 
 **Canister deployment fails**
 - Verify that the local network is healthy: `icp network ping`

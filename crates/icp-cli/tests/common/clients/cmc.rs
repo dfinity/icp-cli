@@ -1,32 +1,26 @@
 use candid::{Decode, Encode, Principal};
+use ic_agent::Agent;
 use icp_canister_interfaces::cycles_minting_canister::{
     CYCLES_MINTING_CANISTER_PRINCIPAL, GetDefaultSubnetsResponse,
 };
-use pocket_ic::nonblocking::PocketIc;
 
 use crate::common::TestContext;
 
-pub(crate) struct Client<'a> {
-    pic: &'a PocketIc,
+pub(crate) struct Client {
+    agent: Agent,
 }
 
-impl<'a> Client<'a> {
-    pub(crate) fn new(ctx: &'a TestContext) -> Self {
-        Self {
-            pic: ctx.pocketic(),
-        }
+impl Client {
+    pub(crate) fn new(ctx: &TestContext) -> Self {
+        Self { agent: ctx.agent() }
     }
 
     pub(crate) async fn get_default_subnets(&self) -> Vec<Principal> {
         let bytes = Encode!(&()).unwrap();
         let result = &self
-            .pic
-            .query_call(
-                CYCLES_MINTING_CANISTER_PRINCIPAL,
-                Principal::anonymous(),
-                "get_default_subnets",
-                bytes,
-            )
+            .agent
+            .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
+            .with_arg(bytes)
             .await
             .unwrap();
         Decode!(result, GetDefaultSubnetsResponse).unwrap()

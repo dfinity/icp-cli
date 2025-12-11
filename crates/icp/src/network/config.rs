@@ -1,4 +1,3 @@
-use candid::Principal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -19,11 +18,11 @@ pub struct NetworkDescriptorModel {
     pub network: String,
     pub network_dir: PathBuf,
     pub gateway: NetworkDescriptorGatewayPort,
-    pub default_effective_canister_id: Principal,
-    pub pocketic_url: String,
-    pub pocketic_instance_id: usize,
     pub pid: Option<u32>,
-    pub root_key: String,
+    #[serde(with = "hex::serde")]
+    pub root_key: Vec<u8>,
+    pub pocketic_config_port: Option<u16>,
+    pub pocketic_instance_id: Option<usize>,
 }
 
 impl NetworkDescriptorModel {

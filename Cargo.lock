@@ -3133,6 +3133,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "serial_test",
+ "sha2 0.10.9",
  "snafu",
  "sysinfo",
  "tiny-bip39 2.0.0",

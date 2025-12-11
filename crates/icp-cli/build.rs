@@ -1,4 +1,8 @@
+use std::env;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+
+mod artifacts;
 
 /// Gets a git tag with the least number of revs between HEAD of current branch and the tag,
 /// and combines is with SHA of the HEAD commit. Example of expected output: `0.12.0-beta.1-b9ace030`
@@ -89,4 +93,13 @@ fn define_git_sha() {
 fn main() {
     define_icp_cli_version();
     define_git_sha();
+
+    // Process artifacts: download and embed them
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
+
+    let artifacts_source_path = PathBuf::from(&manifest_dir).join("artifacts/source.json");
+    let output_dir = PathBuf::from(out_dir);
+
+    artifacts::process_artifacts(&artifacts_source_path, &output_dir);
 }

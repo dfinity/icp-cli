@@ -137,14 +137,12 @@ async fn run_network_launcher(
                 port: instance.gateway_port,
                 fixed: matches!(config.gateway.port, Port::Fixed(_)),
             };
-            let default_effective_canister_id = instance.effective_canister_id;
             let descriptor = NetworkDescriptorModel {
                 id: Uuid::new_v4(),
                 project_dir: project_root.to_path_buf(),
                 network: nd.network_name.to_owned(),
                 network_dir: root.root_dir().to_path_buf(),
                 gateway,
-                default_effective_canister_id,
                 pid: Some(child.id().unwrap()),
                 root_key: instance.root_key,
             };

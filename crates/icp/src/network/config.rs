@@ -1,4 +1,3 @@
-use candid::Principal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -19,7 +18,6 @@ pub struct NetworkDescriptorModel {
     pub network: String,
     pub network_dir: PathBuf,
     pub gateway: NetworkDescriptorGatewayPort,
-    pub default_effective_canister_id: Principal,
     pub pid: Option<u32>,
     pub root_key: String,
 }

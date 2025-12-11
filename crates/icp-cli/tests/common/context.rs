@@ -193,7 +193,6 @@ impl TestContext {
 
         let instance = NetworkInstance {
             gateway_port,
-            effective_canister_id: status.default_effective_canister_id,
             root_key: status.root_key,
         };
         // Initialize network instance
@@ -218,7 +217,6 @@ impl TestContext {
                 "port": instance.gateway_port,
                 "fixed": false
             },
-            "default-effective-canister-id": instance.effective_canister_id.to_string(),
             "pid": launcher_pid,
             "root-key": instance.root_key,
         });

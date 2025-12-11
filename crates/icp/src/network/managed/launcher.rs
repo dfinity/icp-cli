@@ -10,7 +10,6 @@ use crate::{network::Port, prelude::*};
 
 pub struct NetworkInstance {
     pub gateway_port: u16,
-    pub effective_canister_id: Principal,
     pub root_key: String,
 }
 
@@ -62,7 +61,6 @@ pub async fn spawn_network_launcher(
         child,
         NetworkInstance {
             gateway_port: launcher_status.gateway_port,
-            effective_canister_id: launcher_status.default_effective_canister_id,
             root_key: launcher_status.root_key,
         },
     )
@@ -170,11 +168,11 @@ pub enum WaitForLauncherStatusError {
 #[derive(Deserialize)]
 pub struct LauncherStatus {
     pub v: String,
-    pub instance_id: usize,
-    pub config_port: u16,
+    pub instance_id: Option<usize>,
+    pub config_port: Option<u16>,
     pub gateway_port: u16,
     pub root_key: String,
-    pub default_effective_canister_id: Principal,
+    pub default_effective_canister_id: Option<Principal>,
 }
 
 #[derive(Debug, Snafu)]

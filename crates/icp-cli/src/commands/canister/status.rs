@@ -1,5 +1,6 @@
+use anyhow::anyhow;
 use clap::Args;
-use ic_agent::export::Principal;
+use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
@@ -76,6 +77,73 @@ async fn get_principals(
     Ok(cids)
 }
 
+async fn read_state_tree_canister_controllers(
+    agent: &Agent,
+    cid: Principal,
+) -> Result<Option<Vec<Principal>>, anyhow::Error> {
+    let controllers = match agent.read_state_canister_controllers(cid).await {
+        Ok(controllers) => controllers,
+        Err(AgentError::LookupPathAbsent(_)) => {
+            return Ok(None);
+        }
+        Err(AgentError::InvalidCborData(_)) => {
+            return Err(anyhow!(
+                "Invalid cbor data in controllers canister info for canister {cid}"
+            ));
+        }
+        Err(e) => {
+            return Err(anyhow!(
+                "Error fetching controllers from the state tree for {cid}: {e}"
+            ));
+        }
+    };
+    Ok(Some(controllers))
+}
+
+/// None can indicate either of these, but we can't tell from here:
+/// - the canister doesn't exist
+/// - the canister exists but does not have a module installed
+async fn read_state_tree_canister_module_hash(
+    agent: &Agent,
+    cid: Principal,
+) -> Result<Option<Vec<u8>>, anyhow::Error> {
+    let module_hash = match agent.read_state_canister_module_hash(cid).await {
+        Ok(blob) => Some(blob),
+        Err(AgentError::LookupPathAbsent(_)) => None,
+        Err(e) => {
+            return Err(anyhow!(
+                "Error reading the module hash from the state tree for {cid}: {e}"
+            ));
+        }
+    };
+
+    Ok(module_hash)
+}
+
+async fn build_public_status(
+    agent: &Agent,
+    cid: Principal,
+) -> Result<PublicCanisterStatusResult, anyhow::Error> {
+    let controllers = match read_state_tree_canister_controllers(agent, cid).await? {
+        Some(controllers) => controllers.iter().map(|p| p.to_string()).collect(),
+        None => Vec::new(),
+    };
+    let module_hash = read_state_tree_canister_module_hash(agent, cid)
+        .await?
+        .map(|hash| {
+            format!(
+                "0x{}",
+                hash.iter().map(|b| format!("{b:02x}")).collect::<String>()
+            )
+        });
+
+    Ok(PublicCanisterStatusResult {
+        id: cid,
+        controllers,
+        module_hash,
+    })
+}
+
 pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow::Error> {
     struct Selection {
         environment: EnvironmentSelection,
@@ -116,18 +184,29 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     for cid in cids.iter() {
-        // Retrieve canister status from management canister
-        let (result,) = mgmt.canister_status(cid).await?;
-        let status = CliCanisterStatusResult {
-            id: cid.to_owned(),
-            status: SerializableCanisterStatusResult::from(&result),
-        };
-
-        let output = match args.json_format {
+        let output = match args.public {
             true => {
-                serde_json::to_string(&status).expect("Serializing status result to json failed")
+                // We construct the status out of the state tree
+                let status = build_public_status(&agent, cid.to_owned()).await?;
+
+                match args.json_format {
+                    true => serde_json::to_string(&status)
+                        .expect("Serializing status result to json failed"),
+                    false => build_public_output(&status)
+                        .expect("Failed to build canister status output"),
+                }
             }
-            false => build_output(&status).expect("Failed to build canister status output"),
+            false => {
+                // Retrieve canister status from management canister
+                let (result,) = mgmt.canister_status(cid).await?;
+                let status = SerializableCanisterStatusResult::from(cid.to_owned(), &result);
+
+                match args.json_format {
+                    true => serde_json::to_string(&status)
+                        .expect("Serializing status result to json failed"),
+                    false => build_output(&status).expect("Failed to build canister status output"),
+                }
+            }
         };
 
         ctx.term
@@ -139,16 +218,16 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 }
 
 #[derive(Serialize)]
-struct CliCanisterStatusResult {
+struct PublicCanisterStatusResult {
     id: Principal,
-
-    #[serde(flatten)]
-    status: SerializableCanisterStatusResult,
+    controllers: Vec<String>,
+    module_hash: Option<String>,
 }
 
 /// Serializable wrapper for CanisterStatusResult that converts Nat fields to String
 #[derive(Serialize)]
 struct SerializableCanisterStatusResult {
+    id: Principal,
     status: String,
     settings: SerializableCanisterSettings,
     module_hash: Option<String>,
@@ -189,8 +268,9 @@ struct SerializableQueryStats {
 }
 
 impl SerializableCanisterStatusResult {
-    fn from(result: &CanisterStatusResult) -> Self {
+    fn from(id: Principal, result: &CanisterStatusResult) -> Self {
         Self {
+            id,
             status: format!("{:?}", result.status),
             settings: SerializableCanisterSettings::from(&result.settings),
             module_hash: result.module_hash.as_ref().map(|hash| {
@@ -247,15 +327,29 @@ impl SerializableQueryStats {
     }
 }
 
-fn build_output(result: &CliCanisterStatusResult) -> Result<String, anyhow::Error> {
+fn build_public_output(result: &PublicCanisterStatusResult) -> Result<String, anyhow::Error> {
     let mut buf = String::new();
-    let status = &result.status;
+    writeln!(&mut buf, "Canister Id: {}", result.id)?;
+    writeln!(&mut buf, "Canister Status Report:")?;
+
+    writeln!(&mut buf, "  Controllers: {}", result.controllers.join(", "))?;
+    writeln!(
+        &mut buf,
+        "  Module hash: {}",
+        &result.module_hash.clone().unwrap_or("<none>".to_string())
+    )?;
+
+    Ok(buf)
+}
+
+fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, anyhow::Error> {
+    let mut buf = String::new();
 
     writeln!(&mut buf, "Canister Id: {}", result.id)?;
     writeln!(&mut buf, "Canister Status Report:")?;
-    writeln!(&mut buf, "  Status: {:?}", status.status)?;
+    writeln!(&mut buf, "  Status: {:?}", &result.status)?;
 
-    let settings = &status.settings;
+    let settings = &result.settings;
     writeln!(
         &mut buf,
         "  Controllers: {}",
@@ -321,19 +415,19 @@ fn build_output(result: &CliCanisterStatusResult) -> Result<String, anyhow::Erro
     writeln!(
         &mut buf,
         "  Module hash: {}",
-        status.module_hash.clone().unwrap_or("<none>".to_string())
+        &result.module_hash.clone().unwrap_or("<none>".to_string())
     )?;
 
-    writeln!(&mut buf, "  Memory size: {}", status.memory_size)?;
-    writeln!(&mut buf, "  Cycles: {}", status.cycles)?;
-    writeln!(&mut buf, "  Reserved cycles: {}", status.reserved_cycles)?;
+    writeln!(&mut buf, "  Memory size: {}", result.memory_size)?;
+    writeln!(&mut buf, "  Cycles: {}", result.cycles)?;
+    writeln!(&mut buf, "  Reserved cycles: {}", result.reserved_cycles)?;
     writeln!(
         &mut buf,
         "  Idle cycles burned per day: {}",
-        status.idle_cycles_burned_per_day
+        result.idle_cycles_burned_per_day
     )?;
 
-    let stats = &status.query_stats;
+    let stats = &result.query_stats;
     writeln!(&mut buf, "  Query stats:")?;
     writeln!(&mut buf, "    Calls: {}", stats.num_calls_total)?;
     writeln!(

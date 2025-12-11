@@ -34,7 +34,6 @@ notify = { workspace = true }
 p256 = { workspace = true }
 pem = { workspace = true }
 pkcs8 = { workspace = true }
-pocket-ic = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 schemars = { workspace = true }

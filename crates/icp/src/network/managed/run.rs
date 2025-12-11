@@ -78,7 +78,7 @@ pub enum RunNetworkError {
     LockFileError { source: LockError },
 
     #[snafu(transparent)]
-    RunPocketIc { source: RunPocketIcError },
+    RunNetworkLauncher { source: RunNetworkLauncherError },
 }
 
 async fn run_network_launcher(
@@ -88,11 +88,11 @@ async fn run_network_launcher(
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
     background: bool,
-) -> Result<(), RunPocketIcError> {
+) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
     // hold port_claim until the end of this function
     let (mut child, port, _port_claim) = network_root
-        .with_write(async |root| -> Result<_, RunPocketIcError> {
+        .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
             let port_lock = if let Port::Fixed(port) = &config.gateway.port {
                 Some(nd.port(*port)?.into_write().await?)
             } else {
@@ -145,8 +145,11 @@ async fn run_network_launcher(
                 network_dir: root.root_dir().to_path_buf(),
                 gateway,
                 default_effective_canister_id,
-                pocketic_config_url: instance.admin.base_url.to_string(),
-                pocketic_instance_id: instance.instance_id,
+                pocketic_config_url: format!(
+                    "http://localhost:{}/instances/{}/",
+                    instance.pocketic_config_port, instance.pocketic_instance_id
+                ),
+                pocketic_instance_id: instance.pocketic_instance_id,
                 pid: Some(child.id().unwrap()),
                 root_key: instance.root_key,
             };
@@ -189,7 +192,7 @@ fn send_sigint(pid: Pid) {
 }
 
 #[derive(Debug, Snafu)]
-pub enum RunPocketIcError {
+pub enum RunNetworkLauncherError {
     #[snafu(display("failed to create dir"))]
     CreateDirAll { source: crate::fs::IoError },
 

@@ -1,7 +1,6 @@
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::Watcher;
-use pocket_ic::common::rest::{CreateInstanceResponse, InstanceConfig, InstanceId, Topology};
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::prelude::*;
@@ -10,10 +9,10 @@ use tokio::process::Child;
 
 use crate::{network::Port, prelude::*};
 
-pub struct PocketIcInstance {
-    pub admin: PocketIcAdminInterface,
+pub struct NetworkInstance {
     pub gateway_port: u16,
-    pub instance_id: InstanceId,
+    pub pocketic_config_port: u16,
+    pub pocketic_instance_id: usize,
     pub effective_canister_id: Principal,
     pub root_key: String,
 }
@@ -25,7 +24,7 @@ pub async fn spawn_network_launcher(
     background: bool,
     port: &Port,
     state_dir: &Path,
-) -> (Child, PocketIcInstance) {
+) -> (Child, NetworkInstance) {
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
@@ -64,12 +63,10 @@ pub async fn spawn_network_launcher(
     );
     (
         child,
-        PocketIcInstance {
-            admin: PocketIcAdminInterface::new(
-                Url::parse(&format!("http://localhost:{}", launcher_status.config_port)).unwrap(),
-            ),
+        NetworkInstance {
+            pocketic_config_port: launcher_status.config_port,
             gateway_port: launcher_status.gateway_port,
-            instance_id: launcher_status.instance_id,
+            pocketic_instance_id: launcher_status.instance_id,
             effective_canister_id: launcher_status.default_effective_canister_id,
             root_key: launcher_status.root_key,
         },
@@ -186,45 +183,7 @@ pub struct LauncherStatus {
 }
 
 pub struct PocketIcAdminInterface {
-    client: reqwest::Client,
     pub base_url: Url,
-}
-
-impl PocketIcAdminInterface {
-    pub fn new(base_url: Url) -> Self {
-        let client = reqwest::Client::new();
-        Self { client, base_url }
-    }
-
-    fn post(&self, path: &str) -> reqwest::RequestBuilder {
-        self.client.post(self.base_url.join(path).unwrap())
-    }
-
-    pub async fn create_instance_with_config(
-        &self,
-        inst_cfg: InstanceConfig,
-    ) -> Result<(InstanceId, Topology), CreateInstanceError> {
-        // Perform request
-        let resp = self.post("/instances").json(&inst_cfg).send().await?;
-
-        // Check for replica errors
-        let resp = resp
-            .error_for_status()?
-            .json::<CreateInstanceResponse>()
-            .await?;
-
-        match resp {
-            CreateInstanceResponse::Created {
-                instance_id,
-                topology,
-                ..
-            } => Ok((instance_id, topology)),
-
-            CreateInstanceResponse::Error { message } => {
-                Err(CreateInstanceError::Create { message })
-            }
-        }
-    }
 }
 
 #[derive(Debug, Snafu)]

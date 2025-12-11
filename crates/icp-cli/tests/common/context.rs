@@ -8,14 +8,14 @@ use std::{
 use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
+use ic_agent::Agent;
 use icp::{
     network::managed::{
-        launcher::{PocketIcAdminInterface, PocketIcInstance, wait_for_launcher_status},
+        launcher::{NetworkInstance, wait_for_launcher_status},
         run::seed_instance,
     },
     prelude::*,
 };
-use pocket_ic::nonblocking::PocketIc;
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork};
@@ -24,7 +24,8 @@ pub(crate) struct TestContext {
     bin_dir: PathBuf,
     asset_dir: PathBuf,
     os_path: OsString,
-    pocketic: OnceCell<PocketIc>,
+    gateway_url: OnceCell<Url>,
+    root_key: OnceCell<String>,
 }
 
 impl TestContext {
@@ -50,7 +51,8 @@ impl TestContext {
             bin_dir,
             asset_dir,
             os_path,
-            pocketic: OnceCell::new(),
+            gateway_url: OnceCell::new(),
+            root_key: OnceCell::new(),
         }
     }
 
@@ -114,16 +116,16 @@ impl TestContext {
         // "icp network start" will wait for the local network to be healthy,
         // but for now we need to wait for the descriptor to be created.
         let network_descriptor = self.wait_for_network_descriptor(project_dir, name);
-        let pocketic = PocketIc::new_from_existing_instance(
-            network_descriptor.pocketic_url,
-            network_descriptor.pocketic_instance_id,
-            None,
-        );
-        self.pocketic
-            .set(pocketic)
-            .ok()
-            .expect("PocketIc should not be already initialized");
-
+        self.root_key
+            .set(network_descriptor.root_key.clone())
+            .expect("Root key should not be already initialized");
+        self.gateway_url
+            .set(
+                format!("http://localhost:{}", network_descriptor.gateway_port)
+                    .parse()
+                    .unwrap(),
+            )
+            .expect("Gateway URL should not be already initialized");
         child_guard
     }
 
@@ -189,12 +191,10 @@ impl TestContext {
         let gateway_port = status.gateway_port;
         eprintln!("Gateway started on port {gateway_port}");
 
-        let instance = PocketIcInstance {
-            admin: PocketIcAdminInterface::new(
-                Url::parse(&format!("http://localhost:{}/", status.config_port)).unwrap(),
-            ),
+        let instance = NetworkInstance {
             gateway_port,
-            instance_id: status.instance_id,
+            pocketic_config_port: status.config_port,
+            pocketic_instance_id: status.instance_id,
             effective_canister_id: status.default_effective_canister_id,
             root_key: status.root_key,
         };
@@ -221,8 +221,8 @@ impl TestContext {
                 "fixed": false
             },
             "default-effective-canister-id": instance.effective_canister_id.to_string(),
-            "pocketic-config-url": instance.admin.base_url,
-            "pocketic-instance-id": instance.instance_id,
+            "pocketic-config-url": format!("http://localhost:{}/instances/{}/", instance.pocketic_config_port, instance.pocketic_instance_id),
+            "pocketic-instance-id": instance.pocketic_instance_id,
             "pid": launcher_pid,
             "root-key": instance.root_key,
         });
@@ -232,17 +232,16 @@ impl TestContext {
         )
         .expect("Failed to write network descriptor");
 
-        // Connect PocketIc client
-        let pocketic = PocketIc::new_from_existing_instance(
-            instance.admin.base_url.clone(),
-            instance.instance_id,
-            None,
-        );
-        self.pocketic
-            .set(pocketic)
-            .ok()
-            .expect("PocketIc should not be already initialized");
-
+        self.root_key
+            .set(instance.root_key.clone())
+            .expect("Root key should not be already initialized");
+        self.gateway_url
+            .set(
+                format!("http://localhost:{}", instance.gateway_port)
+                    .parse()
+                    .unwrap(),
+            )
+            .expect("Gateway URL should not be already initialized");
         // Wrap child in ChildGuard
         ChildGuard { child }
     }
@@ -357,9 +356,12 @@ impl TestContext {
             .expect("Failed to write network descriptor file");
     }
 
-    pub(crate) fn pocketic(&self) -> &PocketIc {
-        self.pocketic
-            .get()
-            .expect("PocketIc instance not initialized")
+    pub(crate) fn agent(&self) -> Agent {
+        let agent = Agent::builder()
+            .with_url(self.gateway_url.get().unwrap().as_str())
+            .build()
+            .unwrap();
+        agent.set_root_key(hex::decode(self.root_key.get().unwrap()).unwrap());
+        agent
     }
 }

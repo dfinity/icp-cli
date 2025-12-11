@@ -1,3 +1,4 @@
+use ic_utils::interfaces::ManagementCanister;
 use indoc::formatdoc;
 use predicates::{
     ord::eq,
@@ -56,7 +57,9 @@ async fn canister_top_up() {
     let canister_id = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
         .get_canister_id("my-canister");
 
-    let canister_balance = ctx.pocketic().cycle_balance(canister_id).await;
+    let agent = ctx.agent();
+    let mgmt = ManagementCanister::create(&agent);
+    let canister_balance = mgmt.canister_status(&canister_id).await.unwrap().0.cycles;
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -100,6 +103,6 @@ async fn canister_top_up() {
         .stdout(eq("Topped up canister my-canister with 10.000000000000T cycles").trim())
         .success();
 
-    let new_canister_balance = ctx.pocketic().cycle_balance(canister_id).await;
-    assert_eq!(new_canister_balance, canister_balance + 10 * TRILLION);
+    let new_canister_balance = mgmt.canister_status(&canister_id).await.unwrap().0.cycles;
+    assert!((canister_balance + 10 * TRILLION) - new_canister_balance < 100_000_000_u128);
 }

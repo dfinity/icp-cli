@@ -1,21 +1,32 @@
-use crate::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::prelude::*;
+
+use crate::fs;
+use crate::prelude::*;
 
 pub(crate) mod adapter;
 pub(crate) mod canister;
 pub(crate) mod environment;
 pub(crate) mod network;
-pub mod project;
+pub(crate) mod project;
 pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
-pub use {canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest};
+pub use {
+    canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
+    project::ProjectManifest,
+};
 
 pub const PROJECT_MANIFEST: &str = "icp.yaml";
 pub const CANISTER_MANIFEST: &str = "canister.yaml";
 
+// A manifest item that can either be a path to another manifest file or the manifest itself.
+//
+// The valid path specifications are:
+// - CanisterManifest: path or glob pattern to the directory containing "canister.yaml"
+// - NetworkManifest: path to network manifest
+// - EnvironmentManifest: path to environment manifest
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {
@@ -90,4 +101,28 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
             return Ok(dir);
         }
     }
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadManifestFromPathError {
+    #[snafu(display("failed to read manifest from path"))]
+    Read { source: fs::IoError },
+
+    #[snafu(display("failed to parse manifest at '{path}'"))]
+    Parse {
+        source: serde_yaml::Error,
+        path: PathBuf,
+    },
+}
+
+/// Loads a manifest of type `T` from the specified file path.
+pub async fn load_manifest_from_path<T>(path: &Path) -> Result<T, LoadManifestFromPathError>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let content = fs::read(path).context(ReadSnafu)?;
+    let m = serde_yaml::from_slice::<T>(&content).context(ParseSnafu {
+        path: path.to_path_buf(),
+    })?;
+    Ok(m)
 }

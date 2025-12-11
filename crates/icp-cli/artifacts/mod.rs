@@ -66,21 +66,18 @@ fn get_or_download_artifact(name: &str, url: &str, expected_sha256: &str, cache_
     if cache_path.exists() {
         match compute_file_sha256(cache_path) {
             Ok(cached_hash) if cached_hash == expected_sha256 => {
-                println!(
-                    "cargo:warning=Using cached artifact '{}' (SHA256: {})",
-                    name, cached_hash
-                );
+                eprintln!("Using cached artifact '{}' (SHA256: {})", name, cached_hash);
                 return;
             }
             Ok(cached_hash) => {
-                println!(
-                    "cargo:warning=Cached artifact '{}' has mismatched SHA256 (expected: {}, got: {}), re-downloading",
+                eprintln!(
+                    "Cached artifact '{}' has mismatched SHA256 (expected: {}, got: {}), re-downloading",
                     name, expected_sha256, cached_hash
                 );
             }
             Err(e) => {
-                println!(
-                    "cargo:warning=Failed to read cached artifact '{}': {}, re-downloading",
+                eprintln!(
+                    "Failed to read cached artifact '{}': {}, re-downloading",
                     name, e
                 );
             }
@@ -88,10 +85,7 @@ fn get_or_download_artifact(name: &str, url: &str, expected_sha256: &str, cache_
     }
 
     // Download artifact
-    println!(
-        "cargo:warning=Downloading artifact '{}' from: {}",
-        name, url
-    );
+    eprintln!("Downloading artifact '{}' from: {}", name, url);
 
     let response = reqwest::blocking::get(url)
         .unwrap_or_else(|e| panic!("failed to download artifact from {}: {}", url, e));
@@ -133,8 +127,8 @@ fn get_or_download_artifact(name: &str, url: &str, expected_sha256: &str, cache_
         )
     });
 
-    println!(
-        "cargo:warning=Successfully downloaded and cached artifact '{}' (SHA256: {})",
+    eprintln!(
+        "Successfully downloaded and cached artifact '{}' (SHA256: {})",
         name, hash_hex
     );
 }
@@ -182,20 +176,14 @@ fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir:
     let artifacts_source: SourceFile = serde_json::from_str(&json_content)
         .unwrap_or_else(|e| panic!("failed to parse artifacts source JSON: {}", e));
 
-    println!(
-        "cargo:warning=Processing {} artifacts",
-        artifacts_source.artifacts.len()
-    );
+    eprintln!("Processing {} artifacts", artifacts_source.artifacts.len());
 
-    println!(
-        "cargo:warning=Using artifact cache directory: {}",
-        cache_dir.display()
-    );
+    eprintln!("Using artifact cache directory: {}", cache_dir.display());
 
     // Get or download all artifacts to cache
     let mut artifact_names = Vec::new();
     for (name, source) in &artifacts_source.artifacts {
-        println!("cargo:warning=Processing artifact: {}", name);
+        eprintln!("Processing artifact: {}", name);
         let cache_file = cache_dir.join(format!("{}.bin", name));
         get_or_download_artifact(name, &source.url, &source.sha256, &cache_file);
         artifact_names.push(name.clone());
@@ -222,10 +210,7 @@ fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir:
             )
         });
 
-    println!(
-        "cargo:warning=Generated artifacts code at: {}",
-        output_path.display()
-    );
+    eprintln!("Generated artifacts code at: {}", output_path.display());
 }
 
 /// High-level function to bundle artifacts during build.

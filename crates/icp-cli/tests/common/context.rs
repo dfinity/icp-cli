@@ -194,6 +194,8 @@ impl TestContext {
         let instance = NetworkInstance {
             gateway_port,
             root_key: hex::decode(&status.root_key).unwrap(),
+            pocketic_config_port: status.config_port,
+            pocketic_instance_id: status.instance_id,
         };
         // Initialize network instance
         seed_instance(

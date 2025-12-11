@@ -21,6 +21,8 @@ pub struct NetworkDescriptorModel {
     pub pid: Option<u32>,
     #[serde(with = "hex::serde")]
     pub root_key: Vec<u8>,
+    pub pocketic_config_port: Option<u16>,
+    pub pocketic_instance_id: Option<usize>,
 }
 
 impl NetworkDescriptorModel {

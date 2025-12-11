@@ -145,6 +145,8 @@ async fn run_network_launcher(
                 gateway,
                 pid: Some(child.id().unwrap()),
                 root_key: instance.root_key,
+                pocketic_config_port: instance.pocketic_config_port,
+                pocketic_instance_id: instance.pocketic_instance_id,
             };
 
             save_network_descriptors(

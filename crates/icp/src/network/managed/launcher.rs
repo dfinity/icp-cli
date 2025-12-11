@@ -11,6 +11,8 @@ use crate::{network::Port, prelude::*};
 pub struct NetworkInstance {
     pub gateway_port: u16,
     pub root_key: Vec<u8>,
+    pub pocketic_config_port: Option<u16>,
+    pub pocketic_instance_id: Option<usize>,
 }
 
 pub async fn spawn_network_launcher(
@@ -62,6 +64,8 @@ pub async fn spawn_network_launcher(
         NetworkInstance {
             gateway_port: launcher_status.gateway_port,
             root_key: hex::decode(&launcher_status.root_key).unwrap(),
+            pocketic_config_port: launcher_status.config_port,
+            pocketic_instance_id: launcher_status.instance_id,
         },
     )
 }

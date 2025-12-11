@@ -171,8 +171,6 @@ fn generate_artifacts_code(artifact_names: &[String], cache_dir: &Path) -> Strin
 
 /// Main function to process artifacts: download them and generate Rust code
 fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir: &Path) {
-    println!("cargo:rerun-if-changed={}", artifacts_source_path.display());
-
     // Read the artifacts source JSON file
     let json_content = fs::read_to_string(artifacts_source_path).unwrap_or_else(|e| {
         panic!(
@@ -231,7 +229,7 @@ fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir:
 }
 
 /// High-level function to bundle artifacts during build.
-/// 
+///
 /// This reads environment variables to determine paths and calls `process_artifacts`.
 pub fn bundle_artifacts() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
@@ -239,7 +237,7 @@ pub fn bundle_artifacts() {
 
     let artifacts_source_path = PathBuf::from(&manifest_dir).join("artifacts/source.json");
     let output_dir = PathBuf::from(out_dir);
-    
+
     // Cache directory is at workspace root target/icp-cli-artifact-cache
     // manifest_dir is at crates/icp-cli, so go up 2 levels to workspace root
     let cache_dir = PathBuf::from(&manifest_dir)

@@ -1,15 +1,11 @@
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::Watcher;
-use pocket_ic::common::rest::{
-    AutoProgressConfig, CreateHttpGatewayResponse, CreateInstanceResponse, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, InstanceConfig, InstanceId, RawTime, Topology,
-};
+use pocket_ic::common::rest::{CreateInstanceResponse, InstanceConfig, InstanceId, Topology};
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio};
-use time::OffsetDateTime;
 use tokio::process::Child;
 
 use crate::{network::Port, prelude::*};
@@ -227,63 +223,6 @@ impl PocketIcAdminInterface {
             CreateInstanceResponse::Error { message } => {
                 Err(CreateInstanceError::Create { message })
             }
-        }
-    }
-
-    pub(crate) async fn set_time(&self, instance_id: InstanceId) -> Result<(), reqwest::Error> {
-        self.post(&format!("/instances/{instance_id}/update/set_time"))
-            .json(&RawTime {
-                nanos_since_epoch: OffsetDateTime::now_utc()
-                    .unix_timestamp_nanos()
-                    .try_into()
-                    .unwrap(),
-            })
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(())
-    }
-
-    pub(crate) async fn auto_progress(
-        &self,
-        instance_id: InstanceId,
-        artificial_delay: i32,
-    ) -> Result<(), reqwest::Error> {
-        self.post(&format!("/instances/{instance_id}/auto_progress"))
-            .json(&AutoProgressConfig {
-                artificial_delay_ms: Some(artificial_delay as u64),
-            })
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(())
-    }
-
-    pub(crate) async fn create_http_gateway(
-        &self,
-        forward_to: HttpGatewayBackend,
-        port: Option<u16>,
-    ) -> Result<HttpGatewayInfo, CreateHttpGatewayError> {
-        let resp = self
-            .post("/http_gateway")
-            .json(&HttpGatewayConfig {
-                ip_addr: None,
-                port,
-                forward_to,
-                domains: None,
-                https_config: None,
-            })
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<CreateHttpGatewayResponse>()
-            .await?;
-
-        match resp {
-            CreateHttpGatewayResponse::Error { message } => {
-                Err(CreateHttpGatewayError::Create { message })
-            }
-            CreateHttpGatewayResponse::Created(info) => Ok(info),
         }
     }
 }

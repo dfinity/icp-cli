@@ -1,25 +1,30 @@
-use candid::Principal;
+use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
-use ic_agent::{Agent, AgentError, agent::status::Status};
+use ic_agent::{
+    Agent, AgentError, Identity,
+    agent::status::Status,
+    identity::{AnonymousIdentity, Secp256k1Identity},
+};
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
 use icp_canister_interfaces::{
-    cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
+    cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL},
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
         NotifyMintArgs, NotifyMintResponse,
     },
-    governance::GOVERNANCE_PRINCIPAL,
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
-use pocket_ic::{
-    common::rest::{HttpGatewayBackend, InstanceConfig, RawEffectivePrincipal},
-    nonblocking::{PocketIc, call_candid, call_candid_as},
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{TransferArg, TransferError},
 };
-use reqwest::Url;
+use k256::SecretKey;
+use rand::{RngCore, rng};
 use snafu::prelude::*;
 use std::{env::var, io::Write, process::ExitStatus, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -29,10 +34,7 @@ use crate::{
         RunNetworkError::NoLauncherPath,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
-        managed::launcher::{
-            CreateHttpGatewayError, CreateInstanceError, PocketIcAdminInterface, PocketIcInstance,
-            spawn_network_launcher,
-        },
+        managed::launcher::{CreateHttpGatewayError, CreateInstanceError, spawn_network_launcher},
     },
     prelude::*,
 };
@@ -123,7 +125,14 @@ async fn run_network_launcher(
                 eprintln!("Network started on port {}", instance.gateway_port);
             }
 
-            seed_instance(&instance, seed_accounts).await?;
+            seed_instance(
+                &format!("http://localhost:{}", instance.gateway_port)
+                    .parse()
+                    .unwrap(),
+                &hex::decode(&instance.root_key).unwrap(),
+                seed_accounts,
+            )
+            .await?;
             let gateway = NetworkDescriptorGatewayPort {
                 port: instance.gateway_port,
                 fixed: matches!(config.gateway.port, Port::Fixed(_)),
@@ -267,104 +276,31 @@ pub enum WaitForPortError {
     ChildExited { source: ChildExitError },
 }
 
-pub async fn initialize_instance(
-    pocketic_config_port: u16,
-    instance_config: InstanceConfig,
-    gateway_port: Option<u16>,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
-) -> Result<PocketIcInstance, InitializePocketicError> {
-    let pic_url = format!("http://localhost:{pocketic_config_port}")
-        .parse::<Url>()
-        .unwrap();
-    let pic = PocketIcAdminInterface::new(pic_url.clone());
-
-    eprintln!("Initializing PocketIC instance");
-    let (instance_id, topology) = pic.create_instance_with_config(instance_config).await?;
-    let default_effective_canister_id = topology.default_effective_canister_id;
-    eprintln!("Created instance with id {instance_id}");
-
-    eprintln!("Setting time");
-    pic.set_time(instance_id).await?;
-
-    eprintln!("Setting auto-progress");
-    let artificial_delay = 600;
-    pic.auto_progress(instance_id, artificial_delay).await?;
-
-    eprintln!("Seeding ICP and TCYCLES account balances");
-    let pocket_ic_client = PocketIc::new_from_existing_instance(pic_url.clone(), instance_id, None);
-    let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&pocket_ic_client).await?;
-    let seed_icp = join_all(
-        seed_accounts
-            .clone()
-            .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic
-            .map(|account| mint_icp_to_account(&pocket_ic_client, account, 100_000_000_000_000u64)),
-    );
-    let seed_cycles = join_all(seed_accounts.map(|account| {
-        mint_cycles_to_account(
-            &pocket_ic_client,
-            account,
-            1_000_000_000_000_000u128, // 1k TCYCLES
-            icp_xdr_conversion_rate,
-        )
-    }));
-    let (seed_icp_results, seed_cycles_results) = join(seed_icp, seed_cycles).await;
-    seed_icp_results
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-    seed_cycles_results
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let gateway_info = pic
-        .create_http_gateway(
-            HttpGatewayBackend::PocketIcInstance(instance_id),
-            gateway_port,
-        )
-        .await?;
-    eprintln!(
-        "Created HTTP gateway instance={} port={}",
-        gateway_info.instance_id, gateway_info.port
-    );
-
-    let agent_url = format!("http://localhost:{}", gateway_info.port);
-    eprintln!("Agent url is {agent_url}");
-    let status = ping_and_wait(&agent_url).await?;
-
-    let root_key = status.root_key.ok_or(InitializePocketicError::NoRootKey)?;
-    let root_key = hex::encode(root_key);
-    eprintln!("Root key: {root_key}");
-
-    let props = PocketIcInstance {
-        admin: pic,
-        gateway_port: gateway_info.port,
-        instance_id,
-        effective_canister_id: default_effective_canister_id.into(),
-        root_key,
-    };
-    Ok(props)
-}
-
 pub async fn seed_instance(
-    instance: &PocketIcInstance,
+    gateway_url: &Url,
+    root_key: &[u8],
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
 ) -> Result<(), InitializePocketicError> {
     eprintln!("Seeding ICP and TCYCLES account balances");
-    let pocket_ic_client = PocketIc::new_from_existing_instance(
-        instance.admin.base_url.clone(),
-        instance.instance_id,
-        None,
-    );
-    let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&pocket_ic_client).await?;
+    let agent = Agent::builder()
+        .with_url(gateway_url.as_str())
+        .with_identity(AnonymousIdentity)
+        .build()
+        .context(BuildAgentSnafu {
+            url: gateway_url.as_str(),
+        })?;
+    agent.set_root_key(root_key.to_vec());
+    let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&agent).await?;
     let seed_icp = join_all(
         seed_accounts
             .clone()
             .into_iter()
             .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic
-            .map(|account| mint_icp_to_account(&pocket_ic_client, account, 100_000_000_000_000u64)),
+            .map(|account| acquire_icp_to_account(&agent, account, 100_000_000_000_000u64)),
     );
     let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
         mint_cycles_to_account(
-            &pocket_ic_client,
+            &agent,
             account,
             1_000_000_000_000_000u128, // 1k TCYCLES
             icp_xdr_conversion_rate,
@@ -402,119 +338,165 @@ pub enum InitializePocketicError {
 }
 
 async fn mint_cycles_to_account(
-    pic: &PocketIc,
+    agent: &Agent,
     account: Principal,
     amount: u128,
     icp_xdr_conversion_rate: u64,
 ) -> Result<(), InitializePocketicError> {
+    // First withdraw to a different account because notify_mint_cycles will fail if the depositing transaction is a mint TX
+    let mut tmp_key = [0_u8; 32];
+    rng().fill_bytes(&mut tmp_key);
+    let tmp_identity =
+        Secp256k1Identity::from_private_key(SecretKey::from_bytes(&tmp_key.into()).unwrap());
+    // one ICP ledger fee to acquire, one to transfer to CMC,
+    // one cycles ledger fee to mint, one to transfer back
     let icp_to_convert =
-        (amount + CYCLES_LEDGER_BLOCK_FEE).div_ceil(icp_xdr_conversion_rate as u128) as u64;
-    // First mint to the non-CMC account because notify_mint_cycles will fail if the depositing transaction is a mint TX
-    mint_icp_to_account(pic, account, icp_to_convert + ICP_LEDGER_BLOCK_FEE_E8S).await?;
-    // Then transfer to the CMC account
-    let (transfer_result,): (TransferResult,) = call_candid_as(
-        pic,
-        ICP_LEDGER_PRINCIPAL,
-        RawEffectivePrincipal::None,
-        account,
-        "transfer",
-        (TransferArgs {
-            memo: Memo(MEMO_MINT_CYCLES),
-            amount: Tokens::from_e8s(icp_to_convert),
-            fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
-            from_subaccount: None,
-            to: AccountIdentifier::new(
-                &CYCLES_MINTING_CANISTER_PRINCIPAL,
-                &Subaccount::from(account),
-            ),
-            created_at_time: None,
-        },),
+        (amount + CYCLES_LEDGER_BLOCK_FEE * 2).div_ceil(icp_xdr_conversion_rate as u128) as u64;
+    acquire_icp_to_account(
+        agent,
+        tmp_identity.sender().unwrap(),
+        icp_to_convert + ICP_LEDGER_BLOCK_FEE_E8S * 2,
     )
-    .await
-    .map_err(|err| InitializePocketicError::SeedTokens {
-        error: format!("Failed to decode transfer ICP to CMC response: {err}"),
+    .await?;
+    // Then transfer to the CMC account
+    let mut tmp_agent = agent.clone();
+    tmp_agent.set_identity(tmp_identity.clone());
+    let transfer_result = tmp_agent
+        .update(&ICP_LEDGER_PRINCIPAL, "transfer")
+        .with_arg(
+            Encode!(&TransferArgs {
+                memo: Memo(MEMO_MINT_CYCLES),
+                amount: Tokens::from_e8s(icp_to_convert),
+                fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
+                from_subaccount: None,
+                to: AccountIdentifier::new(
+                    &CYCLES_MINTING_CANISTER_PRINCIPAL,
+                    &Subaccount::from(tmp_identity.sender().unwrap()),
+                ),
+                created_at_time: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|err| InitializePocketicError::SeedTokens {
+            error: format!("Failed to send transfer ICP to CMC request: {err}"),
+        })?;
+    let transfer_result = Decode!(&transfer_result, TransferResult).map_err(|err| {
+        InitializePocketicError::SeedTokens {
+            error: format!("Failed to decode transfer ICP to CMC response: {err}"),
+        }
     })?;
     let block_index = transfer_result.map_err(|err| InitializePocketicError::SeedTokens {
         error: format!("Failed to transfer ICP to CMC: {err}"),
     })?;
 
-    let mint_result: (NotifyMintResponse,) = call_candid_as(
-        pic,
-        CYCLES_MINTING_CANISTER_PRINCIPAL,
-        RawEffectivePrincipal::None,
-        account,
-        "notify_mint_cycles",
-        (NotifyMintArgs {
-            block_index,
-            deposit_memo: None,
-            to_subaccount: None,
-        },),
-    )
-    .await
-    .map_err(|err| InitializePocketicError::SeedTokens {
-        error: format!("Failed to decode notify mint cycles response: {err}"),
+    let mint_result = tmp_agent
+        .update(&CYCLES_MINTING_CANISTER_PRINCIPAL, "notify_mint_cycles")
+        .with_arg(
+            Encode!(&NotifyMintArgs {
+                block_index,
+                deposit_memo: None,
+                to_subaccount: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|err| InitializePocketicError::SeedTokens {
+            error: format!("Failed to send notify mint cycles request: {err}"),
+        })?;
+    let mint_result = Decode!(&mint_result, NotifyMintResponse).map_err(|err| {
+        InitializePocketicError::SeedTokens {
+            error: format!("Failed to decode notify mint cycles response: {err}"),
+        }
     })?;
-    if let NotifyMintResponse::Err(err) = mint_result.0 {
-        eprintln!("Failed to notify mint cycles: {err:?}");
+    if let NotifyMintResponse::Err(err) = mint_result {
         return SeedTokensSnafu {
             error: format!("Failed to notify mint cycles: {err:?}"),
         }
         .fail();
     }
+    let response = tmp_agent
+        .update(&CYCLES_LEDGER_PRINCIPAL, "icrc1_transfer")
+        .with_arg(
+            Encode!(&TransferArg {
+                to: Account {
+                    owner: account,
+                    subaccount: None
+                },
+                amount: amount.into(),
+                memo: None,
+                fee: Some(CYCLES_LEDGER_BLOCK_FEE.into()),
+                from_subaccount: None,
+                created_at_time: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|err| InitializePocketicError::SeedTokens {
+            error: format!("Failed to send cycles ledger transfer request: {err}"),
+        })?;
 
-    if let NotifyMintResponse::Ok(ok) = mint_result.0 {
-        eprintln!("Minted {} cycles to account {}", ok.minted, account);
-    }
-
+    let response = Decode!(&response, Result<Nat, TransferError>).map_err(|err| {
+        InitializePocketicError::SeedTokens {
+            error: format!("Failed to decode cycles ledger transfer response: {err}"),
+        }
+    })?;
+    response.map_err(|err| InitializePocketicError::SeedTokens {
+        error: format!("Failed to transfer cycles: {err}"),
+    })?;
     Ok(())
 }
 
-async fn mint_icp_to_account(
-    pic: &PocketIc,
+async fn acquire_icp_to_account(
+    agent: &Agent,
     account: Principal,
     amount: u64,
 ) -> Result<(), InitializePocketicError> {
-    let response: (TransferResult,) = call_candid_as(
-        pic,
-        ICP_LEDGER_PRINCIPAL,
-        RawEffectivePrincipal::None,
-        GOVERNANCE_PRINCIPAL, // Governance with no subaccount is configured as the minter on the ICP ledger
-        "transfer",
-        (TransferArgs {
-            memo: Memo(0),
-            amount: Tokens::from_e8s(amount),
-            fee: Tokens::from_e8s(0), // mints are free
-            from_subaccount: None,
-            to: AccountIdentifier::new(&account, &Subaccount([0u8; 32])),
-            created_at_time: None,
-        },),
-    )
-    .await
-    .map_err(|err| InitializePocketicError::SeedTokens {
-        error: format!("Failed to decode ICP mint response: {err}"),
-    })?;
-    response
-        .0
+    let response = agent
+        .update(&ICP_LEDGER_PRINCIPAL, "transfer")
+        .with_arg(
+            Encode!(&TransferArgs {
+                memo: Memo(0),
+                amount: Tokens::from_e8s(amount),
+                fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
+                from_subaccount: None,
+                to: AccountIdentifier::new(&account, &Subaccount([0u8; 32])),
+                created_at_time: None,
+            })
+            .unwrap(),
+        )
+        .await
         .map_err(|err| InitializePocketicError::SeedTokens {
-            error: format!("Failed to mint ICP: {err}"),
+            error: format!("Failed to send ICP transfer request: {err}"),
         })?;
+    let response =
+        Decode!(&response, TransferResult).map_err(|err| InitializePocketicError::SeedTokens {
+            error: format!("Failed to decode ICP transfer response: {err}"),
+        })?;
+    response.map_err(|err| InitializePocketicError::SeedTokens {
+        error: format!("Failed to transfer ICP: {err}"),
+    })?;
     eprintln!("Minted {amount} ICP to account {account}");
     Ok(())
 }
 
-async fn get_icp_xdr_conversion_rate(pic: &PocketIc) -> Result<u64, InitializePocketicError> {
-    let response: (ConversionRateResponse,) = call_candid(
-        pic,
-        CYCLES_MINTING_CANISTER_PRINCIPAL,
-        RawEffectivePrincipal::None,
-        "get_icp_xdr_conversion_rate",
-        ((),),
-    )
-    .await
-    .map_err(|e| InitializePocketicError::SeedTokens {
-        error: format!("Failed to get ICP XDR conversion rate: {e}"),
+async fn get_icp_xdr_conversion_rate(agent: &Agent) -> Result<u64, InitializePocketicError> {
+    let response = agent
+        .update(
+            &CYCLES_MINTING_CANISTER_PRINCIPAL,
+            "get_icp_xdr_conversion_rate",
+        )
+        .with_arg(Encode!().unwrap())
+        .await
+        .map_err(|e| InitializePocketicError::SeedTokens {
+            error: format!("Failed to get ICP XDR conversion rate: {e}"),
+        })?;
+    let response = Decode!(&response, ConversionRateResponse).map_err(|e| {
+        InitializePocketicError::SeedTokens {
+            error: format!("Failed to decode ICP XDR conversion rate response: {e}"),
+        }
     })?;
-    Ok(response.0.data.xdr_permyriad_per_icp)
+    Ok(response.data.xdr_permyriad_per_icp)
 }
 
 pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {

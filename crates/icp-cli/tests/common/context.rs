@@ -200,7 +200,10 @@ impl TestContext {
         };
         // Initialize PocketIC instance with custom config
         seed_instance(
-            &instance,
+            &format!("http://localhost:{}", instance.gateway_port)
+                .parse()
+                .unwrap(),
+            &hex::decode(&instance.root_key).unwrap(),
             [Principal::anonymous()], // Seed anonymous account only for tests
         )
         .await

@@ -130,7 +130,7 @@ mod tests {
                     name: my-network
                     mode: connected
                     url: https://ic0.app
-                    root-key: the-key
+                    root-key: deadbeef
                 "#}),
             NetworkManifest {
                 name: "my-network".to_string(),

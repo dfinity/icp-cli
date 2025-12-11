@@ -94,14 +94,14 @@ fn get_or_download_artifact(name: &str, url: &str, expected_sha256: &str, cache_
     );
 
     let response = reqwest::blocking::get(url)
-        .unwrap_or_else(|e| panic!("Failed to download artifact from {}: {}", url, e));
+        .unwrap_or_else(|e| panic!("failed to download artifact from {}: {}", url, e));
     if !response.status().is_success() {
-        panic!("Failed to download artifact: HTTP {}", response.status());
+        panic!("failed to download artifact: HTTP {}", response.status());
     }
 
     let bytes = response
         .bytes()
-        .unwrap_or_else(|e| panic!("Failed to read response bytes: {}", e))
+        .unwrap_or_else(|e| panic!("failed to read response bytes: {}", e))
         .to_vec();
 
     // Verify SHA256
@@ -118,7 +118,7 @@ fn get_or_download_artifact(name: &str, url: &str, expected_sha256: &str, cache_
     if let Some(parent) = cache_path.parent() {
         fs::create_dir_all(parent).unwrap_or_else(|e| {
             panic!(
-                "Failed to create cache directory {}: {}",
+                "failed to create cache directory {}: {}",
                 parent.display(),
                 e
             )
@@ -127,7 +127,7 @@ fn get_or_download_artifact(name: &str, url: &str, expected_sha256: &str, cache_
 
     fs::write(cache_path, &bytes).unwrap_or_else(|e| {
         panic!(
-            "Failed to write to cache file {}: {}",
+            "failed to write to cache file {}: {}",
             cache_path.display(),
             e
         )
@@ -152,7 +152,7 @@ fn generate_artifacts_code(artifact_names: &[String], cache_dir: &Path) -> Strin
         let artifact_path = cache_dir.join(&artifact_filename);
         let artifact_path_str = artifact_path.to_str().unwrap_or_else(|| {
             panic!(
-                "Cache path contains invalid UTF-8: {}",
+                "cache path contains invalid UTF-8: {}",
                 artifact_path.display()
             )
         });
@@ -176,13 +176,13 @@ fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir:
     // Read the artifacts source JSON file
     let json_content = fs::read_to_string(artifacts_source_path).unwrap_or_else(|e| {
         panic!(
-            "Failed to read artifacts source file {}: {}",
+            "failed to read artifacts source file {}: {}",
             artifacts_source_path.display(),
             e
         )
     });
     let artifacts_source: SourceFile = serde_json::from_str(&json_content)
-        .unwrap_or_else(|e| panic!("Failed to parse artifacts source JSON: {}", e));
+        .unwrap_or_else(|e| panic!("failed to parse artifacts source JSON: {}", e));
 
     println!(
         "cargo:warning=Processing {} artifacts",
@@ -210,7 +210,7 @@ fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir:
     let output_path = output_dir.join("artifacts.rs");
     let mut file = fs::File::create(&output_path).unwrap_or_else(|e| {
         panic!(
-            "Failed to create output file {}: {}",
+            "failed to create output file {}: {}",
             output_path.display(),
             e
         )
@@ -218,7 +218,7 @@ fn process_artifacts(artifacts_source_path: &Path, output_dir: &Path, cache_dir:
     file.write_all(generated_code.as_bytes())
         .unwrap_or_else(|e| {
             panic!(
-                "Failed to write to output file {}: {}",
+                "failed to write to output file {}: {}",
                 output_path.display(),
                 e
             )
@@ -245,7 +245,7 @@ pub fn bundle_artifacts() {
     let cache_dir = PathBuf::from(&manifest_dir)
         .parent()
         .and_then(|p| p.parent())
-        .expect("Failed to find workspace root")
+        .expect("failed to find workspace root")
         .join("target/icp-cli-artifact-cache");
 
     process_artifacts(&artifacts_source_path, &output_dir, &cache_dir);

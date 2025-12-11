@@ -29,10 +29,11 @@ pub struct Connected {
     pub url: String,
 
     /// The root key of this network
+    #[schemars(with = "Option<String>", regex(pattern = "^[0-9a-f]{64}$"))]
     pub root_key: Option<RootKey>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(try_from = "String", into = "String")]
 pub struct RootKey(pub Vec<u8>);
 

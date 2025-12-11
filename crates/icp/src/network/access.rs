@@ -2,10 +2,7 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
 
 use crate::{
-    network::{
-        Connected, NetworkDirectory, access::GetNetworkAccessError::DecodeRootKey,
-        directory::LoadNetworkFileError,
-    },
+    network::{Connected, NetworkDirectory, directory::LoadNetworkFileError},
     prelude::*,
 };
 
@@ -35,9 +32,6 @@ impl NetworkAccess {
 
 #[derive(Debug, Snafu)]
 pub enum GetNetworkAccessError {
-    #[snafu(display("failed to decode root key"))]
-    DecodeRootKey { source: hex::FromHexError },
-
     #[snafu(display("failed to load port {port} descriptor"))]
     LoadPortDescriptor {
         port: u16,

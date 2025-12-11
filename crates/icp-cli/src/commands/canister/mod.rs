@@ -3,11 +3,9 @@ use clap::Subcommand;
 pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;
-pub(crate) mod info;
 pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod settings;
-pub(crate) mod show;
 pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
@@ -25,9 +23,6 @@ pub(crate) enum Command {
     /// Delete a canister from a network
     Delete(delete::DeleteArgs),
 
-    /// Display a canister's information
-    Info(info::InfoArgs),
-
     /// Install a built WASM to a canister on a network
     Install(install::InstallArgs),
 
@@ -38,13 +33,14 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Settings(settings::Command),
 
-    /// Show a canister's details
-    Show(show::ShowArgs),
-
     /// Start a canister on a network
     Start(start::StartArgs),
 
-    /// Show the status of a canister
+    /// Show the status of canister(s).
+    ///
+    /// By default this queries the status endpoint of the management canister.
+    /// If the caller is not a controller, falls back on fetching public
+    /// information from the state tree.
     Status(status::StatusArgs),
 
     /// Stop a canister on a network

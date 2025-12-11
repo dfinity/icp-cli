@@ -100,6 +100,14 @@ fn main() {
 
     let artifacts_source_path = PathBuf::from(&manifest_dir).join("artifacts/source.json");
     let output_dir = PathBuf::from(out_dir);
+    
+    // Cache directory is at workspace root target/icp-cli-artifact-cache
+    // manifest_dir is at crates/icp-cli, so go up 2 levels to workspace root
+    let cache_dir = PathBuf::from(&manifest_dir)
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("Failed to find workspace root")
+        .join("target/icp-cli-artifact-cache");
 
-    artifacts::process_artifacts(&artifacts_source_path, &output_dir);
+    artifacts::process_artifacts(&artifacts_source_path, &output_dir, &cache_dir);
 }

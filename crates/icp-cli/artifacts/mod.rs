@@ -32,6 +32,9 @@
 //!
 //! Note: Hyphens in artifact names become underscores in function names.
 
+// It's okay to use std::path::{Path, PathBuf} in build scripts.
+#![allow(clippy::disallowed_types)]
+
 use std::collections::HashMap;
 use std::env;
 use std::fs;

@@ -234,7 +234,11 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 
                         if reject.error_code.as_deref() != Some(E_NOT_A_CONTROLLER) {
                             // We don't know this error code
-                            bail!("Error looking up canister {cid}: {:?}", reject.error_code);
+                            bail!(
+                                "Error looking up canister {cid}: {:?} - {}",
+                                reject.error_code,
+                                reject.reject_message
+                            );
                         }
 
                         // We got E_NOT_A_CONTROLLER so we fallback on fetching the public status

@@ -1,7 +1,9 @@
 # Unreleased
 
-feat!: Switch to using icp-cli-network-launcher instead of pocket-ic directly. Download it [here](https://github.com/dfinity/icp-cli-network-launcher/releases)
-feat: Introduce `new` command to create projects (#219)
+# v0.1.0-beta.1
+
+* feat!: Switch to using icp-cli-network-launcher instead of pocket-ic directly. Download it [here](https://github.com/dfinity/icp-cli-network-launcher/releases).
+* feat!: Introduce `new` command to create projects from templates (#219)
 
 # v0.1.0-beta.0
 

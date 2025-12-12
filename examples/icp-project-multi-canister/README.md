@@ -11,7 +11,7 @@ This project consists of two canisters, `canister-1` and `canister-2`, which are
 First, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canisters:

@@ -16,7 +16,7 @@ To try any example:
 
 2. **Start local network** (in separate terminal):
    ```bash
-   icp network run
+   icp network start
    ```
 
 3. **Deploy the canister**:

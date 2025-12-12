@@ -635,7 +635,7 @@ Run a given network
 
 ###### **Options:**
 
-* `--background` — Starts the network in a background process. This command will exit once the network is running. To stop the network, use 'icp network stop'
+* `-d`, `--background` — Starts the network in a background process. This command will exit once the network is running. To stop the network, use 'icp network stop'
 
 
 

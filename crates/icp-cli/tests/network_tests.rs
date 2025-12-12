@@ -58,10 +58,10 @@ fn network_same_port() {
     eprintln!("wait for network A healthy");
     ctx.ping_until_healthy(&project_dir_a, "my-network");
 
-    eprintln!("second network run attempt in another project");
+    eprintln!("second network start attempt in another project");
     ctx.icp()
         .current_dir(&project_dir_b)
-        .args(["network", "run", "my-network"])
+        .args(["network", "start", "my-network"])
         .assert()
         .failure()
         .stderr(contains(format!(
@@ -310,7 +310,7 @@ async fn network_run_and_stop_background() {
     // Start network in background and verify we can see child process output
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "run", "my-network", "--background"])
+        .args(["network", "start", "my-network", "--background"])
         .assert()
         .success()
         .stderr(contains("Seeding ICP and TCYCLES")); // part of network start output

@@ -1,20 +1,9 @@
-use async_dropper::{AsyncDrop, AsyncDropper};
-use async_trait::async_trait;
-use bollard::{
-    Docker,
-    query_parameters::{
-        CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions,
-        StartContainerOptions, StopContainerOptions, WaitContainerOptions,
-    },
-    secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
-};
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
-use futures::TryStreamExt;
 use notify::Watcher;
 use serde::Deserialize;
 use snafu::prelude::*;
-use std::{collections::HashMap, io::ErrorKind, process::Stdio};
+use std::{io::ErrorKind, process::Stdio};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select};
 
@@ -45,6 +34,23 @@ pub enum SpawnNetworkLauncherError {
     },
     #[snafu(display("failed to watch launcher status file"))]
     WatchForStatusFile { source: WaitForLauncherStatusError },
+    #[snafu(display(
+        "network launcher at {network_launcher_path} exited prematurely with status {exit_status}"
+    ))]
+    LauncherExitedPrematurely {
+        network_launcher_path: PathBuf,
+        exit_status: std::process::ExitStatus,
+    },
+    #[snafu(display("failed to watch launcher process for exit code"))]
+    WatchLauncher {
+        network_launcher_path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("failed to parse root key {key}"))]
+    ParseRootKey {
+        key: String,
+        source: hex::FromHexError,
+    },
 }
 
 pub async fn spawn_network_launcher(
@@ -86,13 +92,28 @@ pub async fn spawn_network_launcher(
     let child = cmd.spawn().context(SpawnLauncherSnafu {
         network_launcher_path,
     })?;
-    let child = ChildSignalOnDrop { child };
-    let launcher_status = watcher.await.context(WatchForStatusFileSnafu)?;
+    let mut guard = ChildSignalOnDrop { child };
+    let child = &mut guard.child;
+    let launcher_status = select! {
+        status = watcher => status.context(WatchForStatusFileSnafu)?,
+        // If the child process exits before writing the status file, return an error.
+        res = child.wait() => {
+            let exit_status = res.context(WatchLauncherSnafu {
+                network_launcher_path,
+            })?;
+            return LauncherExitedPrematurelySnafu {
+                exit_status,
+                network_launcher_path: &network_launcher_path,
+            }.fail();
+        },
+    };
     Ok((
-        child,
+        guard,
         NetworkInstance {
             gateway_port: launcher_status.gateway_port,
-            root_key: hex::decode(&launcher_status.root_key).unwrap(),
+            root_key: hex::decode(&launcher_status.root_key).context(ParseRootKeySnafu {
+                key: &launcher_status.root_key,
+            })?,
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
@@ -122,153 +143,6 @@ impl ChildSignalOnDrop {
 impl Drop for ChildSignalOnDrop {
     fn drop(&mut self) {
         self.signal();
-    }
-}
-
-pub async fn spawn_docker_launcher(
-    image: &str,
-    port_mappings: &[String],
-) -> (AsyncDropper<DockerDropGuard>, NetworkInstance) {
-    let status_dir = Utf8TempDir::new().unwrap();
-    #[cfg(unix)]
-    let docker = Docker::connect_with_socket_defaults()
-        .expect("failed to connect to docker socket (is it running?)");
-    let portmap = port_mappings
-        .iter()
-        .map(|mapping| {
-            let (host_port, container_port) = mapping
-                .split_once(':')
-                .expect("invalid port mapping, must be in format <host_port>:<container_port>");
-            (
-                format!("{}/tcp", container_port),
-                Some(vec![PortBinding {
-                    host_ip: None,
-                    host_port: Some(host_port.to_string()),
-                }]),
-            )
-        })
-        .collect::<HashMap<_, _>>();
-    let container_resp = docker
-        .create_container(
-            None::<CreateContainerOptions>,
-            ContainerCreateBody {
-                image: Some(image.to_string()),
-                attach_stdin: Some(false),
-                attach_stdout: Some(true),
-                attach_stderr: Some(true),
-                host_config: Some(HostConfig {
-                    port_bindings: Some(portmap),
-                    mounts: Some(vec![Mount {
-                        target: Some("/app/status".to_string()),
-                        source: Some(status_dir.path().to_string()),
-                        typ: Some(MountTypeEnum::BIND),
-                        read_only: Some(false),
-                        ..<_>::default()
-                    }]),
-                    ..<_>::default()
-                }),
-                ..<_>::default()
-            },
-        )
-        .await
-        .expect("failed to create docker container");
-    let container_id = container_resp.id;
-    let guard = AsyncDropper::new(DockerDropGuard {
-        container_id: Some(container_id),
-        docker: Some(docker),
-    });
-    let container_id = guard.container_id.as_ref().unwrap();
-    let docker = guard.docker.as_ref().unwrap();
-    let watcher = wait_for_single_line_file(&status_dir.path().join("status.json")).unwrap();
-    docker
-        .start_container(container_id, None::<StartContainerOptions>)
-        .await
-        .expect("failed to start docker container");
-    let mut wait_container = docker.wait_container(container_id, None::<WaitContainerOptions>);
-    let status_content = select! {
-        content = watcher => content.unwrap(),
-        res = wait_container.try_next() => {
-            let exit = res.unwrap();
-            if let Some(exit) = exit {
-                panic!("Docker container exited with code {} before writing status file.", exit.status_code);
-            } else {
-                panic!("Docker container exited before writing status file.");
-            }
-        },
-    };
-    let launcher_status: LauncherStatus =
-        serde_json::from_str(&status_content).expect("failed to parse launcher status file");
-    assert_eq!(
-        launcher_status.v, "1",
-        "unexpected Docker launcher status version"
-    );
-    let container_info = docker
-        .inspect_container(container_id, None::<InspectContainerOptions>)
-        .await
-        .expect("failed to inspect docker container");
-    let container_config_port = launcher_status.config_port;
-    let container_gateway_port = launcher_status.gateway_port;
-    let port_bindings = container_info
-        .network_settings
-        .expect("missing network settings in docker container")
-        .ports
-        .expect("missing port mappings in docker container");
-    let host_config_port = container_config_port.map(|container_config_port| {
-        port_bindings
-            .get(&format!("{container_config_port}/tcp"))
-            .expect("missing PIC config port in docker container")
-            .as_ref()
-            .expect("missing host port binding for PIC config port in docker container")
-            .first()
-            .expect("missing host port binding for PIC config port in docker container")
-            .host_port
-            .as_ref()
-            .expect("missing host port for PIC config port in docker container")
-            .parse::<u16>()
-            .expect("invalid host port for PIC config port in docker container")
-    });
-    let host_gateway_port = port_bindings
-        .get(&format!("{container_gateway_port}/tcp"))
-        .expect("missing PIC gateway port in docker container")
-        .as_ref()
-        .expect("missing host port binding for PIC gateway port in docker container")
-        .first()
-        .expect("missing host port binding for PIC gateway port in docker container")
-        .host_port
-        .as_ref()
-        .expect("missing host port for PIC gateway port in docker container")
-        .parse::<u16>()
-        .expect("invalid host port for PIC gateway port in docker container");
-    (
-        guard,
-        NetworkInstance {
-            gateway_port: host_gateway_port,
-            pocketic_config_port: host_config_port,
-            pocketic_instance_id: launcher_status.instance_id,
-            root_key: hex::decode(&launcher_status.root_key)
-                .expect("invalid root key in launcher status"),
-        },
-    )
-}
-
-#[derive(Default)]
-pub struct DockerDropGuard {
-    docker: Option<Docker>,
-    container_id: Option<String>,
-}
-
-#[async_trait]
-impl AsyncDrop for DockerDropGuard {
-    async fn async_drop(&mut self) {
-        if let Some(docker) = &self.docker.take() {
-            let container_id = self.container_id.take().unwrap();
-            let _ = docker
-                .stop_container(&container_id, None::<StopContainerOptions>)
-                .await;
-            let _ = docker
-                .remove_container(&container_id, None::<RemoveContainerOptions>)
-                .await;
-        }
     }
 }
 

@@ -34,9 +34,9 @@ use crate::{
         Gateway, Managed, ManagedMode, NetworkDirectory, Port,
         config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
-        managed::launcher::{
-            ChildSignalOnDrop, CreateHttpGatewayError, DockerDropGuard, spawn_docker_launcher,
-            spawn_network_launcher,
+        managed::{
+            docker::{DockerDropGuard, spawn_docker_launcher},
+            launcher::{ChildSignalOnDrop, CreateHttpGatewayError, spawn_network_launcher},
         },
     },
     prelude::*,
@@ -118,7 +118,7 @@ async fn run_network_launcher(
                     image,
                     port_mapping,
                 } => {
-                    let (guard, instance) = spawn_docker_launcher(image, port_mapping).await;
+                    let (guard, instance) = spawn_docker_launcher(image, port_mapping).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: false,
@@ -257,6 +257,11 @@ pub enum RunNetworkLauncherError {
     #[snafu(transparent)]
     SpawnLauncher {
         source: crate::network::managed::launcher::SpawnNetworkLauncherError,
+    },
+
+    #[snafu(transparent)]
+    SpawnDockerLauncher {
+        source: crate::network::managed::docker::DockerLauncherError,
     },
 }
 

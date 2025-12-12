@@ -284,6 +284,29 @@ impl Context {
         Ok(())
     }
 
+    /// Removes the canister ID for a given canister name in a specified environment.
+    pub async fn remove_canister_id_for_env(
+        &self,
+        canister_name: &str,
+        environment: &EnvironmentSelection,
+    ) -> Result<(), RemoveCanisterIdForEnvError> {
+        let env = self.get_environment(environment).await?;
+        let is_cache = match env.network.configuration {
+            NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::Connected { .. } => false,
+        };
+
+        // Unregister the canister id
+        self.ids
+            .unregister(is_cache, &env.name, canister_name)
+            .context(CanisterIdUnregisterSnafu {
+                canister_name: canister_name.to_owned(),
+                environment_name: environment.name().to_owned(),
+            })?;
+
+        Ok(())
+    }
+
     /// Creates an agent for a given identity and environment.
     pub async fn get_agent_for_env(
         &self,
@@ -524,6 +547,24 @@ pub enum SetCanisterIdForEnvError {
     ))]
     CanisterIdRegister {
         source: crate::store_id::RegisterError,
+        canister_name: String,
+        environment_name: String,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum RemoveCanisterIdForEnvError {
+    #[snafu(transparent)]
+    GetEnvironment { source: GetEnvironmentError },
+
+    #[snafu(display(
+        "failed to unregister canister ID for canister '{}' in environment '{}': {}",
+        canister_name,
+        environment_name,
+        source
+    ))]
+    CanisterIdUnregister {
+        source: crate::store_id::UnregisterError,
         canister_name: String,
         environment_name: String,
     },

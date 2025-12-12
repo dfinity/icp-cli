@@ -44,6 +44,14 @@ pub trait Access: Sync + Send {
         canister_id: Principal,
     ) -> Result<(), RegisterError>;
 
+    /// Unregister a canister ID mapping for a given environment.
+    fn unregister(
+        &self,
+        is_cache: bool,
+        env: &str,
+        canister_name: &str,
+    ) -> Result<(), UnregisterError>;
+
     /// Lookup canister ID of a canister name in an environment.
     fn lookup(
         &self,
@@ -84,6 +92,18 @@ pub enum RegisterError {
 
     #[snafu(display("failed to save canister id mapping for environment '{env}'"))]
     RegisterSaveStore { source: json::Error, env: String },
+}
+
+#[derive(Debug, Snafu)]
+pub enum UnregisterError {
+    #[snafu(transparent)]
+    ProjectRootLocate { source: ProjectRootLocateError },
+
+    #[snafu(display("failed to load canister id store for environment '{env}'"))]
+    UnregisterLoadStore { source: json::Error, env: String },
+
+    #[snafu(display("failed to save canister id mapping for environment '{env}'"))]
+    UnregisterSaveStore { source: json::Error, env: String },
 }
 
 #[derive(Debug, Snafu)]
@@ -160,6 +180,33 @@ impl Access for AccessImpl {
 
         // Store JSON
         json::save(&fpath, &mapping).context(RegisterSaveStoreSnafu {
+            env: env.to_owned(),
+        })?;
+
+        Ok(())
+    }
+
+    fn unregister(
+        &self,
+        is_cache: bool,
+        env: &str,
+        canister_name: &str,
+    ) -> Result<(), UnregisterError> {
+        // Lock ID Store
+        let _g = self.lock.lock().expect("failed to acquire id store lock");
+
+        let fpath = self.get_fpath_for_env(is_cache, env)?;
+
+        // Load the file
+        let mut mapping = load_mapping(&fpath).context(UnregisterLoadStoreSnafu {
+            env: env.to_owned(),
+        })?;
+
+        // Remove the canister ID (ignore if not present)
+        mapping.remove(canister_name);
+
+        // Store JSON
+        json::save(&fpath, &mapping).context(UnregisterSaveStoreSnafu {
             env: env.to_owned(),
         })?;
 
@@ -277,6 +324,25 @@ pub(crate) mod mock {
                     id: existing_cid,
                 }
                 .fail();
+            }
+
+            Ok(())
+        }
+
+        fn unregister(
+            &self,
+            is_cache: bool,
+            env: &str,
+            canister_name: &str,
+        ) -> Result<(), UnregisterError> {
+            let mut store = if is_cache {
+                self.cache.lock().unwrap()
+            } else {
+                self.data.lock().unwrap()
+            };
+
+            if let Some(mapping) = store.get_mut(env) {
+                mapping.remove(canister_name);
             }
 
             Ok(())

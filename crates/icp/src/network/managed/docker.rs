@@ -24,6 +24,7 @@ use crate::prelude::*;
 pub async fn spawn_docker_launcher(
     image: &str,
     port_mappings: &[String],
+    rm_on_drop: bool,
 ) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance), DockerLauncherError> {
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     #[cfg(unix)]
@@ -78,6 +79,7 @@ pub async fn spawn_docker_launcher(
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
+        rm_on_drop,
     });
     let container_id = guard.container_id.as_ref().unwrap();
     let docker = guard.docker.as_ref().unwrap();
@@ -259,6 +261,7 @@ pub enum DockerLauncherError {
 pub struct DockerDropGuard {
     docker: Option<Docker>,
     container_id: Option<String>,
+    rm_on_drop: bool,
 }
 
 #[async_trait]
@@ -269,9 +272,11 @@ impl AsyncDrop for DockerDropGuard {
             let _ = docker
                 .stop_container(&container_id, None::<StopContainerOptions>)
                 .await;
-            let _ = docker
-                .remove_container(&container_id, None::<RemoveContainerOptions>)
-                .await;
+            if self.rm_on_drop {
+                let _ = docker
+                    .remove_container(&container_id, None::<RemoveContainerOptions>)
+                    .await;
+            }
         }
     }
 }

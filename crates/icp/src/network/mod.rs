@@ -81,6 +81,7 @@ pub enum ManagedMode {
     Image {
         image: String,
         port_mapping: Vec<String>,
+        rm_on_exit: bool,
     },
     Launcher {
         gateway: Gateway,
@@ -170,11 +171,13 @@ impl From<Mode> for Configuration {
                 crate::manifest::network::ManagedMode::Image {
                     image,
                     port_mapping,
+                    rm_on_exit,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image {
                             image,
                             port_mapping,
+                            rm_on_exit: rm_on_exit.unwrap_or(false),
                         },
                     },
                 },

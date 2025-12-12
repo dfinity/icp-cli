@@ -28,8 +28,8 @@ pub struct Managed {
 pub enum ManagedMode {
     Image {
         image: String,
-        #[serde(default)]
         port_mapping: Vec<String>,
+        rm_on_exit: Option<bool>,
     },
     Launcher {
         gateway: Option<Gateway>,

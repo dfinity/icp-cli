@@ -629,7 +629,7 @@ Run a given network
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of the network to run
+* `<NAME>` — Name of the network to start
 
   Default value: `local`
 

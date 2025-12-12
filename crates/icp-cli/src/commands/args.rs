@@ -7,19 +7,6 @@ use icp::identity::IdentitySelection;
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
-#[derive(Debug, Args, Clone)]
-pub(crate) struct ListArgsOptions {
-
-    /// Only print the names
-    #[arg(short, long, conflicts_with_all = ["yaml_format"])]
-    pub name_only: bool,
-
-    /// Format output in json
-    #[arg(long = "yaml")]
-    pub yaml_format: bool,
-
-}
-
 #[derive(Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field

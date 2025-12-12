@@ -590,7 +590,7 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
-* `list` — List networks in the project
+* `list` — 
 * `ping` — Try to connect to a network, and print out its status
 * `run` — Run a given network
 * `stop` — Stop a background network
@@ -598,8 +598,6 @@ Launch and manage local test networks
 
 
 ## `icp-cli network list`
-
-List networks in the project
 
 **Usage:** `icp-cli network list`
 

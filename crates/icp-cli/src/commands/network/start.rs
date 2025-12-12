@@ -12,13 +12,13 @@ use icp::context::Context;
 /// Run a given network
 #[derive(Args, Debug)]
 pub(crate) struct StartArgs {
-    /// Name of the network to run
+    /// Name of the network to start
     #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
 
     /// Starts the network in a background process. This command will exit once the network is running.
     /// To stop the network, use 'icp network stop'.
-    #[arg(short='d', long)]
+    #[arg(short = 'd', long)]
     background: bool,
 }
 

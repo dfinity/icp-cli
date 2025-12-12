@@ -35,7 +35,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli network`↴](#icp-cli-network)
 * [`icp-cli network list`↴](#icp-cli-network-list)
 * [`icp-cli network ping`↴](#icp-cli-network-ping)
-* [`icp-cli network run`↴](#icp-cli-network-run)
+* [`icp-cli network start`↴](#icp-cli-network-start)
 * [`icp-cli network stop`↴](#icp-cli-network-stop)
 * [`icp-cli new`↴](#icp-cli-new)
 * [`icp-cli project`↴](#icp-cli-project)
@@ -592,7 +592,7 @@ Launch and manage local test networks
 
 * `list` — 
 * `ping` — Try to connect to a network, and print out its status
-* `run` — Run a given network
+* `start` — Run a given network
 * `stop` — Stop a background network
 
 
@@ -621,11 +621,11 @@ Try to connect to a network, and print out its status
 
 
 
-## `icp-cli network run`
+## `icp-cli network start`
 
 Run a given network
 
-**Usage:** `icp-cli network run [OPTIONS] [NAME]`
+**Usage:** `icp-cli network start [OPTIONS] [NAME]`
 
 ###### **Arguments:**
 

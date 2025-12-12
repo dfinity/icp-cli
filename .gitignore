@@ -10,5 +10,6 @@
 # They are ignored here because we are developing icp-cli itself.
 .icpdata
 
-# pocket-ic binary
+# often-used binaries
 pocket-ic
+icp-cli-network-launcher

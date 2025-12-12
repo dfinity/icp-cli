@@ -285,6 +285,55 @@ async fn test_set_canister_id_for_env_already_registered() {
 }
 
 #[tokio::test]
+async fn test_remove_canister_id_for_env_success() {
+    let ids_store = Arc::new(MockInMemoryIdStore::new());
+
+    // Register a canister ID
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    ids_store
+        .register(true, "dev", "backend", canister_id)
+        .unwrap();
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ids: ids_store.clone() as Arc<dyn IdAccess>,
+        ..Context::mocked()
+    };
+
+    // Verify canister ID exists
+    let lookup_result = ids_store.lookup(true, "dev", "backend").unwrap();
+    assert_eq!(lookup_result, canister_id);
+
+    // Remove the canister ID
+    ctx.remove_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .await
+        .unwrap();
+
+    // Verify canister ID is removed
+    let lookup_result = ids_store.lookup(true, "dev", "backend");
+    assert!(matches!(
+        lookup_result,
+        Err(crate::store_id::LookupIdError::IdNotFound { .. })
+    ));
+}
+
+#[tokio::test]
+async fn test_remove_canister_id_for_env_nonexistent_canister() {
+    let ids_store = Arc::new(MockInMemoryIdStore::new());
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::complex()),
+        ids: ids_store.clone() as Arc<dyn IdAccess>,
+        ..Context::mocked()
+    };
+
+    // Remove a canister that was never registered - should not fail
+    let result = ctx
+        .remove_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
 async fn test_get_agent_for_env_uses_environment_network() {
     let staging_root_key = vec![1, 2, 3];
 

@@ -1,5 +1,7 @@
 # Unreleased
 
+* fix: When deleting a canister, also delete the id from the id store
+
 # v0.1.0-beta.1
 
 * feat!: Switch to using icp-cli-network-launcher instead of pocket-ic directly. Download it [here](https://github.com/dfinity/icp-cli-network-launcher/releases).

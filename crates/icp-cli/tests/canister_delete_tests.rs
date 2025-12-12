@@ -1,4 +1,5 @@
 use indoc::formatdoc;
+use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
@@ -53,6 +54,19 @@ fn canister_delete() {
         .assert()
         .success();
 
+    // Verify canister ID is in the id store after deploy
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("my-environment.ids.json");
+    let id_mapping_before =
+        std::fs::read_to_string(&id_mapping_path).expect("ID mapping file should exist");
+    assert!(
+        id_mapping_before.contains("my-canister"),
+        "ID mapping should contain my-canister before deletion"
+    );
+
     // Stop canister
     ctx.icp()
         .current_dir(&project_dir)
@@ -79,7 +93,15 @@ fn canister_delete() {
         .assert()
         .success();
 
-    // Query status
+    // Verify canister ID is removed from the id store after delete
+    let id_mapping_after =
+        std::fs::read_to_string(&id_mapping_path).expect("ID mapping file should still exist");
+    assert!(
+        !id_mapping_after.contains("my-canister"),
+        "ID mapping should NOT contain my-canister after deletion"
+    );
+
+    // Query status - should fail because canister ID is not found in id store
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -90,5 +112,6 @@ fn canister_delete() {
             "my-environment",
         ])
         .assert()
-        .failure();
+        .failure()
+        .stderr(contains("could not find ID for canister"));
 }

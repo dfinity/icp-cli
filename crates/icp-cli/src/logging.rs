@@ -12,6 +12,7 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 
+#[expect(unused)]
 #[derive(Debug)]
 pub(crate) struct TermWriter<W> {
     pub(crate) debug: bool,

@@ -11,7 +11,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    logging::{TermWriter, debug_layer},
+    logging::debug_layer,
     telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
@@ -105,13 +105,14 @@ async fn main() -> Result<(), Error> {
     };
 
     // Printing for user-facing messages
-    let term = Term::read_write_pair(
-        std::io::stdin(),
-        TermWriter {
-            debug: cli.debug,
-            writer: Box::new(std::io::stdout()),
-        },
-    );
+    // let term = Term::read_write_pair(
+    //     std::io::stdin(),
+    //     TermWriter {
+    //         debug: cli.debug,
+    //         writer: Box::new(std::io::stdout()),
+    //     },
+    // );
+    let term = Term::stdout();
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (

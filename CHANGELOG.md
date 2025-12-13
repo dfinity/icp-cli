@@ -1,6 +1,7 @@
 # Unreleased
 
 * fix: When deleting a canister, also delete the id from the id store
+* chore!: rename `icp network run` to `icp network start`
 
 # v0.1.0-beta.1
 

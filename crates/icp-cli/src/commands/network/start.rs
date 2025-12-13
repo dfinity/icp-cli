@@ -11,18 +11,18 @@ use icp::context::Context;
 
 /// Run a given network
 #[derive(Args, Debug)]
-pub(crate) struct RunArgs {
-    /// Name of the network to run
+pub(crate) struct StartArgs {
+    /// Name of the network to start
     #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
     name: String,
 
     /// Starts the network in a background process. This command will exit once the network is running.
     /// To stop the network, use 'icp network stop'.
-    #[arg(long)]
+    #[arg(short = 'd', long)]
     background: bool,
 }
 
-pub(crate) async fn exec(ctx: &Context, args: &RunArgs) -> Result<(), anyhow::Error> {
+pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::Error> {
     // Load project
     let p = ctx.project.load().await?;
 

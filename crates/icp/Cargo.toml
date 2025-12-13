@@ -34,6 +34,7 @@ itertools = { workspace = true }
 k256 = { workspace = true }
 notify = { workspace = true }
 p256 = { workspace = true }
+pathsearch = { workspace = true }
 pem = { workspace = true }
 pkcs8 = { workspace = true }
 rand = { workspace = true }

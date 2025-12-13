@@ -36,6 +36,23 @@ pub enum ScriptError {
 
     #[snafu(display("command '{command}' failed with status code {code}"))]
     Status { command: String, code: String },
+
+    #[cfg(windows)]
+    #[snafu(display(
+        "failed to locate bash (the git at {git_path} does not appear to be Git for Windows, try running in Git Bash)"
+    ))]
+    LocateBash { git_path: PathBuf },
+
+    #[cfg(windows)]
+    #[snafu(display("failed to locate git executable in PATH (try running in Git Bash)"))]
+    LocateGit,
+
+    #[cfg(windows)]
+    #[snafu(display("unprocessable executable path: {}", path.display()))]
+    BadPath {
+        path: std::path::PathBuf,
+        source: camino::FromPathBufError,
+    },
 }
 
 pub(super) async fn execute(
@@ -152,8 +169,26 @@ fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
         }
         .fail();
     }
-
+    #[cfg(unix)]
     let mut cmd = Command::new("sh");
+    #[cfg(windows)]
+    let mut cmd = if let Some(_) = std::env::var_os("BASH_VERSION") {
+        Command::new("bash")
+    } else {
+        if let Some(git_path) = pathsearch::find_executable_in_path("git") {
+            let git_path =
+                PathBuf::try_from(git_path.clone()).context(BadPathSnafu { path: git_path })?;
+            if let Some(cmd_path) = git_path.parent()
+                && cmd_path.ends_with("cmd")
+            {
+                Command::new(cmd_path.parent().unwrap().join("bin/bash.exe"))
+            } else {
+                return LocateBashSnafu { git_path }.fail();
+            }
+        } else {
+            return LocateGitSnafu.fail();
+        }
+    };
     cmd.args(["-c", s]);
     cmd.current_dir(cwd);
     Ok(cmd)

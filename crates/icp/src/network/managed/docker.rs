@@ -13,7 +13,6 @@ use bollard::{
 use camino_tempfile::Utf8TempDir;
 use futures::TryStreamExt;
 use itertools::Itertools;
-#[cfg(unix)]
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;

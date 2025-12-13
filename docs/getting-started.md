@@ -59,16 +59,22 @@ Let's create and deploy a simple "Hello World" canister.
 Choose from one of the examples to get started quickly:
 
 ```bash
-# Copy a template (choose one)
-cp -r examples/icp-motoko my-first-project     # For Motoko
-cp -r examples/icp-rust my-first-project       # For Rust
+# Create a project from a template
+# by default icp-cli will use templates in https://github.com/dfinity/icp-cli-templates
+#
+# 
+icp new my-project
 
-cd my-first-project
+#
+# Select the type of project you want to start with
+#
+
+cd my-project
 ```
 
 ### 2. Understand the Project Structure
 
-Your project contains:
+A typical project contains:
 
 - `icp.yaml` - Project configuration file
 - `src/` - Source code directory
@@ -86,19 +92,26 @@ canisters:
             # Build commands specific to your language
 ```
 
-### 3. Start a Local Network
-
-In a separate terminal, start the local Internet Computer network:
+Note that the configuration can be split across different files. To see the effective
+project configuration, you can run:
 
 ```bash
-icp network run
+icp project show
 ```
 
-This starts a local replica where you can deploy and test your canisters. Keep this running throughout development.
+### 3. Start a Local Network
+
+Start the local Internet Computer network:
+
+```bash
+icp network start -d
+```
+
+This starts a local replica where you can deploy and test your canisters.
 
 ### 4. Build Your Canister
 
-Build the canister from your source code:
+Build your project:
 
 ```bash
 icp build my-canister
@@ -160,10 +173,33 @@ icp deploy canister1
 icp canister list
 ```
 
-### Environment Management
+## Networks and Environments
+
+A *network* is a url through which you can reach an ICP network. This could be "mainnet",
+the official ICP network reachable at https://icp-api.io, a local or remote network started
+for test or development purposes.
+
+An *environment* represents a set of canisters to deploy to a network. For example you could
+have:
+- A local development environment pointing using your local network
+- A staging environment deployed to mainnet
+- A production envrionment deployed to mainnet
+
+For example:
+
+```yaml
+environments:
+  - name: staging
+    network: mainnet
+  - name: prod
+    network: mainnet
+```
+There is always an implicit "local" environment using the "local" network which is the default
+and that cannot be overriden.
+
+To deploy to a specific environment use:
+
 ```bash
-# Deploy to Internet Computer mainnet
-icp deploy --ic
 
 # Deploy to a custom environment
 icp deploy --environment staging

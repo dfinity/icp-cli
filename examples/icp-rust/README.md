@@ -19,7 +19,7 @@ rustup target add wasm32-unknown-unknown
 First, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canister:

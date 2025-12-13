@@ -55,7 +55,7 @@ pub(crate) fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httpte
     server
 }
 
-// A network run by icp-cli for a test. These fields are read from the network descriptor
+// A network start by icp-cli for a test. These fields are read from the network descriptor
 // after starting the network.
 pub(crate) struct TestNetwork {
     pub(crate) gateway_port: u16,

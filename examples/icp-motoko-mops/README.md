@@ -18,7 +18,7 @@ Before you begin, ensure that you have the Motoko compiler (`moc`) and the Mops 
 First, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canister:

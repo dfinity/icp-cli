@@ -11,7 +11,7 @@ This project consists of a single, pre-built canister. The `icp.yaml` file at th
 First, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canister:

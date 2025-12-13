@@ -45,9 +45,10 @@ Configure the tools that ICP CLI depends on:
 # Export path to network launcher for local network support
 export ICP_CLI_NETWORK_LAUNCHER_PATH="path/to/the/icp-cli-network-launcher"
 
-# Add Motoko compiler to PATH (if building Motoko canisters)
-dfx cache install
-export PATH=$(dfx cache show):$PATH
+# if you want to use motoko
+# Make sure you have installed mops, see https://cli.mops.one/
+# and have initialized the toolchain
+mops toolchain init
 ```
 
 ## Your First Canister

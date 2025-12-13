@@ -24,6 +24,7 @@ pub async fn spawn_docker_launcher(
     image: &str,
     port_mappings: &[String],
     rm_on_drop: bool,
+    args: &[String],
 ) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance), DockerLauncherError> {
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     #[cfg(unix)]
@@ -50,11 +51,14 @@ pub async fn spawn_docker_launcher(
             ))
         })
         .try_collect()?;
+    let mut args = args.to_vec();
+    args.push("--interface-version=1.0.0".to_string());
     let container_resp = docker
         .create_container(
             None::<CreateContainerOptions>,
             ContainerCreateBody {
                 image: Some(image.to_string()),
+                cmd: Some(args),
                 attach_stdin: Some(false),
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),

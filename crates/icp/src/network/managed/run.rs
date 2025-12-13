@@ -118,9 +118,10 @@ async fn run_network_launcher(
                     image,
                     port_mapping,
                     rm_on_exit,
+                    args,
                 } => {
                     let (guard, instance) =
-                        spawn_docker_launcher(image, port_mapping, *rm_on_exit).await?;
+                        spawn_docker_launcher(image, port_mapping, *rm_on_exit, args).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: false,

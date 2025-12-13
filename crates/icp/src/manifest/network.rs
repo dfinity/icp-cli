@@ -30,6 +30,7 @@ pub enum ManagedMode {
         image: String,
         port_mapping: Vec<String>,
         rm_on_exit: Option<bool>,
+        args: Option<Vec<String>>,
     },
     Launcher {
         gateway: Option<Gateway>,

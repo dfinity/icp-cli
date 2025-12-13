@@ -82,6 +82,7 @@ pub enum ManagedMode {
         image: String,
         port_mapping: Vec<String>,
         rm_on_exit: bool,
+        args: Vec<String>,
     },
     Launcher {
         gateway: Gateway,
@@ -172,12 +173,14 @@ impl From<Mode> for Configuration {
                     image,
                     port_mapping,
                     rm_on_exit,
+                    args,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image {
                             image,
                             port_mapping,
                             rm_on_exit: rm_on_exit.unwrap_or(false),
+                            args: args.unwrap_or_default(),
                         },
                     },
                 },

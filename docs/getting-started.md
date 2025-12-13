@@ -259,7 +259,7 @@ Now that you have your first canister running, explore:
 - Check language-specific prerequisites
 
 **Network connection fails**
-- Verify `icp network run` is running in another terminal
+- Verify `icp network start` is running in another terminal
 - Check that `ICP_CLI_NETWORK_LAUNCHER_PATH` is set correctly. It should point directly to your icp-cli-network-launcher binary. You can download the launcher from [github](https://github.com/dfinity/icp-cli-network-launcher/releases)
 
 **Canister deployment fails**

@@ -38,8 +38,8 @@ async fn canister_top_up() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister
     ctx.icp()
@@ -49,12 +49,12 @@ async fn canister_top_up() {
             "create",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
 
-    let canister_id = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    let canister_id = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .get_canister_id("my-canister");
 
     let agent = ctx.agent();
@@ -75,7 +75,7 @@ async fn canister_top_up() {
             "top-up",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--identity",
             "financially-challenged",
             "--amount",
@@ -95,7 +95,7 @@ async fn canister_top_up() {
             "top-up",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--amount",
             &format!("{}", 10 * TRILLION),
         ])

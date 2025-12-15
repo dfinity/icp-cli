@@ -1,3 +1,4 @@
+use candid::Principal;
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
@@ -12,7 +13,8 @@ use serial_test::file_serial;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 
 use crate::common::{
-    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, TestNetwork, clients,
+    ENVIRONMENT_DOCKER, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER, NETWORK_RANDOM_PORT, TestContext,
+    TestNetwork, clients,
 };
 use icp::{
     fs::{read_to_string, write_string},
@@ -31,7 +33,7 @@ fn network_same_port() {
     // Project manifest
     let pm = indoc! {r#"
         networks:
-          - name: my-network
+          - name: sameport-network
             mode: managed
             gateway:
               port: 8080
@@ -53,19 +55,19 @@ fn network_same_port() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx.start_network_in(&project_dir_a, "my-network");
+    let _a_guard = ctx.start_network_in(&project_dir_a, "sameport-network");
 
     eprintln!("wait for network A healthy");
-    ctx.ping_until_healthy(&project_dir_a, "my-network");
+    ctx.ping_until_healthy(&project_dir_a, "sameport-network");
 
     eprintln!("second network run attempt in another project");
     ctx.icp()
         .current_dir(&project_dir_b)
-        .args(["network", "run", "my-network"])
+        .args(["network", "run", "sameport-network"])
         .assert()
         .failure()
         .stderr(contains(format!(
-            "Error: port 8080 is in use by the my-network network of the project at '{}'",
+            "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
             project_dir_a.canonicalize().unwrap().display()
         )));
 }
@@ -81,7 +83,7 @@ fn two_projects_different_fixed_ports() {
         &project_dir_a.join("icp.yaml"), // path
         indoc! {r#"
             networks:
-              - name: my-network
+              - name: fixedport-network
                 mode: managed
                 gateway:
                   port: 8001
@@ -97,7 +99,7 @@ fn two_projects_different_fixed_ports() {
         &project_dir_b.join("icp.yaml"), // path
         indoc! {r#"
             networks:
-              - name: my-network
+              - name: fixedport-network
                 mode: managed
                 gateway:
                   port: 8002
@@ -105,15 +107,15 @@ fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx_a.start_network_in(&project_dir_a, "my-network");
+    let _a_guard = ctx_a.start_network_in(&project_dir_a, "fixedport-network");
 
     eprintln!("wait for network A healthy");
-    ctx_a.ping_until_healthy(&project_dir_a, "my-network");
+    ctx_a.ping_until_healthy(&project_dir_a, "fixedport-network");
 
-    let _b_guard = ctx_b.start_network_in(&project_dir_b, "my-network");
+    let _b_guard = ctx_b.start_network_in(&project_dir_b, "fixedport-network");
 
     eprintln!("wait for network B healthy");
-    ctx_b.ping_until_healthy(&project_dir_b, "my-network");
+    ctx_b.ping_until_healthy(&project_dir_b, "fixedport-network");
 }
 
 // TODO(or.ricon) This is broken
@@ -132,15 +134,15 @@ fn deploy_to_other_projects_network() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&proja, "my-network");
+    let _g = ctx.start_network_in(&proja, "random-network");
 
     let TestNetwork {
         gateway_port,
         root_key,
         ..
-    } = ctx.wait_for_network_descriptor(&proja, "my-network");
+    } = ctx.wait_for_network_descriptor(&proja, "random-network");
 
-    ctx.ping_until_healthy(&proja, "my-network");
+    ctx.ping_until_healthy(&proja, "random-network");
 
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");
@@ -236,15 +238,15 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     )
     .expect("failed to write project manifest");
 
-    let icp_client = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()));
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
 
     // Create identities BEFORE starting the network
     icp_client.create_identity("before");
 
     // Time how long it takes to configure and start the network
     let start = std::time::Instant::now();
-    let _guard = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _guard = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
     let duration = start.elapsed();
     println!("========== Configuring and starting network took {duration:?}");
 
@@ -255,7 +257,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("anonymous");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance", "--environment", "my-environment"])
+        .args(["token", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(is_match(r"Balance: \d{9}\.\d{8} ICP").unwrap())
         .success();
@@ -264,7 +266,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("before");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance", "--environment", "my-environment"])
+        .args(["token", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 1000000.00000000 ICP"))
         .success();
@@ -273,7 +275,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("after");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance", "--environment", "my-environment"])
+        .args(["token", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 0 ICP"))
         .success();
@@ -282,7 +284,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("before");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance", "--environment", "my-environment"])
+        .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 1000.000000000000 TCYCLES"))
         .success();
@@ -291,7 +293,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     icp_client.use_identity("after");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance", "--environment", "my-environment"])
+        .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
@@ -310,19 +312,19 @@ async fn network_run_and_stop_background() {
     // Start network in background and verify we can see child process output
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "run", "my-network", "--background"])
+        .args(["network", "run", "random-network", "--background"])
         .assert()
         .success()
         .stderr(contains("Seeding ICP and TCYCLES")); // part of network start output
 
-    let network = ctx.wait_for_network_descriptor(&project_dir, "my-network");
+    let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
     // Verify PID file was written
     let pid_file_path = project_dir
         .join(".icp")
         .join("cache")
         .join("networks")
-        .join("my-network")
+        .join("random-network")
         .join("background_network_runner.pid");
     assert!(
         pid_file_path.exists(),
@@ -351,7 +353,7 @@ async fn network_run_and_stop_background() {
     // Stop the network
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "stop", "my-network"])
+        .args(["network", "stop", "random-network"])
         .assert()
         .success()
         .stdout(contains(format!(
@@ -400,8 +402,8 @@ async fn network_starts_with_canisters_preset() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _guard = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _guard = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     let agent = ctx.agent();
 
@@ -431,4 +433,30 @@ async fn network_starts_with_canisters_preset() {
         .read_state_canister_module_hash(INTERNET_IDENTITY_PRINCIPAL)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn network_docker() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("docker-network");
+
+    // Project manifest
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_DOCKER}
+            {ENVIRONMENT_DOCKER}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    ctx.docker_pull_network();
+    let _guard = ctx.start_network_in(&project_dir, "docker-network");
+    ctx.ping_until_healthy(&project_dir, "docker-network");
+
+    let balance = clients::ledger(&ctx)
+        .balance_of(Principal::anonymous(), None)
+        .await;
+    assert!(balance > 0_u128);
 }

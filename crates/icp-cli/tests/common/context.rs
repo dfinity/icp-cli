@@ -346,4 +346,11 @@ impl TestContext {
         agent.set_root_key(self.root_key.get().unwrap().clone());
         agent
     }
+
+    pub(crate) fn docker_pull_network(&self) {
+        Command::new("docker")
+            .args(["pull", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"])
+            .assert()
+            .success();
+    }
 }

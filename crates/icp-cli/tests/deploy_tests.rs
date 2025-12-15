@@ -91,10 +91,10 @@ async fn deploy() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
 
     // Deploy project
     ctx.icp()
@@ -104,7 +104,7 @@ async fn deploy() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -116,7 +116,7 @@ async fn deploy() {
             "canister",
             "call",
             "--environment",
-            "my-environment",
+            "random-environment",
             "my-canister",
             "greet",
             "(\"test\")",
@@ -156,10 +156,10 @@ async fn deploy_twice_should_succeed() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
 
     // Deploy project (first time)
     ctx.icp()
@@ -169,7 +169,7 @@ async fn deploy_twice_should_succeed() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -182,7 +182,7 @@ async fn deploy_twice_should_succeed() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -197,7 +197,7 @@ async fn deploy_twice_should_succeed() {
             "greet",
             "(\"test\")",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()

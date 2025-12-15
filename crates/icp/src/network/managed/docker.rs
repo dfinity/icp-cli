@@ -20,13 +20,14 @@ use tokio::select;
 
 use crate::network::{
     ManagedImageConfig,
+    config::ChildLocator,
     managed::launcher::{NetworkInstance, wait_for_launcher_status},
 };
 use crate::prelude::*;
 
 pub async fn spawn_docker_launcher(
     image_config: &ManagedImageConfig,
-) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance), DockerLauncherError> {
+) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance, ChildLocator), DockerLauncherError> {
     let ManagedImageConfig {
         image,
         port_mapping,
@@ -40,14 +41,15 @@ pub async fn spawn_docker_launcher(
         shm_size,
     } = image_config;
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    #[cfg(unix)]
-    let docker = Docker::connect_with_unix_defaults().context(ConnectDockerSnafu {
-        socket: "/var/run/docker.sock",
-    })?;
-    #[cfg(windows)]
-    let docker = Docker::connect_with_named_pipe_defaults().context(ConnectDockerSnafu {
-        socket: r"\\.\pipe\docker_engine",
-    })?;
+    let socket = match std::env::var("DOCKER_HOST").ok() {
+        Some(sock) => PathBuf::from(sock),
+        #[cfg(unix)]
+        None => PathBuf::from("/var/run/docker.sock"),
+        #[cfg(windows)]
+        None => PathBuf::from(r"\\.\pipe\docker_engine"),
+    };
+    let docker = Docker::connect_with_local(socket.as_str(), 120, bollard::API_DEFAULT_VERSION)
+        .context(ConnectDockerSnafu { socket: &socket })?;
     let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {
@@ -208,6 +210,11 @@ pub async fn spawn_docker_launcher(
             container_port: container_gateway_port,
             container_id,
         })?;
+    let locator = ChildLocator::Container {
+        id: container_id.clone(),
+        socket,
+        rm_on_exit: *rm_on_exit,
+    };
     Ok((
         guard,
         NetworkInstance {
@@ -218,7 +225,55 @@ pub async fn spawn_docker_launcher(
                 key: &launcher_status.root_key,
             })?,
         },
+        locator,
     ))
+}
+
+pub async fn stop_docker_launcher(
+    socket: &str,
+    container_id: &str,
+    rm_on_exit: bool,
+) -> Result<(), StopContainerError> {
+    let docker = Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
+        .context(ConnectSnafu { socket })?;
+    stop(&docker, container_id, rm_on_exit).await
+}
+
+async fn stop(
+    docker: &Docker,
+    container_id: &str,
+    rm_on_exit: bool,
+) -> Result<(), StopContainerError> {
+    docker
+        .stop_container(container_id, None::<StopContainerOptions>)
+        .await
+        .context(StopSnafu { container_id })?;
+    if rm_on_exit {
+        docker
+            .remove_container(container_id, None::<RemoveContainerOptions>)
+            .await
+            .context(RemoveSnafu { container_id })?;
+    }
+    Ok(())
+}
+
+#[derive(Snafu, Debug)]
+pub enum StopContainerError {
+    #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
+    Connect {
+        source: bollard::errors::Error,
+        socket: String,
+    },
+    #[snafu(display("failed to stop docker container {container_id}"))]
+    Stop {
+        source: bollard::errors::Error,
+        container_id: String,
+    },
+    #[snafu(display("failed to remove docker container {container_id}"))]
+    Remove {
+        source: bollard::errors::Error,
+        container_id: String,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -308,19 +363,23 @@ pub struct DockerDropGuard {
     rm_on_drop: bool,
 }
 
+impl DockerDropGuard {
+    pub fn defuse(&mut self) {
+        self.docker = None;
+        self.container_id = None;
+    }
+    pub async fn stop(&mut self) -> Result<(), StopContainerError> {
+        if let Some(docker) = &self.docker.take() {
+            let container_id = self.container_id.take().unwrap();
+            stop(docker, &container_id, self.rm_on_drop).await?;
+        }
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl AsyncDrop for DockerDropGuard {
     async fn async_drop(&mut self) {
-        if let Some(docker) = &self.docker.take() {
-            let container_id = self.container_id.take().unwrap();
-            let _ = docker
-                .stop_container(&container_id, None::<StopContainerOptions>)
-                .await;
-            if self.rm_on_drop {
-                let _ = docker
-                    .remove_container(&container_id, None::<RemoveContainerOptions>)
-                    .await;
-            }
-        }
+        _ = self.stop().await;
     }
 }

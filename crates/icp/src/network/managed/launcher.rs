@@ -1,3 +1,5 @@
+use async_dropper::{AsyncDrop, AsyncDropper};
+use async_trait::async_trait;
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::Watcher;
@@ -7,7 +9,10 @@ use std::{io::ErrorKind, process::Stdio};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select};
 
-use crate::{network::Port, prelude::*};
+use crate::{
+    network::{Port, config::ChildLocator},
+    prelude::*,
+};
 
 pub struct NetworkInstance {
     pub gateway_port: u16,
@@ -60,7 +65,14 @@ pub async fn spawn_network_launcher(
     background: bool,
     port: &Port,
     state_dir: &Path,
-) -> Result<(ChildSignalOnDrop, NetworkInstance), SpawnNetworkLauncherError> {
+) -> Result<
+    (
+        AsyncDropper<ChildSignalOnDrop>,
+        NetworkInstance,
+        ChildLocator,
+    ),
+    SpawnNetworkLauncherError,
+> {
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
@@ -92,8 +104,8 @@ pub async fn spawn_network_launcher(
     let child = cmd.spawn().context(SpawnLauncherSnafu {
         network_launcher_path,
     })?;
-    let mut guard = ChildSignalOnDrop { child };
-    let child = &mut guard.child;
+    let mut guard = AsyncDropper::new(ChildSignalOnDrop { child: Some(child) });
+    let child = guard.child.as_mut().unwrap();
     let launcher_status = select! {
         status = watcher => status.context(WatchForStatusFileSnafu)?,
         // If the child process exits before writing the status file, return an error.
@@ -117,7 +129,12 @@ pub async fn spawn_network_launcher(
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
+        ChildLocator::Pid(launcher_status.instance_id.unwrap() as u32),
     ))
+}
+
+pub fn stop_launcher(pid: Pid) {
+    send_sigint(pid);
 }
 
 pub fn send_sigint(pid: Pid) {
@@ -128,21 +145,30 @@ pub fn send_sigint(pid: Pid) {
     }
 }
 
+#[derive(Default)]
 pub struct ChildSignalOnDrop {
-    pub child: Child,
+    pub child: Option<Child>,
 }
 
 impl ChildSignalOnDrop {
-    pub fn signal(&self) {
-        if let Some(id) = self.child.id() {
+    pub async fn signal_and_wait(&mut self) -> std::io::Result<()> {
+        if let Some(mut child) = self.child.take()
+            && let Some(id) = child.id()
+        {
             send_sigint((id as usize).into());
+            child.wait().await?;
         }
+        Ok(())
+    }
+    pub fn defuse(&mut self) {
+        self.child = None;
     }
 }
 
-impl Drop for ChildSignalOnDrop {
-    fn drop(&mut self) {
-        self.signal();
+#[async_trait]
+impl AsyncDrop for ChildSignalOnDrop {
+    async fn async_drop(&mut self) {
+        _ = self.signal_and_wait().await;
     }
 }
 

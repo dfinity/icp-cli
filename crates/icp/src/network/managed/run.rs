@@ -23,7 +23,6 @@ use k256::SecretKey;
 use rand::{RngCore, rng};
 use snafu::prelude::*;
 use std::{env::var, io::Write, process::ExitStatus, time::Duration};
-use sysinfo::Pid;
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use url::Url;
 use uuid::Uuid;
@@ -32,7 +31,7 @@ use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
         Gateway, Managed, ManagedMode, NetworkDirectory, Port,
-        config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
+        config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
             docker::{DockerDropGuard, spawn_docker_launcher},
@@ -65,6 +64,22 @@ pub async fn run_network(
     Ok(())
 }
 
+pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError> {
+    match locator {
+        ChildLocator::Pid(pid) => {
+            super::launcher::stop_launcher((*pid as usize).into());
+        }
+        ChildLocator::Container {
+            id,
+            socket,
+            rm_on_exit,
+        } => {
+            super::docker::stop_docker_launcher(socket.as_str(), id, *rm_on_exit).await?;
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
     #[snafu(transparent)]
@@ -75,6 +90,14 @@ pub enum RunNetworkError {
 
     #[snafu(transparent)]
     RunNetworkLauncher { source: RunNetworkLauncherError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum StopNetworkError {
+    #[snafu(transparent)]
+    DockerLauncher {
+        source: super::docker::StopContainerError,
+    },
 }
 
 async fn run_network_launcher(
@@ -113,14 +136,14 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            let (guard, instance, gateway) = match &config.mode {
+            let (guard, instance, gateway, locator) = match &config.mode {
                 ManagedMode::Image(image_config) => {
-                    let (guard, instance) = spawn_docker_launcher(image_config).await?;
+                    let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: false,
                     };
-                    (ShutdownGuard::Container(guard), instance, gateway)
+                    (ShutdownGuard::Container(guard), instance, gateway, locator)
                 }
                 ManagedMode::Launcher { gateway } => {
                     if root.state_dir().exists() {
@@ -130,7 +153,7 @@ async fn run_network_launcher(
                     let network_launcher_path =
                         network_launcher_path.context(NoNetworkLauncherPathSnafu)?;
                     eprintln!("Network launcher path: {network_launcher_path}");
-                    let (child, instance) = spawn_network_launcher(
+                    let (child, instance, locator) = spawn_network_launcher(
                         network_launcher_path,
                         &root.network_stdout_file(),
                         &root.network_stderr_file(),
@@ -147,7 +170,7 @@ async fn run_network_launcher(
                         port: instance.gateway_port,
                         fixed: matches!(gateway.port, Port::Fixed(_)),
                     };
-                    (ShutdownGuard::Process(child), instance, gateway)
+                    (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
             };
             seed_instance(
@@ -159,15 +182,13 @@ async fn run_network_launcher(
             )
             .await?;
             let descriptor = NetworkDescriptorModel {
+                v: "1".to_string(),
                 id: Uuid::new_v4(),
                 project_dir: project_root.to_path_buf(),
                 network: nd.network_name.to_owned(),
                 network_dir: root.root_dir().to_path_buf(),
                 gateway,
-                pid: match &guard {
-                    ShutdownGuard::Container(_) => None,
-                    ShutdownGuard::Process(child) => Some(child.child.id().unwrap()),
-                },
+                child_locator: locator.clone(),
                 root_key: instance.root_key,
                 pocketic_config_port: instance.pocketic_config_port,
                 pocketic_instance_id: instance.pocketic_instance_id,
@@ -182,12 +203,9 @@ async fn run_network_launcher(
             Ok((guard, instance.gateway_port, port_claim))
         })
         .await??;
-    if background && let ShutdownGuard::Process(child) = &guard {
-        // Save the PID of the main `pocket-ic` process
-        // This is used by the `icp network stop` command to find and kill the process.
-        nd.save_background_network_runner_pid(Pid::from(child.child.id().unwrap() as usize))
-            .await?;
+    if background {
         eprintln!("To stop the network, run `icp network stop`");
+        guard.defuse();
     } else {
         eprintln!("Press Ctrl-C to exit.");
 
@@ -202,17 +220,20 @@ async fn run_network_launcher(
 
 enum ShutdownGuard {
     Container(AsyncDropper<DockerDropGuard>),
-    Process(ChildSignalOnDrop),
+    Process(AsyncDropper<ChildSignalOnDrop>),
 }
 
 impl ShutdownGuard {
     async fn async_drop(self) {
         match self {
             ShutdownGuard::Container(mut guard) => guard.async_drop().await,
-            ShutdownGuard::Process(mut guard) => {
-                guard.signal();
-                guard.child.wait().await.unwrap();
-            }
+            ShutdownGuard::Process(mut guard) => guard.async_drop().await,
+        }
+    }
+    fn defuse(self) {
+        match self {
+            ShutdownGuard::Container(mut guard) => guard.defuse(),
+            ShutdownGuard::Process(mut guard) => guard.defuse(),
         }
     }
 }
@@ -288,7 +309,7 @@ async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
                     safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
                     ShutdownReason::CtrlC
                 }
-                res = notice_child_exit(&mut child.child) => {
+                res = notice_child_exit(child.child.as_mut().unwrap()) => {
                     safe_eprintln(&format!("PocketIC exited with status: {:?}", res.status));
                     ShutdownReason::ChildExited
                 }

@@ -14,7 +14,7 @@ For now, you have to build icp-cli locally in order to use it.
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
 - **Network launcher**: Download [icp-cli-network-launcher](https://github.com/dfinity/icp-cli-network-launcher/releases) in order to run a local network.
-- **mops**: Required if you want to build Motoko canister. See [mops.one](https://cli.mops.one/).
+- **mops**: Required if you want to build Motoko canisters. See [mops.one](https://cli.mops.one/).
 
 ### Building
 

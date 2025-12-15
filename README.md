@@ -46,7 +46,7 @@ Note: The network launcher binary must not end up in a different directory than 
 ### [Optional] Add motoko tools to the path
 
 You might also need the Motoko compiler if you plan on building canisters with Motoko. The best way
-is to install the mops, the motoko package manager, see: https://cli.mops.one/
+is to install mops, the motoko package manager, see: https://cli.mops.one/
 
 Reminder, when mops is installed the first time, you must initialize the toolchain with:
 

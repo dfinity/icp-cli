@@ -78,15 +78,8 @@ pub struct Managed {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(untagged)]
 pub enum ManagedMode {
-    Image {
-        image: String,
-        port_mapping: Vec<String>,
-        rm_on_exit: bool,
-        args: Vec<String>,
-    },
-    Launcher {
-        gateway: Gateway,
-    },
+    Image(ManagedImageConfig),
+    Launcher { gateway: Gateway },
 }
 
 impl Default for ManagedMode {
@@ -95,6 +88,20 @@ impl Default for ManagedMode {
             gateway: Gateway::default(),
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct ManagedImageConfig {
+    image: String,
+    port_mapping: Vec<String>,
+    rm_on_exit: bool,
+    args: Vec<String>,
+    entrypoint: Option<Vec<String>>,
+    environment: Vec<String>,
+    volumes: Vec<String>,
+    platform: Option<String>,
+    user: Option<String>,
+    shm_size: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -174,14 +181,26 @@ impl From<Mode> for Configuration {
                     port_mapping,
                     rm_on_exit,
                     args,
+                    entrypoint,
+                    environment,
+                    volumes,
+                    platform,
+                    user,
+                    shm_size,
                 } => Configuration::Managed {
                     managed: Managed {
-                        mode: ManagedMode::Image {
+                        mode: ManagedMode::Image(ManagedImageConfig {
                             image,
                             port_mapping,
                             rm_on_exit: rm_on_exit.unwrap_or(false),
                             args: args.unwrap_or_default(),
-                        },
+                            entrypoint,
+                            environment: environment.unwrap_or_default(),
+                            volumes: volumes.unwrap_or_default(),
+                            platform,
+                            user,
+                            shm_size,
+                        }),
                     },
                 },
             },

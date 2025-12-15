@@ -4,6 +4,7 @@ use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
 use bollard::{
     Docker,
+    errors::Error as BollardError,
     query_parameters::{
         CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions,
         StartContainerOptions, StopContainerOptions, WaitContainerOptions,
@@ -17,15 +18,27 @@ use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;
 
-use crate::network::managed::launcher::{NetworkInstance, wait_for_launcher_status};
+use crate::network::{
+    ManagedImageConfig,
+    managed::launcher::{NetworkInstance, wait_for_launcher_status},
+};
 use crate::prelude::*;
 
 pub async fn spawn_docker_launcher(
-    image: &str,
-    port_mappings: &[String],
-    rm_on_drop: bool,
-    args: &[String],
+    image_config: &ManagedImageConfig,
 ) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance), DockerLauncherError> {
+    let ManagedImageConfig {
+        image,
+        port_mapping,
+        rm_on_exit,
+        args,
+        entrypoint,
+        environment,
+        volumes,
+        platform,
+        user,
+        shm_size,
+    } = image_config;
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     #[cfg(unix)]
     let docker = Docker::connect_with_unix_defaults().context(ConnectDockerSnafu {
@@ -35,7 +48,7 @@ pub async fn spawn_docker_launcher(
     let docker = Docker::connect_with_named_pipe_defaults().context(ConnectDockerSnafu {
         socket: r"\\.\pipe\docker_engine",
     })?;
-    let portmap: HashMap<_, _> = port_mappings
+    let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {
             let (host_port, container_port) =
@@ -51,14 +64,34 @@ pub async fn spawn_docker_launcher(
             ))
         })
         .try_collect()?;
+    let image_query = docker.inspect_image(image).await;
+    match image_query {
+        Ok(_) => {}
+        Err(BollardError::DockerResponseServerError {
+            status_code: 404, ..
+        }) => return NoSuchImageSnafu { image }.fail(),
+        Err(e) => return Err(e).context(QueryImageSnafu { image }),
+    };
     let mut args = args.to_vec();
     args.push("--interface-version=1.0.0".to_string());
     let container_resp = docker
         .create_container(
-            None::<CreateContainerOptions>,
+            platform.clone().map(|p| CreateContainerOptions {
+                platform: p,
+                ..<_>::default()
+            }),
             ContainerCreateBody {
                 image: Some(image.to_string()),
                 cmd: Some(args),
+                entrypoint: entrypoint.clone(),
+                env: Some(environment.clone()),
+                volumes: Some(
+                    volumes
+                        .iter()
+                        .map(|v| (v.clone(), HashMap::new()))
+                        .collect(),
+                ),
+                user: user.clone(),
                 attach_stdin: Some(false),
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
@@ -71,6 +104,7 @@ pub async fn spawn_docker_launcher(
                         read_only: Some(false),
                         ..<_>::default()
                     }]),
+                    shm_size: *shm_size,
                     ..<_>::default()
                 }),
                 ..<_>::default()
@@ -82,7 +116,7 @@ pub async fn spawn_docker_launcher(
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
-        rm_on_drop,
+        rm_on_drop: *rm_on_exit,
     });
     let container_id = guard.container_id.as_ref().unwrap();
     let docker = guard.docker.as_ref().unwrap();
@@ -258,6 +292,13 @@ pub enum DockerLauncherError {
     },
     #[snafu(display("failed to create status directory"))]
     CreateStatusDir { source: std::io::Error },
+    #[snafu(display("failed to query docker image {image}"))]
+    QueryImage {
+        source: bollard::errors::Error,
+        image: String,
+    },
+    #[snafu(display("image {image} not found (try running `docker pull {image}`)"))]
+    NoSuchImage { image: String },
 }
 
 #[derive(Default)]

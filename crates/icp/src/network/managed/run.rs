@@ -114,14 +114,8 @@ async fn run_network_launcher(
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
             let (guard, instance, gateway) = match &config.mode {
-                ManagedMode::Image {
-                    image,
-                    port_mapping,
-                    rm_on_exit,
-                    args,
-                } => {
-                    let (guard, instance) =
-                        spawn_docker_launcher(image, port_mapping, *rm_on_exit, args).await?;
+                ManagedMode::Image(image_config) => {
+                    let (guard, instance) = spawn_docker_launcher(image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: false,

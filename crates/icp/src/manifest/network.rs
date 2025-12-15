@@ -30,7 +30,14 @@ pub enum ManagedMode {
         image: String,
         port_mapping: Vec<String>,
         rm_on_exit: Option<bool>,
+        #[serde(alias = "cmd", alias = "command")]
         args: Option<Vec<String>>,
+        entrypoint: Option<Vec<String>>,
+        environment: Option<Vec<String>>,
+        volumes: Option<Vec<String>>,
+        platform: Option<String>,
+        user: Option<String>,
+        shm_size: Option<i64>,
     },
     Launcher {
         gateway: Option<Gateway>,

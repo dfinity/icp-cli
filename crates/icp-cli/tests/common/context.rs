@@ -219,7 +219,10 @@ impl TestContext {
                 "port": instance.gateway_port,
                 "fixed": false
             },
-            "pid": launcher_pid,
+            "child-locator": {
+                "type": "pid",
+                "pid": launcher_pid
+            },
             "root-key": hex::encode(&instance.root_key),
         });
         fs::write(

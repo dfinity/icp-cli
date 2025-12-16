@@ -33,7 +33,9 @@ pub struct NetworkDescriptorModel {
     rename_all_fields = "kebab-case"
 )]
 pub enum ChildLocator {
-    Pid(u32),
+    Pid {
+        pid: u32,
+    },
     Container {
         id: String,
         socket: PathBuf,

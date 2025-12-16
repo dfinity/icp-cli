@@ -129,7 +129,9 @@ pub async fn spawn_network_launcher(
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
-        ChildLocator::Pid(launcher_status.instance_id.unwrap() as u32),
+        ChildLocator::Pid {
+            pid: launcher_status.instance_id.unwrap() as u32,
+        },
     ))
 }
 

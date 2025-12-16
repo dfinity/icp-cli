@@ -333,18 +333,102 @@
       "type": "object"
     },
     "Managed": {
-      "properties": {
-        "gateway": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Gateway"
+      "anyOf": [
+        {
+          "properties": {
+            "args": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
             },
-            {
-              "type": "null"
+            "entrypoint": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "environment": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "image": {
+              "type": "string"
+            },
+            "platform": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "port-mapping": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rm-on-exit": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "shm-size": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "user": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "volumes": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
             }
-          ]
+          },
+          "required": [
+            "image",
+            "port-mapping"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "gateway": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Gateway"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
         }
-      },
+      ],
       "type": "object"
     },
     "NetworkManifest": {

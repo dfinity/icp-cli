@@ -44,13 +44,13 @@ pub async fn spawn_docker_launcher(
     } = image_config;
     let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
-        Some(sock) => PathBuf::from(sock),
+        Some(sock) => sock,
         #[cfg(unix)]
-        None => PathBuf::from("/var/run/docker.sock"),
+        None => "/var/run/docker.sock".to_string(),
         #[cfg(windows)]
-        None => PathBuf::from(r"\\.\pipe\docker_engine"),
+        None => r"\\.\pipe\docker_engine".to_string(),
     };
-    let docker = Docker::connect_with_local(socket.as_str(), 120, bollard::API_DEFAULT_VERSION)
+    let docker = Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
         .context(ConnectDockerSnafu { socket: &socket })?;
     let portmap: HashMap<_, _> = port_mapping
         .iter()

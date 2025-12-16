@@ -109,8 +109,6 @@ pub async fn spawn_docker_launcher(
         }) => return NoSuchImageSnafu { image }.fail(),
         Err(e) => return Err(e).context(QueryImageSnafu { image }),
     };
-    let mut args = args.to_vec();
-    args.push("--interface-version=1.0.0".to_string());
     let container_resp = docker
         .create_container(
             platform.clone().map(|p| CreateContainerOptions {
@@ -119,13 +117,13 @@ pub async fn spawn_docker_launcher(
             }),
             ContainerCreateBody {
                 image: Some(image.to_string()),
-                cmd: Some(args),
+                cmd: Some(args.to_vec()),
                 entrypoint: entrypoint.clone(),
-                env: Some(environment.clone()),
-                volumes: Some(
-                    volumes
+                env: Some(
+                    environment
                         .iter()
-                        .map(|v| (v.clone(), HashMap::new()))
+                        .cloned()
+                        .chain(["ICP_CLI_NETWORK_LAUNCHER_INTERFACE_VERSION=1.0.0".to_string()])
                         .collect(),
                 ),
                 user: user.clone(),
@@ -135,6 +133,7 @@ pub async fn spawn_docker_launcher(
                 host_config: Some(HostConfig {
                     port_bindings: Some(portmap),
                     mounts: Some(mounts),
+                    binds: Some(volumes.to_vec()),
                     shm_size: *shm_size,
                     ..<_>::default()
                 }),

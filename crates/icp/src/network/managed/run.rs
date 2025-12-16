@@ -1,4 +1,5 @@
 use async_dropper::{AsyncDrop, AsyncDropper};
+use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
 use ic_agent::{
@@ -539,7 +540,8 @@ async fn acquire_icp_to_account(
     response.map_err(|err| InitializeNetworkError::SeedTokens {
         error: format!("Failed to transfer ICP: {err}"),
     })?;
-    eprintln!("Minted {amount} ICP to account {account}");
+    let display_amount = BigDecimal::new(amount.into(), 8).normalized();
+    eprintln!("Minted {display_amount} ICP to account {account}");
     Ok(())
 }
 

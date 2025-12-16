@@ -286,6 +286,16 @@ gateway:
   port: 4943
 ```
 
+**Managed Docker Networks:**
+```yaml
+name: local-dev
+mode: managed
+image: ghcr.io/dfinity/icp-cli-network-launcher
+port-mapping:
+  4943:4943
+```
+See the [containers docs](./containers.md).
+
 **External Networks:**
 ```yaml
 name: ic-mainnet

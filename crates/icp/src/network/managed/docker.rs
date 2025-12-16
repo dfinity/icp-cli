@@ -40,6 +40,7 @@ pub async fn spawn_docker_launcher(
         user,
         shm_size,
         status_dir,
+        mounts,
     } = image_config;
     let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
@@ -66,6 +67,39 @@ pub async fn spawn_docker_launcher(
                 }]),
             ))
         })
+        .try_collect()?;
+    let mounts = mounts
+        .iter()
+        .map(|m| {
+            let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
+            let host = dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
+            let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
+            let (target, flags) = match rest.split_once(':') {
+                Some((t, f)) => (t, Some(f)),
+                None => (rest, None),
+            };
+            let read_only = flags
+                .map(|f| match f {
+                    "ro" => Ok(true),
+                    "rw" => Ok(false),
+                    _ => Err(UnknownFlagsSnafu { flags: f }.build()),
+                })
+                .transpose()?;
+            Ok::<_, DockerLauncherError>(Mount {
+                target: Some(target.to_string()),
+                source: Some(host.to_string()),
+                typ: Some(MountTypeEnum::BIND),
+                read_only,
+                ..<_>::default()
+            })
+        })
+        .chain([Ok(Mount {
+            target: Some(status_dir.to_string()),
+            source: Some(host_status_dir.path().to_string()),
+            typ: Some(MountTypeEnum::BIND),
+            read_only: Some(false),
+            ..<_>::default()
+        })])
         .try_collect()?;
     let image_query = docker.inspect_image(image).await;
     match image_query {
@@ -100,13 +134,7 @@ pub async fn spawn_docker_launcher(
                 attach_stderr: Some(true),
                 host_config: Some(HostConfig {
                     port_bindings: Some(portmap),
-                    mounts: Some(vec![Mount {
-                        target: Some(status_dir.to_string()),
-                        source: Some(host_status_dir.path().to_string()),
-                        typ: Some(MountTypeEnum::BIND),
-                        read_only: Some(false),
-                        ..<_>::default()
-                    }]),
+                    mounts: Some(mounts),
                     shm_size: *shm_size,
                     ..<_>::default()
                 }),
@@ -326,6 +354,19 @@ pub enum DockerLauncherError {
         "failed to parse port mapping {port_mapping}, must be in format <host_port>:<container_port>"
     ))]
     ParsePortmap { port_mapping: String },
+    #[snafu(display(
+        "failed to parse mount {mount}, must be in format <host_path>:<container_path>[:<options>]"
+    ))]
+    ParseMount { mount: String },
+    #[snafu(display("failed to convert path {path} to absolute path"))]
+    ProcessMountSource {
+        source: std::io::Error,
+        path: String,
+    },
+    #[snafu(display("failed to process path as UTF-8"))]
+    BadPath { source: camino::FromPathBufError },
+    #[snafu(display("unknown mount flags {flags}, expected 'ro' or 'rw'"))]
+    UnknownFlags { flags: String },
     #[snafu(transparent)]
     WaitForLauncherStatus {
         source: crate::network::managed::launcher::WaitForLauncherStatusError,

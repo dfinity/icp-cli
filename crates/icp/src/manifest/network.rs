@@ -20,7 +20,7 @@ pub enum Mode {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub struct Managed {
     #[serde(flatten)]
-    pub mode: ManagedMode,
+    pub mode: Box<ManagedMode>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
@@ -40,6 +40,7 @@ pub enum ManagedMode {
         user: Option<String>,
         shm_size: Option<i64>,
         status_dir: Option<String>,
+        mounts: Option<Vec<String>>,
     },
     Launcher {
         gateway: Option<Gateway>,
@@ -196,7 +197,7 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    mode: ManagedMode::Launcher { gateway: None }
+                    mode: Box::new(ManagedMode::Launcher { gateway: None })
                 })
             },
         );
@@ -214,12 +215,12 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    mode: ManagedMode::Launcher {
+                    mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
                             host: Some("localhost".to_string()),
                             port: None,
                         })
-                    }
+                    })
                 })
             },
         );
@@ -238,12 +239,12 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    mode: ManagedMode::Launcher {
+                    mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
                             host: Some("localhost".to_string()),
                             port: Some(8000)
                         })
-                    }
+                    })
                 })
             },
         );

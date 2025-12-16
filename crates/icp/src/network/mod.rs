@@ -103,6 +103,7 @@ pub struct ManagedImageConfig {
     user: Option<String>,
     shm_size: Option<i64>,
     status_dir: String,
+    mounts: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -165,7 +166,7 @@ impl From<ManifestConnected> for Connected {
 impl From<Mode> for Configuration {
     fn from(value: Mode) -> Self {
         match value {
-            Mode::Managed(managed) => match managed.mode {
+            Mode::Managed(managed) => match *managed.mode {
                 crate::manifest::network::ManagedMode::Launcher { gateway } => {
                     let gateway: Gateway = match gateway {
                         Some(g) => g.into(),
@@ -189,6 +190,7 @@ impl From<Mode> for Configuration {
                     user,
                     shm_size,
                     status_dir,
+                    mounts: mount,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image(Box::new(ManagedImageConfig {
@@ -203,6 +205,7 @@ impl From<Mode> for Configuration {
                             user,
                             shm_size,
                             status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
+                            mounts: mount.unwrap_or_default(),
                         })),
                     },
                 },

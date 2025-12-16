@@ -56,6 +56,7 @@ The gateway port of the network must be bound to a host port (permitted to be 0)
 - `entrypoint`: []string, entrypoint executable for the container
 - `environment`: []string, environment variables for the container, in `VAR=VALUE` format, or just `VAR` to inherit from icp-cli's environment.
 - `volumes`: []string, Docker volumes to mount into the container, in `name:path` format
+- `mounts`: []string, bind mounts for the container, in `host-path:container-path[:flags]` format. `host-path` is permitted to be relative, and `flags` can be `rw` or `ro`.
 - `platform`: string, explicit platform selection for Docker installations that support multi-platform hosts.
 - `user`: string, the user to run the container as, in `user:group` format
 - `shm-size`: uint, size of `/dev/shm` in bytes.

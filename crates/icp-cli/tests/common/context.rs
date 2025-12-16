@@ -211,6 +211,7 @@ impl TestContext {
         // Build and write network descriptor
         let descriptor_path = network_dir.join("descriptor.json");
         let network_descriptor = serde_json::json!({
+            "v": "1",
             "id": ::uuid::Uuid::new_v4().to_string(),
             "project-dir": project_dir.as_str(),
             "network": "local",

@@ -12,6 +12,7 @@ use predicates::{
 use serde_json::Value;
 use serial_test::file_serial;
 use sysinfo::{ProcessesToUpdate, System};
+use test_tag::tag;
 
 use crate::common::{
     ENVIRONMENT_DOCKER, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER, NETWORK_RANDOM_PORT, TestContext,
@@ -443,6 +444,7 @@ async fn network_starts_with_canisters_preset() {
         .unwrap();
 }
 
+#[tag(docker)]
 #[tokio::test]
 async fn network_docker() {
     let ctx = TestContext::new();

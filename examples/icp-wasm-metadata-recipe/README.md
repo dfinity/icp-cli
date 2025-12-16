@@ -34,7 +34,7 @@ These demonstrate how arbitrary metadata can be embedded in the Wasm module for 
 First, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canister:

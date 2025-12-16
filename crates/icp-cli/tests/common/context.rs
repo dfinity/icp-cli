@@ -106,7 +106,7 @@ impl TestContext {
             .env("HOME", self.home_path())
             .env_remove("ICP_HOME")
             .arg("network")
-            .arg("run")
+            .arg("start")
             .arg(name);
 
         eprintln!("Running network in {project_dir}");

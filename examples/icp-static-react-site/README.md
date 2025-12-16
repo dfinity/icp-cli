@@ -21,7 +21,7 @@ npm ci
 Next, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canister:
@@ -32,6 +32,6 @@ icp deploy
 
 Once the canister is deployed, you can access the React application in your browser.
 
-The `icp network run` command will output the port number for the local network (e.g., `8000`), and the `icp deploy` command will output the canister ID. You can then construct the URL to view the site, which will look something like this:
+The `icp network start` command will output the port number for the local network (e.g., `8000`), and the `icp deploy` command will output the canister ID. You can then construct the URL to view the site, which will look something like this:
 
 `http://localhost:8000/?canisterId=<canister_id>`

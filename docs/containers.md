@@ -44,7 +44,7 @@ The container should start its network automatically, and write the status file 
 
 ### ICP network
 
-The network is expected to have the ICP ledger, the cycles ledger, and the cycles minting canister set up. The anonymous principal `2vxsx-fae` should have very large amounts of both ICP and cycles.
+The network is expected to have the ICP ledger, the cycles ledger, and the cycles minting canister set up. The anonymous principal `2vxsx-fae` requires a significant initial ICP balance for seeding identities with ICP/cycles.
 
 ## Configuration
 

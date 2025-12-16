@@ -78,7 +78,7 @@ pub struct Managed {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(untagged)]
 pub enum ManagedMode {
-    Image(ManagedImageConfig),
+    Image(Box<ManagedImageConfig>),
     Launcher { gateway: Gateway },
 }
 
@@ -102,6 +102,7 @@ pub struct ManagedImageConfig {
     platform: Option<String>,
     user: Option<String>,
     shm_size: Option<i64>,
+    status_dir: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -187,9 +188,10 @@ impl From<Mode> for Configuration {
                     platform,
                     user,
                     shm_size,
+                    status_dir,
                 } => Configuration::Managed {
                     managed: Managed {
-                        mode: ManagedMode::Image(ManagedImageConfig {
+                        mode: ManagedMode::Image(Box::new(ManagedImageConfig {
                             image,
                             port_mapping,
                             rm_on_exit: rm_on_exit.unwrap_or(false),
@@ -200,7 +202,8 @@ impl From<Mode> for Configuration {
                             platform,
                             user,
                             shm_size,
-                        }),
+                            status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
+                        })),
                     },
                 },
             },

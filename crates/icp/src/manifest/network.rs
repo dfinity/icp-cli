@@ -25,6 +25,7 @@ pub struct Managed {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(untagged, rename_all_fields = "kebab-case")]
+#[allow(clippy::large_enum_variant)]
 pub enum ManagedMode {
     Image {
         image: String,
@@ -38,6 +39,7 @@ pub enum ManagedMode {
         platform: Option<String>,
         user: Option<String>,
         shm_size: Option<i64>,
+        status_dir: Option<String>,
     },
     Launcher {
         gateway: Option<Gateway>,

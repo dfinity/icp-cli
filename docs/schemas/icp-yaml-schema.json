@@ -391,6 +391,12 @@
                 "null"
               ]
             },
+            "status-dir": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "user": {
               "type": [
                 "string",

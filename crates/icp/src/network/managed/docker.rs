@@ -39,8 +39,9 @@ pub async fn spawn_docker_launcher(
         platform,
         user,
         shm_size,
+        status_dir,
     } = image_config;
-    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
+    let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => PathBuf::from(sock),
         #[cfg(unix)]
@@ -100,8 +101,8 @@ pub async fn spawn_docker_launcher(
                 host_config: Some(HostConfig {
                     port_bindings: Some(portmap),
                     mounts: Some(vec![Mount {
-                        target: Some("/app/status".to_string()),
-                        source: Some(status_dir.path().to_string()),
+                        target: Some(status_dir.to_string()),
+                        source: Some(host_status_dir.path().to_string()),
                         typ: Some(MountTypeEnum::BIND),
                         read_only: Some(false),
                         ..<_>::default()
@@ -122,7 +123,7 @@ pub async fn spawn_docker_launcher(
     });
     let container_id = guard.container_id.as_ref().unwrap();
     let docker = guard.docker.as_ref().unwrap();
-    let watcher = wait_for_launcher_status(status_dir.path())?;
+    let watcher = wait_for_launcher_status(host_status_dir.path())?;
     docker
         .start_container(container_id, None::<StartContainerOptions>)
         .await

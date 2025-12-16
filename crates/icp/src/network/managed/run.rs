@@ -67,7 +67,7 @@ pub async fn run_network(
 pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError> {
     match locator {
         ChildLocator::Pid { pid } => {
-            super::launcher::stop_launcher((*pid as usize).into());
+            super::launcher::stop_launcher((*pid as usize).into()).await;
         }
         ChildLocator::Container {
             id,

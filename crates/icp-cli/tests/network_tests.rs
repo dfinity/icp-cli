@@ -9,8 +9,9 @@ use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains, is_match},
 };
+use serde_json::Value;
 use serial_test::file_serial;
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{ProcessesToUpdate, System};
 
 use crate::common::{
     ENVIRONMENT_DOCKER, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER, NETWORK_RANDOM_PORT, TestContext,
@@ -319,24 +320,31 @@ async fn network_run_and_stop_background() {
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
-    // Verify PID file was written
-    let pid_file_path = project_dir
+    // Verify network descriptor file was written
+    let descriptor_file_path = project_dir
         .join(".icp")
         .join("cache")
         .join("networks")
         .join("random-network")
-        .join("background_network_runner.pid");
+        .join("descriptor.json");
     assert!(
-        pid_file_path.exists(),
-        "PID file should exist at {:?}",
-        pid_file_path
+        descriptor_file_path.exists(),
+        "Network descriptor file should exist at {:?}",
+        descriptor_file_path
     );
 
-    let pid_contents = read_to_string(&pid_file_path).expect("Failed to read PID file");
-    let background_launcher_pid: Pid = pid_contents
+    let descriptor_contents =
+        read_to_string(&descriptor_file_path).expect("Failed to read network descriptor file");
+    let descriptor: Value = descriptor_contents
         .trim()
         .parse()
-        .expect("PID file should contain a valid process ID");
+        .expect("Descriptor file should contain valid JSON");
+    let background_launcher_pid = descriptor
+        .get("child-locator")
+        .and_then(|cl| cl.get("pid"))
+        .and_then(|pid| pid.as_u64())
+        .expect("Descriptor should contain launcher PID");
+    let background_launcher_pid = (background_launcher_pid as usize).into();
 
     // Verify network is healthy with agent.status()
     let agent = ic_agent::Agent::builder()
@@ -364,8 +372,8 @@ async fn network_run_and_stop_background() {
 
     // Verify PID file is removed
     assert!(
-        !pid_file_path.exists(),
-        "PID file should be removed after stopping"
+        !descriptor_file_path.exists(),
+        "Descriptor file should be removed after stopping"
     );
 
     // Verify launcher process is no longer running

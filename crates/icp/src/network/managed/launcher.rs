@@ -5,9 +5,9 @@ use candid::Principal;
 use notify::Watcher;
 use serde::Deserialize;
 use snafu::prelude::*;
-use std::{io::ErrorKind, process::Stdio};
+use std::{io::ErrorKind, process::Stdio, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
-use tokio::{process::Child, select};
+use tokio::{process::Child, select, time::Instant};
 
 use crate::{
     network::{Port, config::ChildLocator},
@@ -119,6 +119,7 @@ pub async fn spawn_network_launcher(
             }.fail();
         },
     };
+    let pid = child.id().unwrap();
     Ok((
         guard,
         NetworkInstance {
@@ -129,14 +130,27 @@ pub async fn spawn_network_launcher(
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
-        ChildLocator::Pid {
-            pid: launcher_status.instance_id.unwrap() as u32,
-        },
+        ChildLocator::Pid { pid },
     ))
 }
 
-pub fn stop_launcher(pid: Pid) {
+pub async fn stop_launcher(pid: Pid) {
     send_sigint(pid);
+    let mut system = System::new();
+    let expire = Instant::now() + Duration::from_secs(10);
+    loop {
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+        match system.process(pid) {
+            None => break,
+            Some(_) => {
+                if Instant::now() >= expire {
+                    eprintln!("process {pid} did not exit within 10 seconds");
+                    break;
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 pub fn send_sigint(pid: Pid) {

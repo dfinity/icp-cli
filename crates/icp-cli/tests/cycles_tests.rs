@@ -131,7 +131,14 @@ async fn cycles_mint_with_explicit_network() {
     // Run mint command with explicit --network flag
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "1", "--network", "random-network"])
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "1",
+            "--network",
+            "random-network",
+        ])
         .assert()
         .stdout(contains(
             "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",

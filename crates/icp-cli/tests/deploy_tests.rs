@@ -94,7 +94,8 @@ async fn deploy() {
     let _g = ctx.start_network_in(&project_dir, "random-network");
     ctx.ping_until_healthy(&project_dir, "random-network");
 
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     // Deploy project
     ctx.icp()
@@ -159,7 +160,8 @@ async fn deploy_twice_should_succeed() {
     let _g = ctx.start_network_in(&project_dir, "random-network");
     ctx.ping_until_healthy(&project_dir, "random-network");
 
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     // Deploy project (first time)
     ctx.icp()

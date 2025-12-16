@@ -59,7 +59,13 @@ async fn token_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "icp", "balance", "--environment", "random-environment"])
+        .args([
+            "token",
+            "icp",
+            "balance",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .stdout(contains("Balance: 1.23456780 ICP"))
         .success();

@@ -40,7 +40,8 @@ fn canister_status() {
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)

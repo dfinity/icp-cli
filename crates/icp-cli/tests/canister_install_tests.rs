@@ -50,7 +50,8 @@ fn canister_install() {
         .success();
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -155,7 +156,8 @@ fn canister_install_with_wasm_flag() {
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([

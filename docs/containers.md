@@ -40,7 +40,7 @@ It may optionally also provide the following PocketIC-specific fields, if pocket
 
 ### Container
 
-The container should start its network automatically, and write the status file only when the gateway API is ready to be connected to. When the container receives the stop signal (which is `SIGSTOP` by default, be sure to specify `STOPSIGNAL` if you need it to be `SIGINT` instead), it should gracefully shut down the network, then exit.
+The container should start its network automatically, and write the status file only when the gateway API is ready to be connected to. When the container receives the stop signal (which is `SIGTERM` by default, be sure to specify `STOPSIGNAL` if you need it to be `SIGINT` instead), it should gracefully shut down the network, then exit.
 
 ### ICP network
 

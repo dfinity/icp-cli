@@ -19,7 +19,50 @@ pub enum Mode {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
 pub struct Managed {
-    pub gateway: Option<Gateway>,
+    #[serde(flatten)]
+    pub mode: Box<ManagedMode>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(untagged, rename_all_fields = "kebab-case")]
+#[allow(clippy::large_enum_variant)]
+pub enum ManagedMode {
+    Image {
+        /// The docker image to use for the network
+        image: String,
+        /// Port mappings in the format "host_port:container_port"
+        port_mapping: Vec<String>,
+        /// Whether to delete the container when the network stops
+        rm_on_exit: Option<bool>,
+        /// Command line arguments to pass to the container's entrypoint
+        #[serde(alias = "cmd", alias = "command")]
+        args: Option<Vec<String>>,
+        /// Entrypoint to use for the container
+        entrypoint: Option<Vec<String>>,
+        /// Environment variables to set in the container in VAR=VALUE format (or VAR to inherit from host)
+        environment: Option<Vec<String>>,
+        /// Volumes to mount into the container in the format name:container_path[:options]
+        volumes: Option<Vec<String>>,
+        /// The platform to use for the container (e.g. linux/amd64)
+        platform: Option<String>,
+        /// The user to run the container as in the format user[:group]
+        user: Option<String>,
+        /// The size of /dev/shm in bytes
+        shm_size: Option<i64>,
+        /// The status directory inside the container. Defaults to /app/status
+        status_dir: Option<String>,
+        /// Bind mounts to add to the container in the format relative_host_path:container_path[:options]
+        mounts: Option<Vec<String>>,
+    },
+    Launcher {
+        gateway: Option<Gateway>,
+    },
+}
+
+impl Default for ManagedMode {
+    fn default() -> Self {
+        ManagedMode::Launcher { gateway: None }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
@@ -165,7 +208,9 @@ mod tests {
                 "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
-                configuration: Mode::Managed(Managed { gateway: None })
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Launcher { gateway: None })
+                })
             },
         );
     }
@@ -182,9 +227,11 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    gateway: Some(Gateway {
-                        host: Some("localhost".to_string()),
-                        port: None,
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: Some(Gateway {
+                            host: Some("localhost".to_string()),
+                            port: None,
+                        })
                     })
                 })
             },
@@ -204,9 +251,11 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    gateway: Some(Gateway {
-                        host: Some("localhost".to_string()),
-                        port: Some(8000)
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: Some(Gateway {
+                            host: Some("localhost".to_string()),
+                            port: Some(8000)
+                        })
                     })
                 })
             },

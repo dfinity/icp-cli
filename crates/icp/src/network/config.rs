@@ -13,16 +13,34 @@ pub struct NetworkDescriptorGatewayPort {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct NetworkDescriptorModel {
+    pub v: String,
     pub id: Uuid,
     pub project_dir: PathBuf,
     pub network: String,
     pub network_dir: PathBuf,
     pub gateway: NetworkDescriptorGatewayPort,
-    pub pid: Option<u32>,
+    pub child_locator: ChildLocator,
     #[serde(with = "hex::serde")]
     pub root_key: Vec<u8>,
     pub pocketic_config_port: Option<u16>,
     pub pocketic_instance_id: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(
+    tag = "type",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
+pub enum ChildLocator {
+    Pid {
+        pid: u32,
+    },
+    Container {
+        id: String,
+        socket: PathBuf,
+        rm_on_exit: bool,
+    },
 }
 
 impl NetworkDescriptorModel {

@@ -46,13 +46,14 @@ fn sync_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project (it should sync as well)
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -62,7 +63,7 @@ fn sync_adapter_script_single() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -76,7 +77,7 @@ fn sync_adapter_script_single() {
             "sync",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -119,13 +120,14 @@ fn sync_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project (it should sync as well)
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -135,7 +137,7 @@ fn sync_adapter_script_multiple() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -149,7 +151,7 @@ fn sync_adapter_script_multiple() {
             "sync",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -197,20 +199,21 @@ async fn sync_adapter_static_assets() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     let network_port = ctx
-        .wait_for_network_descriptor(&project_dir, "my-network")
+        .wait_for_network_descriptor(&project_dir, "random-network")
         .gateway_port;
 
     // Canister ID
     let cid = "tqzl2-p7777-77776-aaaaa-cai";
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -219,7 +222,7 @@ async fn sync_adapter_static_assets() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -227,7 +230,7 @@ async fn sync_adapter_static_assets() {
     // Invoke sync
     ctx.icp()
         .current_dir(project_dir)
-        .args(["sync", "my-canister", "--environment", "my-environment"])
+        .args(["sync", "my-canister", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -268,8 +271,8 @@ fn sync_with_valid_principal() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Valid principal
     let principal = "aaaaa-aa";
@@ -277,7 +280,7 @@ fn sync_with_valid_principal() {
     // Try to sync with principal (should fail)
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["sync", principal, "--environment", "my-environment"])
+        .args(["sync", principal, "--environment", "random-environment"])
         .assert()
         .failure()
         .stderr(contains("project does not contain a canister named"));
@@ -335,13 +338,14 @@ fn sync_multiple_canisters() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -350,7 +354,7 @@ fn sync_multiple_canisters() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -365,7 +369,7 @@ fn sync_multiple_canisters() {
             "canister-a",
             "canister-b",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -421,7 +425,7 @@ fn sync_all_canisters_in_environment() {
         
         environments:
           - name: test-env
-            network: my-network
+            network: random-network
             canisters:
               - canister-a
               - canister-b
@@ -434,10 +438,10 @@ fn sync_all_canisters_in_environment() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
     clients::icp(&ctx, &project_dir, Some("test-env".to_string())).mint_cycles(10 * TRILLION);

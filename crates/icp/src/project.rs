@@ -13,7 +13,7 @@ use crate::{
         load_manifest_from_path,
         recipe::RecipeType,
     },
-    network::{Configuration, Connected, Gateway, Managed, Port},
+    network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
     prelude::*,
 };
 
@@ -95,9 +95,11 @@ fn default_networks() -> Vec<Network> {
             name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
-                    gateway: Gateway {
-                        host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
-                        port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                    mode: ManagedMode::Launcher {
+                        gateway: Gateway {
+                            host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                            port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                        },
                     },
                 },
             },

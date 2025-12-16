@@ -47,13 +47,14 @@ fn canister_settings_update_controllers() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -62,7 +63,7 @@ fn canister_settings_update_controllers() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -76,7 +77,7 @@ fn canister_settings_update_controllers() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -95,7 +96,7 @@ fn canister_settings_update_controllers() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--add-controller",
             principal_alice.as_str(),
         ])
@@ -111,7 +112,7 @@ fn canister_settings_update_controllers() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -130,7 +131,7 @@ fn canister_settings_update_controllers() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--add-controller",
             principal_bob.as_str(),
             "--remove-controller",
@@ -148,7 +149,7 @@ fn canister_settings_update_controllers() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -168,7 +169,7 @@ fn canister_settings_update_controllers() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--remove-controller",
             principal_bob.as_str(),
         ])
@@ -184,7 +185,7 @@ fn canister_settings_update_controllers() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -203,7 +204,7 @@ fn canister_settings_update_controllers() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--add-controller",
             principal_alice.as_str(),
             "--add-controller",
@@ -221,7 +222,7 @@ fn canister_settings_update_controllers() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -241,7 +242,7 @@ fn canister_settings_update_controllers() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--remove-controller",
             principal_alice.as_str(),
             "--remove-controller",
@@ -259,7 +260,7 @@ fn canister_settings_update_controllers() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -279,7 +280,7 @@ fn canister_settings_update_controllers() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--set-controller",
             principal_alice.as_str(),
             "--set-controller",
@@ -299,7 +300,7 @@ fn canister_settings_update_controllers() {
             "--identity",
             "alice",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -351,13 +352,14 @@ fn canister_settings_update_log_visibility() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -366,7 +368,7 @@ fn canister_settings_update_log_visibility() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -380,7 +382,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -397,7 +399,7 @@ fn canister_settings_update_log_visibility() {
             "--log-visibility",
             "public",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -411,7 +413,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -428,7 +430,7 @@ fn canister_settings_update_log_visibility() {
             "--add-log-viewer",
             principal_alice.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -442,7 +444,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -465,7 +467,7 @@ fn canister_settings_update_log_visibility() {
             "--remove-log-viewer",
             principal_alice.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -479,7 +481,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -501,7 +503,7 @@ fn canister_settings_update_log_visibility() {
             "--remove-log-viewer",
             principal_bob.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -515,7 +517,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -537,7 +539,7 @@ fn canister_settings_update_log_visibility() {
             "--add-log-viewer",
             principal_bob.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -551,7 +553,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -575,7 +577,7 @@ fn canister_settings_update_log_visibility() {
             "--remove-log-viewer",
             principal_bob.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -589,7 +591,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -611,7 +613,7 @@ fn canister_settings_update_log_visibility() {
             "--set-log-viewer",
             principal_bob.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -625,7 +627,7 @@ fn canister_settings_update_log_visibility() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -667,11 +669,11 @@ fn canister_settings_update_miscellaneous() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(200 * TRILLION);
 
     ctx.icp()
@@ -683,7 +685,7 @@ fn canister_settings_update_miscellaneous() {
             "--cycles",
             &format!("{}", 120 * TRILLION), // 120 TCYCLES because compute allocation is expensive
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -697,7 +699,7 @@ fn canister_settings_update_miscellaneous() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -719,7 +721,7 @@ fn canister_settings_update_miscellaneous() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--compute-allocation",
             "1",
             "--memory-allocation",
@@ -745,7 +747,7 @@ fn canister_settings_update_miscellaneous() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -790,11 +792,11 @@ fn canister_settings_update_environment_variables() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(200 * TRILLION);
 
     ctx.icp()
@@ -804,7 +806,7 @@ fn canister_settings_update_environment_variables() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -818,7 +820,7 @@ fn canister_settings_update_environment_variables() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -838,7 +840,7 @@ fn canister_settings_update_environment_variables() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--add-environment-variable",
             "var1=value1",
             "--add-environment-variable",
@@ -856,7 +858,7 @@ fn canister_settings_update_environment_variables() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -876,7 +878,7 @@ fn canister_settings_update_environment_variables() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--add-environment-variable",
             "var3=value3",
             "--remove-environment-variable",
@@ -894,7 +896,7 @@ fn canister_settings_update_environment_variables() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -915,7 +917,7 @@ fn canister_settings_update_environment_variables() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--remove-environment-variable",
             "var2",
             "--remove-environment-variable",
@@ -933,7 +935,7 @@ fn canister_settings_update_environment_variables() {
             "show",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -971,11 +973,11 @@ fn canister_settings_sync() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(200 * TRILLION);
 
     ctx.icp()
@@ -985,7 +987,7 @@ fn canister_settings_sync() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -1000,7 +1002,7 @@ fn canister_settings_sync() {
                 "sync",
                 "my-canister",
                 "--environment",
-                "my-environment",
+                "random-environment",
             ])
             .assert()
             .success();
@@ -1015,7 +1017,7 @@ fn canister_settings_sync() {
                 "show",
                 "my-canister",
                 "--environment",
-                "my-environment",
+                "random-environment",
             ])
             .assert()
             .success()
@@ -1089,7 +1091,7 @@ fn canister_settings_sync() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--wasm-memory-limit",
             "5GiB",
         ])
@@ -1119,7 +1121,7 @@ fn canister_settings_sync() {
             "update",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--wasm-memory-limit",
             "5GiB",
         ])

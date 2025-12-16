@@ -4,13 +4,11 @@ use std::{
 };
 
 use snafu::{ResultExt, prelude::*};
-use sysinfo::Pid;
 
 use crate::{
     fs::{
         create_dir_all, json,
         lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
-        read_to_string,
     },
     network::config::NetworkDescriptorModel,
     prelude::*,
@@ -115,36 +113,6 @@ impl NetworkDirectory {
         Ok(())
     }
 
-    /// Saves the PID of the process spawned for `--background`
-    pub async fn save_background_network_runner_pid(&self, pid: Pid) -> Result<(), SavePidError> {
-        self.root()?
-            .with_write(async |root| {
-                crate::fs::write(
-                    &root.background_network_runner_pid_file(),
-                    format!("{pid}").as_bytes(),
-                )?;
-                Ok(())
-            })
-            .await?
-    }
-
-    /// Loads the PID of the process spawned for `--background`. Returns None if the file does not exist,
-    /// but Some does not mean the process is still running.
-    pub async fn load_background_network_runner_pid(&self) -> Result<Option<Pid>, LoadPidError> {
-        self.root()?
-            .with_read(async |root| {
-                let path = root.background_network_runner_pid_file();
-
-                read_to_string(&path)
-                    .map(|content| content.trim().parse::<Pid>().ok())
-                    .or_else(|err| match err.kind() {
-                        ErrorKind::NotFound => Ok(None),
-                        _ => Err(err).context(ReadPidSnafu { path: path.clone() }),
-                    })
-            })
-            .await?
-    }
-
     /// Locked directory access for the local network root.
     pub fn root(&self) -> Result<DirectoryStructureLock<NetworkRootPaths>, LockError> {
         DirectoryStructureLock::open_or_create(NetworkRootPaths {
@@ -199,12 +167,6 @@ impl NetworkRootPaths {
     /// Subdirectory for network-launcher-related files (but not the state directory)
     pub fn launcher_dir(&self) -> PathBuf {
         self.network_root.join("network-launcher")
-    }
-
-    /// When running a network in the background, we store the PID of the background controlling `icp` process here.
-    /// This does _not_ contain launcher/pocket-ic processess.
-    pub fn background_network_runner_pid_file(&self) -> PathBuf {
-        self.network_root.join("background_network_runner.pid")
     }
 
     /// icp-cli may write the network's stdout to this file.

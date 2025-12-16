@@ -1,3 +1,5 @@
+use async_dropper::{AsyncDrop, AsyncDropper};
+use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
 use ic_agent::{
@@ -22,7 +24,6 @@ use k256::SecretKey;
 use rand::{RngCore, rng};
 use snafu::prelude::*;
 use std::{env::var, io::Write, process::ExitStatus, time::Duration};
-use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use url::Url;
 use uuid::Uuid;
@@ -30,11 +31,13 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Managed, NetworkDirectory, Port,
-        RunNetworkError::NoLauncherPath,
-        config::{NetworkDescriptorGatewayPort, NetworkDescriptorModel},
+        Gateway, Managed, ManagedMode, NetworkDirectory, Port,
+        config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
-        managed::launcher::{CreateHttpGatewayError, spawn_network_launcher},
+        managed::{
+            docker::{DockerDropGuard, spawn_docker_launcher},
+            launcher::{ChildSignalOnDrop, CreateHttpGatewayError, spawn_network_launcher},
+        },
     },
     prelude::*,
 };
@@ -46,16 +49,12 @@ pub async fn run_network(
     seed_accounts: impl Iterator<Item = Principal> + Clone,
     background: bool,
 ) -> Result<(), RunNetworkError> {
-    let network_launcher_path = PathBuf::from(
-        var("ICP_CLI_NETWORK_LAUNCHER_PATH")
-            .ok()
-            .ok_or(NoLauncherPath)?,
-    );
-
     nd.ensure_exists()?;
 
+    let network_launcher_path = var("ICP_CLI_NETWORK_LAUNCHER_PATH").ok().map(PathBuf::from);
+
     run_network_launcher(
-        &network_launcher_path,
+        network_launcher_path.as_deref(),
         config,
         &nd,
         project_root,
@@ -66,13 +65,26 @@ pub async fn run_network(
     Ok(())
 }
 
+pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError> {
+    match locator {
+        ChildLocator::Pid { pid } => {
+            super::launcher::stop_launcher((*pid as usize).into()).await;
+        }
+        ChildLocator::Container {
+            id,
+            socket,
+            rm_on_exit,
+        } => {
+            super::docker::stop_docker_launcher(socket.as_str(), id, *rm_on_exit).await?;
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
     #[snafu(transparent)]
     CreateDirFailed { source: crate::fs::IoError },
-
-    #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
-    NoLauncherPath,
 
     #[snafu(transparent)]
     LockFileError { source: LockError },
@@ -81,8 +93,16 @@ pub enum RunNetworkError {
     RunNetworkLauncher { source: RunNetworkLauncherError },
 }
 
+#[derive(Debug, Snafu)]
+pub enum StopNetworkError {
+    #[snafu(transparent)]
+    DockerLauncher {
+        source: super::docker::StopContainerError,
+    },
+}
+
 async fn run_network_launcher(
-    network_launcher_path: &Path,
+    network_launcher_path: Option<&Path>,
     config: &Managed,
     nd: &NetworkDirectory,
     project_root: &Path,
@@ -91,9 +111,16 @@ async fn run_network_launcher(
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
     // hold port_claim until the end of this function
-    let (mut child, port, _port_claim) = network_root
+    let (mut guard, port, _port_claim) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let Port::Fixed(port) = &config.gateway.port {
+            let port_lock = if let ManagedMode::Launcher {
+                gateway:
+                    Gateway {
+                        port: Port::Fixed(port),
+                        ..
+                    },
+            } = &config.mode
+            {
                 Some(nd.port(*port)?.into_write().await?)
             } else {
                 None
@@ -102,7 +129,6 @@ async fn run_network_launcher(
                 .as_ref()
                 .map(|lock| lock.claim_port())
                 .transpose()?;
-            eprintln!("Network launcher path: {network_launcher_path}");
 
             create_dir_all(&root.launcher_dir()).context(CreateDirAllSnafu)?;
 
@@ -111,20 +137,43 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            let (child, instance) = spawn_network_launcher(
-                network_launcher_path,
-                &root.network_stdout_file(),
-                &root.network_stderr_file(),
-                background,
-                &config.gateway.port,
-                &root.state_dir(),
-            )
-            .await?;
-            if background {
-                // background means we're using stdio files - otherwise the launcher already prints this
-                eprintln!("Network started on port {}", instance.gateway_port);
-            }
-
+            let (guard, instance, gateway, locator) = match &config.mode {
+                ManagedMode::Image(image_config) => {
+                    let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
+                    let gateway = NetworkDescriptorGatewayPort {
+                        port: instance.gateway_port,
+                        fixed: false,
+                    };
+                    (ShutdownGuard::Container(guard), instance, gateway, locator)
+                }
+                ManagedMode::Launcher { gateway } => {
+                    if root.state_dir().exists() {
+                        remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
+                    }
+                    create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
+                    let network_launcher_path =
+                        network_launcher_path.context(NoNetworkLauncherPathSnafu)?;
+                    eprintln!("Network launcher path: {network_launcher_path}");
+                    let (child, instance, locator) = spawn_network_launcher(
+                        network_launcher_path,
+                        &root.network_stdout_file(),
+                        &root.network_stderr_file(),
+                        background,
+                        &gateway.port,
+                        &root.state_dir(),
+                    )
+                    .await?;
+                    if background {
+                        // background means we're using stdio files - otherwise the launcher already prints this
+                        eprintln!("Network started on port {}", instance.gateway_port);
+                    }
+                    let gateway = NetworkDescriptorGatewayPort {
+                        port: instance.gateway_port,
+                        fixed: matches!(gateway.port, Port::Fixed(_)),
+                    };
+                    (ShutdownGuard::Process(child), instance, gateway, locator)
+                }
+            };
             seed_instance(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()
@@ -133,17 +182,14 @@ async fn run_network_launcher(
                 seed_accounts,
             )
             .await?;
-            let gateway = NetworkDescriptorGatewayPort {
-                port: instance.gateway_port,
-                fixed: matches!(config.gateway.port, Port::Fixed(_)),
-            };
             let descriptor = NetworkDescriptorModel {
+                v: "1".to_string(),
                 id: Uuid::new_v4(),
                 project_dir: project_root.to_path_buf(),
                 network: nd.network_name.to_owned(),
                 network_dir: root.root_dir().to_path_buf(),
                 gateway,
-                pid: Some(child.id().unwrap()),
+                child_locator: locator.clone(),
                 root_key: instance.root_key,
                 pocketic_config_port: instance.pocketic_config_port,
                 pocketic_instance_id: instance.pocketic_instance_id,
@@ -155,22 +201,17 @@ async fn run_network_launcher(
                 &descriptor,
             )
             .await?;
-            Ok((child, instance.gateway_port, port_claim))
+            Ok((guard, instance.gateway_port, port_claim))
         })
         .await??;
     if background {
-        // Save the PID of the main launcher process
-        // This is used by the `icp network stop` command to find and kill the process.
-        nd.save_background_network_runner_pid(Pid::from(child.id().unwrap() as usize))
-            .await?;
         eprintln!("To stop the network, run `icp network stop`");
+        guard.defuse();
     } else {
         eprintln!("Press Ctrl-C to exit.");
 
-        let _ = wait_for_shutdown(&mut child).await;
-        let pid = child.id().unwrap() as usize;
-        send_sigint(pid.into());
-        let _ = child.wait().await;
+        let _ = wait_for_shutdown(&mut guard).await;
+        guard.async_drop().await;
 
         let _ = nd.cleanup_project_network_descriptor().await;
         let _ = nd.cleanup_port_descriptor(Some(port)).await;
@@ -178,16 +219,31 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn send_sigint(pid: Pid) {
-    let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-    if let Some(process) = system.process(pid) {
-        process.kill_with(Signal::Interrupt);
+enum ShutdownGuard {
+    Container(AsyncDropper<DockerDropGuard>),
+    Process(AsyncDropper<ChildSignalOnDrop>),
+}
+
+impl ShutdownGuard {
+    async fn async_drop(self) {
+        match self {
+            ShutdownGuard::Container(mut guard) => guard.async_drop().await,
+            ShutdownGuard::Process(mut guard) => guard.async_drop().await,
+        }
+    }
+    fn defuse(self) {
+        match self {
+            ShutdownGuard::Container(mut guard) => guard.defuse(),
+            ShutdownGuard::Process(mut guard) => guard.defuse(),
+        }
     }
 }
 
 #[derive(Debug, Snafu)]
 pub enum RunNetworkLauncherError {
+    #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
+    NoNetworkLauncherPath,
+
     #[snafu(display("failed to create dir"))]
     CreateDirAll { source: crate::fs::IoError },
 
@@ -221,6 +277,11 @@ pub enum RunNetworkLauncherError {
     SpawnLauncher {
         source: crate::network::managed::launcher::SpawnNetworkLauncherError,
     },
+
+    #[snafu(transparent)]
+    SpawnDockerLauncher {
+        source: crate::network::managed::docker::DockerLauncherError,
+    },
 }
 
 #[derive(Debug)]
@@ -236,17 +297,26 @@ fn safe_eprintln(msg: &str) {
     let _ = std::io::stderr().write_all(b"\n");
 }
 
-async fn wait_for_shutdown(child: &mut Child) -> ShutdownReason {
-    select!(
-        _ = ctrl_c() => {
-            safe_eprintln("Received Ctrl-C, shutting down network...");
+async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
+    match guard {
+        ShutdownGuard::Container(_) => {
+            _ = ctrl_c().await;
+            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
-        res = notice_child_exit(child) => {
-            safe_eprintln(&format!("Network exited with status: {:?}", res.status));
-            ShutdownReason::ChildExited
+        ShutdownGuard::Process(child) => {
+            select!(
+                _ = ctrl_c() => {
+                    safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
+                    ShutdownReason::CtrlC
+                }
+                res = notice_child_exit(child.child.as_mut().unwrap()) => {
+                    safe_eprintln(&format!("PocketIC exited with status: {:?}", res.status));
+                    ShutdownReason::ChildExited
+                }
+            )
         }
-    )
+    }
 }
 
 /// Yields immediately if the child exits.
@@ -470,7 +540,8 @@ async fn acquire_icp_to_account(
     response.map_err(|err| InitializeNetworkError::SeedTokens {
         error: format!("Failed to transfer ICP: {err}"),
     })?;
-    eprintln!("Minted {amount} ICP to account {account}");
+    let display_amount = BigDecimal::new(amount.into(), 8).normalized();
+    eprintln!("Minted {display_amount} ICP to account {account}");
     Ok(())
 }
 

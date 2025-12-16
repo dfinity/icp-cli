@@ -24,17 +24,17 @@ async fn token_balance() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
-    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    let identity = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .use_new_random_identity();
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "balance", "--environment", "my-environment"])
+        .args(["token", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 0 ICP"))
         .success();
@@ -46,7 +46,7 @@ async fn token_balance() {
             "cycles",
             "balance",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
@@ -59,7 +59,13 @@ async fn token_balance() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["token", "icp", "balance", "--environment", "my-environment"])
+        .args([
+            "token",
+            "icp",
+            "balance",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .stdout(contains("Balance: 1.23456780 ICP"))
         .success();
@@ -79,10 +85,10 @@ async fn token_transfer() {
     )
     .expect("failed to write project manifest");
 
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
-    let icp_client = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()));
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
 
     icp_client.create_identity("alice");
     icp_client.use_identity("alice");
@@ -112,7 +118,7 @@ async fn token_transfer() {
             "1.1",
             &bob_principal.to_string(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .stdout(contains(format!(
@@ -137,7 +143,7 @@ async fn token_transfer() {
             "--icp",
             "5",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -150,7 +156,7 @@ async fn token_transfer() {
             "2",
             &bob_principal.to_string(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .stdout(contains(format!(
@@ -160,7 +166,7 @@ async fn token_transfer() {
     icp_client.use_identity("bob");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance", "--environment", "my-environment"])
+        .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 2.000000000000 TCYCLES"))
         .success();

@@ -211,6 +211,7 @@ impl TestContext {
         // Build and write network descriptor
         let descriptor_path = network_dir.join("descriptor.json");
         let network_descriptor = serde_json::json!({
+            "v": "1",
             "id": ::uuid::Uuid::new_v4().to_string(),
             "project-dir": project_dir.as_str(),
             "network": "local",
@@ -219,7 +220,10 @@ impl TestContext {
                 "port": instance.gateway_port,
                 "fixed": false
             },
-            "pid": launcher_pid,
+            "child-locator": {
+                "type": "pid",
+                "pid": launcher_pid
+            },
             "root-key": hex::encode(&instance.root_key),
         });
         fs::write(
@@ -345,5 +349,12 @@ impl TestContext {
             .unwrap();
         agent.set_root_key(self.root_key.get().unwrap().clone());
         agent
+    }
+
+    pub(crate) fn docker_pull_network(&self) {
+        Command::new("docker")
+            .args(["pull", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"])
+            .assert()
+            .success();
     }
 }

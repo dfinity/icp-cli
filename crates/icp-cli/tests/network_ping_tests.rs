@@ -18,9 +18,9 @@ fn ping_network() {
     )
     .expect("failed to write project manifest");
 
-    let _child_guard = ctx.start_network_in(&project_dir, "my-network");
+    let _child_guard = ctx.start_network_in(&project_dir, "random-network");
 
-    let network_descriptor = ctx.wait_for_network_descriptor(&project_dir, "my-network");
+    let network_descriptor = ctx.wait_for_network_descriptor(&project_dir, "random-network");
     let expected_root_key = network_descriptor
         .root_key
         .into_iter()
@@ -30,7 +30,7 @@ fn ping_network() {
     let output = ctx
         .icp()
         .current_dir(&project_dir)
-        .args(["network", "ping", "my-network"])
+        .args(["network", "ping", "random-network"])
         .assert()
         .success()
         .get_output()

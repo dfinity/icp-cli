@@ -291,7 +291,7 @@ impl MockProjectLoader {
         use crate::{
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
             manifest::canister::{BuildStep, BuildSteps, SyncSteps},
-            network::{Configuration, Connected, Gateway, Managed, Port},
+            network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
         };
 
         // Create canisters
@@ -342,9 +342,11 @@ impl MockProjectLoader {
             name: "local".to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8000),
+                    mode: ManagedMode::Launcher {
+                        gateway: Gateway {
+                            host: "localhost".to_string(),
+                            port: Port::Fixed(8000),
+                        },
                     },
                 },
             },
@@ -354,9 +356,11 @@ impl MockProjectLoader {
             name: "staging".to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
-                    gateway: Gateway {
-                        host: "localhost".to_string(),
-                        port: Port::Fixed(8001),
+                    mode: ManagedMode::Launcher {
+                        gateway: Gateway {
+                            host: "localhost".to_string(),
+                            port: Port::Fixed(8001),
+                        },
                     },
                 },
             },

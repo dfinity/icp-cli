@@ -36,11 +36,12 @@ fn canister_delete() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -49,7 +50,7 @@ fn canister_delete() {
             "--subnet",
             common::SUBNET_ID,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -59,7 +60,7 @@ fn canister_delete() {
         .join(".icp")
         .join("cache")
         .join("mappings")
-        .join("my-environment.ids.json");
+        .join("random-environment.ids.json");
     let id_mapping_before =
         std::fs::read_to_string(&id_mapping_path).expect("ID mapping file should exist");
     assert!(
@@ -75,7 +76,7 @@ fn canister_delete() {
             "stop",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -88,7 +89,7 @@ fn canister_delete() {
             "delete",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -109,7 +110,7 @@ fn canister_delete() {
             "status",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .failure()

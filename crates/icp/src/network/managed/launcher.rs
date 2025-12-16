@@ -1,12 +1,18 @@
+use async_dropper::{AsyncDrop, AsyncDropper};
+use async_trait::async_trait;
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::Watcher;
 use serde::Deserialize;
 use snafu::prelude::*;
-use std::{io::ErrorKind, process::Stdio};
-use tokio::process::Child;
+use std::{io::ErrorKind, process::Stdio, time::Duration};
+use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
+use tokio::{process::Child, select, time::Instant};
 
-use crate::{network::Port, prelude::*};
+use crate::{
+    network::{Port, config::ChildLocator},
+    prelude::*,
+};
 
 pub struct NetworkInstance {
     pub gateway_port: u16,
@@ -33,6 +39,23 @@ pub enum SpawnNetworkLauncherError {
     },
     #[snafu(display("failed to watch launcher status file"))]
     WatchForStatusFile { source: WaitForLauncherStatusError },
+    #[snafu(display(
+        "network launcher at {network_launcher_path} exited prematurely with status {exit_status}"
+    ))]
+    LauncherExitedPrematurely {
+        network_launcher_path: PathBuf,
+        exit_status: std::process::ExitStatus,
+    },
+    #[snafu(display("failed to watch launcher process for exit code"))]
+    WatchLauncher {
+        network_launcher_path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("failed to parse root key {key}"))]
+    ParseRootKey {
+        key: String,
+        source: hex::FromHexError,
+    },
 }
 
 pub async fn spawn_network_launcher(
@@ -42,7 +65,14 @@ pub async fn spawn_network_launcher(
     background: bool,
     port: &Port,
     state_dir: &Path,
-) -> Result<(Child, NetworkInstance), SpawnNetworkLauncherError> {
+) -> Result<
+    (
+        AsyncDropper<ChildSignalOnDrop>,
+        NetworkInstance,
+        ChildLocator,
+    ),
+    SpawnNetworkLauncherError,
+> {
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
@@ -74,16 +104,88 @@ pub async fn spawn_network_launcher(
     let child = cmd.spawn().context(SpawnLauncherSnafu {
         network_launcher_path,
     })?;
-    let launcher_status = watcher.await.context(WatchForStatusFileSnafu)?;
+    let mut guard = AsyncDropper::new(ChildSignalOnDrop { child: Some(child) });
+    let child = guard.child.as_mut().unwrap();
+    let launcher_status = select! {
+        status = watcher => status.context(WatchForStatusFileSnafu)?,
+        // If the child process exits before writing the status file, return an error.
+        res = child.wait() => {
+            let exit_status = res.context(WatchLauncherSnafu {
+                network_launcher_path,
+            })?;
+            return LauncherExitedPrematurelySnafu {
+                exit_status,
+                network_launcher_path: &network_launcher_path,
+            }.fail();
+        },
+    };
+    let pid = child.id().unwrap();
     Ok((
-        child,
+        guard,
         NetworkInstance {
             gateway_port: launcher_status.gateway_port,
-            root_key: hex::decode(&launcher_status.root_key).unwrap(),
+            root_key: hex::decode(&launcher_status.root_key).context(ParseRootKeySnafu {
+                key: &launcher_status.root_key,
+            })?,
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
+        ChildLocator::Pid { pid },
     ))
+}
+
+pub async fn stop_launcher(pid: Pid) {
+    send_sigint(pid);
+    let mut system = System::new();
+    let expire = Instant::now() + Duration::from_secs(10);
+    loop {
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+        match system.process(pid) {
+            None => break,
+            Some(_) => {
+                if Instant::now() >= expire {
+                    eprintln!("process {pid} did not exit within 10 seconds");
+                    break;
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+pub fn send_sigint(pid: Pid) {
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+    if let Some(process) = system.process(pid) {
+        process.kill_with(Signal::Interrupt);
+    }
+}
+
+#[derive(Default)]
+pub struct ChildSignalOnDrop {
+    pub child: Option<Child>,
+}
+
+impl ChildSignalOnDrop {
+    pub async fn signal_and_wait(&mut self) -> std::io::Result<()> {
+        if let Some(mut child) = self.child.take()
+            && let Some(id) = child.id()
+        {
+            send_sigint((id as usize).into());
+            child.wait().await?;
+        }
+        Ok(())
+    }
+    pub fn defuse(&mut self) {
+        self.child = None;
+    }
+}
+
+#[async_trait]
+impl AsyncDrop for ChildSignalOnDrop {
+    async fn async_drop(&mut self) {
+        _ = self.signal_and_wait().await;
+    }
 }
 
 #[derive(Debug, Snafu)]

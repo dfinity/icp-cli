@@ -67,6 +67,7 @@ predicates = "3"
 rand.workspace = true
 serde_yaml.workspace = true
 serial_test = { version = "3.2.0", features = ["file_locks"] }
+test-tag = "0.1"
 uuid.workspace = true
 
 [lints]

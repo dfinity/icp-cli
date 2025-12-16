@@ -1,12 +1,12 @@
 use anyhow::{anyhow, bail};
 use clap::Parser;
-use icp::{fs::remove_file, network::Configuration, project::DEFAULT_LOCAL_NETWORK_NAME};
-use std::time::Duration;
-use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
+use icp::{
+    fs::remove_file,
+    network::{Configuration, config::ChildLocator, managed::run::stop_network},
+    project::DEFAULT_LOCAL_NETWORK_NAME,
+};
 
 use icp::context::Context;
-
-const TIMEOUT_SECS: u64 = 30;
 
 /// Stop a background network
 #[derive(Parser, Debug)]
@@ -33,23 +33,29 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     // Network directory
     let nd = ctx.network.get_network_directory(network)?;
 
-    // Load PID from file
-    let pid = nd
-        .load_background_network_runner_pid()
+    let descriptor = nd
+        .load_network_descriptor()
         .await?
-        .ok_or_else(|| anyhow!("network '{}' is not running in the background", cmd.name))?;
+        .ok_or_else(|| anyhow!("network '{}' is not running", cmd.name))?;
 
-    let _ = ctx
-        .term
-        .write_line(&format!("Stopping background network (PID: {})...", pid));
+    match &descriptor.child_locator {
+        ChildLocator::Pid { pid } => {
+            let _ = ctx
+                .term
+                .write_line(&format!("Stopping background network (PID: {})...", pid));
+        }
+        ChildLocator::Container { id, .. } => {
+            let _ = ctx.term.write_line(&format!(
+                "Stopping background network (container ID: {})...",
+                id
+            ));
+        }
+    }
 
-    send_sigint(pid);
-    wait_for_process_exit(pid)?;
+    stop_network(&descriptor.child_locator).await?;
 
     nd.root()?
         .with_write(async |root| {
-            let pid_file = root.background_network_runner_pid_file();
-            let _ = remove_file(&pid_file); // Cleanup is nice, but optional
             let descriptor_file = root.network_descriptor_path();
             // Desciptor file must be deleted to allow the network to be restarted, but if it doesn't exist, that's fine too
             let _ = remove_file(&descriptor_file);
@@ -61,35 +67,4 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     let _ = ctx.term.write_line("Network stopped successfully");
 
     Ok(())
-}
-
-fn send_sigint(pid: Pid) {
-    let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-    if let Some(process) = system.process(pid) {
-        process.kill_with(Signal::Interrupt);
-    }
-}
-
-fn wait_for_process_exit(pid: Pid) -> Result<(), anyhow::Error> {
-    let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(TIMEOUT_SECS);
-    let mut system = System::new();
-
-    loop {
-        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-        if system.process(pid).is_none() {
-            return Ok(());
-        }
-
-        if start.elapsed() > timeout {
-            bail!(
-                "process {} did not exit within {} seconds",
-                pid,
-                TIMEOUT_SECS
-            );
-        }
-
-        std::thread::sleep(Duration::from_millis(100));
-    }
 }

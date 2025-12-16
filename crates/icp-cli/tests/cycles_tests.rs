@@ -26,18 +26,18 @@ async fn cycles_balance() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Empty account has empty balance
-    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    let identity = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .use_new_random_identity();
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance", "--environment", "my-environment"])
+        .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 0 TCYCLES"))
         .success();
@@ -54,7 +54,7 @@ async fn cycles_balance() {
             "--icp",
             "1",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .stdout(contains(
@@ -63,7 +63,7 @@ async fn cycles_balance() {
         .success();
 
     // Mint ICP to cycles, specify cycles amount
-    let identity = clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    let identity = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .use_new_random_identity();
 
     clients::ledger(&ctx)
@@ -77,7 +77,7 @@ async fn cycles_balance() {
             "--cycles",
             "1000000000",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .stdout(contains(
@@ -92,7 +92,7 @@ async fn cycles_balance() {
             "--cycles",
             "1500000000",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .stdout(contains(
@@ -119,8 +119,8 @@ async fn cycles_mint_with_explicit_network() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create identity and mint ICP
     let identity = clients::icp(&ctx, &project_dir, None).use_new_random_identity();
@@ -131,7 +131,14 @@ async fn cycles_mint_with_explicit_network() {
     // Run mint command with explicit --network flag
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "1", "--network", "my-network"])
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "1",
+            "--network",
+            "random-network",
+        ])
         .assert()
         .stdout(contains(
             "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",

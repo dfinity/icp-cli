@@ -1,7 +1,8 @@
-use std::{
-    io::Write,
-    os::fd::{AsRawFd, RawFd},
-};
+use std::io::Write;
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, RawFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawHandle, RawHandle};
 
 use tracing::{Level, Subscriber, debug};
 use tracing_subscriber::{
@@ -12,12 +13,12 @@ use tracing_subscriber::{
 };
 
 #[derive(Debug)]
-pub(crate) struct TermWriter<W: Write + AsRawFd> {
+pub(crate) struct TermWriter<W> {
     pub(crate) debug: bool,
     pub(crate) writer: Box<W>,
 }
 
-impl<W: Write + AsRawFd> Write for TermWriter<W> {
+impl<W: Write> Write for TermWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if !self.debug {
             self.writer.write(buf)?;
@@ -34,9 +35,16 @@ impl<W: Write + AsRawFd> Write for TermWriter<W> {
     }
 }
 
-impl<W: Write + AsRawFd> AsRawFd for TermWriter<W> {
+#[cfg(unix)]
+impl<W: AsRawFd> AsRawFd for TermWriter<W> {
     fn as_raw_fd(&self) -> RawFd {
         self.writer.as_raw_fd()
+    }
+}
+#[cfg(windows)]
+impl<W: AsRawHandle> AsRawHandle for TermWriter<W> {
+    fn as_raw_handle(&self) -> RawHandle {
+        self.writer.as_raw_handle()
     }
 }
 

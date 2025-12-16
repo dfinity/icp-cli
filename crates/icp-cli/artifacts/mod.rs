@@ -159,7 +159,7 @@ fn generate_artifacts_code(artifact_names: &[String], cache_dir: &Path) -> Strin
             name
         ));
         code.push_str(&format!("pub fn {}() -> &'static [u8] {{\n", fn_name));
-        code.push_str(&format!("    include_bytes!(\"{}\")\n", artifact_path_str));
+        code.push_str(&format!("    include_bytes!(r\"{}\")\n", artifact_path_str));
         code.push_str("}\n\n");
     }
 

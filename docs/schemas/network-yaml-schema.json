@@ -74,6 +74,15 @@
             "image": {
               "type": "string"
             },
+            "mounts": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "platform": {
               "type": [
                 "string",

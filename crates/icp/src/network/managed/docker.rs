@@ -46,7 +46,34 @@ pub async fn spawn_docker_launcher(
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
         #[cfg(unix)]
-        None => "/var/run/docker.sock".to_string(),
+        None => {
+            let default_sock = "/var/run/docker.sock".to_string();
+            if Path::new(&default_sock).exists() {
+                default_sock
+            } else {
+                let command_res = std::process::Command::new("docker")
+                    .args([
+                        "context",
+                        "inspect",
+                        "--format",
+                        "{{.Endpoints.docker.Host}}",
+                    ])
+                    .output()
+                    .context(NoGlobalSocketAndShellSnafu)?;
+                if !command_res.status.success() {
+                    return NoGlobalSocketAndCommandSnafu {
+                        stderr: String::from_utf8_lossy(&command_res.stderr).to_string(),
+                    }
+                    .fail();
+                }
+                str::from_utf8(&command_res.stdout)
+                    .context(NoGlobalSocketAndParseCommandSnafu {
+                        display: String::from_utf8_lossy(&command_res.stdout),
+                    })?
+                    .trim()
+                    .to_string()
+            }
+        }
         #[cfg(windows)]
         None => r"\\.\pipe\docker_engine".to_string(),
     };
@@ -417,6 +444,21 @@ pub enum DockerLauncherError {
     },
     #[snafu(display("image {image} not found (try running `docker pull {image}`)"))]
     NoSuchImage { image: String },
+    #[snafu(display(
+        "docker socket was not at /var/run/docker.sock; DOCKER_HOST is not set; and error shelling out to `docker context`"
+    ))]
+    NoGlobalSocketAndShellError { source: std::io::Error },
+    #[snafu(display(
+        "docker socket was not at /var/run/docker.sock; DOCKER_HOST is not set; and `docker context` errored with: {stderr}"
+    ))]
+    NoGlobalSocketAndCommandError { stderr: String },
+    #[snafu(display(
+        "docker socket was not at /var/run/docker.sock; DOCKER_HOST is not set; and error parsing `docker context` output as UTF-8: {display}"
+    ))]
+    NoGlobalSocketAndParseCommandError {
+        source: std::str::Utf8Error,
+        display: String,
+    },
 }
 
 #[derive(Default)]

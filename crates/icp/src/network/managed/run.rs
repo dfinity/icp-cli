@@ -28,6 +28,7 @@ use rand::{RngCore, rng};
 use snafu::prelude::*;
 use std::{env::var, io::Write, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
+use tracing::debug;
 use url::Url;
 use uuid::Uuid;
 
@@ -354,6 +355,8 @@ pub enum WaitForPortError {
 /// Initialize the network:
 /// - Seed ICP and cycles to the given accounts
 /// - Install the candid UI canister
+///
+/// Returns the canister id of the candid ui canister
 pub async fn initialize_network(
     gateway_url: &Url,
     root_key: &[u8],
@@ -361,17 +364,6 @@ pub async fn initialize_network(
     candid_ui_wasm: Option<&[u8]>,
 ) -> Result<Option<Principal>, InitializeNetworkError> {
     eprintln!("Seeding ICP and TCYCLES account balances");
-    if !seed_accounts
-        .clone()
-        .into_iter()
-        .any(|account| account == Principal::anonymous())
-    {
-        return SeedTokensSnafu {
-            error: "seed_accounts must include the anonymous principal for initialization"
-                .to_string(),
-        }
-        .fail();
-    }
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
         .with_identity(AnonymousIdentity)
@@ -590,6 +582,7 @@ async fn install_candid_ui(
     agent: &Agent,
     candid_ui_wasm: &[u8],
 ) -> Result<Principal, InitializeNetworkError> {
+    debug!("Creating canister for Candid UI");
     let amount = 10_000_000_000_000u64; // 10 TCYCLES
     let response = agent
         .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
@@ -622,6 +615,7 @@ async fn install_candid_ui(
             });
         }
     };
+    debug!("Installing Candid UI wasm into canister {}", canister_id);
 
     let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
     mgmt.install_code(&canister_id, candid_ui_wasm)

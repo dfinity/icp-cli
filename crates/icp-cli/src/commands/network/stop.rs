@@ -47,7 +47,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
         ChildLocator::Container { id, .. } => {
             let _ = ctx.term.write_line(&format!(
                 "Stopping background network (container ID: {})...",
-                id
+                &id[..12]
             ));
         }
     }

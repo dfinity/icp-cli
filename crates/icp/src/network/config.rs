@@ -38,7 +38,7 @@ pub enum ChildLocator {
     },
     Container {
         id: String,
-        socket: PathBuf,
+        socket: String,
         rm_on_exit: bool,
     },
 }

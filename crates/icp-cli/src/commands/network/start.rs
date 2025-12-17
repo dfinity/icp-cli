@@ -74,6 +74,16 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     debug!("Project root: {pdir}");
     debug!("Network root: {}", nd.network_root);
 
-    run_network(cfg, nd, pdir, seed_accounts, args.background).await?;
+    let candid_ui_wasm = crate::artifacts::get_candid_ui_wasm();
+
+    run_network(
+        cfg,
+        nd,
+        pdir,
+        seed_accounts,
+        Some(candid_ui_wasm),
+        args.background,
+    )
+    .await?;
     Ok(())
 }

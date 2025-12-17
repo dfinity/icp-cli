@@ -204,6 +204,7 @@ impl TestContext {
                 .unwrap(),
             &instance.root_key,
             [Principal::anonymous()], // Seed anonymous account only for tests
+            None,
         )
         .await
         .expect("Failed to initialize network instance");

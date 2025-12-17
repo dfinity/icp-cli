@@ -7,8 +7,12 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
-    cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL},
+    cycles_ledger::{
+        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs,
+        CreateCanisterResponse,
+    },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
         NotifyMintArgs, NotifyMintResponse,
@@ -46,6 +50,7 @@ pub async fn run_network(
     nd: NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    candid_ui_wasm: Option<&[u8]>,
     background: bool,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
@@ -58,6 +63,7 @@ pub async fn run_network(
         &nd,
         project_root,
         seed_accounts,
+        candid_ui_wasm,
         background,
     )
     .await?;
@@ -106,6 +112,7 @@ async fn run_network_launcher(
     nd: &NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    candid_ui_wasm: Option<&[u8]>,
     background: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
@@ -173,12 +180,13 @@ async fn run_network_launcher(
                     (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
             };
-            initialize_network(
+            let candid_ui_canister_id = initialize_network(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()
                     .unwrap(),
                 &instance.root_key,
                 seed_accounts,
+                candid_ui_wasm,
             )
             .await?;
             let descriptor = NetworkDescriptorModel {
@@ -192,6 +200,7 @@ async fn run_network_launcher(
                 root_key: instance.root_key,
                 pocketic_config_port: instance.pocketic_config_port,
                 pocketic_instance_id: instance.pocketic_instance_id,
+                candid_ui_canister_id,
             };
 
             save_network_descriptors(
@@ -348,8 +357,20 @@ pub async fn initialize_network(
     gateway_url: &Url,
     root_key: &[u8],
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
-) -> Result<(), InitializeNetworkError> {
+    candid_ui_wasm: Option<&[u8]>,
+) -> Result<Option<Principal>, InitializeNetworkError> {
     eprintln!("Seeding ICP and TCYCLES account balances");
+    if !seed_accounts
+        .clone()
+        .into_iter()
+        .any(|account| account == Principal::anonymous())
+    {
+        return SeedTokensSnafu {
+            error: "seed_accounts must include the anonymous principal for initialization"
+                .to_string(),
+        }
+        .fail();
+    }
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
         .with_identity(AnonymousIdentity)
@@ -381,7 +402,12 @@ pub async fn initialize_network(
     seed_cycles_results
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(())
+
+    if let Some(candid_ui_wasm) = candid_ui_wasm {
+        Ok(Some(install_candid_ui(&agent, candid_ui_wasm).await?))
+    } else {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -391,6 +417,9 @@ pub enum InitializeNetworkError {
 
     #[snafu(display("Failed to seed initial balances: {error}"))]
     SeedTokens { error: String },
+
+    #[snafu(display("Failed to install Candid UI canister: {error}"))]
+    CandidUI { error: String },
 }
 
 async fn mint_cycles_to_account(
@@ -554,4 +583,53 @@ async fn get_icp_xdr_conversion_rate(agent: &Agent) -> Result<u64, InitializeNet
         }
     })?;
     Ok(response.data.xdr_permyriad_per_icp)
+}
+
+async fn install_candid_ui(
+    agent: &Agent,
+    candid_ui_wasm: &[u8],
+) -> Result<Principal, InitializeNetworkError> {
+    let amount = 10_000_000_000_000u64; // 10 TCYCLES
+    let response = agent
+        .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
+        .with_arg(
+            Encode!(&CreateCanisterArgs {
+                from_subaccount: None,
+                created_at_time: None,
+                amount: Nat::from(amount),
+                creation_args: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|e| InitializeNetworkError::CandidUI {
+            error: format!("Failed to create canister for Candid UI: {e}"),
+        })?;
+    let response = Decode!(&response, CreateCanisterResponse).map_err(|e| {
+        InitializeNetworkError::CandidUI {
+            error: format!("Failed to decode create canister response for Candid UI: {e}"),
+        }
+    })?;
+    let canister_id = match response {
+        CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+        CreateCanisterResponse::Err(err) => {
+            return Err(InitializeNetworkError::CandidUI {
+                error: format!(
+                    "Failed to create canister for Candid UI: {}",
+                    err.format_error(amount as u128)
+                ),
+            });
+        }
+    };
+
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+    mgmt.install_code(&canister_id, candid_ui_wasm)
+        .with_mode(CanisterInstallMode::Install)
+        .await
+        .map_err(|e| InitializeNetworkError::CandidUI {
+            error: format!("Failed to install Candid UI canister: {e}"),
+        })?;
+    eprintln!("Installed Candid UI canister with ID {}", canister_id);
+
+    Ok(canister_id)
 }

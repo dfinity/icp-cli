@@ -4,7 +4,6 @@ use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
 use ic_agent::{
     Agent, AgentError, Identity,
-    agent::status::Status,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
@@ -36,7 +35,7 @@ use crate::{
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
             docker::{DockerDropGuard, spawn_docker_launcher},
-            launcher::{ChildSignalOnDrop, CreateHttpGatewayError, spawn_network_launcher},
+            launcher::{ChildSignalOnDrop, spawn_network_launcher},
         },
     },
     prelude::*,
@@ -174,7 +173,7 @@ async fn run_network_launcher(
                     (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
             };
-            seed_instance(
+            initialize_network(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()
                     .unwrap(),
@@ -343,7 +342,9 @@ pub enum WaitForPortError {
     ChildExited { source: ChildExitError },
 }
 
-pub async fn seed_instance(
+/// Initialize the network:
+/// - Seed ICP and cycles to the given accounts
+pub async fn initialize_network(
     gateway_url: &Url,
     root_key: &[u8],
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
@@ -385,17 +386,8 @@ pub async fn seed_instance(
 
 #[derive(Debug, Snafu)]
 pub enum InitializeNetworkError {
-    #[snafu(transparent)]
-    CreateHttpGateway { source: CreateHttpGatewayError },
-
-    #[snafu(display("no root key reported in status"))]
-    NoRootKey,
-
-    #[snafu(transparent)]
-    PingAndWait { source: PingAndWaitError },
-
-    #[snafu(transparent)]
-    Reqwest { source: reqwest::Error },
+    #[snafu(display("failed to build agent for url {}", url))]
+    BuildAgent { source: AgentError, url: String },
 
     #[snafu(display("Failed to seed initial balances: {error}"))]
     SeedTokens { error: String },
@@ -562,45 +554,4 @@ async fn get_icp_xdr_conversion_rate(agent: &Agent) -> Result<u64, InitializeNet
         }
     })?;
     Ok(response.data.xdr_permyriad_per_icp)
-}
-
-pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {
-    let agent = Agent::builder()
-        .with_url(url)
-        .build()
-        .context(BuildAgentSnafu { url })?;
-
-    let mut retries = 0;
-
-    loop {
-        let status = agent.status().await;
-        match status {
-            Ok(status) => {
-                if matches!(&status.replica_health_status, Some(status) if status == "healthy") {
-                    break Ok(status);
-                }
-            }
-
-            Err(e) => {
-                if retries >= 60 {
-                    break Err(PingAndWaitError::Timeout { source: e });
-                }
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                retries += 1;
-            }
-        }
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum PingAndWaitError {
-    #[snafu(display("failed to build agent for url {}", url))]
-    BuildAgent {
-        source: AgentError,
-        url: String,
-    },
-
-    Timeout {
-        source: AgentError,
-    },
 }

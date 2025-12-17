@@ -289,7 +289,7 @@ gateway:
 **Managed Docker Networks:**
 ```yaml
 name: local-dev
-mode: managed
+mode: managed-container
 image: ghcr.io/dfinity/icp-cli-network-launcher
 port-mapping:
   4943:4943

@@ -32,14 +32,13 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         .get(&args.name)
         .ok_or_else(|| anyhow!("project does not contain a network named '{}'", args.name))?;
 
-    let cfg = match &network.configuration {
-        // Locally-managed network
-        Configuration::Managed { managed: cfg } => cfg,
-
+    let cfg = &network.configuration;
+    match cfg {
         // Non-managed networks cannot be started
-        Configuration::Connected { connected: _ } => {
+        Configuration::Connected { .. } => {
             bail!("network '{}' is not a managed network", args.name)
         }
+        Configuration::Managed { .. } | Configuration::ManagedContainer { .. } => {}
     };
 
     let pdir = &p.dir;

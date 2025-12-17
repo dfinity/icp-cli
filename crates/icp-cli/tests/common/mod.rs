@@ -34,7 +34,7 @@ environments:
 pub(crate) const NETWORK_DOCKER: &str = r#"
 networks:
   - name: docker-network
-    mode: managed
+    mode: managed-container
     image: ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0
     port-mapping:
       - 0:4943

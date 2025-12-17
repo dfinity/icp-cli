@@ -19,16 +19,16 @@ use snafu::{OptionExt, Snafu};
 use tokio::select;
 
 use crate::network::{
-    ManagedImageConfig,
+    ManagedContainerConfig,
     config::ChildLocator,
     managed::launcher::{NetworkInstance, wait_for_launcher_status},
 };
 use crate::prelude::*;
 
 pub async fn spawn_docker_launcher(
-    image_config: &ManagedImageConfig,
+    container_config: &ManagedContainerConfig,
 ) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance, ChildLocator), DockerLauncherError> {
-    let ManagedImageConfig {
+    let ManagedContainerConfig {
         image,
         port_mapping,
         rm_on_exit,
@@ -41,7 +41,7 @@ pub async fn spawn_docker_launcher(
         shm_size,
         status_dir,
         mounts,
-    } = image_config;
+    } = container_config;
     let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,

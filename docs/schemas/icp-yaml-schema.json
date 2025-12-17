@@ -264,26 +264,6 @@
       ],
       "type": "object"
     },
-    "Gateway": {
-      "properties": {
-        "host": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "port": {
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
     "Item": {
       "anyOf": [
         {
@@ -333,128 +313,128 @@
       "type": "object"
     },
     "Managed": {
-      "anyOf": [
-        {
-          "properties": {
-            "args": {
-              "description": "Command line arguments to pass to the container's entrypoint",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "entrypoint": {
-              "description": "Entrypoint to use for the container",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "environment": {
-              "description": "Environment variables to set in the container in VAR=VALUE format (or VAR to inherit from host)",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "image": {
-              "description": "The docker image to use for the network",
-              "type": "string"
-            },
-            "mounts": {
-              "description": "Bind mounts to add to the container in the format relative_host_path:container_path[:options]",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "platform": {
-              "description": "The platform to use for the container (e.g. linux/amd64)",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "port-mapping": {
-              "description": "Port mappings in the format \"host_port:container_port\"",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rm-on-exit": {
-              "description": "Whether to delete the container when the network stops",
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
-            "shm-size": {
-              "description": "The size of /dev/shm in bytes",
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "status-dir": {
-              "description": "The status directory inside the container. Defaults to /app/status",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "user": {
-              "description": "The user to run the container as in the format user[:group]",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "volumes": {
-              "description": "Volumes to mount into the container in the format name:container_path[:options]",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "image",
-            "port-mapping"
-          ],
-          "type": "object"
+      "properties": {
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        {
-          "properties": {
-            "gateway": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Gateway"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "type": "object"
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
+      },
+      "type": "object"
+    },
+    "ManagedContainer": {
+      "properties": {
+        "args": {
+          "description": "Command line arguments to pass to the container's entrypoint",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "entrypoint": {
+          "description": "Entrypoint to use for the container",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "environment": {
+          "description": "Environment variables to set in the container in VAR=VALUE format (or VAR to inherit from host)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "image": {
+          "description": "The docker image to use for the network",
+          "type": "string"
+        },
+        "mounts": {
+          "description": "Bind mounts to add to the container in the format relative_host_path:container_path[:options]",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "The platform to use for the container (e.g. linux/amd64)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port-mapping": {
+          "description": "Port mappings in the format \"host_port:container_port\"",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rm-on-exit": {
+          "description": "Whether to delete the container when the network stops",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "shm-size": {
+          "description": "The size of /dev/shm in bytes",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status-dir": {
+          "description": "The status directory inside the container. Defaults to /app/status",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user": {
+          "description": "The user to run the container as in the format user[:group]",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "volumes": {
+          "description": "Volumes to mount into the container in the format name:container_path[:options]",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "image",
+        "port-mapping"
       ],
       "type": "object"
     },
@@ -466,6 +446,19 @@
           "properties": {
             "mode": {
               "const": "managed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ManagedContainer",
+          "properties": {
+            "mode": {
+              "const": "managed-container",
               "type": "string"
             }
           },

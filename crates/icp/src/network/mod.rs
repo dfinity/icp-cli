@@ -12,7 +12,9 @@ use crate::{
     CACHE_DIR, ICP_BASE, Network,
     manifest::{
         ProjectRootLocate, ProjectRootLocateError,
-        network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
+        network::{
+            Connected as ManifestConnected, Managed as ManifestGateway, ManagedContainer, Mode,
+        },
     },
     network::access::{
         GetNetworkAccessError, NetworkAccess, get_connected_network_access,
@@ -52,7 +54,8 @@ fn default_host() -> String {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct Gateway {
+#[serde(rename_all = "kebab-case")]
+pub struct ManagedLauncherConfig {
     #[serde(default = "default_host")]
     pub host: String,
 
@@ -60,7 +63,7 @@ pub struct Gateway {
     pub port: Port,
 }
 
-impl Default for Gateway {
+impl Default for ManagedLauncherConfig {
     fn default() -> Self {
         Self {
             host: default_host(),
@@ -69,29 +72,9 @@ impl Default for Gateway {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct Managed {
-    #[serde(flatten)]
-    pub mode: ManagedMode,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-#[serde(untagged)]
-pub enum ManagedMode {
-    Image(Box<ManagedImageConfig>),
-    Launcher { gateway: Gateway },
-}
-
-impl Default for ManagedMode {
-    fn default() -> Self {
-        ManagedMode::Launcher {
-            gateway: Gateway::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct ManagedImageConfig {
+#[serde(rename_all = "kebab-case")]
+pub struct ManagedContainerConfig {
     image: String,
     port_mapping: Vec<String>,
     rm_on_exit: bool,
@@ -117,14 +100,19 @@ pub struct Connected {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-#[serde(tag = "mode", rename_all = "lowercase")]
+#[serde(tag = "mode", rename_all = "kebab-case")]
 pub enum Configuration {
     // Note: we must use struct variants to be able to flatten
     // and make schemars generate the proper schema
     /// A managed network is one which can be controlled and manipulated.
     Managed {
         #[serde(flatten)]
-        managed: Managed,
+        launcher: ManagedLauncherConfig,
+    },
+
+    ManagedContainer {
+        #[serde(flatten)]
+        container: Box<ManagedContainerConfig>,
     },
 
     /// A connected network is one which can be interacted with
@@ -138,12 +126,12 @@ pub enum Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Configuration::Managed {
-            managed: Managed::default(),
+            launcher: ManagedLauncherConfig::default(),
         }
     }
 }
 
-impl From<ManifestGateway> for Gateway {
+impl From<ManifestGateway> for ManagedLauncherConfig {
     fn from(value: ManifestGateway) -> Self {
         let host = value.host.unwrap_or("localhost".to_string());
         let port = match value.port {
@@ -151,7 +139,7 @@ impl From<ManifestGateway> for Gateway {
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };
-        Gateway { host, port }
+        ManagedLauncherConfig { host, port }
     }
 }
 
@@ -163,52 +151,47 @@ impl From<ManifestConnected> for Connected {
     }
 }
 
+impl From<ManagedContainer> for ManagedContainerConfig {
+    fn from(value: ManagedContainer) -> Self {
+        let ManagedContainer {
+            image,
+            port_mapping,
+            rm_on_exit,
+            args,
+            entrypoint,
+            environment,
+            volumes,
+            platform,
+            user,
+            shm_size,
+            status_dir,
+            mounts: mount,
+        } = value;
+        ManagedContainerConfig {
+            image,
+            port_mapping,
+            rm_on_exit: rm_on_exit.unwrap_or(false),
+            args: args.unwrap_or_default(),
+            entrypoint,
+            environment: environment.unwrap_or_default(),
+            volumes: volumes.unwrap_or_default(),
+            platform,
+            user,
+            shm_size,
+            status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
+            mounts: mount.unwrap_or_default(),
+        }
+    }
+}
+
 impl From<Mode> for Configuration {
     fn from(value: Mode) -> Self {
         match value {
-            Mode::Managed(managed) => match *managed.mode {
-                crate::manifest::network::ManagedMode::Launcher { gateway } => {
-                    let gateway: Gateway = match gateway {
-                        Some(g) => g.into(),
-                        None => Gateway::default(),
-                    };
-                    Configuration::Managed {
-                        managed: Managed {
-                            mode: ManagedMode::Launcher { gateway },
-                        },
-                    }
-                }
-                crate::manifest::network::ManagedMode::Image {
-                    image,
-                    port_mapping,
-                    rm_on_exit,
-                    args,
-                    entrypoint,
-                    environment,
-                    volumes,
-                    platform,
-                    user,
-                    shm_size,
-                    status_dir,
-                    mounts: mount,
-                } => Configuration::Managed {
-                    managed: Managed {
-                        mode: ManagedMode::Image(Box::new(ManagedImageConfig {
-                            image,
-                            port_mapping,
-                            rm_on_exit: rm_on_exit.unwrap_or(false),
-                            args: args.unwrap_or_default(),
-                            entrypoint,
-                            environment: environment.unwrap_or_default(),
-                            volumes: volumes.unwrap_or_default(),
-                            platform,
-                            user,
-                            shm_size,
-                            status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
-                            mounts: mount.unwrap_or_default(),
-                        })),
-                    },
-                },
+            Mode::Managed(gateway) => Configuration::Managed {
+                launcher: gateway.into(),
+            },
+            Mode::ManagedContainer(container) => Configuration::ManagedContainer {
+                container: Box::new((*container).into()),
             },
             Mode::Connected(connected) => Configuration::Connected {
                 connected: connected.into(),
@@ -259,7 +242,8 @@ impl Access for Accessor {
     }
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
         match &network.configuration {
-            Configuration::Managed { managed: _ } => {
+            Configuration::Managed { launcher: _ }
+            | Configuration::ManagedContainer { container: _ } => {
                 let nd = self.get_network_directory(network)?;
                 Ok(get_managed_network_access(nd).await?)
             }

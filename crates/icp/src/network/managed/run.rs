@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Gateway, Managed, ManagedMode, NetworkDirectory, Port,
+        Configuration, ManagedLauncherConfig, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
@@ -47,7 +47,7 @@ use crate::{
 };
 
 pub async fn run_network(
-    config: &Managed,
+    config: &Configuration,
     nd: NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
@@ -109,7 +109,7 @@ pub enum StopNetworkError {
 
 async fn run_network_launcher(
     network_launcher_path: Option<&Path>,
-    config: &Managed,
+    config: &Configuration,
     nd: &NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
@@ -120,13 +120,13 @@ async fn run_network_launcher(
     // hold port_claim until the end of this function
     let (mut guard, port, _port_claim) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let ManagedMode::Launcher {
-                gateway:
-                    Gateway {
+            let port_lock = if let Configuration::Managed {
+                launcher:
+                    ManagedLauncherConfig {
                         port: Port::Fixed(port),
                         ..
                     },
-            } = &config.mode
+            } = &config
             {
                 Some(nd.port(*port)?.into_write().await?)
             } else {
@@ -144,16 +144,19 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            let (guard, instance, gateway, locator) = match &config.mode {
-                ManagedMode::Image(image_config) => {
-                    let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
+            let (guard, instance, gateway, locator) = match &config {
+                Configuration::ManagedContainer {
+                    container: container_config,
+                } => {
+                    let (guard, instance, locator) =
+                        spawn_docker_launcher(container_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: false,
                     };
                     (ShutdownGuard::Container(guard), instance, gateway, locator)
                 }
-                ManagedMode::Launcher { gateway } => {
+                Configuration::Managed { launcher: gateway } => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
                     }
@@ -180,6 +183,7 @@ async fn run_network_launcher(
                     };
                     (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
+                Configuration::Connected { .. } => unreachable!(),
             };
             let candid_ui_canister_id = initialize_network(
                 &format!("http://localhost:{}", instance.gateway_port)

@@ -215,9 +215,11 @@ impl MockProjectLoader {
     /// - Environment: "default" (uses local network, includes backend canister)
     pub fn minimal() -> Self {
         use crate::{
-            manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
-            manifest::canister::{BuildStep, BuildSteps, SyncSteps},
-            network::{Configuration, Managed},
+            manifest::{
+                adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
+                canister::{BuildStep, BuildSteps, SyncSteps},
+            },
+            network::{Configuration, ManagedLauncherConfig},
         };
 
         let backend_canister = Canister {
@@ -237,7 +239,7 @@ impl MockProjectLoader {
         let local_network = Network {
             name: "local".to_string(),
             configuration: Configuration::Managed {
-                managed: Managed::default(),
+                launcher: ManagedLauncherConfig::default(),
             },
         };
 
@@ -291,7 +293,7 @@ impl MockProjectLoader {
         use crate::{
             manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
             manifest::canister::{BuildStep, BuildSteps, SyncSteps},
-            network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
+            network::{Configuration, Connected, ManagedLauncherConfig, Port},
         };
 
         // Create canisters
@@ -341,13 +343,9 @@ impl MockProjectLoader {
         let local_network = Network {
             name: "local".to_string(),
             configuration: Configuration::Managed {
-                managed: Managed {
-                    mode: ManagedMode::Launcher {
-                        gateway: Gateway {
-                            host: "localhost".to_string(),
-                            port: Port::Fixed(8000),
-                        },
-                    },
+                launcher: ManagedLauncherConfig {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(8000),
                 },
             },
         };
@@ -355,13 +353,9 @@ impl MockProjectLoader {
         let staging_network = Network {
             name: "staging".to_string(),
             configuration: Configuration::Managed {
-                managed: Managed {
-                    mode: ManagedMode::Launcher {
-                        gateway: Gateway {
-                            host: "localhost".to_string(),
-                            port: Port::Fixed(8001),
-                        },
-                    },
+                launcher: ManagedLauncherConfig {
+                    host: "localhost".to_string(),
+                    port: Port::Fixed(8001),
                 },
             },
         };

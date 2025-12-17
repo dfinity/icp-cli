@@ -219,6 +219,7 @@ impl Context {
                 let env = self.get_environment(environment).await?;
                 let is_cache = match env.network.configuration {
                     NetworkConfiguration::Managed { .. } => true,
+                    NetworkConfiguration::ManagedContainer { .. } => true,
                     NetworkConfiguration::Connected { .. } => false,
                 };
 
@@ -262,6 +263,7 @@ impl Context {
         let env = self.get_environment(environment).await?;
         let is_cache = match env.network.configuration {
             NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::ManagedContainer { .. } => true,
             NetworkConfiguration::Connected { .. } => false,
         };
 
@@ -293,6 +295,7 @@ impl Context {
         let env = self.get_environment(environment).await?;
         let is_cache = match env.network.configuration {
             NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::ManagedContainer { .. } => true,
             NetworkConfiguration::Connected { .. } => false,
         };
 
@@ -436,6 +439,7 @@ impl Context {
         let env = self.get_environment(environment).await?;
         let is_cache = match env.network.configuration {
             NetworkConfiguration::Managed { .. } => true,
+            NetworkConfiguration::ManagedContainer { .. } => true,
             NetworkConfiguration::Connected { .. } => false,
         };
         self.ids

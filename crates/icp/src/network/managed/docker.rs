@@ -121,7 +121,7 @@ pub async fn spawn_docker_launcher(
                 .map(|r| r.map(|_| ()))
                 .try_collect::<()>()
                 .await
-                .context(PullContainerSnafu { image })?;
+                .context(PullImageSnafu { image })?;
         }
         Err(e) => return Err(e).context(QueryImageSnafu { image }),
     };
@@ -344,7 +344,7 @@ pub enum DockerLauncherError {
         container_id: String,
     },
     #[snafu(display("failed to locate or pull docker image {image}"))]
-    PullContainer {
+    PullImage {
         source: bollard::errors::Error,
         image: String,
     },

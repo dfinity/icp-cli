@@ -6,13 +6,13 @@ use bollard::{
     Docker,
     errors::Error as BollardError,
     query_parameters::{
-        CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions,
-        StartContainerOptions, StopContainerOptions, WaitContainerOptions,
+        CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
+        RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
     secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
 use camino_tempfile::Utf8TempDir;
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
@@ -106,7 +106,23 @@ pub async fn spawn_docker_launcher(
         Ok(_) => {}
         Err(BollardError::DockerResponseServerError {
             status_code: 404, ..
-        }) => return NoSuchImageSnafu { image }.fail(),
+        }) => {
+            eprintln!("Pulling image {image}");
+            docker
+                .create_image(
+                    Some(CreateImageOptions {
+                        from_image: Some(image.clone()),
+                        platform: platform.clone().unwrap_or_default(),
+                        ..<_>::default()
+                    }),
+                    None,
+                    None,
+                )
+                .map(|r| r.map(|_| ()))
+                .try_collect::<()>()
+                .await
+                .context(PullContainerSnafu { image })?;
+        }
         Err(e) => return Err(e).context(QueryImageSnafu { image }),
     };
     let container_resp = docker
@@ -143,6 +159,7 @@ pub async fn spawn_docker_launcher(
         .await
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
+    eprintln!("Created container {}", &container_id[..12]);
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
@@ -325,6 +342,11 @@ pub enum DockerLauncherError {
     InspectContainer {
         source: bollard::errors::Error,
         container_id: String,
+    },
+    #[snafu(display("failed to locate or pull docker image {image}"))]
+    PullContainer {
+        source: bollard::errors::Error,
+        image: String,
     },
     #[snafu(display("failed to parse root key {key}"))]
     ParseRootKey {

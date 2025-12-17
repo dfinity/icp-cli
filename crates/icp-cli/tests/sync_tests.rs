@@ -1,6 +1,7 @@
 use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
+    store_id::IdMapping,
 };
 use indoc::formatdoc;
 use predicates::{
@@ -208,9 +209,6 @@ async fn sync_adapter_static_assets() {
         .wait_for_network_descriptor(&project_dir, "random-network")
         .gateway_port;
 
-    // Canister ID
-    let cid = "tqzl2-p7777-77776-aaaaa-cai";
-
     // Deploy project
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
@@ -226,6 +224,19 @@ async fn sync_adapter_static_assets() {
         ])
         .assert()
         .success();
+
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("random-environment.ids.json");
+
+    let id_mapping_content: IdMapping =
+        icp::fs::json::load(&id_mapping_path).expect("failed to read ID mapping file");
+
+    let cid = id_mapping_content
+        .get("my-canister")
+        .expect("canister ID not found");
 
     // Invoke sync
     ctx.icp()

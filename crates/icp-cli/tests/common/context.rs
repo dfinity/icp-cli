@@ -12,7 +12,7 @@ use ic_agent::Agent;
 use icp::{
     network::managed::{
         launcher::{NetworkInstance, wait_for_launcher_status},
-        run::seed_instance,
+        run::initialize_network,
     },
     prelude::*,
 };
@@ -198,12 +198,13 @@ impl TestContext {
             pocketic_instance_id: status.instance_id,
         };
         // Initialize network instance
-        seed_instance(
+        initialize_network(
             &format!("http://localhost:{}", instance.gateway_port)
                 .parse()
                 .unwrap(),
             &instance.root_key,
             [Principal::anonymous()], // Seed anonymous account only for tests
+            None,
         )
         .await
         .expect("Failed to initialize network instance");

@@ -4,12 +4,15 @@ use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
 use ic_agent::{
     Agent, AgentError, Identity,
-    agent::status::Status,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
-    cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL},
+    cycles_ledger::{
+        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs,
+        CreateCanisterResponse,
+    },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
         NotifyMintArgs, NotifyMintResponse,
@@ -25,6 +28,7 @@ use rand::{RngCore, rng};
 use snafu::prelude::*;
 use std::{env::var, io::Write, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
+use tracing::debug;
 use url::Url;
 use uuid::Uuid;
 
@@ -36,7 +40,7 @@ use crate::{
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
             docker::{DockerDropGuard, spawn_docker_launcher},
-            launcher::{ChildSignalOnDrop, CreateHttpGatewayError, spawn_network_launcher},
+            launcher::{ChildSignalOnDrop, spawn_network_launcher},
         },
     },
     prelude::*,
@@ -47,6 +51,7 @@ pub async fn run_network(
     nd: NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    candid_ui_wasm: Option<&[u8]>,
     background: bool,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
@@ -59,6 +64,7 @@ pub async fn run_network(
         &nd,
         project_root,
         seed_accounts,
+        candid_ui_wasm,
         background,
     )
     .await?;
@@ -107,6 +113,7 @@ async fn run_network_launcher(
     nd: &NetworkDirectory,
     project_root: &Path,
     seed_accounts: impl Iterator<Item = Principal> + Clone,
+    candid_ui_wasm: Option<&[u8]>,
     background: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
@@ -174,12 +181,13 @@ async fn run_network_launcher(
                     (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
             };
-            seed_instance(
+            let candid_ui_canister_id = initialize_network(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()
                     .unwrap(),
                 &instance.root_key,
                 seed_accounts,
+                candid_ui_wasm,
             )
             .await?;
             let descriptor = NetworkDescriptorModel {
@@ -193,6 +201,7 @@ async fn run_network_launcher(
                 root_key: instance.root_key,
                 pocketic_config_port: instance.pocketic_config_port,
                 pocketic_instance_id: instance.pocketic_instance_id,
+                candid_ui_canister_id,
             };
 
             save_network_descriptors(
@@ -343,11 +352,17 @@ pub enum WaitForPortError {
     ChildExited { source: ChildExitError },
 }
 
-pub async fn seed_instance(
+/// Initialize the network:
+/// - Seed ICP and cycles to the given accounts
+/// - Install the candid UI canister
+///
+/// Returns the canister id of the candid ui canister
+pub async fn initialize_network(
     gateway_url: &Url,
     root_key: &[u8],
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
-) -> Result<(), InitializeNetworkError> {
+    candid_ui_wasm: Option<&[u8]>,
+) -> Result<Option<Principal>, InitializeNetworkError> {
     eprintln!("Seeding ICP and TCYCLES account balances");
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
@@ -380,25 +395,24 @@ pub async fn seed_instance(
     seed_cycles_results
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(())
+
+    if let Some(candid_ui_wasm) = candid_ui_wasm {
+        Ok(Some(install_candid_ui(&agent, candid_ui_wasm).await?))
+    } else {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Snafu)]
 pub enum InitializeNetworkError {
-    #[snafu(transparent)]
-    CreateHttpGateway { source: CreateHttpGatewayError },
-
-    #[snafu(display("no root key reported in status"))]
-    NoRootKey,
-
-    #[snafu(transparent)]
-    PingAndWait { source: PingAndWaitError },
-
-    #[snafu(transparent)]
-    Reqwest { source: reqwest::Error },
+    #[snafu(display("failed to build agent for url {}", url))]
+    BuildAgent { source: AgentError, url: String },
 
     #[snafu(display("Failed to seed initial balances: {error}"))]
     SeedTokens { error: String },
+
+    #[snafu(display("Failed to install Candid UI canister: {error}"))]
+    CandidUI { error: String },
 }
 
 async fn mint_cycles_to_account(
@@ -564,43 +578,53 @@ async fn get_icp_xdr_conversion_rate(agent: &Agent) -> Result<u64, InitializeNet
     Ok(response.data.xdr_permyriad_per_icp)
 }
 
-pub async fn ping_and_wait(url: &str) -> Result<Status, PingAndWaitError> {
-    let agent = Agent::builder()
-        .with_url(url)
-        .build()
-        .context(BuildAgentSnafu { url })?;
-
-    let mut retries = 0;
-
-    loop {
-        let status = agent.status().await;
-        match status {
-            Ok(status) => {
-                if matches!(&status.replica_health_status, Some(status) if status == "healthy") {
-                    break Ok(status);
-                }
-            }
-
-            Err(e) => {
-                if retries >= 60 {
-                    break Err(PingAndWaitError::Timeout { source: e });
-                }
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                retries += 1;
-            }
+async fn install_candid_ui(
+    agent: &Agent,
+    candid_ui_wasm: &[u8],
+) -> Result<Principal, InitializeNetworkError> {
+    debug!("Creating canister for Candid UI");
+    let amount = 10_000_000_000_000u64; // 10 TCYCLES
+    let response = agent
+        .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
+        .with_arg(
+            Encode!(&CreateCanisterArgs {
+                from_subaccount: None,
+                created_at_time: None,
+                amount: Nat::from(amount),
+                creation_args: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|e| InitializeNetworkError::CandidUI {
+            error: format!("Failed to create canister for Candid UI: {e}"),
+        })?;
+    let response = Decode!(&response, CreateCanisterResponse).map_err(|e| {
+        InitializeNetworkError::CandidUI {
+            error: format!("Failed to decode create canister response for Candid UI: {e}"),
         }
-    }
-}
+    })?;
+    let canister_id = match response {
+        CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+        CreateCanisterResponse::Err(err) => {
+            return Err(InitializeNetworkError::CandidUI {
+                error: format!(
+                    "Failed to create canister for Candid UI: {}",
+                    err.format_error(amount as u128)
+                ),
+            });
+        }
+    };
+    debug!("Installing Candid UI wasm into canister {}", canister_id);
 
-#[derive(Debug, Snafu)]
-pub enum PingAndWaitError {
-    #[snafu(display("failed to build agent for url {}", url))]
-    BuildAgent {
-        source: AgentError,
-        url: String,
-    },
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+    mgmt.install_code(&canister_id, candid_ui_wasm)
+        .with_mode(CanisterInstallMode::Install)
+        .await
+        .map_err(|e| InitializeNetworkError::CandidUI {
+            error: format!("Failed to install Candid UI canister: {e}"),
+        })?;
+    eprintln!("Installed Candid UI canister with ID {}", canister_id);
 
-    Timeout {
-        source: AgentError,
-    },
+    Ok(canister_id)
 }

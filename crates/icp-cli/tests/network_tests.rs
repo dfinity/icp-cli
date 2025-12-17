@@ -317,7 +317,8 @@ async fn network_run_and_stop_background() {
         .args(["network", "start", "random-network", "--background"])
         .assert()
         .success()
-        .stderr(contains("Seeding ICP and TCYCLES")); // part of network start output
+        .stderr(contains("Seeding ICP and TCYCLES")) // part of network start output
+        .stderr(contains("Installed Candid UI canister with ID"));
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 

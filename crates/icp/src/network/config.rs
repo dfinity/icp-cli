@@ -1,3 +1,4 @@
+use candid::Principal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -24,6 +25,7 @@ pub struct NetworkDescriptorModel {
     pub root_key: Vec<u8>,
     pub pocketic_config_port: Option<u16>,
     pub pocketic_instance_id: Option<usize>,
+    pub candid_ui_canister_id: Option<Principal>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -296,15 +296,3 @@ pub struct LauncherStatus {
     pub root_key: String,
     pub default_effective_canister_id: Option<Principal>,
 }
-
-#[derive(Debug, Snafu)]
-pub enum CreateHttpGatewayError {
-    #[snafu(
-        display("failed to create HTTP gateway: {message}"),
-        context(suffix(GatewaySnafu))
-    )]
-    Create { message: String },
-
-    #[snafu(transparent, context(false))]
-    Reqwest { source: reqwest::Error },
-}

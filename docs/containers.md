@@ -6,7 +6,7 @@
 # icp.yaml
 networks:
   - name: my-network
-    kind: managed
+    mode: managed
     image: ghcr.io/dfinity/icp-cli-network-launcher
     port-mapping:
       - 0:4943

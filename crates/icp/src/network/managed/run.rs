@@ -353,6 +353,7 @@ pub enum WaitForPortError {
 
 /// Initialize the network:
 /// - Seed ICP and cycles to the given accounts
+/// - Install the candid UI canister
 pub async fn initialize_network(
     gateway_url: &Url,
     root_key: &[u8],

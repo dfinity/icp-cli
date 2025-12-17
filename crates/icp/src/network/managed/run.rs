@@ -80,7 +80,7 @@ pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError
             socket,
             rm_on_exit,
         } => {
-            super::docker::stop_docker_launcher(socket.as_str(), id, *rm_on_exit).await?;
+            super::docker::stop_docker_launcher(socket, id, *rm_on_exit).await?;
         }
     }
     Ok(())

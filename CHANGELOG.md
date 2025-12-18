@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.1.0-beta.2
+
 * feat: Add support for launching dockerized local networks (#233)
 * fix: When deleting a canister, also delete the id from the id store.
 * chore!: rename `icp network run` to `icp network start

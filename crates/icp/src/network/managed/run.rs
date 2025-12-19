@@ -373,20 +373,30 @@ pub async fn initialize_network(
         })?;
     agent.set_root_key(root_key.to_vec());
     let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&agent).await?;
+    let icp_amount = 100_000_000_000_000u64;
+    let display_icp_amount = BigDecimal::new(icp_amount.into(), 8).normalized();
     let seed_icp = join_all(
         seed_accounts
             .clone()
             .into_iter()
             .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic (or whatever the launcher is doing)
-            .map(|account| acquire_icp_to_account(&agent, account, 100_000_000_000_000u64)),
+            .map(|account| {
+                eprintln!(
+                    "- Seeding {} ICP to account {}",
+                    display_icp_amount, account
+                );
+                acquire_icp_to_account(&agent, account, icp_amount)
+            }),
     );
+    let cycles_amount = 1_000_000_000_000_000u128; // 1k TCYCLES
+    let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
+
     let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
-        mint_cycles_to_account(
-            &agent,
-            account,
-            1_000_000_000_000_000u128, // 1k TCYCLES
-            icp_xdr_conversion_rate,
-        )
+        eprintln!(
+            "- Seeding {} TCYCLES to account {}",
+            display_cycles_amount, account
+        );
+        mint_cycles_to_account(&agent, account, cycles_amount, icp_xdr_conversion_rate)
     }));
     let (seed_icp_results, seed_cycles_results) = join(seed_icp, seed_cycles).await;
     seed_icp_results
@@ -555,7 +565,7 @@ async fn acquire_icp_to_account(
         error: format!("Failed to transfer ICP: {err}"),
     })?;
     let display_amount = BigDecimal::new(amount.into(), 8).normalized();
-    eprintln!("Minted {display_amount} ICP to account {account}");
+    debug!("Minted {display_amount} ICP to account {account}");
     Ok(())
 }
 

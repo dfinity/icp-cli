@@ -24,7 +24,7 @@ The project is configured to pass the backend's canister ID to the frontend usin
 1. During deployment, the `icp` CLI sets the backend's canister ID in the frontend canister's (asset canister) environment variables
 2. The asset canister sets a specific cookie (named `ic_env`) that contains some environment variables when the assets are uploaded
 3. The asset canister serves the frontend assets with the cookie set
-4. The frontend JS code uses the [`@icp-sdk/core/agent/canister-env`](https://js.icp.build/core/latest/canister-env/) module to parse the cookie and extract the environment variables
+4. The frontend JS code uses the [`@icp-sdk/core/agent/canister-env`](https://js.icp.build/core/latest/canister-environment/) module to parse the cookie and extract the environment variables
 
 In the [`App.tsx`](./frontend/app/src/App.tsx) file, you can see how the frontend can obtain the backend's canister ID from the environment variables and use it to create an actor for the backend canister.
 

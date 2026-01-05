@@ -1,0 +1,6 @@
+[advisories]
+ignore = [
+  "RUSTSEC-2025-0140", # gix-date UTF-8 contract issue dependency of cargo-generate
+  "RUSTSEC-2026-0001", # rkyv undefined behavior on OOM dependency of byte-unit
+]
+

@@ -1,6 +1,5 @@
 use anyhow::{Context as _, anyhow};
 use clap::Args;
-use ic_utils::interfaces::ManagementCanister;
 use icp::context::{CanisterSelection, Context};
 use icp::fs;
 use icp::prelude::*;
@@ -58,9 +57,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         )
         .await?;
 
-    let mgmt = ManagementCanister::create(&agent);
     let canister_display = args.cmd_args.canister.to_string();
-    install_canister(&mgmt, &canister_id, &canister_display, &wasm, &args.mode).await?;
+    install_canister(&agent, &canister_id, &canister_display, &wasm, &args.mode).await?;
 
     let _ = ctx.term.write_line(&format!(
         "Canister {canister_display} installed successfully"

@@ -1,5 +1,7 @@
 # Unreleased
 
+* fix: Use EOP when upgrading motoko canisters
+
 # v0.1.0-beta.2
 
 * feat: Add support for launching dockerized local networks (#233)

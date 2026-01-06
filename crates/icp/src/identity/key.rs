@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ic_agent::{
     Identity,
-    identity::{AnonymousIdentity, Secp256k1Identity},
+    identity::{AnonymousIdentity, Prime256v1Identity, Secp256k1Identity},
 };
 use pem::Pem;
 use pkcs8::{
@@ -33,6 +33,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum IdentityKey {
     Secp256k1(k256::SecretKey),
+    Prime256v1(p256::SecretKey),
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +133,14 @@ fn load_pbes2_identity(
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
+        IdentityKeyAlgorithm::Prime256v1 => {
+            let key = p256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
+                .context(ParseKeySnafu { path })?;
+
+            Ok(Arc::new(
+                ic_agent::identity::Prime256v1Identity::from_private_key(key),
+            ))
+        }
     }
 }
 
@@ -151,6 +160,14 @@ fn load_plaintext_identity(
                 k256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
+        }
+        IdentityKeyAlgorithm::Prime256v1 => {
+            let key =
+                p256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
+
+            Ok(Arc::new(
+                ic_agent::identity::Prime256v1Identity::from_private_key(key),
+            ))
         }
     }
 }
@@ -210,11 +227,17 @@ pub fn create_identity(
 
         algorithm: match key {
             IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
+            IdentityKey::Prime256v1(_) => IdentityKeyAlgorithm::Prime256v1,
         },
 
         principal: match &key {
             IdentityKey::Secp256k1(secret_key) => {
                 Secp256k1Identity::from_private_key(secret_key.clone())
+                    .sender()
+                    .expect("infallible method")
+            }
+            IdentityKey::Prime256v1(secret_key) => {
+                Prime256v1Identity::from_private_key(secret_key.clone())
                     .sender()
                     .expect("infallible method")
             }
@@ -229,6 +252,7 @@ pub fn create_identity(
 
     let doc = match key {
         IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
+        IdentityKey::Prime256v1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
     };
 
     let pem = match format {

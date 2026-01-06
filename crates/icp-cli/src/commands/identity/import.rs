@@ -8,7 +8,8 @@ use icp::identity::{
 };
 use icp::{fs::read_to_string, prelude::*};
 use itertools::Itertools;
-use k256::{Secp256k1, SecretKey};
+use k256::Secp256k1;
+use p256::NistP256;
 use pem::Pem;
 use pkcs8::{
     AssociatedOid, EncryptedPrivateKeyInfo, ObjectIdentifier, PrivateKeyInfo, SecretDocument,
@@ -165,9 +166,12 @@ fn import_pkcs8(
         // if the user knows what it is, we do not have to check
         match known_key_type {
             IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
-                SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?,
+                k256::SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?,
             )),
-            // todo p256, ed25519
+            IdentityKeyAlgorithm::Prime256v1 => Ok(IdentityKey::Prime256v1(
+                p256::SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?,
+            )),
+            // todo ed25519
         }
     } else {
         // parse the algorithm information from the metadata
@@ -184,13 +188,16 @@ fn import_pkcs8(
                     })?;
                 match curve {
                     Secp256k1::OID => Ok(IdentityKey::Secp256k1(
-                        SecretKey::from_sec1_der(pki.private_key)
+                        k256::SecretKey::from_sec1_der(pki.private_key)
                             .context(BadPemKeySnafu { path })?,
                     )),
-                    // todo p256
+                    NistP256::OID => Ok(IdentityKey::Prime256v1(
+                        p256::SecretKey::from_sec1_der(pki.private_key)
+                            .context(BadPemKeySnafu { path })?,
+                    )),
                     _ => UnsupportedAlgorithmSnafu {
                         found: curve,
-                        expected: vec![Secp256k1::OID],
+                        expected: vec![Secp256k1::OID, NistP256::OID],
                         path,
                     }
                     .fail(),
@@ -219,9 +226,11 @@ fn import_sec1(
         // if the user knows what it is, we do not have to check
         match known_key_type {
             IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
-                SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+                k256::SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
             )),
-            // todo p256
+            IdentityKeyAlgorithm::Prime256v1 => Ok(IdentityKey::Prime256v1(
+                p256::SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+            )),
         }
     } else {
         // the algorithm information can be found in two places:
@@ -250,12 +259,14 @@ fn import_sec1(
         };
         match curve {
             Secp256k1::OID => Ok(IdentityKey::Secp256k1(
-                SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+                k256::SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
             )),
-            //todo p256
+            NistP256::OID => Ok(IdentityKey::Prime256v1(
+                p256::SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+            )),
             _ => UnsupportedAlgorithmSnafu {
                 found: curve,
-                expected: vec![Secp256k1::OID],
+                expected: vec![Secp256k1::OID, NistP256::OID],
                 path,
             }
             .fail(),

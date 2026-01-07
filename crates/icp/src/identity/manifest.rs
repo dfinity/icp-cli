@@ -148,6 +148,9 @@ pub enum IdentityKeyAlgorithm {
     #[strum(serialize = "prime256v1", serialize = "p256", serialize = "secp256r1")]
     #[cfg_attr(feature = "clap", value(alias = "p256", alias = "secp256r1"))]
     Prime256v1,
+    #[serde(rename = "ed25519")]
+    #[strum(serialize = "ed25519")]
+    Ed25519,
 }
 
 #[derive(Debug, Snafu)]

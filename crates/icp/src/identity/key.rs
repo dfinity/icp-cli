@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use ic_agent::{
     Identity,
-    identity::{AnonymousIdentity, Prime256v1Identity, Secp256k1Identity},
+    identity::{AnonymousIdentity, BasicIdentity, Prime256v1Identity, Secp256k1Identity},
 };
+use ic_ed25519::PrivateKeyFormat;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -34,6 +35,7 @@ use crate::{
 pub enum IdentityKey {
     Secp256k1(k256::SecretKey),
     Prime256v1(p256::SecretKey),
+    Ed25519(ic_ed25519::PrivateKey),
 }
 
 #[derive(Debug, Clone)]
@@ -56,10 +58,20 @@ pub enum LoadIdentityError {
     },
 
     #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
-    ParseKeyError {
+    ParsePkcs8Error {
         path: PathBuf,
         #[snafu(source(from(pkcs8::Error, Box::new)))]
         source: Box<pkcs8::Error>,
+    },
+    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    ParseDerError {
+        path: PathBuf,
+        source: pkcs8::der::Error,
+    },
+    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    ParseEd25519KeyError {
+        path: PathBuf,
+        source: ic_ed25519::PrivateKeyDecodingError,
     },
 
     #[snafu(display("no identity found with name `{name}`"))]
@@ -129,17 +141,24 @@ fn load_pbes2_identity(
     match algorithm {
         IdentityKeyAlgorithm::Secp256k1 => {
             let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
-                .context(ParseKeySnafu { path })?;
+                .context(ParsePkcs8Snafu { path })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Prime256v1 => {
             let key = p256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
-                .context(ParseKeySnafu { path })?;
+                .context(ParsePkcs8Snafu { path })?;
 
-            Ok(Arc::new(
-                ic_agent::identity::Prime256v1Identity::from_private_key(key),
-            ))
+            Ok(Arc::new(Prime256v1Identity::from_private_key(key)))
+        }
+        IdentityKeyAlgorithm::Ed25519 => {
+            let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
+                .context(ParseDerSnafu { path })?;
+            let decrypted: SecretDocument =
+                encrypted.decrypt(&pw).context(ParsePkcs8Snafu { path })?;
+            let key = ic_ed25519::PrivateKey::deserialize_pkcs8(decrypted.as_bytes())
+                .context(ParseEd25519KeySnafu { path })?;
+            Ok(Arc::new(BasicIdentity::from_raw_key(&key.serialize_raw())))
         }
     }
 }
@@ -156,18 +175,21 @@ fn load_plaintext_identity(
 
     match algorithm {
         IdentityKeyAlgorithm::Secp256k1 => {
-            let key =
-                k256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
+            let key = k256::SecretKey::from_pkcs8_der(doc.contents())
+                .context(ParsePkcs8Snafu { path })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Prime256v1 => {
-            let key =
-                p256::SecretKey::from_pkcs8_der(doc.contents()).context(ParseKeySnafu { path })?;
+            let key = p256::SecretKey::from_pkcs8_der(doc.contents())
+                .context(ParsePkcs8Snafu { path })?;
 
-            Ok(Arc::new(
-                ic_agent::identity::Prime256v1Identity::from_private_key(key),
-            ))
+            Ok(Arc::new(Prime256v1Identity::from_private_key(key)))
+        }
+        IdentityKeyAlgorithm::Ed25519 => {
+            let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
+                .context(ParseEd25519KeySnafu { path })?;
+            Ok(Arc::new(BasicIdentity::from_raw_key(&key.serialize_raw())))
         }
     }
 }
@@ -228,6 +250,7 @@ pub fn create_identity(
         algorithm: match key {
             IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
             IdentityKey::Prime256v1(_) => IdentityKeyAlgorithm::Prime256v1,
+            IdentityKey::Ed25519(_) => IdentityKeyAlgorithm::Ed25519,
         },
 
         principal: match &key {
@@ -238,6 +261,11 @@ pub fn create_identity(
             }
             IdentityKey::Prime256v1(secret_key) => {
                 Prime256v1Identity::from_private_key(secret_key.clone())
+                    .sender()
+                    .expect("infallible method")
+            }
+            IdentityKey::Ed25519(secret_key) => {
+                BasicIdentity::from_raw_key(&secret_key.serialize_raw())
                     .sender()
                     .expect("infallible method")
             }
@@ -253,6 +281,10 @@ pub fn create_identity(
     let doc = match key {
         IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
         IdentityKey::Prime256v1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
+        IdentityKey::Ed25519(key) => key
+            .serialize_pkcs8(PrivateKeyFormat::Pkcs8v2)
+            .try_into()
+            .expect("infallible PKI encoding"),
     };
 
     let pem = match format {

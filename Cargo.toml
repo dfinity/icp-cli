@@ -39,7 +39,7 @@ handlebars = "6.3.2"
 hex = "0.4.3"
 httptest = "0.16.3"
 ic-agent = { version = "0.44.1" }
-ic-asset = { version = "0.25.0" }
+ic-asset = { version = "0.26.0" }
 ic-ledger-types = "0.15.0"
 ic-management-canister-types = { version = "0.4.1" }
 ic-utils = { version = "0.44.1" }

@@ -4,38 +4,82 @@ use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
 use bollard::{
     Docker,
+    errors::Error as BollardError,
     query_parameters::{
-        CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions,
-        StartContainerOptions, StopContainerOptions, WaitContainerOptions,
+        CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
+        RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
     secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
 use camino_tempfile::Utf8TempDir;
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;
 
-use crate::network::managed::launcher::{NetworkInstance, wait_for_launcher_status};
+use crate::network::{
+    ManagedImageConfig,
+    config::ChildLocator,
+    managed::launcher::{NetworkInstance, wait_for_launcher_status},
+};
 use crate::prelude::*;
 
 pub async fn spawn_docker_launcher(
-    image: &str,
-    port_mappings: &[String],
-    rm_on_drop: bool,
-    args: &[String],
-) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance), DockerLauncherError> {
-    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    #[cfg(unix)]
-    let docker = Docker::connect_with_unix_defaults().context(ConnectDockerSnafu {
-        socket: "/var/run/docker.sock",
-    })?;
-    #[cfg(windows)]
-    let docker = Docker::connect_with_named_pipe_defaults().context(ConnectDockerSnafu {
-        socket: r"\\.\pipe\docker_engine",
-    })?;
-    let portmap: HashMap<_, _> = port_mappings
+    image_config: &ManagedImageConfig,
+) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance, ChildLocator), DockerLauncherError> {
+    let ManagedImageConfig {
+        image,
+        port_mapping,
+        rm_on_exit,
+        args,
+        entrypoint,
+        environment,
+        volumes,
+        platform,
+        user,
+        shm_size,
+        status_dir,
+        mounts,
+    } = image_config;
+    let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
+    let socket = match std::env::var("DOCKER_HOST").ok() {
+        Some(sock) => sock,
+        #[cfg(unix)]
+        None => {
+            let default_sock = "/var/run/docker.sock".to_string();
+            if Path::new(&default_sock).exists() {
+                default_sock
+            } else {
+                let command_res = std::process::Command::new("docker")
+                    .args([
+                        "context",
+                        "inspect",
+                        "--format",
+                        "{{.Endpoints.docker.Host}}",
+                    ])
+                    .output()
+                    .context(NoGlobalSocketAndShellSnafu)?;
+                if !command_res.status.success() {
+                    return NoGlobalSocketAndCommandSnafu {
+                        stderr: String::from_utf8_lossy(&command_res.stderr).to_string(),
+                    }
+                    .fail();
+                }
+                str::from_utf8(&command_res.stdout)
+                    .context(NoGlobalSocketAndParseCommandSnafu {
+                        display: String::from_utf8_lossy(&command_res.stdout),
+                    })?
+                    .trim()
+                    .to_string()
+            }
+        }
+        #[cfg(windows)]
+        None => r"\\.\pipe\docker_engine".to_string(),
+    };
+    let docker = Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
+        .context(ConnectDockerSnafu { socket: &socket })?;
+    let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {
             let (host_port, container_port) =
@@ -51,26 +95,89 @@ pub async fn spawn_docker_launcher(
             ))
         })
         .try_collect()?;
-    let mut args = args.to_vec();
-    args.push("--interface-version=1.0.0".to_string());
+    let mounts = mounts
+        .iter()
+        .map(|m| {
+            let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
+            let host = dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
+            let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
+            let (target, flags) = match rest.split_once(':') {
+                Some((t, f)) => (t, Some(f)),
+                None => (rest, None),
+            };
+            let read_only = flags
+                .map(|f| match f {
+                    "ro" => Ok(true),
+                    "rw" => Ok(false),
+                    _ => Err(UnknownFlagsSnafu { flags: f }.build()),
+                })
+                .transpose()?;
+            Ok::<_, DockerLauncherError>(Mount {
+                target: Some(target.to_string()),
+                source: Some(host.to_string()),
+                typ: Some(MountTypeEnum::BIND),
+                read_only,
+                ..<_>::default()
+            })
+        })
+        .chain([Ok(Mount {
+            target: Some(status_dir.to_string()),
+            source: Some(host_status_dir.path().to_string()),
+            typ: Some(MountTypeEnum::BIND),
+            read_only: Some(false),
+            ..<_>::default()
+        })])
+        .try_collect()?;
+    let image_query = docker.inspect_image(image).await;
+    match image_query {
+        Ok(_) => {}
+        Err(BollardError::DockerResponseServerError {
+            status_code: 404, ..
+        }) => {
+            eprintln!("Pulling image {image}");
+            docker
+                .create_image(
+                    Some(CreateImageOptions {
+                        from_image: Some(image.clone()),
+                        platform: platform.clone().unwrap_or_default(),
+                        ..<_>::default()
+                    }),
+                    None,
+                    None,
+                )
+                .map(|r| r.map(|_| ()))
+                .try_collect::<()>()
+                .await
+                .context(PullImageSnafu { image })?;
+        }
+        Err(e) => return Err(e).context(QueryImageSnafu { image }),
+    };
     let container_resp = docker
         .create_container(
-            None::<CreateContainerOptions>,
+            platform.clone().map(|p| CreateContainerOptions {
+                platform: p,
+                ..<_>::default()
+            }),
             ContainerCreateBody {
                 image: Some(image.to_string()),
-                cmd: Some(args),
+                cmd: Some(args.to_vec()),
+                entrypoint: entrypoint.clone(),
+                env: Some(
+                    environment
+                        .iter()
+                        .cloned()
+                        .chain(["ICP_CLI_NETWORK_LAUNCHER_INTERFACE_VERSION=1.0.0".to_string()])
+                        .collect(),
+                ),
+                user: user.clone(),
                 attach_stdin: Some(false),
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
                 host_config: Some(HostConfig {
                     port_bindings: Some(portmap),
-                    mounts: Some(vec![Mount {
-                        target: Some("/app/status".to_string()),
-                        source: Some(status_dir.path().to_string()),
-                        typ: Some(MountTypeEnum::BIND),
-                        read_only: Some(false),
-                        ..<_>::default()
-                    }]),
+                    mounts: Some(mounts),
+                    binds: Some(volumes.to_vec()),
+                    shm_size: *shm_size,
                     ..<_>::default()
                 }),
                 ..<_>::default()
@@ -79,14 +186,15 @@ pub async fn spawn_docker_launcher(
         .await
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
+    eprintln!("Created container {}", &container_id[..12]);
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
-        rm_on_drop,
+        rm_on_drop: *rm_on_exit,
     });
     let container_id = guard.container_id.as_ref().unwrap();
     let docker = guard.docker.as_ref().unwrap();
-    let watcher = wait_for_launcher_status(status_dir.path())?;
+    let watcher = wait_for_launcher_status(host_status_dir.path())?;
     docker
         .start_container(container_id, None::<StartContainerOptions>)
         .await
@@ -174,6 +282,11 @@ pub async fn spawn_docker_launcher(
             container_port: container_gateway_port,
             container_id,
         })?;
+    let locator = ChildLocator::Container {
+        id: container_id.clone(),
+        socket,
+        rm_on_exit: *rm_on_exit,
+    };
     Ok((
         guard,
         NetworkInstance {
@@ -184,7 +297,55 @@ pub async fn spawn_docker_launcher(
                 key: &launcher_status.root_key,
             })?,
         },
+        locator,
     ))
+}
+
+pub async fn stop_docker_launcher(
+    socket: &str,
+    container_id: &str,
+    rm_on_exit: bool,
+) -> Result<(), StopContainerError> {
+    let docker = Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
+        .context(ConnectSnafu { socket })?;
+    stop(&docker, container_id, rm_on_exit).await
+}
+
+async fn stop(
+    docker: &Docker,
+    container_id: &str,
+    rm_on_exit: bool,
+) -> Result<(), StopContainerError> {
+    docker
+        .stop_container(container_id, None::<StopContainerOptions>)
+        .await
+        .context(StopSnafu { container_id })?;
+    if rm_on_exit {
+        docker
+            .remove_container(container_id, None::<RemoveContainerOptions>)
+            .await
+            .context(RemoveSnafu { container_id })?;
+    }
+    Ok(())
+}
+
+#[derive(Snafu, Debug)]
+pub enum StopContainerError {
+    #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
+    Connect {
+        source: bollard::errors::Error,
+        socket: String,
+    },
+    #[snafu(display("failed to stop docker container {container_id}"))]
+    Stop {
+        source: bollard::errors::Error,
+        container_id: String,
+    },
+    #[snafu(display("failed to remove docker container {container_id}"))]
+    Remove {
+        source: bollard::errors::Error,
+        container_id: String,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -208,6 +369,11 @@ pub enum DockerLauncherError {
     InspectContainer {
         source: bollard::errors::Error,
         container_id: String,
+    },
+    #[snafu(display("failed to locate or pull docker image {image}"))]
+    PullImage {
+        source: bollard::errors::Error,
+        image: String,
     },
     #[snafu(display("failed to parse root key {key}"))]
     ParseRootKey {
@@ -236,6 +402,19 @@ pub enum DockerLauncherError {
         "failed to parse port mapping {port_mapping}, must be in format <host_port>:<container_port>"
     ))]
     ParsePortmap { port_mapping: String },
+    #[snafu(display(
+        "failed to parse mount {mount}, must be in format <host_path>:<container_path>[:<options>]"
+    ))]
+    ParseMount { mount: String },
+    #[snafu(display("failed to convert path {path} to absolute path"))]
+    ProcessMountSource {
+        source: std::io::Error,
+        path: String,
+    },
+    #[snafu(display("failed to process path as UTF-8"))]
+    BadPath { source: camino::FromPathBufError },
+    #[snafu(display("unknown mount flags {flags}, expected 'ro' or 'rw'"))]
+    UnknownFlags { flags: String },
     #[snafu(transparent)]
     WaitForLauncherStatus {
         source: crate::network::managed::launcher::WaitForLauncherStatusError,
@@ -258,6 +437,28 @@ pub enum DockerLauncherError {
     },
     #[snafu(display("failed to create status directory"))]
     CreateStatusDir { source: std::io::Error },
+    #[snafu(display("failed to query docker image {image}"))]
+    QueryImage {
+        source: bollard::errors::Error,
+        image: String,
+    },
+    #[snafu(display("image {image} not found (try running `docker pull {image}`)"))]
+    NoSuchImage { image: String },
+    #[snafu(display(
+        "docker socket was not at /var/run/docker.sock; DOCKER_HOST is not set; and error shelling out to `docker context`"
+    ))]
+    NoGlobalSocketAndShellError { source: std::io::Error },
+    #[snafu(display(
+        "docker socket was not at /var/run/docker.sock; DOCKER_HOST is not set; and `docker context` errored with: {stderr}"
+    ))]
+    NoGlobalSocketAndCommandError { stderr: String },
+    #[snafu(display(
+        "docker socket was not at /var/run/docker.sock; DOCKER_HOST is not set; and error parsing `docker context` output as UTF-8: {display}"
+    ))]
+    NoGlobalSocketAndParseCommandError {
+        source: std::str::Utf8Error,
+        display: String,
+    },
 }
 
 #[derive(Default)]
@@ -267,19 +468,23 @@ pub struct DockerDropGuard {
     rm_on_drop: bool,
 }
 
+impl DockerDropGuard {
+    pub fn defuse(&mut self) {
+        self.docker = None;
+        self.container_id = None;
+    }
+    pub async fn stop(&mut self) -> Result<(), StopContainerError> {
+        if let Some(docker) = &self.docker.take() {
+            let container_id = self.container_id.take().unwrap();
+            stop(docker, &container_id, self.rm_on_drop).await?;
+        }
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl AsyncDrop for DockerDropGuard {
     async fn async_drop(&mut self) {
-        if let Some(docker) = &self.docker.take() {
-            let container_id = self.container_id.take().unwrap();
-            let _ = docker
-                .stop_container(&container_id, None::<StopContainerOptions>)
-                .await;
-            if self.rm_on_drop {
-                let _ = docker
-                    .remove_container(&container_id, None::<RemoveContainerOptions>)
-                    .await;
-            }
-        }
+        _ = self.stop().await;
     }
 }

@@ -12,7 +12,7 @@ use ic_agent::Agent;
 use icp::{
     network::managed::{
         launcher::{NetworkInstance, wait_for_launcher_status},
-        run::seed_instance,
+        run::initialize_network,
     },
     prelude::*,
 };
@@ -106,7 +106,7 @@ impl TestContext {
             .env("HOME", self.home_path())
             .env_remove("ICP_HOME")
             .arg("network")
-            .arg("run")
+            .arg("start")
             .arg(name);
 
         eprintln!("Running network in {project_dir}");
@@ -198,12 +198,13 @@ impl TestContext {
             pocketic_instance_id: status.instance_id,
         };
         // Initialize network instance
-        seed_instance(
+        initialize_network(
             &format!("http://localhost:{}", instance.gateway_port)
                 .parse()
                 .unwrap(),
             &instance.root_key,
             [Principal::anonymous()], // Seed anonymous account only for tests
+            None,
         )
         .await
         .expect("Failed to initialize network instance");
@@ -211,6 +212,7 @@ impl TestContext {
         // Build and write network descriptor
         let descriptor_path = network_dir.join("descriptor.json");
         let network_descriptor = serde_json::json!({
+            "v": "1",
             "id": ::uuid::Uuid::new_v4().to_string(),
             "project-dir": project_dir.as_str(),
             "network": "local",
@@ -219,7 +221,10 @@ impl TestContext {
                 "port": instance.gateway_port,
                 "fixed": false
             },
-            "pid": launcher_pid,
+            "child-locator": {
+                "type": "pid",
+                "pid": launcher_pid
+            },
             "root-key": hex::encode(&instance.root_key),
         });
         fs::write(
@@ -345,5 +350,12 @@ impl TestContext {
             .unwrap();
         agent.set_root_key(self.root_key.get().unwrap().clone());
         agent
+    }
+
+    pub(crate) fn docker_pull_network(&self) {
+        Command::new("docker")
+            .args(["pull", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"])
+            .assert()
+            .success();
     }
 }

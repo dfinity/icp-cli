@@ -37,13 +37,13 @@ fn canister_create() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(100 * TRILLION);
 
     ctx.icp()
@@ -53,7 +53,7 @@ fn canister_create() {
             "create",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -62,7 +62,7 @@ fn canister_create() {
         .join(".icp")
         .join("cache")
         .join("mappings")
-        .join("my-environment.ids.json");
+        .join("random-environment.ids.json");
     assert!(
         id_mapping_path.exists(),
         "ID mapping file should exist at {id_mapping_path}"
@@ -105,13 +105,13 @@ fn canister_create_with_settings() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(100 * TRILLION);
 
     ctx.icp()
@@ -121,7 +121,7 @@ fn canister_create_with_settings() {
             "create",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--cycles",
             &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
@@ -136,7 +136,7 @@ fn canister_create_with_settings() {
             "status",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -183,13 +183,13 @@ fn canister_create_with_settings_cmdline_override() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
 
     // Wait for network
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string()))
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(100 * TRILLION);
 
     ctx.icp()
@@ -201,7 +201,7 @@ fn canister_create_with_settings_cmdline_override() {
             "--compute-allocation",
             "2",
             "--environment",
-            "my-environment",
+            "random-environment",
             "--cycles",
             &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
         ])
@@ -216,7 +216,7 @@ fn canister_create_with_settings_cmdline_override() {
             "status",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success()
@@ -327,7 +327,7 @@ fn canister_create_with_valid_principal() {
             "create",
             principal,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .failure()

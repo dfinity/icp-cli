@@ -112,7 +112,7 @@ jobs:
           echo "ICP_CLI_NETWORK_LAUNCHER_PATH=$DEST/icp-cli-network-launcher" >> "$GITHUB_ENV"
 
       - name: Run ${{ matrix.test }}
-        run: cargo test --test ${{ matrix.test }}
+        run: cargo test --test ${{ matrix.test }} -- ${{ contains(matrix.os, 'macos') && '--skip :docker:' || '' }}
 
   aggregate:
     name: test:required

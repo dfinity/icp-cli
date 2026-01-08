@@ -1,6 +1,16 @@
 # Unreleased
 
-* fix: When deleting a canister, also delete the id from the id store
+* fix: Use EOP when upgrading motoko canisters
+* feat: Add `icp network status` command to display network information
+  * Displays port, root key, and candid UI principal (if available)
+  * Supports `--json` flag for JSON output
+
+# v0.1.0-beta.2
+
+* feat: Add support for launching dockerized local networks (#233)
+* fix: When deleting a canister, also delete the id from the id store.
+* chore!: rename `icp network run` to `icp network start
+* feat: install Candid UI canister after starting a local network
 
 # v0.1.0-beta.1
 

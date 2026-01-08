@@ -13,7 +13,7 @@ pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), anyhow::Erro
     let p = ctx.project.load().await.context("failed to load project")?;
 
     let yaml = serde_yaml::to_string(&p).expect("Serializing to yaml failed");
-    println!("{yaml}");
+    ctx.term.write_line(&yaml)?;
 
     Ok(())
 }

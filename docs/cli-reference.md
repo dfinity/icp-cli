@@ -35,7 +35,8 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli network`↴](#icp-cli-network)
 * [`icp-cli network list`↴](#icp-cli-network-list)
 * [`icp-cli network ping`↴](#icp-cli-network-ping)
-* [`icp-cli network run`↴](#icp-cli-network-run)
+* [`icp-cli network start`↴](#icp-cli-network-start)
+* [`icp-cli network status`↴](#icp-cli-network-status)
 * [`icp-cli network stop`↴](#icp-cli-network-stop)
 * [`icp-cli new`↴](#icp-cli-new)
 * [`icp-cli project`↴](#icp-cli-project)
@@ -590,16 +591,15 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
-* `list` — List networks in the project
+* `list` — 
 * `ping` — Try to connect to a network, and print out its status
-* `run` — Run a given network
+* `start` — Run a given network
+* `status` — Get status information about a running network
 * `stop` — Stop a background network
 
 
 
 ## `icp-cli network list`
-
-List networks in the project
 
 **Usage:** `icp-cli network list`
 
@@ -623,21 +623,39 @@ Try to connect to a network, and print out its status
 
 
 
-## `icp-cli network run`
+## `icp-cli network start`
 
 Run a given network
 
-**Usage:** `icp-cli network run [OPTIONS] [NAME]`
+**Usage:** `icp-cli network start [OPTIONS] [NAME]`
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of the network to run
+* `<NAME>` — Name of the network to start
 
   Default value: `local`
 
 ###### **Options:**
 
-* `--background` — Starts the network in a background process. This command will exit once the network is running. To stop the network, use 'icp network stop'
+* `-d`, `--background` — Starts the network in a background process. This command will exit once the network is running. To stop the network, use 'icp network stop'
+
+
+
+## `icp-cli network status`
+
+Get status information about a running network
+
+**Usage:** `icp-cli network status [OPTIONS] [NAME]`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the network
+
+  Default value: `local`
+
+###### **Options:**
+
+* `--json` — Format output as JSON
 
 
 

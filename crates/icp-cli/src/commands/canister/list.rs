@@ -13,8 +13,8 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
     let environment_selection = args.environment.clone().into();
     let env = ctx.get_environment(&environment_selection).await?;
 
-    for (_, c) in env.canisters.values() {
-        let _ = ctx.term.write_line(&format!("{c:?}"));
+    for c in env.canisters.keys() {
+        ctx.term.write_line(c)?;
     }
 
     Ok(())

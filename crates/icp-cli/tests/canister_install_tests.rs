@@ -39,8 +39,8 @@ fn canister_install() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Build canister
     ctx.icp()
@@ -50,7 +50,8 @@ fn canister_install() {
         .success();
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -60,7 +61,7 @@ fn canister_install() {
             "my-canister",
             "--quiet", // Set quiet so only the canister ID is output
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -73,7 +74,7 @@ fn canister_install() {
             "install",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -84,7 +85,7 @@ fn canister_install() {
             "canister",
             "call",
             "--environment",
-            "my-environment",
+            "random-environment",
             "my-canister",
             "greet",
             "(\"test\")",
@@ -122,7 +123,7 @@ fn canister_install_with_valid_principal() {
             "install",
             principal,
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .failure()
@@ -151,11 +152,12 @@ fn canister_install_with_wasm_flag() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "my-network");
-    ctx.ping_until_healthy(&project_dir, "my-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister
-    clients::icp(&ctx, &project_dir, Some("my-environment".to_string())).mint_cycles(10 * TRILLION);
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -163,7 +165,7 @@ fn canister_install_with_wasm_flag() {
             "create",
             "my-canister",
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -178,7 +180,7 @@ fn canister_install_with_wasm_flag() {
             "--wasm",
             wasm_path.as_str(),
             "--environment",
-            "my-environment",
+            "random-environment",
         ])
         .assert()
         .success();
@@ -190,7 +192,7 @@ fn canister_install_with_wasm_flag() {
             "canister",
             "call",
             "--environment",
-            "my-environment",
+            "random-environment",
             "my-canister",
             "greet",
             "(\"test\")",

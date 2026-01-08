@@ -14,7 +14,7 @@ For now, you have to build icp-cli locally in order to use it.
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
 - **Network launcher**: Download [icp-cli-network-launcher](https://github.com/dfinity/icp-cli-network-launcher/releases) in order to run a local network.
-- **dfx**: (__Required only if you want the motoko tools__) Install the [DFINITY SDK](https://internetcomputer.org/docs/building-apps/getting-started/install).
+- **mops**: Required if you want to build Motoko canisters. See [mops.one](https://cli.mops.one/).
 
 ### Building
 
@@ -45,16 +45,13 @@ Note: The network launcher binary must not end up in a different directory than 
 
 ### [Optional] Add motoko tools to the path
 
-You might also need the Motoko compiler if you plan on building canisters with Motoko. For now,
-a good way to do this is to use the tools that ship with `dfx`. One way to configure them
-is to run the following in your terminal:
+You might also need the Motoko compiler if you plan on building canisters with Motoko. The best way
+is to install mops, the motoko package manager, see: https://cli.mops.one/
+
+Reminder, when mops is installed the first time, you must initialize the toolchain with:
 
 ```bash
-# Ensure dfx is installed and the cache is populated
-dfx cache install
-
-# Add moc to the path
-export PATH=$(dfx cache show):$PATH
+mops toolchain init
 ```
 
 ### Examples

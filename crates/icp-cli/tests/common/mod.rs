@@ -18,7 +18,7 @@ pub(crate) const PATH_SEPARATOR: &str = ";";
 /// A network manifest for a network using a random port
 pub(crate) const NETWORK_RANDOM_PORT: &str = r#"
 networks:
-  - name: my-network
+  - name: random-network
     mode: managed
     gateway:
       port: 0
@@ -27,8 +27,24 @@ networks:
 /// An environment manifest utilizing the above network
 pub(crate) const ENVIRONMENT_RANDOM_PORT: &str = r#"
 environments:
-  - name: my-environment
-    network: my-network
+  - name: random-environment
+    network: random-network
+"#;
+
+pub(crate) const NETWORK_DOCKER: &str = r#"
+networks:
+  - name: docker-network
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0
+    port-mapping:
+      - 0:4943
+      - 0:4942
+"#;
+
+pub(crate) const ENVIRONMENT_DOCKER: &str = r#"
+environments:
+  - name: docker-environment
+    network: docker-network
 "#;
 
 /// This ID is dependent on the toplogy being served by pocket-ic
@@ -55,7 +71,7 @@ pub(crate) fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httpte
     server
 }
 
-// A network run by icp-cli for a test. These fields are read from the network descriptor
+// A network start by icp-cli for a test. These fields are read from the network descriptor
 // after starting the network.
 pub(crate) struct TestNetwork {
     pub(crate) gateway_port: u16,

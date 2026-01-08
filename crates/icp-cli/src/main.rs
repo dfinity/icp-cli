@@ -327,8 +327,14 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
-            commands::network::Command::Run(args) => {
-                commands::network::run::exec(&ctx, &args)
+            commands::network::Command::Start(args) => {
+                commands::network::start::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::network::Command::Status(args) => {
+                commands::network::status::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }

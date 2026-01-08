@@ -63,7 +63,7 @@ fn identity_import_pem() {
     let ctx = TestContext::new();
     ctx.icp()
         .args(["identity", "import", "alice", "--from-pem"])
-        .arg(ctx.make_asset("decrypted.pem"))
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
         .assert()
         .success();
     ctx.icp()
@@ -71,23 +71,43 @@ fn identity_import_pem() {
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+    ctx.icp()
+        .args(["identity", "import", "alice2", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_p256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice2"])
+        .assert()
+        .success()
+        .stdout(eq("qkn3n-adewz-qvqxz-gkchb-ughyj-pl23l-ezdak-7rnds-fime4-si4tn-nae").trim());
+    ctx.icp()
+        .args(["identity", "import", "alice3", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_pkcs8_ed25519.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice3"])
+        .assert()
+        .success()
+        .stdout(eq("jj5yb-kxwog-t6hmv-jxmpm-rtuci-uikjz-qkezj-4armi-wihgt-ulmi3-bqe").trim());
 
     ctx.icp()
         .args(["identity", "import", "bob", "--from-pem"])
-        .arg(ctx.make_asset("missing_params.pem"))
+        .arg(ctx.make_asset("missing_params_sec1_k256.pem"))
         .assert()
         .failure()
         .stderr(contains("missing field `parameters`"));
     ctx.icp()
         .args(["identity", "import", "bob", "--from-pem"])
-        .arg(ctx.make_asset("unsupported_curve.pem"))
+        .arg(ctx.make_asset("unsupported_curve_sec1.pem"))
         .assert()
         .failure()
         .stderr(contains("unsupported algorithm"));
 
     ctx.icp()
         .args(["identity", "import", "bob", "--from-pem"])
-        .arg(ctx.make_asset("separate_params.pem"))
+        .arg(ctx.make_asset("separate_params_sec1_k256.pem"))
         .assert()
         .success();
     ctx.icp()
@@ -95,10 +115,20 @@ fn identity_import_pem() {
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+    ctx.icp()
+        .args(["identity", "import", "bob2", "--from-pem"])
+        .arg(ctx.make_asset("separate_params_sec1_p256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "bob2"])
+        .assert()
+        .success()
+        .stdout(eq("qkn3n-adewz-qvqxz-gkchb-ughyj-pl23l-ezdak-7rnds-fime4-si4tn-nae").trim());
 
     ctx.icp()
         .args(["identity", "import", "carol", "--from-pem"])
-        .arg(ctx.make_asset("missing_params.pem"))
+        .arg(ctx.make_asset("missing_params_sec1_k256.pem"))
         .args(["--assert-key-type", "secp256k1"])
         .assert()
         .success();
@@ -114,7 +144,7 @@ fn identity_import_pem() {
     let path = file.into_temp_path();
     ctx.icp()
         .args(["identity", "import", "chlöe", "--from-pem"])
-        .arg(ctx.make_asset("encrypted.pem"))
+        .arg(ctx.make_asset("encrypted_pkcs8_k256.pem"))
         .arg("--decryption-password-from-file")
         .arg(&path)
         .assert()
@@ -128,7 +158,7 @@ fn identity_import_pem() {
     // from plaintext pkcs8
     ctx.icp()
         .args(["identity", "import", "d'artagnan", "--from-pem"])
-        .arg(ctx.make_asset("pkcs8.pem"))
+        .arg(ctx.make_asset("pkcs8_k256.pem"))
         .assert()
         .success();
     ctx.icp()
@@ -136,6 +166,16 @@ fn identity_import_pem() {
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+    ctx.icp()
+        .args(["identity", "import", "d'artagnan2", "--from-pem"])
+        .arg(ctx.make_asset("pkcs8_p256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "d'artagnan2"])
+        .assert()
+        .success()
+        .stdout(eq("qkn3n-adewz-qvqxz-gkchb-ughyj-pl23l-ezdak-7rnds-fime4-si4tn-nae").trim());
 }
 
 #[test]
@@ -203,7 +243,7 @@ fn identity_use() {
     let ctx = TestContext::new();
     ctx.icp()
         .args(["identity", "import", "alice", "--from-pem"])
-        .arg(ctx.make_asset("decrypted.pem"))
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
         .assert()
         .success();
     ctx.icp()

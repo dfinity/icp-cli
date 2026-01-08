@@ -32,7 +32,7 @@ The example adds a `user:name` metadata field with the value "Hank Azaria".
 First, start a local network in a separate terminal window:
 
 ```bash
-icp network run
+icp network start
 ```
 
 Then, deploy the canister:

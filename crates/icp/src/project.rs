@@ -13,7 +13,7 @@ use crate::{
         load_manifest_from_path,
         recipe::RecipeType,
     },
-    network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
+    network::{Configuration, Connected, Managed, ManagedMode},
     prelude::*,
 };
 
@@ -99,21 +99,29 @@ fn default_networks() -> Vec<Network> {
                         #[cfg(unix)]
                         {
                             ManagedMode::Launcher {
-                                gateway: Gateway {
+                                gateway: crate::network::Gateway {
                                     host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
-                                    port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                                    port: crate::network::Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
                                 },
                             }
                         }
                         #[cfg(windows)]
                         {
-                            ManagedMode::Image {
+                            ManagedMode::Image(Box::new(crate::network::ManagedImageConfig {
                                 image: "ghcr.io/dfinity/icp-cli-network-launcher:latest"
                                     .to_string(),
                                 port_mapping: vec![format!("{}:4943", DEFAULT_LOCAL_NETWORK_PORT)],
                                 rm_on_exit: true,
-                                args: None,
-                            }
+                                args: vec![],
+                                entrypoint: None,
+                                environment: vec![],
+                                volumes: vec![],
+                                platform: None,
+                                user: None,
+                                shm_size: None,
+                                status_dir: "/app/status".to_string(),
+                                mounts: vec![],
+                            }))
                         }
                     },
                 },

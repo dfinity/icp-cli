@@ -68,10 +68,18 @@ impl Default for ManagedMode {
         #[cfg(windows)]
         {
             ManagedMode::Image {
-                image: "ghcr.io/dfinity/icp-cli-network-launcher:latest",
+                image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
                 port_mapping: vec!["0:4943".to_string()],
-                rm_on_exit: true,
+                rm_on_exit: Some(true),
                 args: None,
+                entrypoint: None,
+                environment: None,
+                volumes: None,
+                platform: None,
+                user: None,
+                shm_size: None,
+                status_dir: None,
+                mounts: None,
             }
         }
     }

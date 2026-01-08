@@ -1,6 +1,9 @@
 # Unreleased
 
 * fix: Use EOP when upgrading motoko canisters
+* feat: Add `icp network info` with options
+  * `port` to display the network port
+  * `candid-ui-principal` to display the principal of the candid UI canister
 
 # v0.1.0-beta.2
 

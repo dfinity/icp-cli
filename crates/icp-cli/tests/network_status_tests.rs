@@ -8,7 +8,7 @@ mod common;
 use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 
 #[test]
-fn info_port_when_network_running() {
+fn status_port_when_network_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -26,10 +26,10 @@ fn info_port_when_network_running() {
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
-    // Test the info port command
+    // Test the status port command
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "port", "random-network"])
+        .args(["network", "status", "port", "random-network"])
         .assert()
         .success()
         .stdout(eq(format!("{}\n", network.gateway_port)));
@@ -43,7 +43,7 @@ fn info_port_when_network_running() {
 }
 
 #[test]
-fn info_port_fixed_port() {
+fn status_port_fixed_port() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -69,10 +69,10 @@ networks:
 
     ctx.wait_for_network_descriptor(&project_dir, "fixed-network");
 
-    // Test the info port command returns the fixed port
+    // Test the status port command returns the fixed port
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "port", "fixed-network"])
+        .args(["network", "status", "port", "fixed-network"])
         .assert()
         .success()
         .stdout(eq("8123\n"));
@@ -86,7 +86,7 @@ networks:
 }
 
 #[test]
-fn info_candid_ui_principal_when_network_running() {
+fn status_candid_ui_principal_when_network_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -105,11 +105,11 @@ fn info_candid_ui_principal_when_network_running() {
     ctx.wait_for_network_descriptor(&project_dir, "random-network");
     ctx.ping_until_healthy(&project_dir, "random-network");
 
-    // Test the info candid-ui-principal command
+    // Test the status candid-ui-principal command
     let output = ctx
         .icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "candid-ui-principal", "random-network"])
+        .args(["network", "status", "candid-ui-principal", "random-network"])
         .assert()
         .success()
         .get_output()
@@ -131,7 +131,7 @@ fn info_candid_ui_principal_when_network_running() {
 }
 
 #[test]
-fn info_port_when_network_not_running() {
+fn status_port_when_network_not_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -142,14 +142,14 @@ fn info_port_when_network_not_running() {
     // Don't start the network
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "port", "random-network"])
+        .args(["network", "status", "port", "random-network"])
         .assert()
         .failure()
         .stderr(contains("network 'random-network' is not running"));
 }
 
 #[test]
-fn info_candid_ui_principal_when_network_not_running() {
+fn status_candid_ui_principal_when_network_not_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -160,14 +160,14 @@ fn info_candid_ui_principal_when_network_not_running() {
     // Don't start the network
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "candid-ui-principal", "random-network"])
+        .args(["network", "status", "candid-ui-principal", "random-network"])
         .assert()
         .failure()
         .stderr(contains("network 'random-network' is not running"));
 }
 
 #[test]
-fn info_port_nonexistent_network() {
+fn status_port_nonexistent_network() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -177,7 +177,7 @@ fn info_port_nonexistent_network() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "port", "nonexistent"])
+        .args(["network", "status", "port", "nonexistent"])
         .assert()
         .failure()
         .stderr(contains(
@@ -186,7 +186,7 @@ fn info_port_nonexistent_network() {
 }
 
 #[test]
-fn info_candid_ui_principal_nonexistent_network() {
+fn status_candid_ui_principal_nonexistent_network() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -196,7 +196,7 @@ fn info_candid_ui_principal_nonexistent_network() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "candid-ui-principal", "nonexistent"])
+        .args(["network", "status", "candid-ui-principal", "nonexistent"])
         .assert()
         .failure()
         .stderr(contains(
@@ -205,7 +205,7 @@ fn info_candid_ui_principal_nonexistent_network() {
 }
 
 #[test]
-fn info_connected_network_fails() {
+fn status_connected_network_fails() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -223,7 +223,7 @@ networks:
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "info", "port", "connected-network"])
+        .args(["network", "status", "port", "connected-network"])
         .assert()
         .failure()
         .stderr(contains(
@@ -232,25 +232,25 @@ networks:
 }
 
 #[test]
-fn info_not_in_project() {
+fn status_not_in_project() {
     let ctx = TestContext::new();
 
     ctx.icp()
-        .args(["network", "info", "port"])
+        .args(["network", "status", "port"])
         .assert()
         .failure()
         .stderr(contains("Error: failed to locate project directory").trim());
 }
 
 #[test]
-fn info_help() {
+fn status_help() {
     let ctx = TestContext::new();
 
     ctx.icp()
-        .args(["network", "info", "--help"])
+        .args(["network", "status", "--help"])
         .assert()
         .success()
-        .stdout(contains("Get information about a running network"))
+        .stdout(contains("Get status information about a running network"))
         .stdout(contains("port"))
         .stdout(contains("candid-ui-principal"));
 }

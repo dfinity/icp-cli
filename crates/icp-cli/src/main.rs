@@ -314,12 +314,6 @@ async fn main() -> Result<(), Error> {
 
         // Network
         Command::Network(cmd) => match cmd {
-            commands::network::Command::Info(args) => {
-                commands::network::info::exec(&ctx, &args)
-                    .instrument(trace_span)
-                    .await?
-            }
-
             commands::network::Command::List(args) => {
                 commands::network::list::exec(&ctx, &args)
                     .instrument(trace_span)
@@ -334,6 +328,12 @@ async fn main() -> Result<(), Error> {
 
             commands::network::Command::Start(args) => {
                 commands::network::start::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::network::Command::Status(args) => {
+                commands::network::status::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }

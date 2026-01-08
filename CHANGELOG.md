@@ -4,6 +4,8 @@
 * feat: Add `icp network info` with options
   * `port` to display the network port
   * `candid-ui-principal` to display the principal of the candid UI canister
+  * `root-key` to display the root key of the network
+  * `--json` to display all the above in json-readable output
 
 # v0.1.0-beta.2
 

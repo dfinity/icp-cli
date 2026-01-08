@@ -109,6 +109,7 @@ pub enum StopNetworkError {
     },
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_network_launcher(
     network_launcher_path: Option<&Path>,
     config: &Managed,

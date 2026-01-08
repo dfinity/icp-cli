@@ -2,6 +2,9 @@
 
 * fix: Use EOP when upgrading motoko canisters
 * feat: Network startup verbose output now requires `--debug` flag
+* feat: Add `icp network status` command to display network information
+  * Displays port, root key, and candid UI principal (if available)
+  * Supports `--json` flag for JSON output
 
 # v0.1.0-beta.2
 

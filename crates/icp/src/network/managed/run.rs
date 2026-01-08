@@ -53,6 +53,7 @@ pub async fn run_network(
     seed_accounts: impl Iterator<Item = Principal> + Clone,
     candid_ui_wasm: Option<&[u8]>,
     background: bool,
+    verbose: bool,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
 
@@ -66,6 +67,7 @@ pub async fn run_network(
         seed_accounts,
         candid_ui_wasm,
         background,
+        verbose,
     )
     .await?;
     Ok(())
@@ -115,6 +117,7 @@ async fn run_network_launcher(
     seed_accounts: impl Iterator<Item = Principal> + Clone,
     candid_ui_wasm: Option<&[u8]>,
     background: bool,
+    verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
     // hold port_claim until the end of this function
@@ -160,12 +163,13 @@ async fn run_network_launcher(
                     create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
                     let network_launcher_path =
                         network_launcher_path.context(NoNetworkLauncherPathSnafu)?;
-                    eprintln!("Network launcher path: {network_launcher_path}");
+                    debug!("Network launcher path: {network_launcher_path}");
                     let (child, instance, locator) = spawn_network_launcher(
                         network_launcher_path,
                         &root.network_stdout_file(),
                         &root.network_stderr_file(),
                         background,
+                        verbose,
                         &gateway.port,
                         &root.state_dir(),
                     )
@@ -217,7 +221,7 @@ async fn run_network_launcher(
         eprintln!("To stop the network, run `icp network stop`");
         guard.defuse();
     } else {
-        eprintln!("Press Ctrl-C to exit.");
+        eprintln!("Network started. Press Ctrl-C to exit.");
 
         let _ = wait_for_shutdown(&mut guard).await;
         guard.async_drop().await;
@@ -363,7 +367,7 @@ pub async fn initialize_network(
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
     candid_ui_wasm: Option<&[u8]>,
 ) -> Result<Option<Principal>, InitializeNetworkError> {
-    eprintln!("Seeding ICP and TCYCLES account balances");
+    debug!("Seeding ICP and TCYCLES account balances");
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
         .with_identity(AnonymousIdentity)
@@ -381,10 +385,7 @@ pub async fn initialize_network(
             .into_iter()
             .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic (or whatever the launcher is doing)
             .map(|account| {
-                eprintln!(
-                    "- Seeding {} ICP to account {}",
-                    display_icp_amount, account
-                );
+                debug!("Seeding {} ICP to account {}", display_icp_amount, account);
                 acquire_icp_to_account(&agent, account, icp_amount)
             }),
     );
@@ -392,8 +393,8 @@ pub async fn initialize_network(
     let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
 
     let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
-        eprintln!(
-            "- Seeding {} TCYCLES to account {}",
+        debug!(
+            "Seeding {} TCYCLES to account {}",
             display_cycles_amount, account
         );
         mint_cycles_to_account(&agent, account, cycles_amount, icp_xdr_conversion_rate)
@@ -564,8 +565,6 @@ async fn acquire_icp_to_account(
     response.map_err(|err| InitializeNetworkError::SeedTokens {
         error: format!("Failed to transfer ICP: {err}"),
     })?;
-    let display_amount = BigDecimal::new(amount.into(), 8).normalized();
-    debug!("Minted {display_amount} ICP to account {account}");
     Ok(())
 }
 
@@ -634,7 +633,7 @@ async fn install_candid_ui(
         .map_err(|e| InitializeNetworkError::CandidUI {
             error: format!("Failed to install Candid UI canister: {e}"),
         })?;
-    eprintln!("Installed Candid UI canister with ID {}", canister_id);
+    debug!("Installed Candid UI canister with ID {}", canister_id);
 
     Ok(canister_id)
 }

@@ -83,6 +83,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         seed_accounts,
         Some(candid_ui_wasm),
         args.background,
+        ctx.debug,
     )
     .await?;
     Ok(())

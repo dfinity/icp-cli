@@ -1,6 +1,7 @@
 # Unreleased
 
 * fix: Use EOP when upgrading motoko canisters
+* feat: Network startup verbose output now requires `--debug` flag
 
 # v0.1.0-beta.2
 

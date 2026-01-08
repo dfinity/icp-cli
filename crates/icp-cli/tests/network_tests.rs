@@ -471,3 +471,99 @@ async fn network_docker() {
         .await;
     assert!(balance > 0_u128);
 }
+
+#[test]
+#[file_serial(default_local_network)]
+fn override_local_network_with_custom_port() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("custom-local");
+
+    // Define a custom "local" network with port 9999
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: local
+                mode: managed
+                gateway:
+                  port: 9999
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Start the custom "local" network
+    let _guard = ctx.start_network_in(&project_dir, "local");
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "local");
+
+    // Verify it's using the custom port
+    assert_eq!(network.gateway_port, 9999);
+
+    ctx.ping_until_healthy(&project_dir, "local");
+}
+
+#[test]
+fn cannot_override_mainnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("override-mainnet");
+
+    // Attempt to override mainnet
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: mainnet
+                mode: connected
+                url: http://fake-mainnet.local
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Any command that loads the project should fail
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(contains("`mainnet` is a reserved network name"));
+}
+
+#[test]
+#[file_serial(default_local_network)]
+fn override_local_network_as_connected() {
+    let ctx = TestContext::new();
+
+    // Project A: Start a normal local network with random port
+    let project_a = ctx.create_project_dir("project-a");
+    write_string(&project_a.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write manifest");
+
+    let _guard = ctx.start_network_in(&project_a, "random-network");
+    let network_a = ctx.wait_for_network_descriptor(&project_a, "random-network");
+    ctx.ping_until_healthy(&project_a, "random-network");
+
+    // Project B: Override "local" to connect to Project A's network
+    let project_b = ctx.create_project_dir("project-b");
+    write_string(
+        &project_b.join("icp.yaml"),
+        &formatdoc! {r#"
+            networks:
+              - name: local
+                mode: connected
+                url: http://localhost:{port}
+                root-key: {root_key}
+        "#,
+            port = network_a.gateway_port,
+            root_key = hex::encode(&network_a.root_key)
+        },
+    )
+    .expect("failed to write manifest");
+
+    // Should be able to use the "local" environment/network name
+    // even though it points to a connected network
+    ctx.icp()
+        .current_dir(&project_b)
+        .args(["network", "ping", "local"])
+        .assert()
+        .success();
+}

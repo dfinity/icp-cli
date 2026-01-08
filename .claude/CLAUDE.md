@@ -45,10 +45,15 @@ export PATH=$(pwd)/target/debug:$PATH
 # Check if CLI works
 icp help
 
-# Generate CLI documentation
+# if the commands have changed, generate CLI documentation:
 ./scripts/generate-cli-docs.sh
-# Or manually:
-cargo build --release && ./target/release/icp --markdown-help > docs/cli-reference.md
+
+
+# if the manifest types change regenerate the schema:
+./scripts/generate-config-schema.sh
+
+# After making changes and if the tests pass run cargo fmt:
+cargo fmt
 ```
 
 ## Architecture

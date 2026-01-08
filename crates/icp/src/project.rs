@@ -257,10 +257,9 @@ pub async fn consolidate_manifest(
     );
 
     // Track which network names are protected (only mainnet)
-    let protected_network_names: HashSet<String> =
-        [DEFAULT_MAINNET_NETWORK_NAME.to_string()]
-            .into_iter()
-            .collect();
+    let protected_network_names: HashSet<String> = [DEFAULT_MAINNET_NETWORK_NAME.to_string()]
+        .into_iter()
+        .collect();
 
     // Resolve NetworkManifests and add them (including user-defined "local" if provided)
     for i in &m.networks {

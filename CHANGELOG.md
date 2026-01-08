@@ -1,11 +1,9 @@
 # Unreleased
 
 * fix: Use EOP when upgrading motoko canisters
-* feat: Add `icp network info` with options
-  * `port` to display the network port
-  * `candid-ui-principal` to display the principal of the candid UI canister
-  * `root-key` to display the root key of the network
-  * `--json` to display all the above in json-readable output
+* feat: Add `icp network status` command to display network information
+  * Displays port, root key, and candid UI principal (if available)
+  * Supports `--json` flag for JSON output
 
 # v0.1.0-beta.2
 

@@ -1,14 +1,11 @@
 use icp::fs::write_string;
-use predicates::{
-    ord::eq,
-    str::{PredicateStrExt, contains},
-};
+use predicates::str::{PredicateStrExt, contains};
 
 mod common;
 use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 
 #[test]
-fn status_port_when_network_running() {
+fn status_when_network_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -24,15 +21,17 @@ fn status_port_when_network_running() {
         .success()
         .stderr(contains("Installed Candid UI canister with ID"));
 
-    let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
+    ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
-    // Test the status port command
+    // Test the status command shows all fields
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "status", "port", "random-network"])
+        .args(["network", "status", "random-network"])
         .assert()
         .success()
-        .stdout(eq(format!("{}\n", network.gateway_port)));
+        .stdout(contains("Port:"))
+        .stdout(contains("Root Key:"))
+        .stdout(contains("Candid UI Principal:"));
 
     // Stop network
     ctx.icp()
@@ -43,7 +42,54 @@ fn status_port_when_network_running() {
 }
 
 #[test]
-fn status_port_fixed_port() {
+fn status_with_json() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // Start network using CLI
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "random-network", "--background"])
+        .assert()
+        .success()
+        .stderr(contains("Installed Candid UI canister with ID"));
+
+    ctx.wait_for_network_descriptor(&project_dir, "random-network");
+
+    // Test the status command with JSON output
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args(["network", "status", "random-network", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json_str = String::from_utf8(output).expect("output should be valid UTF-8");
+    let json: serde_json::Value =
+        serde_json::from_str(&json_str).expect("output should be valid JSON");
+
+    // Verify JSON structure
+    assert!(json.get("port").is_some());
+    assert!(json.get("root_key").is_some());
+    assert!(json.get("candid_ui_principal").is_some());
+
+    // Stop network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "stop", "random-network"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn status_fixed_port() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -69,13 +115,13 @@ networks:
 
     ctx.wait_for_network_descriptor(&project_dir, "fixed-network");
 
-    // Test the status port command returns the fixed port
+    // Test the status command shows the fixed port
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "status", "port", "fixed-network"])
+        .args(["network", "status", "fixed-network"])
         .assert()
         .success()
-        .stdout(eq("8123\n"));
+        .stdout(contains("Port: 8123"));
 
     // Stop network
     ctx.icp()
@@ -86,52 +132,7 @@ networks:
 }
 
 #[test]
-fn status_candid_ui_principal_when_network_running() {
-    let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Project manifest
-    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
-        .expect("failed to write project manifest");
-
-    // Start network using CLI
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "start", "random-network", "--background"])
-        .assert()
-        .success()
-        .stderr(contains("Installed Candid UI canister with ID"));
-
-    ctx.wait_for_network_descriptor(&project_dir, "random-network");
-    ctx.ping_until_healthy(&project_dir, "random-network");
-
-    // Test the status candid-ui-principal command
-    let output = ctx
-        .icp()
-        .current_dir(&project_dir)
-        .args(["network", "status", "candid-ui-principal", "random-network"])
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
-
-    let principal_str = String::from_utf8(output).expect("output should be valid UTF-8");
-    let principal_str = principal_str.trim();
-
-    // Verify it's a valid principal (should be parseable)
-    candid::Principal::from_text(principal_str).expect("output should be a valid principal");
-
-    // Stop network
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "stop", "random-network"])
-        .assert()
-        .success();
-}
-
-#[test]
-fn status_port_when_network_not_running() {
+fn status_when_network_not_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -142,32 +143,14 @@ fn status_port_when_network_not_running() {
     // Don't start the network
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "status", "port", "random-network"])
+        .args(["network", "status", "random-network"])
         .assert()
         .failure()
         .stderr(contains("network 'random-network' is not running"));
 }
 
 #[test]
-fn status_candid_ui_principal_when_network_not_running() {
-    let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Project manifest
-    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
-        .expect("failed to write project manifest");
-
-    // Don't start the network
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "status", "candid-ui-principal", "random-network"])
-        .assert()
-        .failure()
-        .stderr(contains("network 'random-network' is not running"));
-}
-
-#[test]
-fn status_port_nonexistent_network() {
+fn status_nonexistent_network() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -177,26 +160,7 @@ fn status_port_nonexistent_network() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "status", "port", "nonexistent"])
-        .assert()
-        .failure()
-        .stderr(contains(
-            "project does not contain a network named 'nonexistent'",
-        ));
-}
-
-#[test]
-fn status_candid_ui_principal_nonexistent_network() {
-    let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("icp");
-
-    // Project manifest
-    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
-        .expect("failed to write project manifest");
-
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "status", "candid-ui-principal", "nonexistent"])
+        .args(["network", "status", "nonexistent"])
         .assert()
         .failure()
         .stderr(contains(
@@ -223,7 +187,7 @@ networks:
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "status", "port", "connected-network"])
+        .args(["network", "status", "connected-network"])
         .assert()
         .failure()
         .stderr(contains(
@@ -236,7 +200,7 @@ fn status_not_in_project() {
     let ctx = TestContext::new();
 
     ctx.icp()
-        .args(["network", "status", "port"])
+        .args(["network", "status"])
         .assert()
         .failure()
         .stderr(contains("Error: failed to locate project directory").trim());
@@ -250,7 +214,5 @@ fn status_help() {
         .args(["network", "status", "--help"])
         .assert()
         .success()
-        .stdout(contains("Get status information about a running network"))
-        .stdout(contains("port"))
-        .stdout(contains("candid-ui-principal"));
+        .stdout(contains("Get status information about a running network"));
 }

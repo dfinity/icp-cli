@@ -53,7 +53,7 @@ tokio.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
 url.workspace = true
-cargo-generate = "0.23.7"
+cargo-generate = { version = "0.23.7", features = ["vendored-openssl"] }
 anstyle = "1.0.13"
 regex = "1.12.2"
 

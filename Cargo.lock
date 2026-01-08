@@ -2306,6 +2306,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2545,7 +2551,7 @@ dependencies = [
  "http-body",
  "http-body-util",
  "ic-certification",
- "ic-ed25519",
+ "ic-ed25519 0.2.0",
  "ic-transport-types",
  "ic-verify-bls-signature",
  "k256",
@@ -2665,6 +2671,23 @@ dependencies = [
  "ed25519-dalek",
  "hkdf",
  "pem 1.1.1",
+ "rand 0.8.5",
+ "thiserror 2.0.17",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b73f85d01b7a3d538353050f1eda546f827ffe7f3ffa35f8e80faa8cff1da10"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex-literal",
+ "hkdf",
+ "ic_principal",
+ "pem 3.0.5",
  "rand 0.8.5",
  "thiserror 2.0.17",
  "zeroize",
@@ -2840,6 +2863,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-asset",
+ "ic-ed25519 0.5.0",
  "ic-ledger-types",
  "ic-utils",
  "icp-canister-interfaces",
@@ -2908,6 +2932,7 @@ dependencies = [
  "hex",
  "httptest",
  "ic-agent",
+ "ic-ed25519 0.5.0",
  "ic-ledger-types",
  "ic-management-canister-types 0.4.1",
  "ic-utils",
@@ -2920,6 +2945,7 @@ dependencies = [
  "k256",
  "lazy_static",
  "nix 0.30.1",
+ "p256",
  "pem 3.0.5",
  "phf",
  "pkcs8",

@@ -8,14 +8,15 @@ use icp::identity::{
 };
 use icp::{fs::read_to_string, prelude::*};
 use itertools::Itertools;
-use k256::{Secp256k1, SecretKey};
+use k256::Secp256k1;
+use p256::NistP256;
 use pem::Pem;
 use pkcs8::{
     AssociatedOid, EncryptedPrivateKeyInfo, ObjectIdentifier, PrivateKeyInfo, SecretDocument,
     der::{Decode, pem::PemLabel},
 };
 use sec1::{EcParameters, EcPrivateKey};
-use snafu::{OptionExt, ResultExt, Snafu};
+use snafu::{OptionExt, ResultExt, Snafu, ensure};
 
 use icp::context::Context;
 
@@ -98,6 +99,7 @@ async fn import_from_pem(
             let count = e.count();
             if count == 0 {
                 UnknownPemFormatSnafu {
+                    path,
                     expected: vec![
                         PrivateKeyInfo::PEM_LABEL,
                         EcPrivateKey::PEM_LABEL,
@@ -165,9 +167,23 @@ fn import_pkcs8(
         // if the user knows what it is, we do not have to check
         match known_key_type {
             IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
-                SecretKey::from_sec1_der(pki.private_key).context(BadPemKeySnafu { path })?,
+                k256::SecretKey::from_sec1_der(pki.private_key)
+                    .context(BadEcPemKeySnafu { path })?,
             )),
-            // todo p256, ed25519
+            IdentityKeyAlgorithm::Prime256v1 => Ok(IdentityKey::Prime256v1(
+                p256::SecretKey::from_sec1_der(pki.private_key)
+                    .context(BadEcPemKeySnafu { path })?,
+            )),
+            IdentityKeyAlgorithm::Ed25519 => {
+                ensure!(
+                    pki.private_key[0..2] == [0x04, 0x20],
+                    BadP8PemKeySnafu { path },
+                );
+                Ok(IdentityKey::Ed25519(
+                    ic_ed25519::PrivateKey::deserialize_raw(&pki.private_key[2..])
+                        .context(BadEdPemKeySnafu { path })?,
+                ))
+            }
         }
     } else {
         // parse the algorithm information from the metadata
@@ -184,22 +200,34 @@ fn import_pkcs8(
                     })?;
                 match curve {
                     Secp256k1::OID => Ok(IdentityKey::Secp256k1(
-                        SecretKey::from_sec1_der(pki.private_key)
-                            .context(BadPemKeySnafu { path })?,
+                        k256::SecretKey::from_sec1_der(pki.private_key)
+                            .context(BadEcPemKeySnafu { path })?,
                     )),
-                    // todo p256
+                    NistP256::OID => Ok(IdentityKey::Prime256v1(
+                        p256::SecretKey::from_sec1_der(pki.private_key)
+                            .context(BadEcPemKeySnafu { path })?,
+                    )),
                     _ => UnsupportedAlgorithmSnafu {
                         found: curve,
-                        expected: vec![Secp256k1::OID],
+                        expected: vec![Secp256k1::OID, NistP256::OID],
                         path,
                     }
                     .fail(),
                 }
             }
-            // todo ed25519
+            ED25519_OID => {
+                ensure!(
+                    pki.private_key[0..2] == [0x04, 0x20],
+                    BadP8PemKeySnafu { path },
+                );
+                Ok(IdentityKey::Ed25519(
+                    ic_ed25519::PrivateKey::deserialize_raw(&pki.private_key[2..])
+                        .context(BadEdPemKeySnafu { path })?,
+                ))
+            }
             _ => UnsupportedAlgorithmSnafu {
                 found: pki.algorithm.oid,
-                expected: vec![elliptic_curve::ALGORITHM_OID],
+                expected: vec![elliptic_curve::ALGORITHM_OID, ED25519_OID],
                 path,
             }
             .fail(),
@@ -219,9 +247,12 @@ fn import_sec1(
         // if the user knows what it is, we do not have to check
         match known_key_type {
             IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
-                SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+                k256::SecretKey::from_slice(epk.private_key).context(BadEcPemKeySnafu { path })?,
             )),
-            // todo p256
+            IdentityKeyAlgorithm::Prime256v1 => Ok(IdentityKey::Prime256v1(
+                p256::SecretKey::from_slice(epk.private_key).context(BadEcPemKeySnafu { path })?,
+            )),
+            IdentityKeyAlgorithm::Ed25519 => BadEdAssertionSnafu { path }.fail(),
         }
     } else {
         // the algorithm information can be found in two places:
@@ -250,18 +281,23 @@ fn import_sec1(
         };
         match curve {
             Secp256k1::OID => Ok(IdentityKey::Secp256k1(
-                SecretKey::from_slice(epk.private_key).context(BadPemKeySnafu { path })?,
+                k256::SecretKey::from_slice(epk.private_key).context(BadEcPemKeySnafu { path })?,
             )),
-            //todo p256
+            NistP256::OID => Ok(IdentityKey::Prime256v1(
+                p256::SecretKey::from_slice(epk.private_key).context(BadEcPemKeySnafu { path })?,
+            )),
+            // ed25519 cannot be represented in SEC1 format
             _ => UnsupportedAlgorithmSnafu {
                 found: curve,
-                expected: vec![Secp256k1::OID],
+                expected: vec![Secp256k1::OID, NistP256::OID, ED25519_OID],
                 path,
             }
             .fail(),
         }
     }
 }
+
+const ED25519_OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.101.112");
 
 async fn import_from_seed_phrase(
     ctx: &Context,
@@ -286,11 +322,15 @@ async fn import_from_seed_phrase(
 
 #[derive(Debug, Snafu)]
 pub(crate) enum LoadKeyError {
-    #[snafu(display("unknown PEM formats: expected {}; found {}", expected.join(", "), found.join(", ")))]
+    #[snafu(display("unknown PEM formats: expected {}; found {} in file `{path}`", expected.join(", "), found.join(", ")))]
     UnknownPemFormat {
         expected: Vec<&'static str>,
         found: Vec<String>,
+        path: PathBuf,
     },
+
+    #[snafu(display("PEM file `{path}` is in SEC1 format, which cannot represent Ed25519 keys"))]
+    BadEdAssertion { path: PathBuf },
 
     #[snafu(display("failed to read file"))]
     ReadFileError { source: icp::fs::IoError },
@@ -317,11 +357,17 @@ pub(crate) enum LoadKeyError {
     IncompletePemKey { path: PathBuf, field: String },
 
     #[snafu(display("malformed key material in PEM file `{path}`"))]
-    BadPemKey {
+    BadEcPemKey {
         path: PathBuf,
         source: elliptic_curve::Error,
     },
-
+    #[snafu(display("malformed key material in PEM file `{path}`"))]
+    BadEdPemKey {
+        path: PathBuf,
+        source: ic_ed25519::PrivateKeyDecodingError,
+    },
+    #[snafu(display("malformed key material in PEM file `{path}`"))]
+    BadP8PemKey { path: PathBuf },
     #[snafu(display("failed to read password from terminal"))]
     PasswordTermReadError { source: dialoguer::Error },
 

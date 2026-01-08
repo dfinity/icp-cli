@@ -95,11 +95,26 @@ fn default_networks() -> Vec<Network> {
             name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
-                    mode: ManagedMode::Launcher {
-                        gateway: Gateway {
-                            host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
-                            port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
-                        },
+                    mode: {
+                        #[cfg(unix)]
+                        {
+                            ManagedMode::Launcher {
+                                gateway: Gateway {
+                                    host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                                    port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                                },
+                            }
+                        }
+                        #[cfg(windows)]
+                        {
+                            ManagedMode::Image {
+                                image: "ghcr.io/dfinity/icp-cli-network-launcher:latest"
+                                    .to_string(),
+                                port_mapping: vec![format!("{}:4943", DEFAULT_LOCAL_NETWORK_PORT)],
+                                rm_on_exit: true,
+                                args: None,
+                            }
+                        }
                     },
                 },
             },

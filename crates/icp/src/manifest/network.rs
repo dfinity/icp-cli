@@ -39,7 +39,19 @@ pub enum ManagedMode {
 
 impl Default for ManagedMode {
     fn default() -> Self {
-        ManagedMode::Launcher { gateway: None }
+        #[cfg(unix)]
+        {
+            ManagedMode::Launcher { gateway: None }
+        }
+        #[cfg(windows)]
+        {
+            ManagedMode::Image {
+                image: "ghcr.io/dfinity/icp-cli-network-launcher:latest",
+                port_mapping: vec!["0:4943".to_string()],
+                rm_on_exit: true,
+                args: None,
+            }
+        }
     }
 }
 

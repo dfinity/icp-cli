@@ -1,5 +1,6 @@
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use indoc::{formatdoc, indoc};
+use predicates::str::contains;
 
 use crate::common::TestContext;
 use icp::fs::{create_dir_all, write_string};
@@ -167,30 +168,29 @@ fn glob_path() {
 //         .stderr(eq("Error: canister path must exist and be a directory \'my-canister\'").trim());
 // }
 
-// TODO(or.ricon): This test is currently not passing, fix it.
-// #[test]
-// fn redefine_ic_network_disallowed() {
-//     let ctx = TestContext::new();
+#[test]
+fn redefine_mainnet_network_disallowed() {
+    let ctx = TestContext::new();
 
-//     // Setup project
-//     let project_dir = ctx.create_project_dir("icp");
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
 
-//     write_string(
-//         &project_dir.join("icp.yaml"), // path
-//         r#"
-//         networks:
-//           - name: ic
-//             mode: connected
-//             url: https://icp0.io
-//         "#, // contents
-//     )
-//     .expect("failed to write project manifest");
+    write_string(
+        &project_dir.join("icp.yaml"),
+        r#"
+        networks:
+          - name: mainnet
+            mode: connected
+            url: https://fake-mainnet.io
+        "#,
+    )
+    .expect("failed to write project manifest");
 
-//     // Invoke build
-//     ctx.icp()
-//         .current_dir(project_dir)
-//         .args(["deploy", "--subnet", common::SUBNET_ID])
-//         .assert()
-//         .failure()
-//         .stderr(eq("Error: cannot redefine the 'ic' network; the network path 'networks/ic' is invalid").trim());
-// }
+    // Any command that loads the project should fail
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(contains("`mainnet` is a reserved network name"));
+}

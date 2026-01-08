@@ -19,7 +19,7 @@ byte-unit.workspace = true
 camino-tempfile.workspace = true
 candid_parser.workspace = true
 candid.workspace = true
-cargo-generate = "0.23.7"
+cargo-generate = { version = "0.23.7", features = ["vendored-openssl"] }
 clap-markdown.workspace = true
 clap.workspace = true
 console.workspace = true

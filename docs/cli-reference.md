@@ -33,10 +33,10 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli identity new`↴](#icp-cli-identity-new)
 * [`icp-cli identity principal`↴](#icp-cli-identity-principal)
 * [`icp-cli network`↴](#icp-cli-network)
-* [`icp-cli network info`↴](#icp-cli-network-info)
 * [`icp-cli network list`↴](#icp-cli-network-list)
 * [`icp-cli network ping`↴](#icp-cli-network-ping)
 * [`icp-cli network start`↴](#icp-cli-network-start)
+* [`icp-cli network status`↴](#icp-cli-network-status)
 * [`icp-cli network stop`↴](#icp-cli-network-stop)
 * [`icp-cli new`↴](#icp-cli-new)
 * [`icp-cli project`↴](#icp-cli-project)
@@ -591,33 +591,11 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
-* `info` — Get information about a running network
 * `list` — 
 * `ping` — Try to connect to a network, and print out its status
 * `start` — Run a given network
+* `status` — Get status information about a running network
 * `stop` — Stop a background network
-
-
-
-## `icp-cli network info`
-
-Get information about a running network
-
-**Usage:** `icp-cli network info <SUBJECT> [NAME]`
-
-###### **Arguments:**
-
-* `<SUBJECT>` — The type of information to retrieve
-
-  Possible values:
-  - `port`:
-    Get the port the network gateway is listening on
-  - `candid-ui-principal`:
-    Get the principal of the Candid UI canister
-
-* `<NAME>` — Name of the network
-
-  Default value: `local`
 
 
 
@@ -660,6 +638,34 @@ Run a given network
 ###### **Options:**
 
 * `-d`, `--background` — Starts the network in a background process. This command will exit once the network is running. To stop the network, use 'icp network stop'
+
+
+
+## `icp-cli network status`
+
+Get status information about a running network
+
+**Usage:** `icp-cli network status [OPTIONS] [SUBJECT] [NAME]`
+
+###### **Arguments:**
+
+* `<SUBJECT>` — The specific field to retrieve (if not provided, shows all fields)
+
+  Possible values:
+  - `port`:
+    Get the port the network gateway is listening on
+  - `candid-ui-principal`:
+    Get the principal of the Candid UI canister
+  - `root-key`:
+    Get the network's root key (public key)
+
+* `<NAME>` — Name of the network
+
+  Default value: `local`
+
+###### **Options:**
+
+* `--json` — Format output as JSON
 
 
 

@@ -33,6 +33,7 @@ This document contains the help content for the `icp-cli` command-line program.
 * [`icp-cli identity new`↴](#icp-cli-identity-new)
 * [`icp-cli identity principal`↴](#icp-cli-identity-principal)
 * [`icp-cli network`↴](#icp-cli-network)
+* [`icp-cli network info`↴](#icp-cli-network-info)
 * [`icp-cli network list`↴](#icp-cli-network-list)
 * [`icp-cli network ping`↴](#icp-cli-network-ping)
 * [`icp-cli network start`↴](#icp-cli-network-start)
@@ -590,10 +591,33 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
+* `info` — Get information about a running network
 * `list` — 
 * `ping` — Try to connect to a network, and print out its status
 * `start` — Run a given network
 * `stop` — Stop a background network
+
+
+
+## `icp-cli network info`
+
+Get information about a running network
+
+**Usage:** `icp-cli network info <SUBJECT> [NAME]`
+
+###### **Arguments:**
+
+* `<SUBJECT>` — The type of information to retrieve
+
+  Possible values:
+  - `port`:
+    Get the port the network gateway is listening on
+  - `candid-ui-principal`:
+    Get the principal of the Candid UI canister
+
+* `<NAME>` — Name of the network
+
+  Default value: `local`
 
 
 

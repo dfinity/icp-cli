@@ -645,19 +645,9 @@ Run a given network
 
 Get status information about a running network
 
-**Usage:** `icp-cli network status [OPTIONS] [SUBJECT] [NAME]`
+**Usage:** `icp-cli network status [OPTIONS] [NAME]`
 
 ###### **Arguments:**
-
-* `<SUBJECT>` — The specific field to retrieve (if not provided, shows all fields)
-
-  Possible values:
-  - `port`:
-    Get the port the network gateway is listening on
-  - `candid-ui-principal`:
-    Get the principal of the Candid UI canister
-  - `root-key`:
-    Get the network's root key (public key)
 
 * `<NAME>` — Name of the network
 

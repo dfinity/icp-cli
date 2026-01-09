@@ -10,6 +10,7 @@
   * This makes it more convenient to configure the default environment
 * feat: Validate call argument against candid interface
   * The interface is fetched from canister metadata onchain
+* feat: Accept an environment as argument for network commands
 
 # v0.1.0-beta.2
 

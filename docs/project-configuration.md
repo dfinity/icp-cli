@@ -256,10 +256,35 @@ There are two types of networks:
 - managed - this is a network whose lifecycle icp-cli is responsible for.
 - external - A remote network that is hosted, this could be mainnet or a remote instance of pocket-ic serving as a long lived testnet.
 
-You can define your own networks but there are two implict networks defined:
-- local - A managed network that is spun up with the network launcher and typically used for local development.
-- mainnet - The mainnet, production network.
+You can define your own networks. There are two implicit networks:
+- local - A managed network that is spun up with the network launcher and typically used for local development. This network can be overridden in your icp.yaml if you need custom configuration (e.g., different port, connecting to an existing network).
+- mainnet - The mainnet, production network. This network is protected and cannot be overridden to prevent accidental deployment to production with incorrect settings.
 
+#### Overriding the Local Network
+
+The default "local" network uses `localhost:8000` as a managed network. You can override this if you need different configuration:
+
+**Example: Custom port**
+```yaml
+networks:
+  - name: local
+    mode: managed
+    gateway:
+      port: 9999
+```
+
+**Example: Connect to existing network**
+```yaml
+networks:
+  - name: local
+    mode: connected
+    url: http://192.168.1.100:8000
+    root-key: <root-key-hex>
+```
+
+**Important**: The "mainnet" network cannot be overridden for safety reasons. Attempting to define a network named "mainnet" will result in an error.
+
+#### Defining Custom Networks
 
 ```yaml
 networks:

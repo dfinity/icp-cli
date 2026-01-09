@@ -824,6 +824,7 @@ dependencies = [
  "liquid-lib",
  "log",
  "names",
+ "openssl",
  "paste",
  "regex",
  "remove_dir_all",
@@ -1704,6 +1705,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "foreign-types"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
+dependencies = [
+ "foreign-types-shared",
+]
+
+[[package]]
+name = "foreign-types-shared"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+
+[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2306,6 +2322,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2545,7 +2567,7 @@ dependencies = [
  "http-body",
  "http-body-util",
  "ic-certification",
- "ic-ed25519",
+ "ic-ed25519 0.2.0",
  "ic-transport-types",
  "ic-verify-bls-signature",
  "k256",
@@ -2665,6 +2687,23 @@ dependencies = [
  "ed25519-dalek",
  "hkdf",
  "pem 1.1.1",
+ "rand 0.8.5",
+ "thiserror 2.0.17",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b73f85d01b7a3d538353050f1eda546f827ffe7f3ffa35f8e80faa8cff1da10"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex-literal",
+ "hkdf",
+ "ic_principal",
+ "pem 3.0.5",
  "rand 0.8.5",
  "thiserror 2.0.17",
  "zeroize",
@@ -2840,6 +2879,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-asset",
+ "ic-ed25519 0.5.0",
  "ic-ledger-types",
  "ic-utils",
  "icp-canister-interfaces",
@@ -2908,6 +2948,7 @@ dependencies = [
  "hex",
  "httptest",
  "ic-agent",
+ "ic-ed25519 0.5.0",
  "ic-ledger-types",
  "ic-management-canister-types 0.4.1",
  "ic-utils",
@@ -2920,6 +2961,7 @@ dependencies = [
  "k256",
  "lazy_static",
  "nix 0.30.1",
+ "p256",
  "pem 3.0.5",
  "phf",
  "pkcs8",
@@ -3974,10 +4016,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
+name = "openssl"
+version = "0.10.73"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8505734d46c8ab1e19a1dce3aef597ad87dcb4c37e7188231769bd6bd51cebf8"
+dependencies = [
+ "bitflags 2.9.4",
+ "cfg-if",
+ "foreign-types",
+ "libc",
+ "once_cell",
+ "openssl-macros",
+ "openssl-sys",
+]
+
+[[package]]
+name = "openssl-macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
+
+[[package]]
+name = "openssl-src"
+version = "300.5.4+3.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a507b3792995dae9b0df8a1c1e3771e8418b7c2d9f0baeba32e6fe8b06c7cb72"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "openssl-sys"
@@ -3987,6 +4064,7 @@ checksum = "90096e2e47630d78b7d1c20952dc621f957103f8bc2c8359ec81290d75238571"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]

@@ -53,6 +53,10 @@ jobs:
         run: |
           echo "RUSTFLAGS=--remap-path-prefix=${GITHUB_WORKSPACE}=/builds/dfinity" >> $GITHUB_ENV
 
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux.sh
+
       - name: Set names (tag only)
         if: github.ref_type == 'tag'
         run: |

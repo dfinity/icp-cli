@@ -367,7 +367,14 @@ pub fn create_identity(
                 .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let entry = Entry::new(SERVICE_NAME, name).context(CreateEntrySnafu)?;
-            entry.set_password(&pem).context(SetEntryPasswordSnafu)?;
+            let res = entry.set_password(&pem);
+            #[cfg(target_os = "linux")]
+            if let Err(keyring::Error::NoStorageAccess(err)) = &res
+                && err.to_string().contains("no result found")
+            {
+                return Err(CreateIdentityError::NoKeyring);
+            }
+            res.context(SetEntryPasswordSnafu)?;
         }
     }
     let spec = match format {
@@ -395,26 +402,23 @@ pub fn create_identity(
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
     #[snafu(display("failed to write file"))]
-    WriteFileError {
-        source: crate::fs::IoError,
-    },
+    WriteFileError { source: crate::fs::IoError },
 
     #[snafu(display("failed to create directory"))]
-    CreateDirectoryError {
-        source: crate::fs::IoError,
-    },
+    CreateDirectoryError { source: crate::fs::IoError },
 
     #[snafu(transparent)]
-    LockError {
-        source: crate::fs::lock::LockError,
-    },
+    LockError { source: crate::fs::lock::LockError },
 
-    CreateEntryError {
-        source: keyring::Error,
-    },
-    SetEntryPasswordError {
-        source: keyring::Error,
-    },
+    #[snafu(display("failed to create keyring entry"))]
+    CreateEntryError { source: keyring::Error },
+    #[snafu(display("failed to set keyring entry password"))]
+    SetEntryPasswordError { source: keyring::Error },
+    #[cfg(target_os = "linux")]
+    #[snafu(display(
+        "no keyring available - have you set it up? gnome-keyring must be installed and configured with a default keyring."
+    ))]
+    NoKeyring,
 }
 
 fn write_identity(

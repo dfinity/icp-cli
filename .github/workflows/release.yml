@@ -55,7 +55,7 @@ jobs:
 
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
-        run: ./.github/scripts/provision-linux.sh
+        run: ./.github/scripts/provision-linux-build.sh
 
       - name: Set names (tag only)
         if: github.ref_type == 'tag'

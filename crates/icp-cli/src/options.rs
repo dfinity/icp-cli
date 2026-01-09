@@ -39,6 +39,7 @@ pub(crate) struct EnvironmentOpt {
     /// Override the environment to connect to. By default, the local environment is used.
     #[arg(
         long,
+        short = 'e',
         env = "ICP_ENVIRONMENT",
         global(true),
         group = "environment-select",

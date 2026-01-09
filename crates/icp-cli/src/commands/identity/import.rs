@@ -27,7 +27,7 @@ use crate::commands::identity::StorageMode;
 pub(crate) struct ImportArgs {
     name: String,
 
-    #[arg(long, value_enum, group = "import-from", default_value_t)]
+    #[arg(long, value_enum, default_value_t)]
     storage: StorageMode,
 
     #[arg(long, value_name = "FILE", group = "import-from")]

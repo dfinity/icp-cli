@@ -539,6 +539,12 @@ Import a new identity
 
 ###### **Options:**
 
+* `--storage <STORAGE>`
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`
+
 * `--from-pem <FILE>`
 * `--read-seed-phrase`
 * `--from-seed-file <FILE>`
@@ -566,6 +572,12 @@ Create a new identity
 * `<NAME>`
 
 ###### **Options:**
+
+* `--storage <STORAGE>`
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`
 
 * `--output-seed <FILE>`
 

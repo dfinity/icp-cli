@@ -63,6 +63,7 @@ pub async fn spawn_network_launcher(
     stdout_file: &Path,
     stderr_file: &Path,
     background: bool,
+    verbose: bool,
     port: &Port,
     state_dir: &Path,
 ) -> Result<
@@ -96,9 +97,12 @@ pub async fn spawn_network_launcher(
             .context(CreateStdioFileSnafu { path: &stderr_file })?;
         cmd.stdout(Stdio::from(stdout));
         cmd.stderr(Stdio::from(stderr));
-    } else {
+    } else if verbose {
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
+    } else {
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
     }
     let watcher = wait_for_launcher_status(status_dir.as_ref()).context(WatchStatusDirSnafu)?;
     let child = cmd.spawn().context(SpawnLauncherSnafu {

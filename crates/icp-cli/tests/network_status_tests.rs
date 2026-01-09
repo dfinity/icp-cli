@@ -19,7 +19,7 @@ fn status_when_network_running() {
         .args(["network", "start", "random-network", "--background"])
         .assert()
         .success()
-        .stderr(contains("Installed Candid UI canister with ID"));
+        .stderr(contains("Network started on port"));
 
     ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
@@ -56,7 +56,7 @@ fn status_with_json() {
         .args(["network", "start", "random-network", "--background"])
         .assert()
         .success()
-        .stderr(contains("Installed Candid UI canister with ID"));
+        .stderr(contains("Network started on port"));
 
     ctx.wait_for_network_descriptor(&project_dir, "random-network");
 

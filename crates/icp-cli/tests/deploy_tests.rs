@@ -1,5 +1,8 @@
 use indoc::{formatdoc, indoc};
-use predicates::{ord::eq, str::PredicateStrExt};
+use predicates::{
+    ord::eq,
+    str::{PredicateStrExt, contains},
+};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
@@ -333,4 +336,59 @@ async fn canister_create_colocates_canisters() {
         subnet_a, subnet_f,
         "Canister F should be on the same subnet as canister A"
     );
+}
+
+#[tokio::test]
+async fn deploy_prints_canister_urls() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Deploy project and verify Candid UI URLs are printed
+    // The example_icp_mo.wasm doesn't have http_request, so it should show Candid UI
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Deployed canisters:"))
+        .stdout(contains("my-canister (Candid UI):"))
+        .stdout(contains(".localhost:"))
+        .stdout(contains("?id="));
 }

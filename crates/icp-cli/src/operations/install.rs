@@ -10,6 +10,8 @@ use tracing::debug;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
+use super::misc::fetch_canister_metadata;
+
 #[derive(Debug, Snafu)]
 pub enum InstallOperationError {
     #[snafu(display("Could not find build artifact for canister '{canister_name}'"))]
@@ -17,22 +19,6 @@ pub enum InstallOperationError {
 
     #[snafu(display("agent error: {source}"))]
     Agent { source: AgentError },
-}
-
-async fn read_module_metadata(
-    agent: &Agent,
-    canister_id: candid::Principal,
-    metadata: &str,
-) -> Option<String> {
-    Some(
-        String::from_utf8_lossy(
-            &agent
-                .read_state_canister_metadata(canister_id, metadata)
-                .await
-                .ok()?,
-        )
-        .into(),
-    )
 }
 
 pub(crate) async fn install_canister(
@@ -68,7 +54,7 @@ pub(crate) async fn install_canister(
         CanisterInstallMode::Upgrade(_) => {
             // if this is a motoko canister using EOP
             // we need to set additional options
-            if read_module_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
+            if fetch_canister_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
                 .await
                 .is_some()
             {

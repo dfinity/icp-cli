@@ -314,11 +314,17 @@ async fn network_run_and_stop_background() {
     // Start network in background and verify we can see child process output
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "start", "random-network", "--background"])
+        .args([
+            "network",
+            "start",
+            "random-network",
+            "--background",
+            "--debug",
+        ])
         .assert()
         .success()
-        .stderr(contains("Seeding ICP and TCYCLES")) // part of network start output
-        .stderr(contains("Installed Candid UI canister with ID"));
+        .stderr(contains("Seeding ICP and TCYCLES"))
+        .stdout(contains("Installed Candid UI canister with ID"));
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 

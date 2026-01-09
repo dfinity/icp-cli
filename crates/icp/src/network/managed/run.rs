@@ -148,6 +148,7 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
+            eprintln!("Starting network");
             let (guard, instance, gateway, locator) = match &config.mode {
                 ManagedMode::Image(image_config) => {
                     let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
@@ -222,7 +223,7 @@ async fn run_network_launcher(
         eprintln!("To stop the network, run `icp network stop`");
         guard.defuse();
     } else {
-        eprintln!("Network started. Press Ctrl-C to exit.");
+        eprintln!("Network ready. Press Ctrl-C to exit.");
 
         let _ = wait_for_shutdown(&mut guard).await;
         guard.async_drop().await;
@@ -368,7 +369,7 @@ pub async fn initialize_network(
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
     candid_ui_wasm: Option<&[u8]>,
 ) -> Result<Option<Principal>, InitializeNetworkError> {
-    debug!("Seeding ICP and TCYCLES account balances");
+    eprintln!("Seeding ICP and TCYCLES account balances");
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
         .with_identity(AnonymousIdentity)

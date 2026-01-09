@@ -16,6 +16,7 @@ use crate::{
 };
 
 pub mod key;
+pub mod keyring_mock;
 pub mod manifest;
 pub mod seed;
 

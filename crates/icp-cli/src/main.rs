@@ -57,6 +57,7 @@ mod heading {
 
 #[derive(Parser)]
 #[command(
+    name = "icp",
     version = icp_cli_version_str(),
     arg_required_else_help(true),
     about,

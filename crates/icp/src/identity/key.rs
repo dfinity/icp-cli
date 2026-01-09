@@ -52,9 +52,7 @@ pub enum CreateFormat {
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError {
-        source: crate::fs::IoError,
-    },
+    ReadFileError { source: crate::fs::IoError },
 
     #[snafu(display("failed to load PEM from `{origin}`: failed to parse"))]
     ParsePemError {
@@ -81,27 +79,19 @@ pub enum LoadIdentityError {
     },
 
     #[snafu(display("no identity found with name `{name}`"))]
-    NoSuchIdentity {
-        name: String,
-    },
+    NoSuchIdentity { name: String },
 
     #[snafu(display("failed to read password: {message}"))]
-    GetPasswordError {
-        message: String,
-    },
+    GetPasswordError { message: String },
 
     #[snafu(transparent)]
-    LockError {
-        source: crate::fs::lock::LockError,
-    },
+    LockError { source: crate::fs::lock::LockError },
 
-    LoadEntryError {
-        source: keyring::Error,
-    },
+    #[snafu(display("failed to load keyring entry"))]
+    LoadEntryError { source: keyring::Error },
 
-    LoadPasswordFromEntryError {
-        source: keyring::Error,
-    },
+    #[snafu(display("failed to load password from keyring entry"))]
+    LoadPasswordFromEntryError { source: keyring::Error },
 }
 
 pub fn load_identity(

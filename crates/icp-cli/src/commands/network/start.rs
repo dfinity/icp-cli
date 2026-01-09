@@ -94,7 +94,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     let candid_ui_wasm = crate::artifacts::get_candid_ui_wasm();
 
     run_network(
-        &cfg,
+        cfg,
         nd,
         pdir,
         seed_accounts,

@@ -372,7 +372,7 @@ pub fn create_identity(
             if let Err(keyring::Error::NoStorageAccess(err)) = &res
                 && err.to_string().contains("no result found")
             {
-                return NoKeyringSnafu.fail();
+                return NoKeyringSnafu.fail()?;
             }
             res.context(SetEntryPasswordSnafu)?;
         }

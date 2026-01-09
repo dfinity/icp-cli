@@ -8,7 +8,7 @@ use icp::{
     identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
 };
-use icp_canister_interfaces::candid_ui::CANDID_UI_CID;
+use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -457,7 +457,7 @@ async fn get_candid_ui_id(
         }
         NetworkConfiguration::Connected { .. } => {
             // For connected networks, use the mainnet Candid UI
-            Some(CANDID_UI_CID.to_string())
+            Some(MAINNET_CANDID_UI_CID.to_string())
         }
     }
 }

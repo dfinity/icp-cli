@@ -7,6 +7,8 @@
 * feat: `icp deploy` now displays URLs to interact with the deployed canister(s)
 * feat: Allow overriding the `local` network in the config file
   * This makes it more convenient to configure the default environment
+* feat: Validate call argument against candid interface
+  * The interface is fetched from canister metadata onchain
 
 # v0.1.0-beta.2
 

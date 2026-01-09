@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use candid::Principal;
+use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
@@ -9,6 +9,7 @@ use icp::{
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::CANDID_UI_CID;
+use serde::Serialize;
 use std::sync::Arc;
 
 use crate::{
@@ -267,7 +268,11 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .filter(|(_, _, info)| !info.sync.steps.is_empty())
         .collect();
 
-    if !sync_canisters.is_empty() {
+    if sync_canisters.is_empty() {
+        let _ = ctx
+            .term
+            .write_line("\nNo canisters have sync steps configured");
+    } else {
         let _ = ctx.term.write_line("\n\nSyncing canisters:");
 
         sync_many(
@@ -280,36 +285,22 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .await?;
 
         let _ = ctx.term.write_line("\nCanisters synced successfully");
-    } else {
-        let _ = ctx
-            .term
-            .write_line("\nNo canisters have sync steps configured");
     }
 
-    // Print URLs for deployed canisters (don't fail deploy if this fails)
-    if let Err(e) = print_canister_urls(ctx, &environment_selection, agent.clone(), &cnames).await {
-        let _ = ctx
-            .term
-            .write_line(&format!("Warning: Failed to print canister URLs: {}", e));
-    }
+    // Print URLs for deployed canisters
+    print_canister_urls(ctx, &environment_selection, agent.clone(), &cnames).await?;
 
     Ok(())
 }
 
-/// Checks if a canister has an `http_request` function by actually querying it
+/// Checks if a canister has an `http_request` function by querying it
 async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
-    use candid::CandidType;
-    use serde::Serialize;
-
-    // Define the HttpRequest struct matching the Candid interface
     #[derive(CandidType, Serialize)]
     struct HttpRequest {
         method: String,
         url: String,
         headers: Vec<(String, String)>,
         body: Vec<u8>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        certificate_version: Option<u16>,
     }
 
     // Construct an HttpRequest for '/index.html'
@@ -318,7 +309,6 @@ async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
         url: "/index.html".to_string(),
         headers: vec![],
         body: vec![],
-        certificate_version: None,
     };
 
     let args = candid::encode_one(&request).expect("failed to encode request");
@@ -384,7 +374,7 @@ async fn print_canister_urls(
                 format!("http://{}.localhost:{}", canister_id, port)
             } else {
                 // IC network format: extract scheme and domain from base_url
-                // base_url is like "https://icp-api.io" -> "https://<canister_id>.icp-api.io"
+                // base_url is like "https://icp0.io" -> "https://<canister_id>.icp0.io"
                 if let Some(domain) = base_url
                     .strip_prefix("https://")
                     .or_else(|| base_url.strip_prefix("http://"))
@@ -413,7 +403,7 @@ async fn print_canister_urls(
                     format!("http://{}.localhost:{}/?id={}", ui_id, port, canister_id)
                 } else {
                     // IC network format: extract scheme and domain from base_url
-                    // base_url is like "https://icp-api.io" -> "https://<candid_ui_id>.raw.icp-api.io/?id=<canister_id>"
+                    // base_url is like "https://icp0.io" -> "https://<candid_ui_id>.raw.icp0.io/?id=<canister_id>"
                     if let Some(domain) = base_url
                         .strip_prefix("https://")
                         .or_else(|| base_url.strip_prefix("http://"))

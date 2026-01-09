@@ -1,5 +1,6 @@
 use clap::Subcommand;
 
+mod args;
 pub(crate) mod list;
 pub(crate) mod ping;
 pub(crate) mod start;

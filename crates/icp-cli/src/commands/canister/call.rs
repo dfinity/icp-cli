@@ -99,7 +99,7 @@ async fn get_candid_type(
     canister_id: Principal,
     method_name: &str,
 ) -> Option<(TypeEnv, Function)> {
-    let candid_interface = fetch_canister_metadata(&agent, canister_id, "candid:service").await?;
+    let candid_interface = fetch_canister_metadata(agent, canister_id, "candid:service").await?;
     let candid_source = CandidSource::Text(&candid_interface);
     let (env, ty) = candid_source.load().ok()?;
     let actor = ty?;

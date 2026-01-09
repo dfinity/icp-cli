@@ -5,3 +5,5 @@ pub(crate) mod install;
 pub(crate) mod settings;
 pub(crate) mod sync;
 pub(crate) mod token;
+
+pub(crate) mod misc;

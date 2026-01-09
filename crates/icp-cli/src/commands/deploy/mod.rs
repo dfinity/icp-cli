@@ -1,11 +1,14 @@
 use anyhow::anyhow;
+use candid::Principal;
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
-use ic_agent::export::Principal;
+use ic_agent::Agent;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
+    network::Configuration as NetworkConfiguration,
 };
+use icp_canister_interfaces::candid_ui::CANDID_UI_CID;
 use std::sync::Arc;
 
 use crate::{
@@ -264,25 +267,207 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .filter(|(_, _, info)| !info.sync.steps.is_empty())
         .collect();
 
-    if sync_canisters.is_empty() {
+    if !sync_canisters.is_empty() {
+        let _ = ctx.term.write_line("\n\nSyncing canisters:");
+
+        sync_many(
+            ctx.syncer.clone(),
+            agent.clone(),
+            Arc::new(ctx.term.clone()),
+            sync_canisters,
+            ctx.debug,
+        )
+        .await?;
+
+        let _ = ctx.term.write_line("\nCanisters synced successfully");
+    } else {
         let _ = ctx
             .term
-            .write_line("No canisters have sync steps configured");
-        return Ok(());
+            .write_line("\nNo canisters have sync steps configured");
     }
 
-    let _ = ctx.term.write_line("\n\nSyncing canisters:");
-
-    sync_many(
-        ctx.syncer.clone(),
-        agent.clone(),
-        Arc::new(ctx.term.clone()),
-        sync_canisters,
-        ctx.debug,
-    )
-    .await?;
-
-    let _ = ctx.term.write_line("\nCanisters synced successfully");
+    // Print URLs for deployed canisters (don't fail deploy if this fails)
+    if let Err(e) = print_canister_urls(ctx, &environment_selection, agent.clone(), &cnames).await {
+        let _ = ctx
+            .term
+            .write_line(&format!("Warning: Failed to print canister URLs: {}", e));
+    }
 
     Ok(())
+}
+
+/// Checks if a canister has an `http_request` function by actually querying it
+async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
+    use candid::CandidType;
+    use serde::Serialize;
+
+    // Define the HttpRequest struct matching the Candid interface
+    #[derive(CandidType, Serialize)]
+    struct HttpRequest {
+        method: String,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        certificate_version: Option<u16>,
+    }
+
+    // Construct an HttpRequest for '/index.html'
+    let request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/index.html".to_string(),
+        headers: vec![],
+        body: vec![],
+        certificate_version: None,
+    };
+
+    let args = candid::encode_one(&request).expect("failed to encode request");
+
+    // Try to query the http_request endpoint
+    let result = agent
+        .query(&canister_id, "http_request")
+        .with_arg(args)
+        .call()
+        .await;
+
+    // If the query succeeds (regardless of the response), the canister has http_request
+    result.is_ok()
+}
+
+/// Prints URLs for deployed canisters
+async fn print_canister_urls(
+    ctx: &Context,
+    environment_selection: &EnvironmentSelection,
+    agent: Agent,
+    canister_names: &[String],
+) -> Result<(), anyhow::Error> {
+    let env = ctx.get_environment(environment_selection).await?;
+
+    // Get the network URL
+    let network_url = match &env.network.configuration {
+        NetworkConfiguration::Managed { managed: _ } => {
+            // For managed networks, construct localhost URL
+            let access = ctx.network.access(&env.network).await?;
+            access.url.to_string()
+        }
+        NetworkConfiguration::Connected { connected } => {
+            // For connected networks, use the configured URL
+            connected.url.clone()
+        }
+    };
+
+    // Remove trailing slash if present
+    let base_url = network_url.trim_end_matches('/');
+
+    let _ = ctx.term.write_line("\n\nDeployed canisters:");
+
+    for name in canister_names {
+        let canister_id = match ctx
+            .get_canister_id_for_env(
+                &CanisterSelection::Named(name.clone()),
+                environment_selection,
+            )
+            .await
+        {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+
+        // Check if canister has http_request
+        let has_http = has_http_request(&agent, canister_id).await;
+
+        if has_http {
+            // For canisters with http_request, show the direct canister URL
+            let canister_url = if base_url.contains("localhost") || base_url.contains("127.0.0.1") {
+                // Local network format: extract port from base_url
+                let port = base_url.split(':').next_back().unwrap_or("8000");
+                format!("http://{}.localhost:{}", canister_id, port)
+            } else {
+                // IC network format: extract scheme and domain from base_url
+                // base_url is like "https://icp-api.io" -> "https://<canister_id>.icp-api.io"
+                if let Some(domain) = base_url
+                    .strip_prefix("https://")
+                    .or_else(|| base_url.strip_prefix("http://"))
+                {
+                    let scheme = if base_url.starts_with("https://") {
+                        "https"
+                    } else {
+                        "http"
+                    };
+                    format!("{}://{}.{}", scheme, canister_id, domain)
+                } else {
+                    // Fallback if URL doesn't have a recognized scheme
+                    format!("https://{}.{}", canister_id, base_url)
+                }
+            };
+            let _ = ctx
+                .term
+                .write_line(&format!("  {}: {}", name, canister_url));
+        } else {
+            // For canisters without http_request, show the Candid UI URL
+            if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                let candid_url = if base_url.contains("localhost") || base_url.contains("127.0.0.1")
+                {
+                    // Local network format: extract port from base_url
+                    let port = base_url.split(':').next_back().unwrap_or("8000");
+                    format!("http://{}.localhost:{}/?id={}", ui_id, port, canister_id)
+                } else {
+                    // IC network format: extract scheme and domain from base_url
+                    // base_url is like "https://icp-api.io" -> "https://<candid_ui_id>.raw.icp-api.io/?id=<canister_id>"
+                    if let Some(domain) = base_url
+                        .strip_prefix("https://")
+                        .or_else(|| base_url.strip_prefix("http://"))
+                    {
+                        let scheme = if base_url.starts_with("https://") {
+                            "https"
+                        } else {
+                            "http"
+                        };
+                        format!("{}://{}.raw.{}/?id={}", scheme, ui_id, domain, canister_id)
+                    } else {
+                        // Fallback if URL doesn't have a recognized scheme
+                        format!("https://{}.raw.{}/?id={}", ui_id, base_url, canister_id)
+                    }
+                };
+                let _ = ctx
+                    .term
+                    .write_line(&format!("  {} (Candid UI): {}", name, candid_url));
+            } else {
+                // No Candid UI available - just show the canister ID
+                let _ = ctx.term.write_line(&format!(
+                    "  {}: {} (Candid UI not available)",
+                    name, canister_id
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Gets the Candid UI canister ID for the network
+/// Returns None if the Candid UI ID cannot be determined
+async fn get_candid_ui_id(
+    ctx: &Context,
+    environment_selection: &EnvironmentSelection,
+) -> Option<String> {
+    let env = ctx.get_environment(environment_selection).await.ok()?;
+
+    match &env.network.configuration {
+        NetworkConfiguration::Managed { managed: _ } => {
+            // Try to get the candid UI ID from the network descriptor
+            let nd = ctx.network.get_network_directory(&env.network).ok()?;
+            if let Ok(Some(desc)) = nd.load_network_descriptor().await
+                && let Some(candid_ui) = desc.candid_ui_canister_id
+            {
+                return Some(candid_ui.to_string());
+            }
+            // No Candid UI available for this managed network
+            None
+        }
+        NetworkConfiguration::Connected { .. } => {
+            // For connected networks, use the mainnet Candid UI
+            Some(CANDID_UI_CID.to_string())
+        }
+    }
 }

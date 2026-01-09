@@ -4,6 +4,7 @@
 * feat: Add `icp network status` command to display network information
   * Displays port, root key, and candid UI principal (if available)
   * Supports `--json` flag for JSON output
+* feat: `icp deploy` now displays URLs to interact with the deployed canister(s)
 * feat: Allow overriding the `local` network in the config file
   * This makes it more convenient to configure the default environment
 

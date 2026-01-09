@@ -1,3 +1,4 @@
+pub mod candid_ui;
 pub mod cycles_ledger;
 pub mod cycles_minting_canister;
 pub mod governance;

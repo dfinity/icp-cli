@@ -52,6 +52,7 @@ indoc = "2.0.6"
 itertools = "0.14.0"
 jsonschema = "0.33.0"
 k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 lazy_static = "1.5.0"
 mockall = "0.13.1"
 notify = "8.2.0"

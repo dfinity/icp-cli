@@ -20,10 +20,15 @@ use snafu::{OptionExt, ResultExt, Snafu, ensure};
 
 use icp::context::Context;
 
+use crate::commands::identity::StorageMode;
+
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
 pub(crate) struct ImportArgs {
     name: String,
+
+    #[arg(long, value_enum, group = "import-from", default_value_t)]
+    storage: StorageMode,
 
     #[arg(long, value_name = "FILE", group = "import-from")]
     from_pem: Option<PathBuf>,
@@ -42,6 +47,10 @@ pub(crate) struct ImportArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow::Error> {
+    let format = match args.storage {
+        StorageMode::Plaintext => CreateFormat::Plaintext,
+        StorageMode::Keyring => CreateFormat::Keyring,
+    };
     if let Some(from_pem) = &args.from_pem {
         import_from_pem(
             ctx,
@@ -49,18 +58,19 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
             from_pem,
             args.decryption_password_from_file.as_deref(),
             args.assert_key_type.clone(),
+            format,
         )
         .await?;
     } else if let Some(path) = &args.from_seed_file {
         let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase).await?;
+        import_from_seed_phrase(ctx, &args.name, &phrase, format).await?;
     } else if args.read_seed_phrase {
         let phrase = Password::new()
             .with_prompt("Enter seed phrase")
             .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase).await?;
+        import_from_seed_phrase(ctx, &args.name, &phrase, format).await?;
     } else {
         unreachable!();
     }
@@ -76,6 +86,7 @@ async fn import_from_pem(
     path: &Path,
     decryption_password_file: Option<&Path>,
     known_key_type: Option<IdentityKeyAlgorithm>,
+    format: CreateFormat,
 ) -> Result<(), LoadKeyError> {
     // the pem file may be in SEC1 format or PKCS#8 format
     // - if SEC1, the key algorithm can be embedded, separate, or missing
@@ -128,7 +139,7 @@ async fn import_from_pem(
 
     ctx.dirs
         .identity()?
-        .with_write(async |dirs| create_identity(dirs, name, key, CreateFormat::Plaintext))
+        .with_write(async move |dirs| create_identity(dirs, name, key, format))
         .await??;
 
     Ok(())
@@ -303,19 +314,13 @@ async fn import_from_seed_phrase(
     ctx: &Context,
     name: &str,
     phrase: &str,
+    format: CreateFormat,
 ) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
     let key = derive_default_key_from_seed(&mnemonic);
     ctx.dirs
         .identity()?
-        .with_write(async |dirs| {
-            create_identity(
-                dirs,
-                name,
-                IdentityKey::Secp256k1(key),
-                CreateFormat::Plaintext,
-            )
-        })
+        .with_write(async |dirs| create_identity(dirs, name, IdentityKey::Secp256k1(key), format))
         .await??;
     Ok(())
 }

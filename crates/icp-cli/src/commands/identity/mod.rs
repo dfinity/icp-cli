@@ -1,4 +1,4 @@
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 
 pub(crate) mod default;
 pub(crate) mod import;
@@ -22,4 +22,11 @@ pub(crate) enum Command {
 
     /// Display the principal for the current identity
     Principal(principal::PrincipalArgs),
+}
+
+#[derive(Debug, Clone, ValueEnum, Default)]
+enum StorageMode {
+    Plaintext,
+    #[default]
+    Keyring,
 }

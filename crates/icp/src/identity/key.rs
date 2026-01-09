@@ -1,10 +1,14 @@
-use std::sync::Arc;
+use std::{
+    fmt::{self, Display, Formatter},
+    sync::Arc,
+};
 
 use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, BasicIdentity, Prime256v1Identity, Secp256k1Identity},
 };
 use ic_ed25519::PrivateKeyFormat;
+use keyring::Entry;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
@@ -42,49 +46,64 @@ pub enum IdentityKey {
 pub enum CreateFormat {
     Plaintext,
     Pbes2 { password: Zeroizing<String> },
-    // Keyring,
+    Keyring,
 }
 
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: crate::fs::IoError },
+    ReadFileError {
+        source: crate::fs::IoError,
+    },
 
-    #[snafu(display("failed to load PEM file `{path}`: failed to parse"))]
+    #[snafu(display("failed to load PEM from `{origin}`: failed to parse"))]
     ParsePemError {
-        path: PathBuf,
+        origin: PemOrigin,
         #[snafu(source(from(pem::PemError, Box::new)))]
         source: Box<pem::PemError>,
     },
 
-    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    #[snafu(display("failed to load PEM from `{origin}`: failed to decipher key"))]
     ParsePkcs8Error {
-        path: PathBuf,
+        origin: PemOrigin,
         #[snafu(source(from(pkcs8::Error, Box::new)))]
         source: Box<pkcs8::Error>,
     },
-    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    #[snafu(display("failed to load PEM from `{origin}`: failed to decipher key"))]
     ParseDerError {
-        path: PathBuf,
+        origin: PemOrigin,
         source: pkcs8::der::Error,
     },
-    #[snafu(display("failed to load PEM file `{path}`: failed to decipher key"))]
+    #[snafu(display("failed to load PEM from `{origin}`: failed to decipher key"))]
     ParseEd25519KeyError {
-        path: PathBuf,
+        origin: PemOrigin,
         source: ic_ed25519::PrivateKeyDecodingError,
     },
 
     #[snafu(display("no identity found with name `{name}`"))]
-    NoSuchIdentity { name: String },
+    NoSuchIdentity {
+        name: String,
+    },
 
     #[snafu(display("failed to read password: {message}"))]
-    GetPasswordError { message: String },
+    GetPasswordError {
+        message: String,
+    },
 
     #[snafu(transparent)]
-    LockError { source: crate::fs::lock::LockError },
+    LockError {
+        source: crate::fs::lock::LockError,
+    },
+
+    LoadEntryError {
+        source: keyring::Error,
+    },
+
+    LoadPasswordFromEntryError {
+        source: keyring::Error,
+    },
 }
 
-// TODO(adam.spofford): Support p256, ed25519
 pub fn load_identity(
     dirs: LRead<&IdentityPaths>,
     list: &IdentityList,
@@ -100,6 +119,7 @@ pub fn load_identity(
         IdentitySpec::Pem {
             format, algorithm, ..
         } => load_pem_identity(dirs, name, format, algorithm, password_func),
+        IdentitySpec::Keyring { algorithm, .. } => load_keyring_identity(name, algorithm),
 
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
@@ -113,15 +133,18 @@ fn load_pem_identity(
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     let pem_path = dirs.key_pem_path(name);
+    let origin = PemOrigin::File {
+        path: pem_path.clone(),
+    };
 
     let doc = fs::read_to_string(&pem_path)?
         .parse::<Pem>()
-        .context(ParsePemSnafu { path: &pem_path })?;
+        .context(ParsePemSnafu { origin: &origin })?;
 
     match format {
-        PemFormat::Pbes2 => load_pbes2_identity(&doc, algorithm, password_func, &pem_path),
+        PemFormat::Pbes2 => load_pbes2_identity(&doc, algorithm, password_func, &origin),
 
-        PemFormat::Plaintext => load_plaintext_identity(&doc, algorithm, &pem_path),
+        PemFormat::Plaintext => load_plaintext_identity(&doc, algorithm, &origin),
     }
 }
 
@@ -129,7 +152,7 @@ fn load_pbes2_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
     password_func: impl FnOnce() -> Result<String, String>,
-    path: &Path,
+    origin: &PemOrigin,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
@@ -141,23 +164,23 @@ fn load_pbes2_identity(
     match algorithm {
         IdentityKeyAlgorithm::Secp256k1 => {
             let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
-                .context(ParsePkcs8Snafu { path })?;
+                .context(ParsePkcs8Snafu { origin })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Prime256v1 => {
             let key = p256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
-                .context(ParsePkcs8Snafu { path })?;
+                .context(ParsePkcs8Snafu { origin })?;
 
             Ok(Arc::new(Prime256v1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Ed25519 => {
             let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
-                .context(ParseDerSnafu { path })?;
+                .context(ParseDerSnafu { origin })?;
             let decrypted: SecretDocument =
-                encrypted.decrypt(&pw).context(ParsePkcs8Snafu { path })?;
+                encrypted.decrypt(&pw).context(ParsePkcs8Snafu { origin })?;
             let key = ic_ed25519::PrivateKey::deserialize_pkcs8(decrypted.as_bytes())
-                .context(ParseEd25519KeySnafu { path })?;
+                .context(ParseEd25519KeySnafu { origin })?;
             Ok(Arc::new(BasicIdentity::from_raw_key(&key.serialize_raw())))
         }
     }
@@ -166,7 +189,7 @@ fn load_pbes2_identity(
 fn load_plaintext_identity(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
-    path: &Path,
+    origin: &PemOrigin,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
         doc.tag() == PrivateKeyInfo::PEM_LABEL,
@@ -176,21 +199,72 @@ fn load_plaintext_identity(
     match algorithm {
         IdentityKeyAlgorithm::Secp256k1 => {
             let key = k256::SecretKey::from_pkcs8_der(doc.contents())
-                .context(ParsePkcs8Snafu { path })?;
+                .context(ParsePkcs8Snafu { origin })?;
 
             Ok(Arc::new(Secp256k1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Prime256v1 => {
             let key = p256::SecretKey::from_pkcs8_der(doc.contents())
-                .context(ParsePkcs8Snafu { path })?;
+                .context(ParsePkcs8Snafu { origin })?;
 
             Ok(Arc::new(Prime256v1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Ed25519 => {
             let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
-                .context(ParseEd25519KeySnafu { path })?;
+                .context(ParseEd25519KeySnafu { origin })?;
             Ok(Arc::new(BasicIdentity::from_raw_key(&key.serialize_raw())))
         }
+    }
+}
+
+const SERVICE_NAME: &str = "icp-cli";
+
+fn load_keyring_identity(
+    name: &str,
+    algorithm: &IdentityKeyAlgorithm,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let entry = Entry::new(SERVICE_NAME, name).context(LoadEntrySnafu)?;
+    let password = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
+    let origin = PemOrigin::Keyring {
+        service: SERVICE_NAME.to_string(),
+        username: name.to_string(),
+    };
+    let pem = password
+        .parse::<Pem>()
+        .context(ParsePemSnafu { origin: &origin })?;
+    load_plaintext_identity(&pem, algorithm, &origin)
+}
+
+#[derive(Debug, Clone)]
+pub enum PemOrigin {
+    File { path: PathBuf },
+    Keyring { service: String, username: String },
+}
+
+impl Display for PemOrigin {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PemOrigin::File { path } => write!(f, "file `{path}`"),
+            PemOrigin::Keyring { service, username } => {
+                let store = if cfg!(target_os = "windows") {
+                    "Windows Credential Manager"
+                } else if cfg!(target_os = "macos") {
+                    "Keychain"
+                } else {
+                    "secret-service"
+                };
+                write!(
+                    f,
+                    "{store} entry (service=`{service}`, username=`{username}`)"
+                )
+            }
+        }
+    }
+}
+
+impl From<&PemOrigin> for PemOrigin {
+    fn from(value: &PemOrigin) -> Self {
+        value.clone()
     }
 }
 
@@ -241,43 +315,33 @@ pub fn create_identity(
     key: IdentityKey,
     format: CreateFormat,
 ) -> Result<(), CreateIdentityError> {
-    let spec = IdentitySpec::Pem {
-        format: match format {
-            CreateFormat::Plaintext => PemFormat::Plaintext,
-            CreateFormat::Pbes2 { .. } => PemFormat::Pbes2,
-        },
-
-        algorithm: match key {
-            IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
-            IdentityKey::Prime256v1(_) => IdentityKeyAlgorithm::Prime256v1,
-            IdentityKey::Ed25519(_) => IdentityKeyAlgorithm::Ed25519,
-        },
-
-        principal: match &key {
-            IdentityKey::Secp256k1(secret_key) => {
-                Secp256k1Identity::from_private_key(secret_key.clone())
-                    .sender()
-                    .expect("infallible method")
-            }
-            IdentityKey::Prime256v1(secret_key) => {
-                Prime256v1Identity::from_private_key(secret_key.clone())
-                    .sender()
-                    .expect("infallible method")
-            }
-            IdentityKey::Ed25519(secret_key) => {
-                BasicIdentity::from_raw_key(&secret_key.serialize_raw())
-                    .sender()
-                    .expect("infallible method")
-            }
-        },
-    };
-
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
         !identity_list.identities.contains_key(name),
         IdentityAlreadyExistsSnafu { name }
     );
-
+    let principal = match &key {
+        IdentityKey::Secp256k1(secret_key) => {
+            Secp256k1Identity::from_private_key(secret_key.clone())
+                .sender()
+                .expect("infallible method")
+        }
+        IdentityKey::Prime256v1(secret_key) => {
+            Prime256v1Identity::from_private_key(secret_key.clone())
+                .sender()
+                .expect("infallible method")
+        }
+        IdentityKey::Ed25519(secret_key) => {
+            BasicIdentity::from_raw_key(&secret_key.serialize_raw())
+                .sender()
+                .expect("infallible method")
+        }
+    };
+    let algorithm = match key {
+        IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
+        IdentityKey::Prime256v1(_) => IdentityKeyAlgorithm::Prime256v1,
+        IdentityKey::Ed25519(_) => IdentityKeyAlgorithm::Ed25519,
+    };
     let doc = match key {
         IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
         IdentityKey::Prime256v1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
@@ -286,16 +350,42 @@ pub fn create_identity(
             .try_into()
             .expect("infallible PKI encoding"),
     };
-
-    let pem = match format {
-        CreateFormat::Plaintext => doc
-            .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
-            .expect("infallible PKI encoding"),
-
-        CreateFormat::Pbes2 { password } => make_pkcs5_encrypted_pem(&doc, &password),
+    // store key material
+    match &format {
+        CreateFormat::Plaintext => {
+            let pem = doc
+                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .expect("infallible PKI encoding");
+            write_identity(dirs, name, &pem)?;
+        }
+        CreateFormat::Pbes2 { password } => {
+            let pem = make_pkcs5_encrypted_pem(&doc, password);
+            write_identity(dirs, name, &pem)?;
+        }
+        CreateFormat::Keyring => {
+            let pem = doc
+                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .expect("infallible PKI encoding");
+            let entry = Entry::new(SERVICE_NAME, name).context(CreateEntrySnafu)?;
+            entry.set_password(&pem).context(SetEntryPasswordSnafu)?;
+        }
+    }
+    let spec = match format {
+        CreateFormat::Plaintext => IdentitySpec::Pem {
+            format: PemFormat::Plaintext,
+            algorithm,
+            principal,
+        },
+        CreateFormat::Pbes2 { .. } => IdentitySpec::Pem {
+            format: PemFormat::Pbes2,
+            algorithm,
+            principal,
+        },
+        CreateFormat::Keyring => IdentitySpec::Keyring {
+            principal,
+            algorithm,
+        },
     };
-
-    write_identity(dirs, name, &pem)?;
     identity_list.identities.insert(name.to_string(), spec);
     identity_list.write_to(dirs)?;
 
@@ -305,13 +395,26 @@ pub fn create_identity(
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
     #[snafu(display("failed to write file"))]
-    WriteFileError { source: crate::fs::IoError },
+    WriteFileError {
+        source: crate::fs::IoError,
+    },
 
     #[snafu(display("failed to create directory"))]
-    CreateDirectoryError { source: crate::fs::IoError },
+    CreateDirectoryError {
+        source: crate::fs::IoError,
+    },
 
     #[snafu(transparent)]
-    LockError { source: crate::fs::lock::LockError },
+    LockError {
+        source: crate::fs::lock::LockError,
+    },
+
+    CreateEntryError {
+        source: keyring::Error,
+    },
+    SetEntryPasswordError {
+        source: keyring::Error,
+    },
 }
 
 fn write_identity(

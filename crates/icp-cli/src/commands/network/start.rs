@@ -13,23 +13,23 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 EXAMPLES:
-  # Use default 'local' network
-  icp network start
-
-  # Use explicit network name
-  icp network start mynetwork
-
-  # Use environment flag
-  icp network start -e staging
-
-  # Use ICP_ENVIRONMENT variable
-  ICP_ENVIRONMENT=staging icp network start
-
-  # Name overrides ICP_ENVIRONMENT
-  ICP_ENVIRONMENT=staging icp network start local
-
-  # Background mode with environment
-  icp network start -e staging -d
+    # Use default 'local' network
+    icp network start
+  
+    # Use explicit network name
+    icp network start mynetwork
+  
+    # Use environment flag
+    icp network start -e staging
+  
+    # Use ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network start
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network start local
+  
+    # Background mode with environment
+    icp network start -e staging -d
 ")]
 pub(crate) struct StartArgs {
     #[clap(flatten)]

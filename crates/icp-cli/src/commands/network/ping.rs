@@ -12,23 +12,23 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 EXAMPLES:
-  # Ping default 'local' network
-  icp network ping
-
-  # Ping explicit network
-  icp network ping mynetwork
-
-  # Ping using environment flag
-  icp network ping -e staging
-
-  # Ping using ICP_ENVIRONMENT variable
-  ICP_ENVIRONMENT=staging icp network ping
-
-  # Name overrides ICP_ENVIRONMENT
-  ICP_ENVIRONMENT=staging icp network ping local
-
-  # Wait until healthy
-  icp network ping --wait-healthy
+    # Ping default 'local' network
+    icp network ping
+  
+    # Ping explicit network
+    icp network ping mynetwork
+  
+    # Ping using environment flag
+    icp network ping -e staging
+  
+    # Ping using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network ping
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network ping local
+  
+    # Wait until healthy
+    icp network ping --wait-healthy
 ")]
 pub(crate) struct PingArgs {
     #[clap(flatten)]

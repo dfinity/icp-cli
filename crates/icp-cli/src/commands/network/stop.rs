@@ -12,20 +12,20 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 EXAMPLES:
-  # Stop default 'local' network
-  icp network stop
-
-  # Stop explicit network
-  icp network stop mynetwork
-
-  # Stop using environment flag
-  icp network stop -e staging
-
-  # Stop using ICP_ENVIRONMENT variable
-  ICP_ENVIRONMENT=staging icp network stop
-
-  # Name overrides ICP_ENVIRONMENT
-  ICP_ENVIRONMENT=staging icp network stop local
+    # Stop default 'local' network
+    icp network stop
+  
+    # Stop explicit network
+    icp network stop mynetwork
+  
+    # Stop using environment flag
+    icp network stop -e staging
+  
+    # Stop using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network stop
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network stop local
 ")]
 pub struct Cmd {
     #[clap(flatten)]

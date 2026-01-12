@@ -9,23 +9,23 @@ use super::args::NetworkOrEnvironmentArgs;
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 EXAMPLES:
-  # Get status of default 'local' network
-  icp network status
-
-  # Get status of explicit network
-  icp network status mynetwork
-
-  # Get status using environment flag
-  icp network status -e staging
-
-  # Get status using ICP_ENVIRONMENT variable
-  ICP_ENVIRONMENT=staging icp network status
-
-  # Name overrides ICP_ENVIRONMENT
-  ICP_ENVIRONMENT=staging icp network status local
-
-  # JSON output
-  icp network status --json
+    # Get status of default 'local' network
+    icp network status
+  
+    # Get status of explicit network
+    icp network status mynetwork
+  
+    # Get status using environment flag
+    icp network status -e staging
+  
+    # Get status using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network status
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network status local
+  
+    # JSON output
+    icp network status --json
 ")]
 pub(crate) struct StatusArgs {
     #[clap(flatten)]

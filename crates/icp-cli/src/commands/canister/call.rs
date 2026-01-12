@@ -20,6 +20,8 @@ pub(crate) struct CallArgs {
     pub(crate) method: String,
 
     /// String representation of canister call arguments
+    ///
+    /// If not provided, an interactive prompt will be launched to help build the arguments.
     pub(crate) args: Option<String>,
 }
 

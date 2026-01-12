@@ -11,6 +11,7 @@
   * This makes it more convenient to configure the default environment
 * feat: Validate call argument against candid interface
   * The interface is fetched from canister metadata onchain
+* feat: call argument building interactively using candid assist
 
 # v0.1.0-beta.2
 

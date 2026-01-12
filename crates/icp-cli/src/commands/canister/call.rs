@@ -1,5 +1,6 @@
-use anyhow::Context as _;
+use anyhow::{Context as _, bail};
 use candid::{IDLArgs, Principal, TypeEnv, types::Function};
+use candid_parser::assist;
 use candid_parser::utils::CandidSource;
 use clap::Args;
 use dialoguer::console::Term;
@@ -19,7 +20,9 @@ pub(crate) struct CallArgs {
     pub(crate) method: String,
 
     /// String representation of canister call arguments
-    pub(crate) args: String,
+    ///
+    /// If not provided, an interactive prompt will be launched to help build the arguments.
+    pub(crate) args: Option<String>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
@@ -40,22 +43,45 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    // Parse candid arguments
-    let cargs =
-        candid_parser::parse_idl_args(&args.args).context("failed to parse candid arguments")?;
+    let candid_types = get_candid_type(&agent, cid, &args.method).await;
+    let parsed_args = args
+        .args
+        .as_ref()
+        .map(|s| {
+            candid_parser::parse_idl_args(s).context("failed to parse arguments as candid literal")
+        })
+        .transpose()?;
 
-    let arg_bytes = if let Some((env, method)) = get_candid_type(&agent, cid, &args.method).await {
-        cargs
-            .to_bytes_with_types(&env, &method.args)
-            .context("failed to serialize candid arguments with specific types")?
-    } else {
-        warn!(
-            "Could not fetch candid type for method '{}', serializing arguments with inferred types.",
-            args.method
-        );
-        cargs
-            .to_bytes()
-            .context("failed to serialize candid arguments")?
+    let arg_bytes = match (candid_types, parsed_args) {
+        (None, None) => bail!(
+            "arguments was not provided and could not fetch candid type to assist building arguments"
+        ),
+        (None, Some(arguments)) => {
+            warn!("could not fetch candid type, serializing arguments with inferred types.");
+            arguments
+                .to_bytes()
+                .context("failed to serialize candid arguments")?
+        }
+        (Some((type_env, func)), None) => {
+            // interactive argument building using candid assist
+            let context = assist::Context::new(type_env);
+            eprintln!("Please use the following interactive prompt to build the arguments.");
+            let arguments = assist::input_args(&context, &func.args)?;
+            eprintln!("Sending the following argument:\n{arguments}\n");
+            eprintln!("Do you want to send this message? [y/N]");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if !["y", "Y", "yes", "Yes", "YES"].contains(&input.trim()) {
+                eprintln!("User cancelled.");
+                return Ok(());
+            }
+            arguments
+                .to_bytes()
+                .context("failed to serialize candid arguments")?
+        }
+        (Some((type_env, func)), Some(arguments)) => arguments
+            .to_bytes_with_types(&type_env, &func.args)
+            .context("failed to serialize candid arguments with specific types")?,
     };
 
     let res = agent.update(&cid, &args.method).with_arg(arg_bytes).await?;
@@ -101,8 +127,8 @@ async fn get_candid_type(
 ) -> Option<(TypeEnv, Function)> {
     let candid_interface = fetch_canister_metadata(agent, canister_id, "candid:service").await?;
     let candid_source = CandidSource::Text(&candid_interface);
-    let (env, ty) = candid_source.load().ok()?;
+    let (type_env, ty) = candid_source.load().ok()?;
     let actor = ty?;
-    let method = env.get_method(&actor, method_name).ok()?.clone();
-    Some((env, method))
+    let func = type_env.get_method(&actor, method_name).ok()?.clone();
+    Some((type_env, func))
 }

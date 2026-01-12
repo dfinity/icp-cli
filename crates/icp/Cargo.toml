@@ -34,6 +34,7 @@ icrc-ledger-types = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 k256 = { workspace = true }
+keyring = { workspace = true }
 notify = { workspace = true }
 p256 = { workspace = true }
 pem = { workspace = true }

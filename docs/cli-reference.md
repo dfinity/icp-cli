@@ -525,7 +525,7 @@ Display the currently selected identity
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<NAME>` — Identity to set as default. If omitted, prints the current default
 
 
 
@@ -537,15 +537,21 @@ Import a new identity
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<NAME>` — Name for the imported identity
 
 ###### **Options:**
 
-* `--from-pem <FILE>`
-* `--read-seed-phrase`
-* `--from-seed-file <FILE>`
-* `--decryption-password-from-file <FILE>`
-* `--assert-key-type <ASSERT_KEY_TYPE>`
+* `--storage <STORAGE>` — Where to store the private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`
+
+* `--from-pem <FILE>` — Import from a PEM file
+* `--read-seed-phrase` — Read seed phrase interactively from the terminal
+* `--from-seed-file <FILE>` — Read seed phrase from a file
+* `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
+* `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
 
 
 
@@ -565,11 +571,17 @@ Create a new identity
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<NAME>` — Name for the new identity
 
 ###### **Options:**
 
-* `--output-seed <FILE>`
+* `--storage <STORAGE>` — Where to store the private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`
+
+* `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
 
 
 

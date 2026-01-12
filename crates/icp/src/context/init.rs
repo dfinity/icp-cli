@@ -77,6 +77,13 @@ pub fn initialize(
     let idload = Arc::new(identity::Loader {
         dir: dirs.identity().context(IdentityDirectorySnafu)?,
     });
+    if let Ok(mockdir) = std::env::var("ICP_CLI_KEYRING_MOCK_DIR") {
+        keyring::set_default_credential_builder(Box::new(
+            crate::identity::keyring_mock::MockKeyring {
+                dir: PathBuf::from(mockdir),
+            },
+        ));
+    }
 
     // Network accessor
     let netaccess = Arc::new(network::Accessor {

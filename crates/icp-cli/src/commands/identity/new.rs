@@ -12,9 +12,18 @@ use icp::{
 
 use icp::context::Context;
 
+use crate::commands::identity::StorageMode;
+
 #[derive(Debug, Args)]
 pub(crate) struct NewArgs {
+    /// Name for the new identity
     name: String,
+
+    /// Where to store the private key
+    #[arg(long, value_enum, default_value_t)]
+    storage: StorageMode,
+
+    /// Write the seed phrase to a file instead of printing to stdout
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
 }
@@ -24,6 +33,10 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
         MnemonicType::for_key_size(256).context("failed to get mnemonic type")?,
         Language::English,
     );
+    let format = match args.storage {
+        StorageMode::Plaintext => CreateFormat::Plaintext,
+        StorageMode::Keyring => CreateFormat::Keyring,
+    };
 
     ctx.dirs
         .identity()?
@@ -32,7 +45,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
                 dirs,
                 &args.name,
                 IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
-                CreateFormat::Plaintext,
+                format,
             )
         })
         .await??;

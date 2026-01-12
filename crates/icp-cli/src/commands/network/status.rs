@@ -6,27 +6,27 @@ use serde::Serialize;
 use super::args::NetworkOrEnvironmentArgs;
 
 /// Get status information about a running network
-///
-/// # Examples
-///
-///   # Get status of default 'local' network
-///   icp network status
-///
-///   # Get status of explicit network
-///   icp network status mynetwork
-///
-///   # Get status using environment flag
-///   icp network status -e staging
-///
-///   # Get status using ICP_ENVIRONMENT variable
-///   ICP_ENVIRONMENT=staging icp network status
-///
-///   # Name overrides ICP_ENVIRONMENT
-///   ICP_ENVIRONMENT=staging icp network status local
-///
-///   # JSON output
-///   icp network status --json
 #[derive(Args, Debug)]
+#[command(after_long_help = "\
+EXAMPLES:
+  # Get status of default 'local' network
+  icp network status
+
+  # Get status of explicit network
+  icp network status mynetwork
+
+  # Get status using environment flag
+  icp network status -e staging
+
+  # Get status using ICP_ENVIRONMENT variable
+  ICP_ENVIRONMENT=staging icp network status
+
+  # Name overrides ICP_ENVIRONMENT
+  ICP_ENVIRONMENT=staging icp network status local
+
+  # JSON output
+  icp network status --json
+")]
 pub(crate) struct StatusArgs {
     #[clap(flatten)]
     network_selection: NetworkOrEnvironmentArgs,

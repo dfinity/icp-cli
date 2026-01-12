@@ -1,6 +1,8 @@
 use anyhow::Context as _;
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Args;
+use dialoguer::Password;
+use elliptic_curve::zeroize::Zeroizing;
 use icp::{
     fs::write_string,
     identity::{
@@ -23,6 +25,10 @@ pub(crate) struct NewArgs {
     #[arg(long, value_enum, default_value_t)]
     storage: StorageMode,
 
+    /// Read the storage password from a file instead of prompting (for --storage password)
+    #[arg(long, value_name = "FILE")]
+    storage_password_file: Option<PathBuf>,
+
     /// Write the seed phrase to a file instead of printing to stdout
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
@@ -36,6 +42,23 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
     let format = match args.storage {
         StorageMode::Plaintext => CreateFormat::Plaintext,
         StorageMode::Keyring => CreateFormat::Keyring,
+        StorageMode::Password => {
+            let password = if let Some(path) = &args.storage_password_file {
+                icp::fs::read_to_string(path)
+                    .context("failed to read storage password file")?
+                    .trim()
+                    .to_string()
+            } else {
+                Password::new()
+                    .with_prompt("Enter password to encrypt identity")
+                    .with_confirmation("Confirm password", "Passwords do not match")
+                    .interact()
+                    .context("failed to read password from terminal")?
+            };
+            CreateFormat::Pbes2 {
+                password: Zeroizing::new(password),
+            }
+        }
     };
 
     ctx.dirs

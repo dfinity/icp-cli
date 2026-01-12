@@ -103,17 +103,22 @@ pub trait Load: Sync + Send {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError>;
 }
 
+/// A function that prompts for a password and returns it, or an error message.
+pub type PasswordFunc = Box<dyn Fn() -> Result<String, String> + Send + Sync>;
+
 pub struct Loader {
     pub dir: IdentityDirectories,
+    pub password_func: PasswordFunc,
 }
 
 #[async_trait]
 impl Load for Loader {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+        let password_func = &self.password_func;
         match id {
             IdentitySelection::Default => Ok(self
                 .dir
-                .with_read(async |dirs| load_identity_in_context(dirs, || unimplemented!()).await)
+                .with_read(async |dirs| load_identity_in_context(dirs, password_func).await)
                 .await??),
 
             IdentitySelection::Anonymous => {
@@ -123,7 +128,7 @@ impl Load for Loader {
                             dirs,
                             &IdentityList::load_from(dirs)?,
                             "anonymous",
-                            || unimplemented!(),
+                            || unreachable!(),
                         )?)
                     })
                     .await?
@@ -136,7 +141,7 @@ impl Load for Loader {
                             dirs,
                             &IdentityList::load_from(dirs)?,
                             &name,
-                            || unimplemented!(),
+                            password_func,
                         )?)
                     })
                     .await?

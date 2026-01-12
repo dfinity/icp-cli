@@ -70,6 +70,7 @@ This document contains the help content for the `icp` command-line program.
 * `--debug` — Enable debug logging
 
   Default value: `false`
+* `--identity-password-file <FILE>` — Read identity password from a file instead of prompting
 
 
 
@@ -545,12 +546,13 @@ Import a new identity
 
   Default value: `keyring`
 
-  Possible values: `plaintext`, `keyring`
+  Possible values: `plaintext`, `keyring`, `password`
 
 * `--from-pem <FILE>` — Import from a PEM file
 * `--read-seed-phrase` — Read seed phrase interactively from the terminal
 * `--from-seed-file <FILE>` — Read seed phrase from a file
 * `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
 
 
@@ -579,8 +581,9 @@ Create a new identity
 
   Default value: `keyring`
 
-  Possible values: `plaintext`, `keyring`
+  Possible values: `plaintext`, `keyring`, `password`
 
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
 
 

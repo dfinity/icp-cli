@@ -1,6 +1,7 @@
 use bip39::{Language, Mnemonic};
 use clap::{ArgGroup, Args};
 use dialoguer::Password;
+use elliptic_curve::zeroize::Zeroizing;
 use icp::identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
@@ -48,6 +49,10 @@ pub(crate) struct ImportArgs {
     #[arg(long, value_name = "FILE", requires = "from_pem")]
     decryption_password_from_file: Option<PathBuf>,
 
+    /// Read the storage password from a file instead of prompting (for --storage password)
+    #[arg(long, value_name = "FILE")]
+    storage_password_file: Option<PathBuf>,
+
     /// Specify the key type when it cannot be detected from the PEM file (danger!)
     #[arg(long, value_enum)]
     assert_key_type: Option<IdentityKeyAlgorithm>,
@@ -57,6 +62,23 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
     let format = match args.storage {
         StorageMode::Plaintext => CreateFormat::Plaintext,
         StorageMode::Keyring => CreateFormat::Keyring,
+        StorageMode::Password => {
+            let password = if let Some(path) = &args.storage_password_file {
+                read_to_string(path)
+                    .context(ReadStoragePasswordFileSnafu)?
+                    .trim()
+                    .to_string()
+            } else {
+                Password::new()
+                    .with_prompt("Enter password to encrypt identity")
+                    .with_confirmation("Confirm password", "Passwords do not match")
+                    .interact()
+                    .context(StoragePasswordTermReadSnafu)?
+            };
+            CreateFormat::Pbes2 {
+                password: Zeroizing::new(password),
+            }
+        }
     };
     if let Some(from_pem) = &args.from_pem {
         import_from_pem(
@@ -382,6 +404,12 @@ pub(crate) enum LoadKeyError {
     BadP8PemKey { path: PathBuf },
     #[snafu(display("failed to read password from terminal"))]
     PasswordTermReadError { source: dialoguer::Error },
+
+    #[snafu(display("failed to read storage password from terminal"))]
+    StoragePasswordTermReadError { source: dialoguer::Error },
+
+    #[snafu(display("failed to read storage password file"))]
+    ReadStoragePasswordFileError { source: icp::fs::IoError },
 
     #[snafu(display("PEM file `{path}` uses unsupported algorithm {found}, expected {}", expected.iter().format(", ")))]
     UnsupportedAlgorithm {

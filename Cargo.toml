@@ -100,3 +100,8 @@ enum_variant_names = "allow"
 
 [profile.dev.package.scrypt]
 opt-level = 3
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

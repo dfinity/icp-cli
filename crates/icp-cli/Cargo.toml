@@ -4,6 +4,7 @@ version = "0.1.0"
 publish = false
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "icp"
@@ -81,3 +82,7 @@ reqwest = { workspace = true, features = ["blocking"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+
+# explicitly opt-in to distribution via `dist`
+[package.metadata.dist]
+dist = true

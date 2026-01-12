@@ -11,7 +11,7 @@ use icp::context::Context;
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
-EXAMPLES:
+Examples:
     # Ping default 'local' network
     icp network ping
   

@@ -12,7 +12,7 @@ use icp::context::Context;
 /// Run a given network
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
-EXAMPLES:
+Examples:
     # Use default 'local' network
     icp network start
   

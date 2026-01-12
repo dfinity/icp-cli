@@ -8,7 +8,7 @@ use super::args::NetworkOrEnvironmentArgs;
 /// Get status information about a running network
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
-EXAMPLES:
+Examples:
     # Get status of default 'local' network
     icp network status
   

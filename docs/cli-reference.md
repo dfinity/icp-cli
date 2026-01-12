@@ -623,7 +623,7 @@ Try to connect to a network, and print out its status
 
 **Usage:** `icp network ping [OPTIONS] [NAME]`
 
-EXAMPLES:
+Examples:
     # Ping default 'local' network
     icp network ping
   
@@ -665,7 +665,7 @@ Run a given network
 
 **Usage:** `icp network start [OPTIONS] [NAME]`
 
-EXAMPLES:
+Examples:
     # Use default 'local' network
     icp network start
   
@@ -707,7 +707,7 @@ Get status information about a running network
 
 **Usage:** `icp network status [OPTIONS] [NAME]`
 
-EXAMPLES:
+Examples:
     # Get status of default 'local' network
     icp network status
   
@@ -749,7 +749,7 @@ Stop a background network
 
 **Usage:** `icp network stop [OPTIONS] [NAME]`
 
-EXAMPLES:
+Examples:
     # Stop default 'local' network
     icp network stop
   

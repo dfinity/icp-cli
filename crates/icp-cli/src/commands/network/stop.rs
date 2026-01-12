@@ -11,7 +11,7 @@ use icp::context::Context;
 /// Stop a background network
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
-EXAMPLES:
+Examples:
     # Stop default 'local' network
     icp network stop
   

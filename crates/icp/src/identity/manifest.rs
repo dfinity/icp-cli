@@ -118,7 +118,10 @@ pub enum IdentitySpec {
         principal: Principal,
     },
     Anonymous,
-    // Keyring,
+    Keyring {
+        principal: Principal,
+        algorithm: IdentityKeyAlgorithm,
+    },
 }
 
 impl IdentitySpec {
@@ -126,6 +129,7 @@ impl IdentitySpec {
         match self {
             IdentitySpec::Pem { principal, .. } => *principal,
             IdentitySpec::Anonymous => Principal::anonymous(),
+            IdentitySpec::Keyring { principal, .. } => *principal,
         }
     }
 }

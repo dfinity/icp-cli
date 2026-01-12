@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
+      - name: Setup image (Linux)
+        run: ./.github/scripts/provision-linux-build.sh
+
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -38,6 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
+      - name: Setup image (Linux)
+        run: ./.github/scripts/provision-linux-build.sh
+
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -61,6 +67,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup image (Linux)
+        run: ./.github/scripts/provision-linux-build.sh
 
       - name: Install Rust toolchain from rust-toolchain.toml
         run: rustup show
@@ -95,6 +104,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup image (Linux)
+        run: ./.github/scripts/provision-linux-build.sh
 
       - name: Show Rust toolchain
         run: rustup show
@@ -136,6 +148,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup image (Linux)
+        run: ./.github/scripts/provision-linux-build.sh
 
       - name: Show Rust toolchain
         run: rustup show

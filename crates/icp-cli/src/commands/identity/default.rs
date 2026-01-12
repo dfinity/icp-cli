@@ -4,6 +4,7 @@ use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_ide
 
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {
+    /// Identity to set as default. If omitted, prints the current default.
     name: Option<String>,
 }
 

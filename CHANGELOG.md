@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Support keyring storage for identity keys (and make it the default)
 * fix: Use EOP when upgrading motoko canisters
 * feat: Network startup verbose output now requires `--debug` flag
 * feat: Add `icp network status` command to display network information

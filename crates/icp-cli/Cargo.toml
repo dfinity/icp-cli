@@ -17,7 +17,7 @@ bigdecimal.workspace = true
 bip32.workspace = true
 byte-unit.workspace = true
 camino-tempfile.workspace = true
-candid_parser.workspace = true
+candid_parser = { workspace = true, features = ["assist"] }
 candid.workspace = true
 cargo-generate = { version = "0.23.7", features = ["vendored-openssl"] }
 clap-markdown.workspace = true

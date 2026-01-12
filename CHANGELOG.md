@@ -12,6 +12,7 @@
 * feat: Validate call argument against candid interface
   * The interface is fetched from canister metadata onchain
 * feat: Accept an environment as argument for network commands
+* feat: call argument building interactively using candid assist
 
 # v0.1.0-beta.2
 

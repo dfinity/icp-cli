@@ -16,9 +16,14 @@ use crate::commands::identity::StorageMode;
 
 #[derive(Debug, Args)]
 pub(crate) struct NewArgs {
+    /// Name for the new identity
     name: String,
+
+    /// Where to store the private key
     #[arg(long, value_enum, default_value_t)]
     storage: StorageMode,
+
+    /// Write the seed phrase to a file instead of printing to stdout
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
 }

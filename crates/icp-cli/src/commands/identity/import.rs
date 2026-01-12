@@ -25,23 +25,30 @@ use crate::commands::identity::StorageMode;
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
 pub(crate) struct ImportArgs {
+    /// Name for the imported identity
     name: String,
 
+    /// Where to store the private key
     #[arg(long, value_enum, default_value_t)]
     storage: StorageMode,
 
+    /// Import from a PEM file
     #[arg(long, value_name = "FILE", group = "import-from")]
     from_pem: Option<PathBuf>,
 
+    /// Read seed phrase interactively from the terminal
     #[arg(long, group = "import-from")]
     read_seed_phrase: bool,
 
+    /// Read seed phrase from a file
     #[arg(long, value_name = "FILE", group = "import-from")]
     from_seed_file: Option<PathBuf>,
 
+    /// Read the PEM decryption password from a file instead of prompting
     #[arg(long, value_name = "FILE", requires = "from_pem")]
     decryption_password_from_file: Option<PathBuf>,
 
+    /// Specify the key type when it cannot be detected from the PEM file (danger!)
     #[arg(long, value_enum)]
     assert_key_type: Option<IdentityKeyAlgorithm>,
 }

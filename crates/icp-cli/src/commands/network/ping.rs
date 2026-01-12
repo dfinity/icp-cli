@@ -12,6 +12,7 @@ use icp::context::Context;
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 Examples:
+
     # Ping default 'local' network
     icp network ping
   

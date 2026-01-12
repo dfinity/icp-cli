@@ -9,6 +9,7 @@ use super::args::NetworkOrEnvironmentArgs;
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 Examples:
+
     # Get status of default 'local' network
     icp network status
   

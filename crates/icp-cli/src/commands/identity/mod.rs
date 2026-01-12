@@ -29,4 +29,5 @@ enum StorageMode {
     Plaintext,
     #[default]
     Keyring,
+    Password,
 }

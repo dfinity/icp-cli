@@ -52,8 +52,8 @@ icp help
 # if the manifest types change regenerate the schema:
 ./scripts/generate-config-schema.sh
 
-# After making changes and if the tests pass run cargo fmt:
-cargo fmt
+# After making changes and if the tests pass run cargo fmt and cargo clippy:
+cargo fmt && cargo clippy
 ```
 
 ## Architecture
@@ -192,6 +192,20 @@ The project includes JSON schemas for manifest validation:
 
 - The cli reference is generated in `docs/cli-reference.md`.
 - Regenerate the cli reference when commands changes by running: `./scripts/generate-cli-docs.sh`
+
+### Paths
+
+All paths are UTF-8. `PathBuf` and `Path` are the types from `camino`.
+
+- You do not need to add `.display()` to use them in format strings
+- Do not import `Path` or `PathBuf` from `std`; if those names are not available, glob-import `icp::prelude::*` (or `crate::prelude::*` if in `icp`).
+
+### Error handling
+
+This project uses Snafu for error handling.
+
+- Every new *primary erroring action* gets its own error variant. There is no `MyError::Io { source: io::Error }`, instead (hypothetically) `OpenSocket` and `WriteSocket` should be separate. `snafu(context(false))` is not permitted. `snafu(transparent)` should *only* be used for source error types defined elsewhere in this repo, *not* for foreign error types.
+- Every error regarding a file in some way (processing, creating, etc.) should contain the file path of the error. It is okay to add 'dummy' file path parameters only used in error handling routes. For 'basic' file ops and JSON/YML loading use the functions in `icp::fs`, whose errors include the file path and can be made `snafu(transparent)`. 
 
 ## Examples
 

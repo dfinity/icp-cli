@@ -4,12 +4,14 @@ use std::io::Write;
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use common::TestContext;
 use ic_agent::export::Principal;
+use icp::{fs::write_string, prelude::*};
+use indoc::formatdoc;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
 };
 
-use crate::common::clients;
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, clients};
 
 mod common;
 
@@ -274,4 +276,132 @@ fn identity_use() {
         .assert()
         .success()
         .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+}
+
+#[tokio::test]
+async fn identity_storage_forms() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create password file for the password-protected identity storage
+    let mut storage_password_file = NamedTempFile::new().unwrap();
+    storage_password_file
+        .write_all(b"test-password-123")
+        .unwrap();
+    let storage_password_path = storage_password_file.into_temp_path();
+
+    ctx.icp()
+        .args(["identity", "new", "id_plaintext", "--storage", "plaintext"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "new", "id_keyring", "--storage", "keyring"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "new", "id_password", "--storage", "password"])
+        .arg("--storage-password-file")
+        .arg(&storage_password_path)
+        .assert()
+        .success();
+
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "id_plaintext"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "id_keyring"])
+        .assert()
+        .success();
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(&storage_password_path)
+        .args(["identity", "principal", "--identity", "id_password"])
+        .assert()
+        .success();
+
+    // Set up project with greeter canister
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: greeter
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "id_plaintext",
+            "greeter",
+            "greet",
+            "(\"plaintext\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, plaintext!\")").trim());
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "id_keyring",
+            "greeter",
+            "greet",
+            "(\"keyring\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, keyring!\")").trim());
+    ctx.icp()
+        .current_dir(&project_dir)
+        .arg("--identity-password-file")
+        .arg(&storage_password_path)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "id_password",
+            "greeter",
+            "greet",
+            "(\"password\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, password!\")").trim());
 }

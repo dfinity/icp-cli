@@ -23,6 +23,7 @@ pub(crate) struct TestContext {
     home_dir: TempDir,
     bin_dir: PathBuf,
     asset_dir: PathBuf,
+    mock_cred_dir: PathBuf,
     os_path: OsString,
     gateway_url: OnceCell<Url>,
     root_key: OnceCell<Vec<u8>>,
@@ -41,6 +42,10 @@ impl TestContext {
         let asset_dir = home_dir.path().join("share");
         fs::create_dir(&asset_dir).expect("failed to create asset dir");
 
+        // Credentials
+        let mock_cred_dir = home_dir.path().join("mock-keyring");
+        fs::create_dir(&mock_cred_dir).expect("failed to create mock keyring dir");
+
         eprintln!("Test environment home directory: {}", home_dir.path());
 
         // OS Path
@@ -50,6 +55,7 @@ impl TestContext {
             home_dir,
             bin_dir,
             asset_dir,
+            mock_cred_dir,
             os_path,
             gateway_url: OnceCell::new(),
             root_key: OnceCell::new(),
@@ -68,6 +74,7 @@ impl TestContext {
         cmd.env("HOME", self.home_path());
         cmd.env("PATH", self.os_path.clone());
         cmd.env_remove("ICP_HOME");
+        cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
 
         cmd
     }

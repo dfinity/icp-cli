@@ -294,8 +294,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             ctx.debug,
         )
         .await?;
-
-        let _ = ctx.term.write_line("\nCanisters synced successfully");
     }
 
     // Print URLs for deployed canisters

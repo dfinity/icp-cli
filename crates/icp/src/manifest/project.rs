@@ -135,6 +135,7 @@ mod tests {
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
+                    init_args: None,
                     instructions: Instructions::BuildSync {
                         build: BuildSteps {
                             steps: vec![BuildStep::Script(script::Adapter {
@@ -191,6 +192,7 @@ mod tests {
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
+                    init_args: None,
                     instructions: Instructions::BuildSync {
                         build: BuildSteps {
                             steps: vec![BuildStep::Script(script::Adapter {
@@ -225,6 +227,7 @@ mod tests {
                     Item::Manifest(CanisterManifest {
                         name: "my-canister".to_string(),
                         settings: Settings::default(),
+                        init_args: None,
                         instructions: crate::manifest::canister::Instructions::BuildSync {
                             build: BuildSteps {
                                 steps: vec![BuildStep::Script(script::Adapter {
@@ -282,6 +285,7 @@ mod tests {
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                     settings: None,
+                    init_args: None,
                 })],
             },
         );
@@ -304,6 +308,7 @@ mod tests {
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                     settings: None,
+                    init_args: None,
                 })],
             },
         );
@@ -329,18 +334,21 @@ mod tests {
                         network: "local".to_string(),
                         canisters: CanisterSelection::None,
                         settings: None,
+                        init_args: None,
                     }),
                     Item::Manifest(EnvironmentManifest {
                         name: "environment-2".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                         settings: None,
+                        init_args: None,
                     }),
                     Item::Manifest(EnvironmentManifest {
                         name: "environment-3".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Everything,
                         settings: None,
+                        init_args: None,
                     }),
                 ],
             },

@@ -236,6 +236,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         let local_network = Network {
@@ -311,6 +312,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         let frontend_canister = Canister {
@@ -325,6 +327,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         let database_canister = Canister {
@@ -339,6 +342,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         // Create networks

@@ -58,11 +58,11 @@ mod heading {
 #[derive(Parser)]
 #[command(
     name = "icp",
-    version = icp_cli_version_str(),
+    version,
     arg_required_else_help(true),
     about,
     next_line_help(false),
-    styles(style::STYLES),
+    styles(style::STYLES)
 )]
 struct Cli {
     /// Directory to use as your project root directory.

@@ -48,6 +48,10 @@ pub struct Canister {
 
     /// The configuration specifying how to sync the canister
     pub sync: SyncSteps,
+
+    /// Initialization arguments passed to the canister during installation.
+    /// Can be hex-encoded bytes or Candid text format.
+    pub init_args: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -233,6 +237,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         let local_network = Network {
@@ -308,6 +313,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         let frontend_canister = Canister {
@@ -322,6 +328,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         let database_canister = Canister {
@@ -336,6 +343,7 @@ impl MockProjectLoader {
                 })],
             },
             sync: SyncSteps::default(),
+            init_args: None,
         };
 
         // Create networks

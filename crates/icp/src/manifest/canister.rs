@@ -20,6 +20,10 @@ pub struct CanisterManifest {
     #[schemars(with = "Option<Settings>")]
     pub settings: Settings,
 
+    /// Initialization arguments passed to the canister during installation.
+    /// Can be hex-encoded bytes or Candid text format.
+    pub init_args: Option<String>,
+
     #[serde(flatten)]
     pub instructions: Instructions,
 }
@@ -54,6 +58,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 // All the keys to check
                 let name_key = serde_yaml::Value::String("name".to_string());
                 let settings_key = serde_yaml::Value::String("settings".to_string());
+                let init_args_key = serde_yaml::Value::String("init_args".to_string());
                 let recipe_key = serde_yaml::Value::String("recipe".to_string());
                 let build_key = serde_yaml::Value::String("build".to_string());
                 let sync_key = serde_yaml::Value::String("sync".to_string());
@@ -77,6 +82,19 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         })?
                     } else {
                         Settings::default()
+                    };
+
+                // Extract init_args (optional)
+                let init_args: Option<String> =
+                    if let Some(init_args_value) = temp_map.remove(&init_args_key) {
+                        Some(
+                            init_args_value
+                                .as_str()
+                                .ok_or_else(|| Error::custom("'init_args' must be a string"))?
+                                .to_string(),
+                        )
+                    } else {
+                        None
                     };
 
                 //
@@ -126,6 +144,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         Ok(CanisterManifest {
                             name,
                             settings,
+                            init_args,
                             instructions: Instructions::Recipe { recipe },
                         })
                     }
@@ -153,6 +172,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         Ok(CanisterManifest {
                             name,
                             settings,
+                            init_args,
                             instructions: Instructions::BuildSync {
                                 build: helper.build,
                                 sync: helper.sync,
@@ -491,6 +511,7 @@ mod tests {
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
+                init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
@@ -516,6 +537,7 @@ mod tests {
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
+                init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::Url("http://my-recipe".to_string()),
@@ -542,6 +564,7 @@ mod tests {
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
+                init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::Registry {
@@ -578,6 +601,7 @@ mod tests {
                     memory_allocation: Some(4294967296),
                     ..Default::default()
                 },
+                init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
@@ -603,6 +627,7 @@ mod tests {
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
+                init_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
@@ -662,6 +687,7 @@ mod tests {
             CanisterManifest {
                 name: "my-canister".to_string(),
                 settings: Settings::default(),
+                init_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Script(script::Adapter {

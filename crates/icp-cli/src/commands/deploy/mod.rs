@@ -16,8 +16,8 @@ use crate::{
     commands::canister::create,
     operations::{
         binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
-        create::CreateOperation, install::install_many, settings::sync_settings_many,
-        sync::sync_many,
+        create::CreateOperation, init_args::parse_init_args, install::install_many,
+        settings::sync_settings_many, sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
@@ -221,7 +221,18 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 )
                 .await
                 .map_err(|e| anyhow!(e))?;
-            Ok::<_, anyhow::Error>((name.clone(), cid))
+
+            let env = ctx.get_environment(&environment_selection).await?;
+            let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
+
+            // Parse init_args if present
+            let init_args_bytes = if let Some(ref init_args_str) = canister_info.init_args {
+                Some(parse_init_args(init_args_str)?)
+            } else {
+                None
+            };
+
+            Ok::<_, anyhow::Error>((name.clone(), cid, init_args_bytes))
         }
     }))
     .await?;
@@ -283,8 +294,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             ctx.debug,
         )
         .await?;
-
-        let _ = ctx.term.write_line("\nCanisters synced successfully");
     }
 
     // Print URLs for deployed canisters

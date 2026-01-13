@@ -14,6 +14,8 @@
   * The interface is fetched from canister metadata onchain
 * feat: Accept an environment as argument for network commands
 * feat: call argument building interactively using candid assist
+* feat: specifying canister `init_args` in `icp.yaml`
+* fix: overriding canister settings from the `canisters` section of `icp.yaml` with settings from the `environments` section now works as intended
 
 # v0.1.0-beta.2
 

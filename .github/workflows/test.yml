@@ -94,6 +94,14 @@ jobs:
           which mops
           mops --version
 
+      - name: Install ic-wasm
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
+
+      - name: Verify ic-wasm installation
+        run: |
+          which ic-wasm
+          ic-wasm --version
+
       - name: install network launcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -15,3 +15,6 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
+
+[dist.dependencies.apt]
+libdbus-1-dev = '*' # required by libdbus-sys introduced by keyring

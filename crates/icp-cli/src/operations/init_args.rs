@@ -4,7 +4,7 @@ use candid_parser::parse_idl_args;
 /// Parses init args from a string that can be either:
 /// - Hex-encoded bytes (if valid hex)
 /// - Candid text format
-pub(crate) fn parse_init_args(init_args_str: &str, /* TODO: use candid type */) -> Result<Vec<u8>> {
+pub(crate) fn parse_init_args(init_args_str: &str) -> Result<Vec<u8>> {
     // Try to decode as hex first
     if let Ok(bytes) = hex::decode(init_args_str) {
         return Ok(bytes);

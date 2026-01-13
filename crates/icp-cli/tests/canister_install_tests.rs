@@ -209,13 +209,8 @@ fn canister_install_with_init_args_candid() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    // Copy Motoko canister assets (main.mo and mops.toml)
-    let canister_src = ctx.make_asset("echo_init_arg_canister/main.mo");
-    let canister_mops = ctx.make_asset("echo_init_arg_canister/mops.toml");
-    let src_dir = project_dir.join("src");
-    std::fs::create_dir(&src_dir).expect("failed to create src dir");
-    std::fs::copy(&canister_src, src_dir.join("main.mo")).expect("failed to copy main.mo");
-    std::fs::copy(&canister_mops, project_dir.join("mops.toml")).expect("failed to copy mops.toml");
+    // Copy Motoko canister assets
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
 
     // Project manifest with Motoko recipe and init_args
     let pm = formatdoc! {r#"
@@ -224,7 +219,7 @@ fn canister_install_with_init_args_candid() {
             recipe:
               type: "@dfinity/motoko"
               configuration:
-                main: src/main.mo
+                main: main.mo
                 args: ""
             init_args: "(opt 42 : opt nat8)"
 
@@ -277,13 +272,8 @@ fn canister_install_with_init_args_hex() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    // Copy Motoko canister assets (main.mo and mops.toml)
-    let canister_src = ctx.make_asset("echo_init_arg_canister/main.mo");
-    let canister_mops = ctx.make_asset("echo_init_arg_canister/mops.toml");
-    let src_dir = project_dir.join("src");
-    std::fs::create_dir(&src_dir).expect("failed to create src dir");
-    std::fs::copy(&canister_src, src_dir.join("main.mo")).expect("failed to copy main.mo");
-    std::fs::copy(&canister_mops, project_dir.join("mops.toml")).expect("failed to copy mops.toml");
+    // Copy Motoko canister assets
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
 
     // Project manifest with init_args in hex format
     // This is the hex encoding of Candid "(opt 100 : opt nat8)" - didc encode '(opt 100 : opt nat8)'
@@ -293,7 +283,7 @@ fn canister_install_with_init_args_hex() {
             recipe:
               type: "@dfinity/motoko"
               configuration:
-                main: src/main.mo
+                main: main.mo
                 args: ""
             init_args: "4449444c016e7b01000164"
 
@@ -346,13 +336,8 @@ fn canister_install_with_environment_init_args_override() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    // Copy Motoko canister assets (main.mo and mops.toml)
-    let canister_src = ctx.make_asset("echo_init_arg_canister/main.mo");
-    let canister_mops = ctx.make_asset("echo_init_arg_canister/mops.toml");
-    let src_dir = project_dir.join("src");
-    std::fs::create_dir(&src_dir).expect("failed to create src dir");
-    std::fs::copy(&canister_src, src_dir.join("main.mo")).expect("failed to copy main.mo");
-    std::fs::copy(&canister_mops, project_dir.join("mops.toml")).expect("failed to copy mops.toml");
+    // Copy Motoko canister assets
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
 
     // Project manifest with init_args that gets overridden by environment
     let pm = formatdoc! {r#"
@@ -361,7 +346,7 @@ fn canister_install_with_environment_init_args_override() {
             recipe:
               type: "@dfinity/motoko"
               configuration:
-                main: src/main.mo
+                main: main.mo
                 args: ""
             init_args: "(opt 1 : opt nat8)"
 
@@ -419,13 +404,8 @@ fn canister_install_with_invalid_init_args() {
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
-    // Copy Motoko canister assets (main.mo and mops.toml)
-    let canister_src = ctx.make_asset("echo_init_arg_canister/main.mo");
-    let canister_mops = ctx.make_asset("echo_init_arg_canister/mops.toml");
-    let src_dir = project_dir.join("src");
-    std::fs::create_dir(&src_dir).expect("failed to create src dir");
-    std::fs::copy(&canister_src, src_dir.join("main.mo")).expect("failed to copy main.mo");
-    std::fs::copy(&canister_mops, project_dir.join("mops.toml")).expect("failed to copy mops.toml");
+    // Copy Motoko canister assets
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
 
     // Project manifest with invalid init_args
     let pm = formatdoc! {r#"
@@ -434,7 +414,7 @@ fn canister_install_with_invalid_init_args() {
             recipe:
               type: "@dfinity/motoko"
               configuration:
-                main: src/main.mo
+                main: main.mo
                 args: ""
             init_args: "this is not valid hex or candid"
 

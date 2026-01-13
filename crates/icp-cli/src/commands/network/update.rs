@@ -1,6 +1,7 @@
 use clap::Parser;
 use icp::{context::Context, network::managed::cache::download_launcher_version};
 
+/// Update icp-cli-network-launcher to the latest version.
 #[derive(Parser, Debug)]
 pub struct UpdateArgs {}
 

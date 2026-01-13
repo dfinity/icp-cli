@@ -57,7 +57,9 @@ async fn network_same_port() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx.start_network_in(&project_dir_a, "sameport-network").await;
+    let _a_guard = ctx
+        .start_network_in(&project_dir_a, "sameport-network")
+        .await;
 
     eprintln!("wait for network A healthy");
     ctx.ping_until_healthy(&project_dir_a, "sameport-network");
@@ -109,12 +111,16 @@ async fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx_a.start_network_in(&project_dir_a, "fixedport-network").await;
+    let _a_guard = ctx_a
+        .start_network_in(&project_dir_a, "fixedport-network")
+        .await;
 
     eprintln!("wait for network A healthy");
     ctx_a.ping_until_healthy(&project_dir_a, "fixedport-network");
 
-    let _b_guard = ctx_b.start_network_in(&project_dir_b, "fixedport-network").await;
+    let _b_guard = ctx_b
+        .start_network_in(&project_dir_b, "fixedport-network")
+        .await;
 
     eprintln!("wait for network B healthy");
     ctx_b.ping_until_healthy(&project_dir_b, "fixedport-network");

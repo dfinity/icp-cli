@@ -38,6 +38,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp network start`↴](#icp-network-start)
 * [`icp network status`↴](#icp-network-status)
 * [`icp network stop`↴](#icp-network-stop)
+* [`icp network update`↴](#icp-network-update)
 * [`icp new`↴](#icp-new)
 * [`icp project`↴](#icp-project)
 * [`icp project show`↴](#icp-project-show)
@@ -608,15 +609,18 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
-* `list` — 
-* `ping` — Try to connect to a network, and print out its status
-* `start` — Run a given network
-* `status` — Get status information about a running network
-* `stop` — Stop a background network
+* `list` — List available networks in the project
+* `ping` — Ping a network for liveness
+* `start` — Start a new project-local network
+* `status` — Show the status of a running network
+* `stop` — Stop a network started with `icp network start --background`
+* `update` — Update the network launcher to the latest version
 
 
 
 ## `icp network list`
+
+List available networks in the project
 
 **Usage:** `icp network list`
 
@@ -624,7 +628,7 @@ Launch and manage local test networks
 
 ## `icp network ping`
 
-Try to connect to a network, and print out its status
+Ping a network for liveness
 
 **Usage:** `icp network ping [OPTIONS] [NAME]`
 
@@ -667,7 +671,7 @@ Examples:
 
 ## `icp network start`
 
-Run a given network
+Start a new project-local network
 
 **Usage:** `icp network start [OPTIONS] [NAME]`
 
@@ -710,7 +714,7 @@ Examples:
 
 ## `icp network status`
 
-Get status information about a running network
+Show the status of a running network
 
 **Usage:** `icp network status [OPTIONS] [NAME]`
 
@@ -753,7 +757,7 @@ Examples:
 
 ## `icp network stop`
 
-Stop a background network
+Stop a network started with `icp network start --background`
 
 **Usage:** `icp network stop [OPTIONS] [NAME]`
 
@@ -787,6 +791,14 @@ Examples:
 
    Cannot be used together with an explicit network name argument.
    The ICP_ENVIRONMENT environment variable is also checked when neither network name nor -e flag is specified.
+
+
+
+## `icp network update`
+
+Update the network launcher to the latest version
+
+**Usage:** `icp network update`
 
 
 

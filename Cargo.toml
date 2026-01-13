@@ -11,6 +11,7 @@ edition = "2024"
 repository = "https://github.com/dfinity/icp-cli"
 rust-version = "1.88.0"
 license = "Apache-2.0"
+publish = false
 
 [workspace.dependencies]
 anyhow = "1.0.100"

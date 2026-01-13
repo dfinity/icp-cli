@@ -53,9 +53,6 @@ jobs:
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
-      - name: Install mops
-        run: curl -fsSL cli.mops.one/install.sh | sh
-
       - name: Run unit tests
         run: cargo test --workspace --lib --bins
 
@@ -88,6 +85,10 @@ jobs:
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
+
+      - name: Install mops
+        run: |
+          curl -fsSL cli.mops.one/install.sh | sh
 
       - name: install network launcher
         env:

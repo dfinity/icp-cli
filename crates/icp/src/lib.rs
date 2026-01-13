@@ -47,6 +47,10 @@ pub struct Canister {
 
     /// The configuration specifying how to sync the canister
     pub sync: SyncSteps,
+
+    /// Initialization arguments passed to the canister during installation.
+    /// Can be hex-encoded bytes or Candid text format.
+    pub init_args: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

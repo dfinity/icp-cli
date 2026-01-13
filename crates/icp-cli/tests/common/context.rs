@@ -93,6 +93,9 @@ impl TestContext {
 
     pub(crate) fn make_asset(&self, name: &str) -> PathBuf {
         let target = self.asset_dir.join(name);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).expect("failed to create asset parent directories");
+        }
         fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
             .expect("failed to copy asset");
         target

@@ -10,6 +10,7 @@ use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
 use ic_agent::Agent;
 use icp::{
+    directories::{Access, Directories},
     network::managed::{
         launcher::{NetworkInstance, wait_for_launcher_status},
         run::initialize_network,
@@ -79,6 +80,38 @@ impl TestContext {
         cmd
     }
 
+    pub(crate) async fn launcher_path(&self) -> PathBuf {
+        if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+            PathBuf::from(var)
+        } else {
+            // replicate the command's logic to only perform it if needed, and perform it in the user home instead of the test home
+            let cache = Directories::new()
+                .unwrap()
+                .package_cache()
+                .unwrap()
+                .into_write()
+                .await
+                .unwrap();
+            if let Some(path) = icp::network::managed::cache::get_cached_launcher_version(
+                cache.as_ref().read(),
+                "latest",
+            )
+            .unwrap()
+            {
+                path
+            } else {
+                let (_ver, path) = icp::network::managed::cache::download_launcher_version(
+                    cache.as_ref(),
+                    "latest",
+                    &reqwest::Client::new(),
+                )
+                .await
+                .unwrap();
+                path
+            }
+        }
+    }
+
     fn build_os_path(bin_dir: &Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
         let mut new_path = bin_dir.as_os_str().to_owned();
@@ -138,7 +171,7 @@ impl TestContext {
 
     /// Calling this method more than once will panic.
     /// Calling this method after calling [TestContext::start_network_with_config] will panic.
-    pub(crate) fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
+    pub(crate) async fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir)
@@ -147,6 +180,9 @@ impl TestContext {
             .arg("network")
             .arg("start")
             .arg(name);
+
+        let launcher_path = self.launcher_path().await;
+        cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
 
         eprintln!("Running network in {project_dir}");
 
@@ -186,10 +222,7 @@ impl TestContext {
         project_dir: &Path,
         flags: &[&str],
     ) -> ChildGuard {
-        let launcher_path = PathBuf::from(
-            env::var("ICP_CLI_NETWORK_LAUNCHER_PATH")
-                .expect("ICP_CLI_NETWORK_LAUNCHER_PATH must be set"),
-        );
+        let launcher_path = self.launcher_path().await;
 
         // Create network directory structure
         let network_dir = project_dir

@@ -13,7 +13,6 @@ For now, you have to build icp-cli locally in order to use it.
 ### Prerequisites
 
 - **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
-- **Network launcher**: Download [icp-cli-network-launcher](https://github.com/dfinity/icp-cli-network-launcher/releases) in order to run a local network.
 - **mops**: Required if you want to build Motoko canisters. See [mops.one](https://cli.mops.one/).
 
 ### Building
@@ -28,20 +27,6 @@ export PATH=$(pwd)/target/debug:$PATH
 # Check that you can run
 icp help
 ```
-
-### Add network launcher and motoko tools to the path
-
-To launch a local network you will also need to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
-You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases).
-
-```bash
-# for eg for a mac with apple sillicon:
-wget https://github.com/dfinity/icp-cli-network-launcher/releases/download/v11.0.0/icp-cli-network-launcher-arm64-darwin-v11.0.0.tar.gz -O icp-cli-network-launcher-arm64-darwin-v11.0.0.tar.gz
-gunzip icp-cli-network-launcher-arm64-darwin-v11.0.0.tar.gz
-export ICP_CLI_NETWORK_LAUNCHER_PATH="$(pwd)/icp-cli-network-launcher-arm64-darwin-v11.0.0/icp-cli-network-launcher"
-```
-
-Note: The network launcher binary must not end up in a different directory than the pocket-ic binary.
 
 ### [Optional] Add motoko tools to the path
 
@@ -89,27 +74,11 @@ The compiled binary will be available at `target/debug/icp` (or `target/release/
 
 ### Running Tests
 
-#### Prerequisites for Testing
-
-The tests require the network launcher for running the local network. See the setup instructions below.
-
-#### Setup
-
-The `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable should point to
-the path of the `icp-cli-network-launcher` binary.
-
-You can download the correct version for your machine from [github](https://github.com/dfinity/icp-cli-network-launcher/releases/tag/v11.0.0).
-
-To run the tests, it's necessary to set the `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable.
-Here is one way to do that:
-
-```
-# Export the path to the network launcher binary
-export ICP_CLI_NETWORK_LAUNCHER_PATH="<yourpath>/icp-cli-network-launcher"
-
-# Run tests
+```bash
 cargo test
 ```
+
+The network launcher binary is automatically downloaded on first test run. Some tests launch local networks and require available ports.
 
 ### Generating CLI Documentation
 

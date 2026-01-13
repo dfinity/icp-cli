@@ -24,7 +24,7 @@ async fn token_balance() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -85,7 +85,7 @@ async fn token_transfer() {
     )
     .expect("failed to write project manifest");
 
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));

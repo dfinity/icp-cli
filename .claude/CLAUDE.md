@@ -20,10 +20,7 @@ cargo build --release
 # Build only the CLI binary
 cargo build --bin icp
 
-# Running tests requires setting ICP_CLI_NETWORK_LAUNCHER_PATH)
-export ICP_CLI_NETWORK_LAUNCHER_PATH=$(which icp-cli-network-launcher)
-
-# Run all tests (requires ICP_CLI_NETWORK_LAUNCHER_PATH)
+# Run all tests (network launcher is auto-downloaded on first run)
 cargo test
 
 # Run tests for specific package
@@ -110,7 +107,7 @@ Two network types in `crates/icp/src/network/`:
 - **Managed Networks**: Local test networks launched via `icp-cli-network-launcher` (wraps PocketIC)
 - **Connected Networks**: Remote networks (mainnet, testnets) accessed via HTTP
 
-The `ICP_CLI_NETWORK_LAUNCHER_PATH` environment variable must point to the launcher binary for local networks.
+The network launcher is automatically downloaded on first use. For development/debugging, you can override with `ICP_CLI_NETWORK_LAUNCHER_PATH`.
 
 ##### Network Overrides
 
@@ -155,8 +152,7 @@ Tests are split between unit tests (in modules) and integration tests:
 
 ### Test Requirements
 
-- Set `ICP_CLI_NETWORK_LAUNCHER_PATH` pointing to the launcher binary
-- Network launcher must be version-compatible (see releases at github.com/dfinity/icp-cli-network-launcher)
+- The network launcher is automatically downloaded on first test run
 - Some tests launch local networks and require available ports
 
 ### Mock Helpers
@@ -176,9 +172,9 @@ Tests are split between unit tests (in modules) and integration tests:
 
 ### Network Launcher Dependency
 
-- The network launcher binary must be set in $ICP_CLI_NETWORK_LAUNCHER_PATH
-- Version must match the one specified in tests and documentation
-- Download from: github.com/dfinity/icp-cli-network-launcher/releases
+- The network launcher is automatically downloaded on first use (both CLI and tests)
+- `ICP_CLI_NETWORK_LAUNCHER_PATH` can be set to override the auto-downloaded version for debugging
+- Manual download available from: github.com/dfinity/icp-cli-network-launcher/releases
 
 ### Schema Generation
 

@@ -7,6 +7,7 @@
 use crate::{
     fs::lock::LockError,
     identity::{IdentityDirectories, IdentityPaths},
+    package::PackageCache,
     prelude::*,
 };
 use directories::ProjectDirs;
@@ -19,6 +20,9 @@ pub trait Access: Sync + Send {
 
     /// Returns the path to the port descriptors cache directory.
     fn port_descriptor(&self) -> PathBuf;
+
+    /// Returns the path to the package cache for managed packages.
+    fn package_cache(&self) -> Result<PackageCache, LockError>;
 }
 
 /// Inner structure holding data and cache directory paths.
@@ -29,6 +33,9 @@ pub trait Access: Sync + Send {
 pub struct DirectoriesInner {
     /// Path to the data directory for storing user data.
     data: PathBuf,
+    /// Path to the data directory for storing machine-specific data,
+    /// or cached copies of data whose source-of-truth is elsewhere.
+    data_local: PathBuf,
     /// Path to the cache directory for temporary files.
     cache: PathBuf,
 }
@@ -45,6 +52,7 @@ impl DirectoriesInner {
     pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, FromPathBufError> {
         Ok(Self {
             data: dirs.data_dir().to_owned().try_into()?,
+            data_local: dirs.data_local_dir().to_owned().try_into()?,
             cache: dirs.cache_dir().to_owned().try_into()?,
         })
     }
@@ -121,6 +129,13 @@ impl Directories {
         }
     }
 
+    fn data_local(&self) -> PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.data_local.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+
     /// Returns the base cache directory path.
     ///
     /// For standard directories, this is the system cache directory.
@@ -148,6 +163,13 @@ impl Access for Directories {
     fn port_descriptor(&self) -> PathBuf {
         self.cache().join("port-descriptors")
     }
+
+    /// Returns the path to the package cache for managed packages.
+    ///
+    /// This directory stores downloaded versions of managed packages like icp-cli-network-launcher.
+    fn package_cache(&self) -> Result<PackageCache, LockError> {
+        PackageCache::new(self.data_local().join("pkg"))
+    }
 }
 
 #[cfg(test)]
@@ -164,5 +186,9 @@ impl Access for UnimplementedMockDirs {
 
     fn port_descriptor(&self) -> PathBuf {
         unimplemented!("UnimplementedMockDirs::port_descriptor")
+    }
+
+    fn package_cache(&self) -> Result<PackageCache, LockError> {
+        unimplemented!("UnimplementedMockDirs::package_cache")
     }
 }

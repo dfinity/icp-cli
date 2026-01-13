@@ -38,6 +38,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp network start`↴](#icp-network-start)
 * [`icp network status`↴](#icp-network-status)
 * [`icp network stop`↴](#icp-network-stop)
+* [`icp network update`↴](#icp-network-update)
 * [`icp new`↴](#icp-new)
 * [`icp project`↴](#icp-project)
 * [`icp project show`↴](#icp-project-show)
@@ -613,6 +614,7 @@ Launch and manage local test networks
 * `start` — Run a given network
 * `status` — Get status information about a running network
 * `stop` — Stop a background network
+* `update` — Update icp-cli-network-launcher to the latest version
 
 
 
@@ -787,6 +789,14 @@ Examples:
 
    Cannot be used together with an explicit network name argument.
    The ICP_ENVIRONMENT environment variable is also checked when neither network name nor -e flag is specified.
+
+
+
+## `icp network update`
+
+Update icp-cli-network-launcher to the latest version
+
+**Usage:** `icp network update`
 
 
 

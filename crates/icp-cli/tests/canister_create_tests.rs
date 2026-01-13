@@ -10,8 +10,8 @@ use icp::{fs::write_string, prelude::*};
 
 mod common;
 
-#[test]
-fn canister_create() {
+#[tokio::test]
+async fn canister_create() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -37,7 +37,7 @@ fn canister_create() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -69,8 +69,8 @@ fn canister_create() {
     );
 }
 
-#[test]
-fn canister_create_with_settings() {
+#[tokio::test]
+async fn canister_create_with_settings() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -105,7 +105,7 @@ fn canister_create_with_settings() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -150,8 +150,8 @@ fn canister_create_with_settings() {
         );
 }
 
-#[test]
-fn canister_create_with_settings_cmdline_override() {
+#[tokio::test]
+async fn canister_create_with_settings_cmdline_override() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -183,7 +183,7 @@ fn canister_create_with_settings_cmdline_override() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");

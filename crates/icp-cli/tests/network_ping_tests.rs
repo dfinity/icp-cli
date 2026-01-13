@@ -5,8 +5,8 @@ use serde_json::Value;
 mod common;
 use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 
-#[test]
-fn ping_network() {
+#[tokio::test]
+async fn ping_network() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("icp");
@@ -18,7 +18,7 @@ fn ping_network() {
     )
     .expect("failed to write project manifest");
 
-    let _child_guard = ctx.start_network_in(&project_dir, "random-network");
+    let _child_guard = ctx.start_network_in(&project_dir, "random-network").await;
 
     let network_descriptor = ctx.wait_for_network_descriptor(&project_dir, "random-network");
     let expected_root_key = network_descriptor

@@ -12,7 +12,6 @@ Before you begin, ensure you have the following installed:
 
 ### Required
 - **Rust**: Install using [rustup](https://rustup.rs/)
-- **Network launcher**: Download and unzip the [icp-cli network launcher](https://github.com/dfinity/icp-cli-network-launcher/releases)
 
 ### Language-Specific Requirements
 - **For Rust canisters**: `rustup target add wasm32-unknown-unknown`
@@ -39,13 +38,9 @@ icp help
 
 ### Setting Up Dependencies
 
-Configure the tools that ICP CLI depends on:
+If you want to use Motoko, install the Motoko package manager:
 
 ```bash
-# Export path to network launcher for local network support
-export ICP_CLI_NETWORK_LAUNCHER_PATH="path/to/the/icp-cli-network-launcher"
-
-# if you want to use motoko
 # Make sure you have installed mops, see https://cli.mops.one/
 # and have initialized the toolchain
 mops toolchain init
@@ -261,7 +256,7 @@ Now that you have your first canister running, explore:
 
 **Network connection fails**
 - Verify `icp network start` is running in another terminal
-- Check that `ICP_CLI_NETWORK_LAUNCHER_PATH` is set correctly. It should point directly to your icp-cli-network-launcher binary. You can download the launcher from [github](https://github.com/dfinity/icp-cli-network-launcher/releases)
+- The network launcher is automatically downloaded on first use. If you experience issues, you can manually set `ICP_CLI_NETWORK_LAUNCHER_PATH` to a specific launcher binary for debugging
 
 **Canister deployment fails**
 - Verify that the local network is healthy: `icp network ping`

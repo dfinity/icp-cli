@@ -28,6 +28,14 @@ pub fn load<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T, Error> {
     serde_json::from_slice(&read(path)?).context(ParseSnafu { path })
 }
 
+pub fn load_or_default<T: for<'a> Deserialize<'a> + Default>(path: &Path) -> Result<T, Error> {
+    if path.exists() {
+        load(path)
+    } else {
+        Ok(T::default())
+    }
+}
+
 pub fn save<T: Serialize>(path: &Path, value: &T) -> Result<(), Error> {
     write_string(
         path,

@@ -1,5 +1,6 @@
 use anyhow::{Context as _, bail};
 use clap::Args;
+use icp::prelude::*;
 use icp::{
     identity::manifest::IdentityList,
     network::{Configuration, run_network},
@@ -94,6 +95,35 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
 
     let candid_ui_wasm = crate::artifacts::get_candid_ui_wasm();
 
+    let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+        Some(PathBuf::from(var))
+    } else {
+        #[cfg(windows)]
+        {
+            None
+        }
+        #[cfg(unix)]
+        {
+            use icp::network::managed::cache::{
+                download_launcher_version, get_cached_launcher_version,
+            };
+            ctx.dirs
+                .package_cache()?
+                .with_write(async |pkg| {
+                    if let Some(path) = get_cached_launcher_version(pkg.read(), "latest")? {
+                        anyhow::Ok(Some(path))
+                    } else {
+                        debug!("Downloading icp-cli-network-launcher version `latest`");
+                        let client = reqwest::Client::new();
+                        let (_ver, path) =
+                            download_launcher_version(pkg, "latest", &client).await?;
+                        Ok(Some(path))
+                    }
+                })
+                .await??
+        }
+    };
+
     run_network(
         cfg,
         nd,
@@ -102,6 +132,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         Some(candid_ui_wasm),
         args.background,
         ctx.debug,
+        network_launcher_path.as_deref(),
     )
     .await?;
     Ok(())

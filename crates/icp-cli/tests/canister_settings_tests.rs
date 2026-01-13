@@ -12,8 +12,8 @@ use icp::{fs::write_string, prelude::*};
 
 mod common;
 
-#[test]
-fn canister_settings_update_controllers() {
+#[tokio::test]
+async fn canister_settings_update_controllers() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -47,7 +47,7 @@ fn canister_settings_update_controllers() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -317,8 +317,8 @@ fn get_principal(client: &icp_cli::Client<'_>, identity: &str) -> String {
     client.get_principal(identity).to_string()
 }
 
-#[test]
-fn canister_settings_update_log_visibility() {
+#[tokio::test]
+async fn canister_settings_update_log_visibility() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -352,7 +352,7 @@ fn canister_settings_update_log_visibility() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -639,8 +639,8 @@ fn canister_settings_update_log_visibility() {
         );
 }
 
-#[test]
-fn canister_settings_update_miscellaneous() {
+#[tokio::test]
+async fn canister_settings_update_miscellaneous() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -669,7 +669,7 @@ fn canister_settings_update_miscellaneous() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
@@ -762,8 +762,8 @@ fn canister_settings_update_miscellaneous() {
         );
 }
 
-#[test]
-fn canister_settings_update_environment_variables() {
+#[tokio::test]
+async fn canister_settings_update_environment_variables() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -792,7 +792,7 @@ fn canister_settings_update_environment_variables() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project
@@ -947,8 +947,8 @@ fn canister_settings_update_environment_variables() {
         );
 }
 
-#[test]
-fn canister_settings_sync() {
+#[tokio::test]
+async fn canister_settings_sync() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -973,7 +973,7 @@ fn canister_settings_sync() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project

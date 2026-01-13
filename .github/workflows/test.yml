@@ -89,6 +89,11 @@ jobs:
       - name: Install mops
         uses: dfinity/setup-mops@v1
 
+      - name: Verify mops installation
+        run: |
+          which mops
+          mops --version
+
       - name: install network launcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

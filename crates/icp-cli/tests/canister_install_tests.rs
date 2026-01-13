@@ -202,8 +202,8 @@ async fn canister_install_with_wasm_flag() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
-#[test]
-fn canister_install_with_init_args_candid() {
+#[tokio::test]
+async fn canister_install_with_init_args_candid() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -230,7 +230,7 @@ fn canister_install_with_init_args_candid() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy with init_args
@@ -265,8 +265,8 @@ fn canister_install_with_init_args_candid() {
         .stdout(eq("(\"42\")").trim());
 }
 
-#[test]
-fn canister_install_with_init_args_hex() {
+#[tokio::test]
+async fn canister_install_with_init_args_hex() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -294,7 +294,7 @@ fn canister_install_with_init_args_hex() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy with init_args
@@ -329,8 +329,8 @@ fn canister_install_with_init_args_hex() {
         .stdout(eq("(\"100\")").trim());
 }
 
-#[test]
-fn canister_install_with_environment_init_args_override() {
+#[tokio::test]
+async fn canister_install_with_environment_init_args_override() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -362,7 +362,7 @@ fn canister_install_with_environment_init_args_override() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy with environment override (should use 200, not 1)
@@ -397,8 +397,8 @@ fn canister_install_with_environment_init_args_override() {
         .stdout(eq("(\"200\")").trim());
 }
 
-#[test]
-fn canister_install_with_invalid_init_args() {
+#[tokio::test]
+async fn canister_install_with_invalid_init_args() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -425,7 +425,7 @@ fn canister_install_with_invalid_init_args() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Build
@@ -452,8 +452,8 @@ fn canister_install_with_invalid_init_args() {
         .stderr(contains("Failed to parse init_args"));
 }
 
-#[test]
-fn canister_install_with_environment_settings_override() {
+#[tokio::test]
+async fn canister_install_with_environment_settings_override() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -486,7 +486,7 @@ fn canister_install_with_environment_settings_override() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy should use the environment override (memory_allocation: 2GB)

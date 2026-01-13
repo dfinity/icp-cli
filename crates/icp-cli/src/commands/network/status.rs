@@ -1,14 +1,36 @@
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use clap::Args;
-use icp::{context::Context, network::Configuration, project::DEFAULT_LOCAL_NETWORK_NAME};
+use icp::{context::Context, network::Configuration};
 use serde::Serialize;
+
+use super::args::NetworkOrEnvironmentArgs;
 
 /// Get status information about a running network
 #[derive(Args, Debug)]
+#[command(after_long_help = "\
+Examples:
+
+    # Get status of default 'local' network
+    icp network status
+  
+    # Get status of explicit network
+    icp network status mynetwork
+  
+    # Get status using environment flag
+    icp network status -e staging
+  
+    # Get status using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network status
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network status local
+  
+    # JSON output
+    icp network status --json
+")]
 pub(crate) struct StatusArgs {
-    /// Name of the network
-    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
-    name: String,
+    #[clap(flatten)]
+    network_selection: NetworkOrEnvironmentArgs,
 
     /// Format output as JSON
     #[arg(long = "json")]
@@ -25,27 +47,25 @@ struct NetworkStatus {
 
 pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow::Error> {
     // Load project
-    let p = ctx.project.load().await?;
+    let _ = ctx.project.load().await?;
 
-    // Obtain network configuration
-    let network = p
-        .networks
-        .get(&args.name)
-        .ok_or_else(|| anyhow!("project does not contain a network named '{}'", args.name))?;
+    // Convert args to selection and get network
+    let selection: Result<_, _> = args.network_selection.clone().into();
+    let network = ctx.get_network_or_environment(&selection?).await?;
 
     // Ensure it's a managed network
     if let Configuration::Connected { connected: _ } = &network.configuration {
-        bail!("network '{}' is not a managed network", args.name)
+        bail!("network '{}' is not a managed network", network.name)
     };
 
     // Network directory
-    let nd = ctx.network.get_network_directory(network)?;
+    let nd = ctx.network.get_network_directory(&network)?;
 
     // Load network descriptor
     let descriptor = nd
         .load_network_descriptor()
         .await?
-        .ok_or_else(|| anyhow!("network '{}' is not running", args.name))?;
+        .ok_or_else(|| anyhow::anyhow!("network '{}' is not running", network.name))?;
 
     // Build status structure
     let status = NetworkStatus {

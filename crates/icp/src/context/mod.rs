@@ -52,6 +52,15 @@ impl EnvironmentSelection {
     }
 }
 
+/// Selection type for network commands that accept either network name or environment
+#[derive(Clone, Debug, PartialEq)]
+pub enum NetworkOrEnvironmentSelection {
+    /// Use a network by name
+    Network(String),
+    /// Use the network from an environment by name
+    Environment(String),
+}
+
 /// Selection type for canisters - similar to IdentitySelection
 #[derive(Clone, Debug, PartialEq)]
 pub enum CanisterSelection {
@@ -177,6 +186,28 @@ impl Context {
                     },
                 },
             }),
+        }
+    }
+
+    /// Gets a network from either a network name or environment name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the project cannot be loaded or if the network/environment is not found.
+    pub async fn get_network_or_environment(
+        &self,
+        selection: &NetworkOrEnvironmentSelection,
+    ) -> Result<crate::Network, GetNetworkOrEnvironmentError> {
+        match selection {
+            NetworkOrEnvironmentSelection::Network(network_name) => {
+                let network_selection = NetworkSelection::Named(network_name.clone());
+                Ok(self.get_network(&network_selection).await?)
+            }
+            NetworkOrEnvironmentSelection::Environment(env_name) => {
+                let env_selection = EnvironmentSelection::Named(env_name.clone());
+                let env = self.get_environment(&env_selection).await?;
+                Ok(env.network)
+            }
         }
     }
 
@@ -478,7 +509,7 @@ pub enum GetEnvironmentError {
     #[snafu(transparent)]
     ProjectLoad { source: crate::ProjectLoadError },
 
-    #[snafu(display("environment '{}' not found in project", name))]
+    #[snafu(display("project does not contain an environment named '{}'", name))]
     EnvironmentNotFound { name: String },
 }
 
@@ -487,7 +518,7 @@ pub enum GetNetworkError {
     #[snafu(transparent)]
     ProjectLoad { source: crate::ProjectLoadError },
 
-    #[snafu(display("network '{}' not found in project", name))]
+    #[snafu(display("project does not contain a network named '{}'", name))]
     NetworkNotFound { name: String },
 
     #[snafu(display("cannot load URL-specified network"))]
@@ -495,6 +526,15 @@ pub enum GetNetworkError {
 
     #[snafu(display("cannot load default network"))]
     DefaultNetwork,
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetNetworkOrEnvironmentError {
+    #[snafu(transparent)]
+    NetworkResolution { source: GetNetworkError },
+
+    #[snafu(transparent)]
+    EnvironmentResolution { source: GetEnvironmentError },
 }
 
 #[derive(Debug, Snafu)]

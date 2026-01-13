@@ -1,18 +1,39 @@
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use clap::Args;
 use ic_agent::{Agent, agent::status::Status};
-use icp::{identity::IdentitySelection, project::DEFAULT_LOCAL_NETWORK_NAME};
+use icp::identity::IdentitySelection;
 use std::time::Duration;
 use tokio::time::sleep;
 
+use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]
+#[command(after_long_help = "\
+Examples:
+
+    # Ping default 'local' network
+    icp network ping
+  
+    # Ping explicit network
+    icp network ping mynetwork
+  
+    # Ping using environment flag
+    icp network ping -e staging
+  
+    # Ping using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network ping
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network ping local
+  
+    # Wait until healthy
+    icp network ping --wait-healthy
+")]
 pub(crate) struct PingArgs {
-    /// The compute network to connect to. By default, ping the local network.
-    #[arg(value_name = "NETWORK", default_value = DEFAULT_LOCAL_NETWORK_NAME)]
-    network: String,
+    #[clap(flatten)]
+    network_selection: NetworkOrEnvironmentArgs,
 
     /// Repeatedly ping until the replica is healthy or 1 minute has passed.
     #[arg(long)]
@@ -20,19 +41,15 @@ pub(crate) struct PingArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::Error> {
-    // Load Project
-    let p = ctx.project.load().await?;
+    // Load project
+    let _ = ctx.project.load().await?;
 
-    // Obtain network configuration
-    let network = p.networks.get(&args.network).ok_or_else(|| {
-        anyhow!(
-            "project does not contain a network named '{}'",
-            args.network
-        )
-    })?;
+    // Convert args to selection and get network
+    let selection: Result<_, _> = args.network_selection.clone().into();
+    let network = ctx.get_network_or_environment(&selection?).await?;
 
     // NetworkAccess
-    let access = ctx.network.access(network).await?;
+    let access = ctx.network.access(&network).await?;
 
     // Agent
     let agent = ctx

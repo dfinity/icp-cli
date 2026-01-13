@@ -26,7 +26,7 @@ use icrc_ledger_types::icrc1::{
 use k256::SecretKey;
 use rand::{RngCore, rng};
 use snafu::prelude::*;
-use std::{env::var, io::Write, process::ExitStatus, time::Duration};
+use std::{io::Write, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
 use tracing::debug;
 use url::Url;
@@ -54,13 +54,12 @@ pub async fn run_network(
     candid_ui_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
+    network_launcher_path: Option<&Path>,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
 
-    let network_launcher_path = var("ICP_CLI_NETWORK_LAUNCHER_PATH").ok().map(PathBuf::from);
-
     run_network_launcher(
-        network_launcher_path.as_deref(),
+        network_launcher_path,
         config,
         &nd,
         project_root,

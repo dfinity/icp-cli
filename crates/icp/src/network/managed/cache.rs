@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 
 use flate2::bufread::GzDecoder;
 use futures::{StreamExt, TryStreamExt};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tar::Archive;
 
@@ -10,52 +12,108 @@ use crate::fs::lock::PathsAccess;
 use crate::fs::lock::{DirectoryStructureLock, LRead, LWrite, LockError};
 use crate::prelude::*;
 
-pub struct NetworkVersionCachePaths {
+pub struct PackageCachePaths {
     root: PathBuf,
 }
 
-impl NetworkVersionCachePaths {
+impl PackageCachePaths {
     pub fn launcher_dir(&self) -> PathBuf {
         self.root.join("network-launcher")
     }
     pub fn launcher_version(&self, version: &str) -> PathBuf {
         self.launcher_dir().join(version)
     }
-}
-
-pub type NetworkVersionCache = DirectoryStructureLock<NetworkVersionCachePaths>;
-
-impl NetworkVersionCache {
-    pub fn new(root: PathBuf) -> Result<Self, LockError> {
-        DirectoryStructureLock::open_or_create(NetworkVersionCachePaths { root })
+    pub fn manifest(&self) -> PathBuf {
+        self.root.join("manifest.json")
     }
 }
 
-impl PathsAccess for NetworkVersionCachePaths {
+pub type PackageCache = DirectoryStructureLock<PackageCachePaths>;
+
+impl PackageCache {
+    pub fn new(root: PathBuf) -> Result<Self, LockError> {
+        DirectoryStructureLock::open_or_create(PackageCachePaths { root })
+    }
+}
+
+impl PathsAccess for PackageCachePaths {
     fn lock_file(&self) -> PathBuf {
         self.root.join(".lock")
     }
 }
 
 pub fn get_cached_launcher_version(
-    paths: LRead<NetworkVersionCachePaths>,
+    paths: LRead<&PackageCachePaths>,
     version: &str,
-) -> Option<PathBuf> {
-    let version_path = paths.launcher_version(version);
-    if version_path.exists() {
-        Some(version_path.join("icp-cli-network-launcher"))
+) -> Result<Option<PathBuf>, ReadCacheError> {
+    let declared_version = if version == "latest" {
+        let manifest: Manifest =
+            crate::fs::json::load_or_default(&paths.manifest()).context(ReadManifestSnafu)?;
+        let Some(version) = manifest.tags.get("icp-cli-network-launcher:latest") else {
+            return Ok(None);
+        };
+        version.to_owned()
     } else {
-        None
+        format!("v{version}")
+    };
+    let version_path = paths.launcher_version(&declared_version);
+    if version_path.exists() {
+        Ok(Some(version_path.join("icp-cli-network-launcher")))
+    } else {
+        Ok(None)
     }
 }
 
+#[derive(Serialize, Deserialize, Default)]
+struct Manifest {
+    tags: HashMap<String, String>,
+}
+
+#[derive(Debug, Snafu)]
+pub enum ReadCacheError {
+    #[snafu(display("failed to read managed packages manifest"))]
+    ReadManifest { source: crate::fs::json::Error },
+}
+
+pub async fn get_latest_launcher_version(client: &Client) -> Result<String, DownloadLauncherError> {
+    let url = "https://api.github.com/repos/dfinity/icp-cli-network-launcher/releases/latest";
+    let response: serde_json::Value = client
+        .get(url)
+        .header("User-Agent", "icp-cli")
+        .send()
+        .await
+        .context(LatestVersionFetchSnafu)?
+        .error_for_status()
+        .context(LatestVersionFetchSnafu)?
+        .json()
+        .await
+        .context(LatestVersionFetchSnafu)?;
+    let tag_name = response["tag_name"]
+        .as_str()
+        .ok_or_else(|| LatestVersionParseSnafu.build())?;
+    Ok(tag_name.to_owned())
+}
+
 pub async fn download_launcher_version(
-    paths: LWrite<NetworkVersionCachePaths>,
-    version: &str,
+    paths: LWrite<&PackageCachePaths>,
+    version_req: &str,
     client: &Client,
 ) -> Result<PathBuf, DownloadLauncherError> {
-    let version_path = paths.launcher_version(version);
-    crate::fs::create_dir_all(&version_path).context(CreateDirSnafu)?;
+    let pkg_version = if version_req == "latest" {
+        let latest = get_latest_launcher_version(client).await?;
+        let mut manifest = crate::fs::json::load_or_default::<Manifest>(&paths.manifest())
+            .context(LoadManifestSnafu)?;
+        manifest.tags.insert(
+            "icp-cli-network-launcher:latest".to_string(),
+            latest.clone(),
+        );
+        crate::fs::json::save(&paths.manifest(), &manifest).context(SaveManifestSnafu)?;
+        latest
+    } else {
+        format!("v{version_req}")
+    };
+    let version_path = paths.launcher_version(&pkg_version);
+    crate::fs::create_dir_all(&paths.launcher_dir()).context(CreateDirSnafu)?;
     let mut tmp = camino_tempfile::tempfile().context(TempFileSnafu)?;
     let tmp_write = BufWriter::new(&tmp);
     let arch = match std::env::consts::ARCH {
@@ -77,7 +135,7 @@ pub async fn download_launcher_version(
         .fail()?,
     };
     let url = format!(
-        "https://github.com/dfinity/icp-cli-network-launcher/releases/download/v{version}/icp-cli-network-launcher-{arch}-{os}-v{version}.tar.gz"
+        "https://github.com/dfinity/icp-cli-network-launcher/releases/download/{pkg_version}/icp-cli-network-launcher-{arch}-{os}-{pkg_version}.tar.gz"
     );
     let stream = client
         .get(&url)
@@ -100,28 +158,30 @@ pub async fn download_launcher_version(
     let tmp_read = std::io::BufReader::new(&tmp);
     let decompressor = GzDecoder::new(tmp_read);
     let mut archive = Archive::new(decompressor);
-    if let Err(e) = archive.unpack(&version_path) {
-        _ = std::fs::remove_dir_all(&version_path);
-        return Err(e).context(ExtractSnafu);
-    }
+    let extract_dir = camino_tempfile::tempdir().context(TempDirSnafu)?;
+    archive.unpack(extract_dir.path()).context(ExtractSnafu {
+        path: extract_dir.path(),
+    })?;
+    let tarball_name = format!("icp-cli-network-launcher-{arch}-{os}-{pkg_version}");
+    let extracted_inner = extract_dir.path().join(&tarball_name);
+    std::fs::rename(&extracted_inner, &version_path).context(MoveExtractedSnafu {
+        from: extracted_inner,
+        to: &version_path,
+    })?;
     Ok(version_path.join("icp-cli-network-launcher"))
 }
 
 #[derive(Debug, Snafu)]
 pub enum DownloadLauncherError {
     #[snafu(display(
-        "Unsupported network launcher architecture: {}. Supported architectures are: {:?}",
-        arch,
-        supported
+        "Unsupported network launcher architecture: {arch}. Supported architectures are: {supported:?}",
     ))]
     UnsupportedArch {
         arch: String,
         supported: Vec<&'static str>,
     },
     #[snafu(display(
-        "Unsupported network launcher operating system: {}. Supported operating systems are: {:?}",
-        os,
-        supported
+        "Unsupported network launcher operating system: {os}. Supported operating systems are: {supported:?}",
     ))]
     UnsupportedOs {
         os: String,
@@ -133,10 +193,29 @@ pub enum DownloadLauncherError {
     SaveDownload { source: std::io::Error },
     #[snafu(display("failed to create temporary file for download"))]
     TempFile { source: std::io::Error },
+    #[snafu(display("failed to create temporary directory for extraction"))]
+    TempDir { source: std::io::Error },
     #[snafu(display("buffer failure in temporary file"))]
     Buffer { source: std::io::Error },
-    #[snafu(display("failed to extract downloaded network launcher"))]
-    Extract { source: std::io::Error },
+    #[snafu(display("failed to extract downloaded network launcher to {path}"))]
+    Extract {
+        source: std::io::Error,
+        path: PathBuf,
+    },
+    #[snafu(display("failed to move extracted launcher from {from} to {to}"))]
+    MoveExtracted {
+        source: std::io::Error,
+        from: PathBuf,
+        to: PathBuf,
+    },
     #[snafu(display("failed to create network launcher cache directory"))]
     CreateDir { source: crate::fs::IoError },
+    #[snafu(display("failed to fetch latest network launcher version from GitHub"))]
+    LatestVersionFetch { source: reqwest::Error },
+    #[snafu(display("failed to parse latest version response from GitHub"))]
+    LatestVersionParse,
+    #[snafu(display("failed to read managed packages manifest"))]
+    LoadManifest { source: crate::fs::json::Error },
+    #[snafu(display("failed to save managed packages manifest"))]
+    SaveManifest { source: crate::fs::json::Error },
 }

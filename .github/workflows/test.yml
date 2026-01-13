@@ -87,8 +87,7 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
       - name: Install mops
-        run: |
-          curl -fsSL cli.mops.one/install.sh | sh
+        uses: dfinity/setup-mops@v1
 
       - name: install network launcher
         env:

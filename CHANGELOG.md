@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.1.0-beta.3
+
 * feat: Remove requirement that the user install `icp-cli-network-launcher`, auto-install it on first use
 * feat: Support keyring storage and password-protected encryption for identity keys (and make keyring the default)
 * fix: Use EOP when upgrading motoko canisters

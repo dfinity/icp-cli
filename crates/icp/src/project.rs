@@ -240,6 +240,7 @@ pub async fn consolidate_manifest(
                             settings: m.settings.to_owned(),
                             build,
                             sync,
+                            init_args: m.init_args.to_owned(),
                         },
                     ));
                 }
@@ -370,7 +371,7 @@ pub async fn consolidate_manifest(
 
                     // Embed canisters in environment
                     canisters: {
-                        match &m.canisters {
+                        let mut cs = match &m.canisters {
                             // None
                             CanisterSelection::None => HashMap::new(),
 
@@ -395,7 +396,27 @@ pub async fn consolidate_manifest(
 
                                 cs
                             }
+                        };
+
+                        // Apply settings overrides if specified
+                        if let Some(ref settings_overrides) = m.settings {
+                            for (canister_name, settings) in settings_overrides {
+                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.settings = settings.clone();
+                                }
+                            }
                         }
+
+                        // Apply init_args overrides if specified
+                        if let Some(ref init_args_overrides) = m.init_args {
+                            for (canister_name, init_args) in init_args_overrides {
+                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.init_args = Some(init_args.clone());
+                                }
+                            }
+                        }
+
+                        cs
                     },
                 });
             }

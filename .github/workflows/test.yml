@@ -86,6 +86,22 @@ jobs:
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
+      - name: Install mops
+        uses: dfinity/setup-mops@v1
+
+      - name: Verify mops installation
+        run: |
+          which mops
+          mops --version
+
+      - name: Install ic-wasm
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
+
+      - name: Verify ic-wasm installation
+        run: |
+          which ic-wasm
+          ic-wasm --version
+
       - name: install network launcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

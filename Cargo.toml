@@ -33,6 +33,7 @@ dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
 fd-lock = "4.0.4"
+flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
 futures = "0.3.31"
 glob = "0.3.2"
 handlebars = "6.3.2"
@@ -73,6 +74,7 @@ slog = "2.7.0"
 snafu = "0.8.5"
 strum = { version = "0.27", features = ["derive"] }
 sysinfo = "0.37.2"
+tar = "0.4.44"
 tempfile = "3"
 time = "0.3.9"
 tiny-bip39 = "2.0.0"

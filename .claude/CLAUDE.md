@@ -20,10 +20,7 @@ cargo build --release
 # Build only the CLI binary
 cargo build --bin icp
 
-# Running tests requires ICP_CLI_NETWORK_LAUNCHER_PATH (auto-downloaded for normal use, but tests need explicit path)
-export ICP_CLI_NETWORK_LAUNCHER_PATH=$(which icp-cli-network-launcher)
-
-# Run all tests
+# Run all tests (network launcher is auto-downloaded on first run)
 cargo test
 
 # Run tests for specific package
@@ -155,7 +152,7 @@ Tests are split between unit tests (in modules) and integration tests:
 
 ### Test Requirements
 
-- Tests require `ICP_CLI_NETWORK_LAUNCHER_PATH` set to a launcher binary (download from github.com/dfinity/icp-cli-network-launcher/releases)
+- The network launcher is automatically downloaded on first test run
 - Some tests launch local networks and require available ports
 
 ### Mock Helpers
@@ -175,10 +172,9 @@ Tests are split between unit tests (in modules) and integration tests:
 
 ### Network Launcher Dependency
 
-- The network launcher is automatically downloaded on first use for normal CLI operation
-- For tests, `ICP_CLI_NETWORK_LAUNCHER_PATH` must be set to a launcher binary
-- `ICP_CLI_NETWORK_LAUNCHER_PATH` can also be used to override the auto-downloaded version for debugging
-- Download from: github.com/dfinity/icp-cli-network-launcher/releases
+- The network launcher is automatically downloaded on first use (both CLI and tests)
+- `ICP_CLI_NETWORK_LAUNCHER_PATH` can be set to override the auto-downloaded version for debugging
+- Manual download available from: github.com/dfinity/icp-cli-network-launcher/releases
 
 ### Schema Generation
 

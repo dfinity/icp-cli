@@ -74,16 +74,11 @@ The compiled binary will be available at `target/debug/icp` (or `target/release/
 
 ### Running Tests
 
-The tests require the network launcher binary. This is automatically downloaded when running a local network, but for tests you need to set `ICP_CLI_NETWORK_LAUNCHER_PATH`:
-
 ```bash
-# Download the launcher (one-time setup)
-# Get the latest release from: https://github.com/dfinity/icp-cli-network-launcher/releases
-export ICP_CLI_NETWORK_LAUNCHER_PATH="<path-to>/icp-cli-network-launcher"
-
-# Run tests
 cargo test
 ```
+
+The network launcher binary is automatically downloaded on first test run. Some tests launch local networks and require available ports.
 
 ### Generating CLI Documentation
 

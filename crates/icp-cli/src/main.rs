@@ -361,6 +361,12 @@ async fn main() -> Result<(), Error> {
                     .instrument(trace_span)
                     .await?
             }
+
+            commands::network::Command::Update(args) => {
+                commands::network::update::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
         },
 
         // New

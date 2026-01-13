@@ -61,7 +61,7 @@ pub async fn download_launcher_version(
     paths: LWrite<&PackageCachePaths>,
     version_req: &str,
     client: &Client,
-) -> Result<PathBuf, DownloadLauncherError> {
+) -> Result<(String, PathBuf), DownloadLauncherError> {
     let pkg_version = if version_req == "latest" {
         let latest = get_latest_launcher_version(client).await?;
         set_tag(paths, "icp-cli-network-launcher", &latest, "latest").context(CreateTagSnafu)?;
@@ -121,11 +121,14 @@ pub async fn download_launcher_version(
     })?;
     let tarball_name = format!("icp-cli-network-launcher-{arch}-{os}-{pkg_version}");
     let extracted_inner = extract_dir.path().join(&tarball_name);
+    if version_path.exists() {
+        crate::fs::remove_dir_all(&version_path).context(RemoveExistingSnafu)?
+    }
     std::fs::rename(&extracted_inner, &version_path).context(MoveExtractedSnafu {
         from: extracted_inner,
         to: &version_path,
     })?;
-    Ok(version_path.join("icp-cli-network-launcher"))
+    Ok((pkg_version, version_path.join("icp-cli-network-launcher")))
 }
 
 #[derive(Debug, Snafu)]
@@ -148,6 +151,8 @@ pub enum DownloadLauncherError {
     Download { source: reqwest::Error },
     #[snafu(display("failed to save downloaded network launcher"))]
     SaveDownload { source: std::io::Error },
+    #[snafu(display("failed to remove existing launcher"))]
+    RemoveExisting { source: crate::fs::IoError },
     #[snafu(display("failed to create temporary file for download"))]
     TempFile { source: std::io::Error },
     #[snafu(display("failed to create temporary directory for extraction"))]

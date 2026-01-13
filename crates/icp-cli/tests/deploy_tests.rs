@@ -94,7 +94,7 @@ async fn deploy() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
@@ -160,7 +160,7 @@ async fn deploy_twice_should_succeed() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
@@ -368,7 +368,7 @@ async fn deploy_prints_canister_urls() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))

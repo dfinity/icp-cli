@@ -9,8 +9,8 @@ use icp::{fs::write_string, prelude::*};
 
 mod common;
 
-#[test]
-fn canister_install() {
+#[tokio::test]
+async fn canister_install() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -39,7 +39,7 @@ fn canister_install() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Build canister
@@ -95,8 +95,8 @@ fn canister_install() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
-#[test]
-fn canister_install_with_valid_principal() {
+#[tokio::test]
+async fn canister_install_with_valid_principal() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -132,8 +132,8 @@ fn canister_install_with_valid_principal() {
         ));
 }
 
-#[test]
-fn canister_install_with_wasm_flag() {
+#[tokio::test]
+async fn canister_install_with_wasm_flag() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_path = ctx.make_asset("example_icp_mo.wasm");
@@ -152,7 +152,7 @@ fn canister_install_with_wasm_flag() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create canister

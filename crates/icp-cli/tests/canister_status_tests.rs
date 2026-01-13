@@ -9,8 +9,8 @@ use icp::{fs::write_string, prelude::*};
 
 mod common;
 
-#[test]
-fn canister_status() {
+#[tokio::test]
+async fn canister_status() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -39,7 +39,7 @@ fn canister_status() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy project

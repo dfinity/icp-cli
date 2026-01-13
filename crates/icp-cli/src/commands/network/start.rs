@@ -115,7 +115,8 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
                     } else {
                         debug!("Downloading icp-cli-network-launcher version `latest`");
                         let client = reqwest::Client::new();
-                        let path = download_launcher_version(pkg, "latest", &client).await?;
+                        let (_ver, path) =
+                            download_launcher_version(pkg, "latest", &client).await?;
                         Ok(Some(path))
                     }
                 })

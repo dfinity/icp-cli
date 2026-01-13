@@ -13,8 +13,8 @@ use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, c
 
 mod common;
 
-#[test]
-fn sync_adapter_script_single() {
+#[tokio::test]
+async fn sync_adapter_script_single() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -47,7 +47,7 @@ fn sync_adapter_script_single() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -85,8 +85,8 @@ fn sync_adapter_script_single() {
         .stdout(contains("syncing").trim());
 }
 
-#[test]
-fn sync_adapter_script_multiple() {
+#[tokio::test]
+async fn sync_adapter_script_multiple() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -121,7 +121,7 @@ fn sync_adapter_script_multiple() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -200,7 +200,7 @@ async fn sync_adapter_static_assets() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -258,8 +258,8 @@ async fn sync_adapter_static_assets() {
     assert_eq!(out, "hello");
 }
 
-#[test]
-fn sync_with_valid_principal() {
+#[tokio::test]
+async fn sync_with_valid_principal() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -282,7 +282,7 @@ fn sync_with_valid_principal() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Valid principal
@@ -297,8 +297,8 @@ fn sync_with_valid_principal() {
         .stderr(contains("project does not contain a canister named"));
 }
 
-#[test]
-fn sync_multiple_canisters() {
+#[tokio::test]
+async fn sync_multiple_canisters() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -349,7 +349,7 @@ fn sync_multiple_canisters() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -391,8 +391,8 @@ fn sync_multiple_canisters() {
         .stdout(contains("DEBUG icp::progress: syncing canister-c").not());
 }
 
-#[test]
-fn sync_all_canisters_in_environment() {
+#[tokio::test]
+async fn sync_all_canisters_in_environment() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -449,7 +449,7 @@ fn sync_all_canisters_in_environment() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");

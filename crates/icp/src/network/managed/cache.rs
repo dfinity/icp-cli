@@ -1,55 +1,23 @@
-use std::collections::HashMap;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 
 use flate2::bufread::GzDecoder;
 use futures::{StreamExt, TryStreamExt};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tar::Archive;
 
-use crate::fs::lock::PathsAccess;
-use crate::fs::lock::{DirectoryStructureLock, LRead, LWrite, LockError};
+use crate::fs::lock::{LRead, LWrite};
+use crate::package::{PackageCachePaths, get_tag, set_tag};
 use crate::prelude::*;
-
-pub struct PackageCachePaths {
-    root: PathBuf,
-}
-
-impl PackageCachePaths {
-    pub fn launcher_dir(&self) -> PathBuf {
-        self.root.join("network-launcher")
-    }
-    pub fn launcher_version(&self, version: &str) -> PathBuf {
-        self.launcher_dir().join(version)
-    }
-    pub fn manifest(&self) -> PathBuf {
-        self.root.join("manifest.json")
-    }
-}
-
-pub type PackageCache = DirectoryStructureLock<PackageCachePaths>;
-
-impl PackageCache {
-    pub fn new(root: PathBuf) -> Result<Self, LockError> {
-        DirectoryStructureLock::open_or_create(PackageCachePaths { root })
-    }
-}
-
-impl PathsAccess for PackageCachePaths {
-    fn lock_file(&self) -> PathBuf {
-        self.root.join(".lock")
-    }
-}
 
 pub fn get_cached_launcher_version(
     paths: LRead<&PackageCachePaths>,
     version: &str,
 ) -> Result<Option<PathBuf>, ReadCacheError> {
     let declared_version = if version == "latest" {
-        let manifest: Manifest =
-            crate::fs::json::load_or_default(&paths.manifest()).context(ReadManifestSnafu)?;
-        let Some(version) = manifest.tags.get("icp-cli-network-launcher:latest") else {
+        let Some(version) =
+            get_tag(paths, "icp-cli-network-launcher", "latest").context(LoadTagSnafu)?
+        else {
             return Ok(None);
         };
         version.to_owned()
@@ -64,15 +32,10 @@ pub fn get_cached_launcher_version(
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
-struct Manifest {
-    tags: HashMap<String, String>,
-}
-
 #[derive(Debug, Snafu)]
 pub enum ReadCacheError {
-    #[snafu(display("failed to read managed packages manifest"))]
-    ReadManifest { source: crate::fs::json::Error },
+    #[snafu(display("failed to read package tag"))]
+    LoadTag { source: crate::fs::json::Error },
 }
 
 pub async fn get_latest_launcher_version(client: &Client) -> Result<String, DownloadLauncherError> {
@@ -101,13 +64,7 @@ pub async fn download_launcher_version(
 ) -> Result<PathBuf, DownloadLauncherError> {
     let pkg_version = if version_req == "latest" {
         let latest = get_latest_launcher_version(client).await?;
-        let mut manifest = crate::fs::json::load_or_default::<Manifest>(&paths.manifest())
-            .context(LoadManifestSnafu)?;
-        manifest.tags.insert(
-            "icp-cli-network-launcher:latest".to_string(),
-            latest.clone(),
-        );
-        crate::fs::json::save(&paths.manifest(), &manifest).context(SaveManifestSnafu)?;
+        set_tag(paths, "icp-cli-network-launcher", &latest, "latest").context(CreateTagSnafu)?;
         latest
     } else {
         format!("v{version_req}")
@@ -214,8 +171,6 @@ pub enum DownloadLauncherError {
     LatestVersionFetch { source: reqwest::Error },
     #[snafu(display("failed to parse latest version response from GitHub"))]
     LatestVersionParse,
-    #[snafu(display("failed to read managed packages manifest"))]
-    LoadManifest { source: crate::fs::json::Error },
-    #[snafu(display("failed to save managed packages manifest"))]
-    SaveManifest { source: crate::fs::json::Error },
+    #[snafu(display("failed to create package tag"))]
+    CreateTag { source: crate::fs::json::Error },
 }

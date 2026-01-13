@@ -7,7 +7,7 @@
 use crate::{
     fs::lock::LockError,
     identity::{IdentityDirectories, IdentityPaths},
-    network::managed::cache::PackageCache,
+    package::PackageCache,
     prelude::*,
 };
 use directories::ProjectDirs;

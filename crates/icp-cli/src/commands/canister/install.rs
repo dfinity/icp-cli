@@ -58,7 +58,15 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .await?;
 
     let canister_display = args.cmd_args.canister.to_string();
-    install_canister(&agent, &canister_id, &canister_display, &wasm, &args.mode).await?;
+    install_canister(
+        &agent,
+        &canister_id,
+        &canister_display,
+        &wasm,
+        &args.mode,
+        None,
+    )
+    .await?;
 
     let _ = ctx.term.write_line(&format!(
         "Canister {canister_display} installed successfully"

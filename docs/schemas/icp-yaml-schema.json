@@ -176,6 +176,13 @@
       ],
       "description": "Represents the manifest describing a single canister.\nThis struct is typically loaded from a `canister.yaml` file and defines\nthe canister's name and how it should be built into WebAssembly.",
       "properties": {
+        "init_args": {
+          "description": "Initialization arguments passed to the canister during installation.\nCan be hex-encoded bytes or Candid text format.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "description": "The unique name of the canister as defined in this manifest.",
           "type": "string"
@@ -235,6 +242,16 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "init_args": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Override init args for specific canisters in this environment",
+          "type": [
+            "object",
             "null"
           ]
         },

@@ -91,11 +91,43 @@ impl TestContext {
         env!("CARGO_MANIFEST_DIR").into()
     }
 
+    fn asset_source_path(&self, name: &str) -> PathBuf {
+        self.pkg_dir().join(format!("tests/assets/{name}"))
+    }
+
     pub(crate) fn make_asset(&self, name: &str) -> PathBuf {
         let target = self.asset_dir.join(name);
-        fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
-            .expect("failed to copy asset");
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).expect("failed to create asset parent directories");
+        }
+        fs::copy(self.asset_source_path(name), &target).expect("failed to copy asset");
         target
+    }
+
+    /// Copy an entire asset directory to the specified destination
+    pub(crate) fn copy_asset_dir(&self, asset_name: &str, dest: &Path) {
+        let source = self.asset_source_path(asset_name);
+        if !source.exists() {
+            panic!("Asset directory not found: {}", source);
+        }
+        Self::copy_dir_recursive(&source, dest);
+    }
+
+    fn copy_dir_recursive(src: &Path, dest: &Path) {
+        fs::create_dir_all(dest).expect("failed to create destination directory");
+        for entry in fs::read_dir(src.as_std_path()).expect("failed to read source directory") {
+            let entry = entry.expect("failed to read directory entry");
+            let std_path = entry.path();
+            let file_name = std_path.file_name().expect("failed to get file name");
+            let dest_path = dest.join(file_name.to_str().expect("invalid UTF-8 in filename"));
+
+            if std_path.is_dir() {
+                let src_path = PathBuf::try_from(std_path).expect("invalid UTF-8 in path");
+                Self::copy_dir_recursive(&src_path, &dest_path);
+            } else {
+                fs::copy(&std_path, dest_path.as_std_path()).expect("failed to copy file");
+            }
+        }
     }
     pub(crate) fn create_project_dir(&self, name: &str) -> PathBuf {
         let project_dir = self.home_path().join(name);

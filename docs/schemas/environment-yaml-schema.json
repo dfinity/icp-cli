@@ -85,6 +85,16 @@
         "null"
       ]
     },
+    "init_args": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Override init args for specific canisters in this environment",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
     "name": {
       "type": "string"
     },

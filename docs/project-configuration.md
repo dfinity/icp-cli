@@ -342,7 +342,7 @@ There are implicit environments:
 - `local` - Assumes the local network and assumed to be the default
 - `ic` - Assumes mainnet
 
-Canisters can have different settings in each environment.
+Canisters can have different settings in each environment. Settings specified at the environment level will override any settings defined at the canister level.
 
 Example configuration:
 
@@ -415,6 +415,55 @@ settings:
     API_URL: "https://api.example.com"
     FEATURE_FLAGS: "advanced_mode=true,beta_features=false"
     CORS_ORIGINS: "https://myapp.com,https://staging.myapp.com"
+```
+
+### Initialization Arguments
+
+Specify arguments passed to the canister during installation. These arguments are provided to the canister's `init` function when the WASM module is first installed, and to `post_upgrate` when upgrading a canister's WASM module.
+
+```yaml
+canisters:
+  - name: my-canister
+    build:
+      steps:
+        - type: pre-built
+          path: ./canister.wasm
+    
+    # Init args as Candid text format
+    init_args: "(record { owner = principal \"aaaaa-aa\"; name = \"My Canister\" })"
+    
+    # Or as hex-encoded bytes
+    # init_args: "4449444c016d7b0100010203"
+```
+
+The `init_args` field accepts a string that can be in one of two formats:
+
+1. **Candid text format**: Standard Candid notation like `(42)`, `(record { field = "value" })`, etc.
+2. **Hex-encoded bytes**: If the string is valid hexadecimal, it will be decoded as raw bytes
+
+#### Environment-Specific Init Args
+
+Override init args for specific canisters per environment. This is useful for providing different configuration values for development, staging, and production deployments:
+
+```yaml
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: ./backend.wasm
+    
+    # Default init args (production settings for security)
+    init_args: "(record { mode = \"production\"; debug = false })"
+
+environments:
+  - name: development
+    network: local
+    canisters: [backend]
+    
+    # Override init args for development
+    init_args:
+      backend: "(record { mode = \"development\"; debug = true })"
 ```
 
 ## Advanced Configuration Patterns

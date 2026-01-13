@@ -347,6 +347,13 @@
   ],
   "description": "Schema for CanisterManifest",
   "properties": {
+    "init_args": {
+      "description": "Initialization arguments passed to the canister during installation.\nCan be hex-encoded bytes or Candid text format.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "name": {
       "description": "The unique name of the canister as defined in this manifest.",
       "type": "string"

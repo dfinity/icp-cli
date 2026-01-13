@@ -609,18 +609,16 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
-* `list` — List available networks in the project
-* `ping` — Ping a network for liveness
-* `start` — Start a new project-local network
-* `status` — Show the status of a running network
-* `stop` — Stop a network started with `icp network start --background`
-* `update` — Update the network launcher to the latest version
+* `list` — 
+* `ping` — Try to connect to a network, and print out its status
+* `start` — Run a given network
+* `status` — Get status information about a running network
+* `stop` — Stop a background network
+* `update` — Update icp-cli-network-launcher to the latest version
 
 
 
 ## `icp network list`
-
-List available networks in the project
 
 **Usage:** `icp network list`
 
@@ -628,7 +626,7 @@ List available networks in the project
 
 ## `icp network ping`
 
-Ping a network for liveness
+Try to connect to a network, and print out its status
 
 **Usage:** `icp network ping [OPTIONS] [NAME]`
 
@@ -671,7 +669,7 @@ Examples:
 
 ## `icp network start`
 
-Start a new project-local network
+Run a given network
 
 **Usage:** `icp network start [OPTIONS] [NAME]`
 
@@ -714,7 +712,7 @@ Examples:
 
 ## `icp network status`
 
-Show the status of a running network
+Get status information about a running network
 
 **Usage:** `icp network status [OPTIONS] [NAME]`
 
@@ -757,7 +755,7 @@ Examples:
 
 ## `icp network stop`
 
-Stop a network started with `icp network start --background`
+Stop a background network
 
 **Usage:** `icp network stop [OPTIONS] [NAME]`
 
@@ -796,7 +794,7 @@ Examples:
 
 ## `icp network update`
 
-Update the network launcher to the latest version
+Update icp-cli-network-launcher to the latest version
 
 **Usage:** `icp network update`
 

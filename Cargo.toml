@@ -8,9 +8,11 @@ resolver = "3"
 [workspace.package]
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2024"
+version = "0.1.0-beta.3"
 repository = "https://github.com/dfinity/icp-cli"
 rust-version = "1.88.0"
 license = "Apache-2.0"
+publish = false
 
 [workspace.dependencies]
 anyhow = "1.0.100"
@@ -100,3 +102,8 @@ enum_variant_names = "allow"
 
 [profile.dev.package.scrypt]
 opt-level = 3
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

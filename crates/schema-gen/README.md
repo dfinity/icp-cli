@@ -15,7 +15,7 @@ The schema is generated directly from the Rust type definitions in the codebase 
 cargo run --bin schema-gen
 
 # Or use the convenience script
-./scripts/generate-schema.sh
+./scripts/generate-config-schemas.sh
 ```
 
 This generates the yaml schema files in the docs/schema folder.

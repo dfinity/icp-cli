@@ -90,35 +90,15 @@ impl Default for ManagedMode {
 
 impl ManagedMode {
     pub fn default_for_port(port: u16) -> Self {
-        #[cfg(unix)]
-        {
-            ManagedMode::Launcher {
-                gateway: Gateway {
-                    host: default_host(),
-                    port: if port == 0 {
-                        Port::Random
-                    } else {
-                        Port::Fixed(port)
-                    },
+        ManagedMode::Launcher {
+            gateway: Gateway {
+                host: default_host(),
+                port: if port == 0 {
+                    Port::Random
+                } else {
+                    Port::Fixed(port)
                 },
-            }
-        }
-        #[cfg(windows)]
-        {
-            ManagedMode::Image(Box::new(ManagedImageConfig {
-                image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
-                port_mapping: vec![format!("{}:4943", port)],
-                rm_on_exit: true,
-                args: vec![],
-                entrypoint: None,
-                environment: vec![],
-                volumes: vec![],
-                platform: None,
-                user: None,
-                shm_size: None,
-                status_dir: "/app/status".to_string(),
-                mounts: vec![],
-            }))
+            },
         }
     }
 }

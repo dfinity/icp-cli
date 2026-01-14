@@ -86,60 +86,60 @@ pub enum ConsolidateManifestError {
     Environment { source: EnvironmentError },
 }
 
-/// The local and mainnet networks are included by default
-/// They are not overridable
-fn default_networks() -> Vec<Network> {
-    vec![
-        Network {
-            // The local network at localhost:8000
-            name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-            configuration: Configuration::Managed {
-                managed: Managed {
-                    mode: {
-                        #[cfg(unix)]
-                        {
-                            ManagedMode::Launcher {
-                                gateway: crate::network::Gateway {
-                                    host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
-                                    port: crate::network::Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
-                                },
-                            }
+/// Returns the default mainnet network (protected, non-overridable)
+fn default_mainnet_network() -> Network {
+    Network {
+        // Mainnet at https://icp-api.io
+        name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+        configuration: Configuration::Connected {
+            connected: Connected {
+                url: IC_MAINNET_NETWORK_URL.to_string(),
+                // Will use the IC Root key hard coded in agent-rs.
+                // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
+                root_key: None,
+            },
+        },
+    }
+}
+
+/// Returns the default local network (can be overridden by users)
+fn default_local_network() -> Network {
+    Network {
+        // The local network at localhost:8000
+        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        configuration: Configuration::Managed {
+            managed: Managed {
+                mode: {
+                    #[cfg(unix)]
+                    {
+                        ManagedMode::Launcher {
+                            gateway: crate::network::Gateway {
+                                host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                                port: crate::network::Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                            },
                         }
-                        #[cfg(windows)]
-                        {
-                            ManagedMode::Image(Box::new(crate::network::ManagedImageConfig {
-                                image: "ghcr.io/dfinity/icp-cli-network-launcher:latest"
-                                    .to_string(),
-                                port_mapping: vec![format!("{}:4943", DEFAULT_LOCAL_NETWORK_PORT)],
-                                rm_on_exit: true,
-                                args: vec![],
-                                entrypoint: None,
-                                environment: vec![],
-                                volumes: vec![],
-                                platform: None,
-                                user: None,
-                                shm_size: None,
-                                status_dir: "/app/status".to_string(),
-                                mounts: vec![],
-                            }))
-                        }
-                    },
+                    }
+                    #[cfg(windows)]
+                    {
+                        ManagedMode::Image(Box::new(crate::network::ManagedImageConfig {
+                            image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+                            port_mapping: vec![format!("{}:4943", DEFAULT_LOCAL_NETWORK_PORT)],
+                            rm_on_exit: true,
+                            args: vec![],
+                            entrypoint: None,
+                            environment: vec![],
+                            volumes: vec![],
+                            platform: None,
+                            user: None,
+                            shm_size: None,
+                            status_dir: "/app/status".to_string(),
+                            mounts: vec![],
+                        }))
+                    }
                 },
             },
         },
-        Network {
-            // Mainnet at https://icp-api.io
-            name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
-            configuration: Configuration::Connected {
-                connected: Connected {
-                    url: IC_MAINNET_NETWORK_URL.to_string(),
-                    // Will use the IC Root key hard coded in agent-rs.
-                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
-                    root_key: None,
-                },
-            },
-        },
-    ]
+    }
 }
 
 fn is_glob(s: &str) -> bool {
@@ -262,6 +262,7 @@ pub async fn consolidate_manifest(
                             settings: m.settings.to_owned(),
                             build,
                             sync,
+                            init_args: m.init_args.to_owned(),
                         },
                     ));
                 }
@@ -272,15 +273,18 @@ pub async fn consolidate_manifest(
     // Networks
     let mut networks: HashMap<String, Network> = HashMap::new();
 
-    // Add the default networks first
-    for n in default_networks() {
-        networks.insert(n.name.clone(), n);
-    }
+    // Add mainnet first - this is always protected and non-overridable
+    networks.insert(
+        DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+        default_mainnet_network(),
+    );
 
-    let default_network_names: HashSet<String> =
-        default_networks().iter().map(|n| n.name.clone()).collect();
+    // Track which network names are protected (only mainnet)
+    let protected_network_names: HashSet<String> = [DEFAULT_MAINNET_NETWORK_NAME.to_string()]
+        .into_iter()
+        .collect();
 
-    // Resolve NetworkManifests and add them
+    // Resolve NetworkManifests and add them (including user-defined "local" if provided)
     for i in &m.networks {
         let m = match i {
             Item::Path(path) => {
@@ -302,7 +306,8 @@ pub async fn consolidate_manifest(
         match networks.entry(m.name.to_owned()) {
             // Duplicate
             Entry::Occupied(e) => {
-                if default_network_names.contains(&m.name) {
+                // Only error if trying to override a protected network
+                if protected_network_names.contains(&m.name) {
                     return ReservedSnafu {
                         kind: "network".to_string(),
                         name: m.name.to_string(),
@@ -310,6 +315,7 @@ pub async fn consolidate_manifest(
                     .fail();
                 }
 
+                // For non-protected duplicates, this is a user error (defining same network twice)
                 return DuplicateSnafu {
                     kind: "network".to_string(),
                     name: e.key().to_owned(),
@@ -325,6 +331,15 @@ pub async fn consolidate_manifest(
                 });
             }
         }
+    }
+
+    // After processing user networks, add default "local" if not already defined
+    // This provides backward compatibility for projects that don't define their own "local" network
+    if !networks.contains_key(DEFAULT_LOCAL_NETWORK_NAME) {
+        networks.insert(
+            DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+            default_local_network(),
+        );
     }
 
     // Environments
@@ -378,7 +393,7 @@ pub async fn consolidate_manifest(
 
                     // Embed canisters in environment
                     canisters: {
-                        match &m.canisters {
+                        let mut cs = match &m.canisters {
                             // None
                             CanisterSelection::None => HashMap::new(),
 
@@ -403,7 +418,27 @@ pub async fn consolidate_manifest(
 
                                 cs
                             }
+                        };
+
+                        // Apply settings overrides if specified
+                        if let Some(ref settings_overrides) = m.settings {
+                            for (canister_name, settings) in settings_overrides {
+                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.settings = settings.clone();
+                                }
+                            }
                         }
+
+                        // Apply init_args overrides if specified
+                        if let Some(ref init_args_overrides) = m.init_args {
+                            for (canister_name, init_args) in init_args_overrides {
+                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.init_args = Some(init_args.clone());
+                                }
+                            }
+                        }
+
+                        cs
                     },
                 });
             }

@@ -10,6 +10,8 @@ use tracing::debug;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
+use super::misc::fetch_canister_metadata;
+
 #[derive(Debug, Snafu)]
 pub enum InstallOperationError {
     #[snafu(display("Could not find build artifact for canister '{canister_name}'"))]
@@ -19,28 +21,13 @@ pub enum InstallOperationError {
     Agent { source: AgentError },
 }
 
-async fn read_module_metadata(
-    agent: &Agent,
-    canister_id: candid::Principal,
-    metadata: &str,
-) -> Option<String> {
-    Some(
-        String::from_utf8_lossy(
-            &agent
-                .read_state_canister_metadata(canister_id, metadata)
-                .await
-                .ok()?,
-        )
-        .into(),
-    )
-}
-
 pub(crate) async fn install_canister(
     agent: &Agent,
     canister_id: &Principal,
     canister_name: &str,
     wasm: &[u8],
     mode: &str,
+    init_args: Option<&[u8]>,
 ) -> Result<(), InstallOperationError> {
     let mgmt = ManagementCanister::create(agent);
     let install_mode = match mode {
@@ -68,7 +55,7 @@ pub(crate) async fn install_canister(
         CanisterInstallMode::Upgrade(_) => {
             // if this is a motoko canister using EOP
             // we need to set additional options
-            if read_module_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
+            if fetch_canister_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
                 .await
                 .is_some()
             {
@@ -88,8 +75,14 @@ pub(crate) async fn install_canister(
         "Install new canister code for {} with mode `{:?}`",
         canister_name, install_mode
     );
-    mgmt.install_code(canister_id, wasm)
-        .with_mode(install_mode)
+
+    let mut builder = mgmt.install_code(canister_id, wasm).with_mode(install_mode);
+
+    if let Some(args) = init_args {
+        builder = builder.with_raw_arg(args.into());
+    }
+
+    builder
         .await
         .map_err(|source| InstallOperationError::Agent { source })?;
 
@@ -99,7 +92,7 @@ pub(crate) async fn install_canister(
 /// Installs code to multiple canisters and displays progress bars
 pub(crate) async fn install_many(
     agent: Agent,
-    canisters: Vec<(String, Principal)>,
+    canisters: Vec<(String, Principal, Option<Vec<u8>>)>,
     mode: &str,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     debug: bool,
@@ -107,7 +100,7 @@ pub(crate) async fn install_many(
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for (name, cid) in canisters {
+    for (name, cid, init_args) in canisters {
         let pb = progress_manager.create_progress_bar(&name);
         let agent = agent.clone();
         let install_fn = {
@@ -126,7 +119,7 @@ pub(crate) async fn install_many(
                     }
                 })?;
 
-                install_canister(&agent, &cid, &name, &wasm, &mode).await
+                install_canister(&agent, &cid, &name, &wasm, &mode, init_args.as_deref()).await
             }
         };
 

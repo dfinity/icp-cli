@@ -25,9 +25,9 @@ use icp::{
 
 mod common;
 
-#[test]
+#[tokio::test]
 #[file_serial(default_local_network)]
-fn network_same_port() {
+async fn network_same_port() {
     let ctx = TestContext::new();
 
     let project_dir_a = ctx.create_project_dir("a");
@@ -57,7 +57,9 @@ fn network_same_port() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx.start_network_in(&project_dir_a, "sameport-network");
+    let _a_guard = ctx
+        .start_network_in(&project_dir_a, "sameport-network")
+        .await;
 
     eprintln!("wait for network A healthy");
     ctx.ping_until_healthy(&project_dir_a, "sameport-network");
@@ -74,9 +76,9 @@ fn network_same_port() {
         )));
 }
 
-#[test]
+#[tokio::test]
 #[file_serial(port8001, port8002)]
-fn two_projects_different_fixed_ports() {
+async fn two_projects_different_fixed_ports() {
     let ctx_a = TestContext::new();
     let project_dir_a = ctx_a.create_project_dir("a");
 
@@ -109,20 +111,24 @@ fn two_projects_different_fixed_ports() {
     )
     .expect("failed to write project manifest");
 
-    let _a_guard = ctx_a.start_network_in(&project_dir_a, "fixedport-network");
+    let _a_guard = ctx_a
+        .start_network_in(&project_dir_a, "fixedport-network")
+        .await;
 
     eprintln!("wait for network A healthy");
     ctx_a.ping_until_healthy(&project_dir_a, "fixedport-network");
 
-    let _b_guard = ctx_b.start_network_in(&project_dir_b, "fixedport-network");
+    let _b_guard = ctx_b
+        .start_network_in(&project_dir_b, "fixedport-network")
+        .await;
 
     eprintln!("wait for network B healthy");
     ctx_b.ping_until_healthy(&project_dir_b, "fixedport-network");
 }
 
 // TODO(or.ricon) This is broken
-#[test]
-fn deploy_to_other_projects_network() {
+#[tokio::test]
+async fn deploy_to_other_projects_network() {
     let ctx = TestContext::new();
 
     // Project A
@@ -136,7 +142,7 @@ fn deploy_to_other_projects_network() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&proja, "random-network");
+    let _g = ctx.start_network_in(&proja, "random-network").await;
 
     let TestNetwork {
         gateway_port,
@@ -223,8 +229,8 @@ fn deploy_to_other_projects_network() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
-#[test]
-fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
+#[tokio::test]
+async fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -247,7 +253,7 @@ fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
 
     // Time how long it takes to configure and start the network
     let start = std::time::Instant::now();
-    let _guard = ctx.start_network_in(&project_dir, "random-network");
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
     let duration = start.elapsed();
     println!("========== Configuring and starting network took {duration:?}");
@@ -314,11 +320,17 @@ async fn network_run_and_stop_background() {
     // Start network in background and verify we can see child process output
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["network", "start", "random-network", "--background"])
+        .args([
+            "network",
+            "start",
+            "random-network",
+            "--background",
+            "--debug",
+        ])
         .assert()
         .success()
-        .stderr(contains("Seeding ICP and TCYCLES")) // part of network start output
-        .stderr(contains("Installed Candid UI canister with ID"));
+        .stderr(contains("Seeding ICP and TCYCLES"))
+        .stdout(contains("Installed Candid UI canister with ID"));
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
@@ -412,7 +424,7 @@ async fn network_starts_with_canisters_preset() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _guard = ctx.start_network_in(&project_dir, "random-network");
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     let agent = ctx.agent();
@@ -463,11 +475,107 @@ async fn network_docker() {
     .expect("failed to write project manifest");
 
     ctx.docker_pull_network();
-    let _guard = ctx.start_network_in(&project_dir, "docker-network");
+    let _guard = ctx.start_network_in(&project_dir, "docker-network").await;
     ctx.ping_until_healthy(&project_dir, "docker-network");
 
     let balance = clients::ledger(&ctx)
         .balance_of(Principal::anonymous(), None)
         .await;
     assert!(balance > 0_u128);
+}
+
+#[tokio::test]
+#[file_serial(default_local_network)]
+async fn override_local_network_with_custom_port() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("custom-local");
+
+    // Define a custom "local" network with port 9999
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: local
+                mode: managed
+                gateway:
+                  port: 9999
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Start the custom "local" network
+    let _guard = ctx.start_network_in(&project_dir, "local").await;
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "local");
+
+    // Verify it's using the custom port
+    assert_eq!(network.gateway_port, 9999);
+
+    ctx.ping_until_healthy(&project_dir, "local");
+}
+
+#[tokio::test]
+async fn cannot_override_mainnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("override-mainnet");
+
+    // Attempt to override mainnet
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: mainnet
+                mode: connected
+                url: http://fake-mainnet.local
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Any command that loads the project should fail
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build"])
+        .assert()
+        .failure()
+        .stderr(contains("`mainnet` is a reserved network name"));
+}
+
+#[tokio::test]
+#[file_serial(default_local_network)]
+async fn override_local_network_as_connected() {
+    let ctx = TestContext::new();
+
+    // Project A: Start a normal local network with random port
+    let project_a = ctx.create_project_dir("project-a");
+    write_string(&project_a.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write manifest");
+
+    let _guard = ctx.start_network_in(&project_a, "random-network").await;
+    let network_a = ctx.wait_for_network_descriptor(&project_a, "random-network");
+    ctx.ping_until_healthy(&project_a, "random-network");
+
+    // Project B: Override "local" to connect to Project A's network
+    let project_b = ctx.create_project_dir("project-b");
+    write_string(
+        &project_b.join("icp.yaml"),
+        &formatdoc! {r#"
+            networks:
+              - name: local
+                mode: connected
+                url: http://localhost:{port}
+                root-key: {root_key}
+        "#,
+            port = network_a.gateway_port,
+            root_key = hex::encode(&network_a.root_key)
+        },
+    )
+    .expect("failed to write manifest");
+
+    // Should be able to use the "local" environment/network name
+    // even though it points to a connected network
+    ctx.icp()
+        .current_dir(&project_b)
+        .args(["network", "ping", "local"])
+        .assert()
+        .success();
 }

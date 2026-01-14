@@ -15,6 +15,7 @@ pub struct EnvironmentInner {
     pub network: Option<String>,
     pub canisters: Option<Vec<String>>,
     pub settings: Option<HashMap<String, Settings>>,
+    pub init_args: Option<HashMap<String, String>>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
@@ -49,6 +50,9 @@ pub struct EnvironmentManifest {
 
     /// Override the canister settings for this environment
     pub settings: Option<HashMap<String, Settings>>,
+
+    /// Override init args for specific canisters in this environment
+    pub init_args: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Snafu)]
@@ -66,6 +70,7 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
             network,
             canisters,
             settings,
+            init_args,
         } = v;
 
         // Name
@@ -98,6 +103,7 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
 
             // Keep as-is, setting overrides is optional
             settings,
+            init_args,
         })
     }
 }
@@ -127,6 +133,7 @@ mod tests {
                 network: "local".to_string(),
                 canisters: CanisterSelection::Everything,
                 settings: None,
+                init_args: None,
             },
         );
     }

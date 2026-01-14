@@ -35,6 +35,10 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -45,6 +49,9 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
+        if: ${{ contains(matrix.os, 'ubuntu') }}
 
       - name: Run unit tests
         run: cargo test --workspace --lib --bins
@@ -61,6 +68,10 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -71,6 +82,25 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+
+      - name: Install mops
+        uses: dfinity/setup-mops@v1
+
+      - name: Verify mops installation
+        run: |
+          which mops
+          mops --version
+
+      - name: Install ic-wasm
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
+
+      - name: Verify ic-wasm installation
+        run: |
+          which ic-wasm
+          ic-wasm --version
 
       - name: install network launcher
         env:

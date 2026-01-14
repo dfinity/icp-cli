@@ -1,10 +1,12 @@
 use clap::Subcommand;
 
+mod args;
 pub(crate) mod list;
 pub(crate) mod ping;
 pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
+pub(crate) mod update;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
@@ -13,4 +15,5 @@ pub(crate) enum Command {
     Start(start::StartArgs),
     Status(status::StatusArgs),
     Stop(stop::Cmd),
+    Update(update::UpdateArgs),
 }

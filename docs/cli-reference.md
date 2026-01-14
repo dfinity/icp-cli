@@ -1,54 +1,55 @@
-# Command-Line Help for `icp-cli`
+# Command-Line Help for `icp`
 
-This document contains the help content for the `icp-cli` command-line program.
+This document contains the help content for the `icp` command-line program.
 
 **Command Overview:**
 
-* [`icp-cli`↴](#icp-cli)
-* [`icp-cli build`↴](#icp-cli-build)
-* [`icp-cli canister`↴](#icp-cli-canister)
-* [`icp-cli canister call`↴](#icp-cli-canister-call)
-* [`icp-cli canister create`↴](#icp-cli-canister-create)
-* [`icp-cli canister delete`↴](#icp-cli-canister-delete)
-* [`icp-cli canister install`↴](#icp-cli-canister-install)
-* [`icp-cli canister list`↴](#icp-cli-canister-list)
-* [`icp-cli canister settings`↴](#icp-cli-canister-settings)
-* [`icp-cli canister settings show`↴](#icp-cli-canister-settings-show)
-* [`icp-cli canister settings update`↴](#icp-cli-canister-settings-update)
-* [`icp-cli canister settings sync`↴](#icp-cli-canister-settings-sync)
-* [`icp-cli canister start`↴](#icp-cli-canister-start)
-* [`icp-cli canister status`↴](#icp-cli-canister-status)
-* [`icp-cli canister stop`↴](#icp-cli-canister-stop)
-* [`icp-cli canister top-up`↴](#icp-cli-canister-top-up)
-* [`icp-cli cycles`↴](#icp-cli-cycles)
-* [`icp-cli cycles balance`↴](#icp-cli-cycles-balance)
-* [`icp-cli cycles mint`↴](#icp-cli-cycles-mint)
-* [`icp-cli deploy`↴](#icp-cli-deploy)
-* [`icp-cli environment`↴](#icp-cli-environment)
-* [`icp-cli environment list`↴](#icp-cli-environment-list)
-* [`icp-cli identity`↴](#icp-cli-identity)
-* [`icp-cli identity default`↴](#icp-cli-identity-default)
-* [`icp-cli identity import`↴](#icp-cli-identity-import)
-* [`icp-cli identity list`↴](#icp-cli-identity-list)
-* [`icp-cli identity new`↴](#icp-cli-identity-new)
-* [`icp-cli identity principal`↴](#icp-cli-identity-principal)
-* [`icp-cli network`↴](#icp-cli-network)
-* [`icp-cli network list`↴](#icp-cli-network-list)
-* [`icp-cli network ping`↴](#icp-cli-network-ping)
-* [`icp-cli network start`↴](#icp-cli-network-start)
-* [`icp-cli network status`↴](#icp-cli-network-status)
-* [`icp-cli network stop`↴](#icp-cli-network-stop)
-* [`icp-cli new`↴](#icp-cli-new)
-* [`icp-cli project`↴](#icp-cli-project)
-* [`icp-cli project show`↴](#icp-cli-project-show)
-* [`icp-cli sync`↴](#icp-cli-sync)
-* [`icp-cli token`↴](#icp-cli-token)
-* [`icp-cli token balance`↴](#icp-cli-token-balance)
-* [`icp-cli token transfer`↴](#icp-cli-token-transfer)
+* [`icp`↴](#icp)
+* [`icp build`↴](#icp-build)
+* [`icp canister`↴](#icp-canister)
+* [`icp canister call`↴](#icp-canister-call)
+* [`icp canister create`↴](#icp-canister-create)
+* [`icp canister delete`↴](#icp-canister-delete)
+* [`icp canister install`↴](#icp-canister-install)
+* [`icp canister list`↴](#icp-canister-list)
+* [`icp canister settings`↴](#icp-canister-settings)
+* [`icp canister settings show`↴](#icp-canister-settings-show)
+* [`icp canister settings update`↴](#icp-canister-settings-update)
+* [`icp canister settings sync`↴](#icp-canister-settings-sync)
+* [`icp canister start`↴](#icp-canister-start)
+* [`icp canister status`↴](#icp-canister-status)
+* [`icp canister stop`↴](#icp-canister-stop)
+* [`icp canister top-up`↴](#icp-canister-top-up)
+* [`icp cycles`↴](#icp-cycles)
+* [`icp cycles balance`↴](#icp-cycles-balance)
+* [`icp cycles mint`↴](#icp-cycles-mint)
+* [`icp deploy`↴](#icp-deploy)
+* [`icp environment`↴](#icp-environment)
+* [`icp environment list`↴](#icp-environment-list)
+* [`icp identity`↴](#icp-identity)
+* [`icp identity default`↴](#icp-identity-default)
+* [`icp identity import`↴](#icp-identity-import)
+* [`icp identity list`↴](#icp-identity-list)
+* [`icp identity new`↴](#icp-identity-new)
+* [`icp identity principal`↴](#icp-identity-principal)
+* [`icp network`↴](#icp-network)
+* [`icp network list`↴](#icp-network-list)
+* [`icp network ping`↴](#icp-network-ping)
+* [`icp network start`↴](#icp-network-start)
+* [`icp network status`↴](#icp-network-status)
+* [`icp network stop`↴](#icp-network-stop)
+* [`icp network update`↴](#icp-network-update)
+* [`icp new`↴](#icp-new)
+* [`icp project`↴](#icp-project)
+* [`icp project show`↴](#icp-project-show)
+* [`icp sync`↴](#icp-sync)
+* [`icp token`↴](#icp-token)
+* [`icp token balance`↴](#icp-token-balance)
+* [`icp token transfer`↴](#icp-token-transfer)
 
-## `icp-cli`
+## `icp`
 
-**Usage:** `icp-cli [OPTIONS] [COMMAND]`
+**Usage:** `icp [OPTIONS] [COMMAND]`
 
 ###### **Subcommands:**
 
@@ -70,14 +71,15 @@ This document contains the help content for the `icp-cli` command-line program.
 * `--debug` — Enable debug logging
 
   Default value: `false`
+* `--identity-password-file <FILE>` — Read identity password from a file instead of prompting
 
 
 
-## `icp-cli build`
+## `icp build`
 
 Build canisters
 
-**Usage:** `icp-cli build [OPTIONS] [CANISTERS]...`
+**Usage:** `icp build [OPTIONS] [CANISTERS]...`
 
 ###### **Arguments:**
 
@@ -85,16 +87,16 @@ Build canisters
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 
 
 
-## `icp-cli canister`
+## `icp canister`
 
 Perform canister operations against a network
 
-**Usage:** `icp-cli canister <COMMAND>`
+**Usage:** `icp canister <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -111,11 +113,11 @@ Perform canister operations against a network
 
 
 
-## `icp-cli canister call`
+## `icp canister call`
 
 Make a canister call
 
-**Usage:** `icp-cli canister call [OPTIONS] <CANISTER> <METHOD> <ARGS>`
+**Usage:** `icp canister call [OPTIONS] <CANISTER> <METHOD> [ARGS]`
 
 ###### **Arguments:**
 
@@ -123,21 +125,23 @@ Make a canister call
 * `<METHOD>` — Name of canister method to call into
 * `<ARGS>` — String representation of canister call arguments
 
+   If not provided, an interactive prompt will be launched to help build the arguments.
+
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli canister create`
+## `icp canister create`
 
 Create a canister on a network
 
-**Usage:** `icp-cli canister create [OPTIONS] <CANISTER>`
+**Usage:** `icp canister create [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -147,7 +151,7 @@ Create a canister on a network
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
@@ -163,11 +167,11 @@ Create a canister on a network
 
 
 
-## `icp-cli canister delete`
+## `icp canister delete`
 
 Delete a canister from a network
 
-**Usage:** `icp-cli canister delete [OPTIONS] <CANISTER>`
+**Usage:** `icp canister delete [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -177,17 +181,17 @@ Delete a canister from a network
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli canister install`
+## `icp canister install`
 
 Install a built WASM to a canister on a network
 
-**Usage:** `icp-cli canister install [OPTIONS] <CANISTER>`
+**Usage:** `icp canister install [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -204,30 +208,30 @@ Install a built WASM to a canister on a network
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli canister list`
+## `icp canister list`
 
 List the canisters in an environment
 
-**Usage:** `icp-cli canister list [OPTIONS]`
+**Usage:** `icp canister list [OPTIONS]`
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 
 
 
-## `icp-cli canister settings`
+## `icp canister settings`
 
 Commands to manage canister settings
 
-**Usage:** `icp-cli canister settings <COMMAND>`
+**Usage:** `icp canister settings <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -237,13 +241,13 @@ Commands to manage canister settings
 
 
 
-## `icp-cli canister settings show`
+## `icp canister settings show`
 
 Show the status of a canister.
 
 By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
 
-**Usage:** `icp-cli canister settings show [OPTIONS] <CANISTER>`
+**Usage:** `icp canister settings show [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -253,7 +257,7 @@ By default this queries the status endpoint of the management canister. If the c
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
@@ -262,11 +266,11 @@ By default this queries the status endpoint of the management canister. If the c
 
 
 
-## `icp-cli canister settings update`
+## `icp canister settings update`
 
 Change a canister's settings to specified values
 
-**Usage:** `icp-cli canister settings update [OPTIONS] <CANISTER>`
+**Usage:** `icp canister settings update [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -276,7 +280,7 @@ Change a canister's settings to specified values
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--add-controller <ADD_CONTROLLER>`
@@ -297,11 +301,11 @@ Change a canister's settings to specified values
 
 
 
-## `icp-cli canister settings sync`
+## `icp canister settings sync`
 
 Synchronize a canister's settings with those defined in the project
 
-**Usage:** `icp-cli canister settings sync [OPTIONS] <CANISTER>`
+**Usage:** `icp canister settings sync [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -311,17 +315,17 @@ Synchronize a canister's settings with those defined in the project
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli canister start`
+## `icp canister start`
 
 Start a canister on a network
 
-**Usage:** `icp-cli canister start [OPTIONS] <CANISTER>`
+**Usage:** `icp canister start [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -331,19 +335,19 @@ Start a canister on a network
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli canister status`
+## `icp canister status`
 
 Show the status of canister(s).
 
 By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
 
-**Usage:** `icp-cli canister status [OPTIONS] [CANISTER]`
+**Usage:** `icp canister status [OPTIONS] [CANISTER]`
 
 ###### **Arguments:**
 
@@ -353,7 +357,7 @@ By default this queries the status endpoint of the management canister. If the c
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
@@ -362,11 +366,11 @@ By default this queries the status endpoint of the management canister. If the c
 
 
 
-## `icp-cli canister stop`
+## `icp canister stop`
 
 Stop a canister on a network
 
-**Usage:** `icp-cli canister stop [OPTIONS] <CANISTER>`
+**Usage:** `icp canister stop [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
@@ -376,17 +380,17 @@ Stop a canister on a network
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli canister top-up`
+## `icp canister top-up`
 
 Top up a canister with cycles
 
-**Usage:** `icp-cli canister top-up [OPTIONS] --amount <AMOUNT> <CANISTER>`
+**Usage:** `icp canister top-up [OPTIONS] --amount <AMOUNT> <CANISTER>`
 
 ###### **Arguments:**
 
@@ -397,17 +401,17 @@ Top up a canister with cycles
 * `--amount <AMOUNT>` — Amount of cycles to top up
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli cycles`
+## `icp cycles`
 
 Mint and manage cycles
 
-**Usage:** `icp-cli cycles <COMMAND>`
+**Usage:** `icp cycles <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -416,27 +420,27 @@ Mint and manage cycles
 
 
 
-## `icp-cli cycles balance`
+## `icp cycles balance`
 
 Display the cycles balance
 
-**Usage:** `icp-cli cycles balance [OPTIONS]`
+**Usage:** `icp cycles balance [OPTIONS]`
 
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli cycles mint`
+## `icp cycles mint`
 
 Convert icp to cycles
 
-**Usage:** `icp-cli cycles mint [OPTIONS]`
+**Usage:** `icp cycles mint [OPTIONS]`
 
 ###### **Options:**
 
@@ -444,17 +448,17 @@ Convert icp to cycles
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli deploy`
+## `icp deploy`
 
 Deploy a project to an environment
 
-**Usage:** `icp-cli deploy [OPTIONS] [NAMES]...`
+**Usage:** `icp deploy [OPTIONS] [NAMES]...`
 
 ###### **Arguments:**
 
@@ -474,16 +478,16 @@ Deploy a project to an environment
 
   Default value: `2000000000000`
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 
 
 
-## `icp-cli environment`
+## `icp environment`
 
 Show information about the current project environments
 
-**Usage:** `icp-cli environment <COMMAND>`
+**Usage:** `icp environment <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -491,19 +495,19 @@ Show information about the current project environments
 
 
 
-## `icp-cli environment list`
+## `icp environment list`
 
 Display a list of enviroments
 
-**Usage:** `icp-cli environment list`
+**Usage:** `icp environment list`
 
 
 
-## `icp-cli identity`
+## `icp identity`
 
 Manage your identities
 
-**Usage:** `icp-cli identity <COMMAND>`
+**Usage:** `icp identity <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -515,67 +519,81 @@ Manage your identities
 
 
 
-## `icp-cli identity default`
+## `icp identity default`
 
 Display the currently selected identity
 
-**Usage:** `icp-cli identity default [NAME]`
+**Usage:** `icp identity default [NAME]`
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<NAME>` — Identity to set as default. If omitted, prints the current default
 
 
 
-## `icp-cli identity import`
+## `icp identity import`
 
 Import a new identity
 
-**Usage:** `icp-cli identity import [OPTIONS] <--from-pem <FILE>|--read-seed-phrase|--from-seed-file <FILE>> <NAME>`
+**Usage:** `icp identity import [OPTIONS] <--from-pem <FILE>|--read-seed-phrase|--from-seed-file <FILE>> <NAME>`
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<NAME>` — Name for the imported identity
 
 ###### **Options:**
 
-* `--from-pem <FILE>`
-* `--read-seed-phrase`
-* `--from-seed-file <FILE>`
-* `--decryption-password-from-file <FILE>`
-* `--assert-key-type <ASSERT_KEY_TYPE>`
+* `--storage <STORAGE>` — Where to store the private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`, `password`
+
+* `--from-pem <FILE>` — Import from a PEM file
+* `--read-seed-phrase` — Read seed phrase interactively from the terminal
+* `--from-seed-file <FILE>` — Read seed phrase from a file
+* `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
+* `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
 
 
 
-## `icp-cli identity list`
+## `icp identity list`
 
 List the identities
 
-**Usage:** `icp-cli identity list`
+**Usage:** `icp identity list`
 
 
 
-## `icp-cli identity new`
+## `icp identity new`
 
 Create a new identity
 
-**Usage:** `icp-cli identity new [OPTIONS] <NAME>`
+**Usage:** `icp identity new [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 
-* `<NAME>`
+* `<NAME>` — Name for the new identity
 
 ###### **Options:**
 
-* `--output-seed <FILE>`
+* `--storage <STORAGE>` — Where to store the private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`, `password`
+
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
+* `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
 
 
 
-## `icp-cli identity principal`
+## `icp identity principal`
 
 Display the principal for the current identity
 
-**Usage:** `icp-cli identity principal [OPTIONS]`
+**Usage:** `icp identity principal [OPTIONS]`
 
 ###### **Options:**
 
@@ -583,11 +601,11 @@ Display the principal for the current identity
 
 
 
-## `icp-cli network`
+## `icp network`
 
 Launch and manage local test networks
 
-**Usage:** `icp-cli network <COMMAND>`
+**Usage:** `icp network <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -596,90 +614,199 @@ Launch and manage local test networks
 * `start` — Run a given network
 * `status` — Get status information about a running network
 * `stop` — Stop a background network
+* `update` — Update icp-cli-network-launcher to the latest version
 
 
 
-## `icp-cli network list`
+## `icp network list`
 
-**Usage:** `icp-cli network list`
+**Usage:** `icp network list`
 
 
 
-## `icp-cli network ping`
+## `icp network ping`
 
 Try to connect to a network, and print out its status
 
-**Usage:** `icp-cli network ping [OPTIONS] [NETWORK]`
+**Usage:** `icp network ping [OPTIONS] [NAME]`
+
+Examples:
+
+    # Ping default 'local' network
+    icp network ping
+  
+    # Ping explicit network
+    icp network ping mynetwork
+  
+    # Ping using environment flag
+    icp network ping -e staging
+  
+    # Ping using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network ping
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network ping local
+  
+    # Wait until healthy
+    icp network ping --wait-healthy
+
 
 ###### **Arguments:**
 
-* `<NETWORK>` — The compute network to connect to. By default, ping the local network
+* `<NAME>` — Name of the network to use.
 
-  Default value: `local`
+   Takes precedence over -e/--environment and the ICP_ENVIRONMENT environment variable when specified explicitly.
 
 ###### **Options:**
 
+* `-e`, `--environment <ENVIRONMENT>` — Use the network configured in the specified environment.
+
+   Cannot be used together with an explicit network name argument.
+   The ICP_ENVIRONMENT environment variable is also checked when neither network name nor -e flag is specified.
 * `--wait-healthy` — Repeatedly ping until the replica is healthy or 1 minute has passed
 
 
 
-## `icp-cli network start`
+## `icp network start`
 
 Run a given network
 
-**Usage:** `icp-cli network start [OPTIONS] [NAME]`
+**Usage:** `icp network start [OPTIONS] [NAME]`
+
+Examples:
+
+    # Use default 'local' network
+    icp network start
+  
+    # Use explicit network name
+    icp network start mynetwork
+  
+    # Use environment flag
+    icp network start -e staging
+  
+    # Use ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network start
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network start local
+  
+    # Background mode with environment
+    icp network start -e staging -d
+
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of the network to start
+* `<NAME>` — Name of the network to use.
 
-  Default value: `local`
+   Takes precedence over -e/--environment and the ICP_ENVIRONMENT environment variable when specified explicitly.
 
 ###### **Options:**
 
+* `-e`, `--environment <ENVIRONMENT>` — Use the network configured in the specified environment.
+
+   Cannot be used together with an explicit network name argument.
+   The ICP_ENVIRONMENT environment variable is also checked when neither network name nor -e flag is specified.
 * `-d`, `--background` — Starts the network in a background process. This command will exit once the network is running. To stop the network, use 'icp network stop'
 
 
 
-## `icp-cli network status`
+## `icp network status`
 
 Get status information about a running network
 
-**Usage:** `icp-cli network status [OPTIONS] [NAME]`
+**Usage:** `icp network status [OPTIONS] [NAME]`
+
+Examples:
+
+    # Get status of default 'local' network
+    icp network status
+  
+    # Get status of explicit network
+    icp network status mynetwork
+  
+    # Get status using environment flag
+    icp network status -e staging
+  
+    # Get status using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network status
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network status local
+  
+    # JSON output
+    icp network status --json
+
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of the network
+* `<NAME>` — Name of the network to use.
 
-  Default value: `local`
+   Takes precedence over -e/--environment and the ICP_ENVIRONMENT environment variable when specified explicitly.
 
 ###### **Options:**
 
+* `-e`, `--environment <ENVIRONMENT>` — Use the network configured in the specified environment.
+
+   Cannot be used together with an explicit network name argument.
+   The ICP_ENVIRONMENT environment variable is also checked when neither network name nor -e flag is specified.
 * `--json` — Format output as JSON
 
 
 
-## `icp-cli network stop`
+## `icp network stop`
 
 Stop a background network
 
-**Usage:** `icp-cli network stop [NAME]`
+**Usage:** `icp network stop [OPTIONS] [NAME]`
+
+Examples:
+
+    # Stop default 'local' network
+    icp network stop
+  
+    # Stop explicit network
+    icp network stop mynetwork
+  
+    # Stop using environment flag
+    icp network stop -e staging
+  
+    # Stop using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network stop
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network stop local
+
 
 ###### **Arguments:**
 
-* `<NAME>` — Name of the network to stop
+* `<NAME>` — Name of the network to use.
 
-  Default value: `local`
+   Takes precedence over -e/--environment and the ICP_ENVIRONMENT environment variable when specified explicitly.
+
+###### **Options:**
+
+* `-e`, `--environment <ENVIRONMENT>` — Use the network configured in the specified environment.
+
+   Cannot be used together with an explicit network name argument.
+   The ICP_ENVIRONMENT environment variable is also checked when neither network name nor -e flag is specified.
 
 
 
-## `icp-cli new`
+## `icp network update`
+
+Update icp-cli-network-launcher to the latest version
+
+**Usage:** `icp network update`
+
+
+
+## `icp new`
 
 Create a new ICP project from a template
 
 Under the hood templates are generated with `cargo-generate`. See the cargo-generate docs for a guide on how to write your own templates: https://docs.rs/cargo-generate/0.23.7/cargo_generate/
 
-**Usage:** `icp-cli new [OPTIONS] <NAME>`
+**Usage:** `icp new [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 
@@ -711,11 +838,11 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 
 
 
-## `icp-cli project`
+## `icp project`
 
 Display information about the current project
 
-**Usage:** `icp-cli project <COMMAND>`
+**Usage:** `icp project <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -723,7 +850,7 @@ Display information about the current project
 
 
 
-## `icp-cli project show`
+## `icp project show`
 
 Outputs the project's effective yaml configuration.
 
@@ -735,15 +862,15 @@ The effective yaml configuration includes:
 
 - processed recipes
 
-**Usage:** `icp-cli project show`
+**Usage:** `icp project show`
 
 
 
-## `icp-cli sync`
+## `icp sync`
 
 Synchronize canisters
 
-**Usage:** `icp-cli sync [OPTIONS] [CANISTERS]...`
+**Usage:** `icp sync [OPTIONS] [CANISTERS]...`
 
 ###### **Arguments:**
 
@@ -751,17 +878,17 @@ Synchronize canisters
 
 ###### **Options:**
 
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli token`
+## `icp token`
 
 Perform token transactions
 
-**Usage:** `icp-cli token [TOKEN] <COMMAND>`
+**Usage:** `icp token [TOKEN] <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -776,23 +903,23 @@ Perform token transactions
 
 
 
-## `icp-cli token balance`
+## `icp token balance`
 
-**Usage:** `icp-cli token balance [OPTIONS]`
+**Usage:** `icp token balance [OPTIONS]`
 
 ###### **Options:**
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 
 
 
-## `icp-cli token transfer`
+## `icp token transfer`
 
-**Usage:** `icp-cli token transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+**Usage:** `icp token transfer [OPTIONS] <AMOUNT> <RECEIVER>`
 
 ###### **Arguments:**
 
@@ -803,7 +930,7 @@ Perform token transactions
 
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
-* `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
 

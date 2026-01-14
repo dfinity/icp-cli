@@ -10,7 +10,9 @@ use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
-use crate::{Lazy, ProjectLoadImpl, agent, identity, manifest, network, store_id};
+use crate::{
+    Lazy, ProjectLoadImpl, agent, identity, identity::PasswordFunc, manifest, network, store_id,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -33,6 +35,7 @@ pub fn initialize(
     project_root_override: Option<PathBuf>,
     term: Term,
     debug: bool,
+    password_func: PasswordFunc,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
@@ -76,7 +79,15 @@ pub fn initialize(
     // Identity loader
     let idload = Arc::new(identity::Loader {
         dir: dirs.identity().context(IdentityDirectorySnafu)?,
+        password_func,
     });
+    if let Ok(mockdir) = std::env::var("ICP_CLI_KEYRING_MOCK_DIR") {
+        keyring::set_default_credential_builder(Box::new(
+            crate::identity::keyring_mock::MockKeyring {
+                dir: PathBuf::from(mockdir),
+            },
+        ));
+    }
 
     // Network accessor
     let netaccess = Arc::new(network::Accessor {

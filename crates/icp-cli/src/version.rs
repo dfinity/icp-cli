@@ -6,8 +6,6 @@ lazy_static! {
 }
 
 /// Returns the version of icp-cli that was built.
-/// In debug, add a timestamp of the upstream compilation at the end of version to ensure all
-/// debug runs are unique.
 pub(crate) fn icp_cli_version_str() -> &'static str {
     &VERSION_STR
 }

@@ -1,42 +1,57 @@
-use anyhow::{anyhow, bail};
-use clap::Parser;
+use anyhow::bail;
+use clap::Args;
 use icp::{
     fs::remove_file,
     network::{Configuration, config::ChildLocator, managed::run::stop_network},
-    project::DEFAULT_LOCAL_NETWORK_NAME,
 };
 
+use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
 
 /// Stop a background network
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
+#[command(after_long_help = "\
+Examples:
+
+    # Stop default 'local' network
+    icp network stop
+  
+    # Stop explicit network
+    icp network stop mynetwork
+  
+    # Stop using environment flag
+    icp network stop -e staging
+  
+    # Stop using ICP_ENVIRONMENT variable
+    ICP_ENVIRONMENT=staging icp network stop
+  
+    # Name overrides ICP_ENVIRONMENT
+    ICP_ENVIRONMENT=staging icp network stop local
+")]
 pub struct Cmd {
-    /// Name of the network to stop
-    #[arg(default_value = DEFAULT_LOCAL_NETWORK_NAME)]
-    name: String,
+    #[clap(flatten)]
+    network_selection: NetworkOrEnvironmentArgs,
 }
 
 pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     // Load project
-    let p = ctx.project.load().await?;
+    let _ = ctx.project.load().await?;
 
-    // Obtain network configuration
-    let network = p
-        .networks
-        .get(&cmd.name)
-        .ok_or_else(|| anyhow!("project does not contain a network named '{}'", cmd.name))?;
+    // Convert args to selection and get network
+    let selection: Result<_, _> = cmd.network_selection.clone().into();
+    let network = ctx.get_network_or_environment(&selection?).await?;
 
     if let Configuration::Connected { connected: _ } = &network.configuration {
-        bail!("network '{}' is not a managed network", cmd.name)
+        bail!("network '{}' is not a managed network", network.name)
     };
 
     // Network directory
-    let nd = ctx.network.get_network_directory(network)?;
+    let nd = ctx.network.get_network_directory(&network)?;
 
     let descriptor = nd
         .load_network_descriptor()
         .await?
-        .ok_or_else(|| anyhow!("network '{}' is not running", cmd.name))?;
+        .ok_or_else(|| anyhow::anyhow!("network '{}' is not running", network.name))?;
 
     match &descriptor.child_locator {
         ChildLocator::Pid { pid } => {

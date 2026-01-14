@@ -57,11 +57,12 @@ mod heading {
 
 #[derive(Parser)]
 #[command(
-    version = icp_cli_version_str(),
+    name = "icp",
+    version,
     arg_required_else_help(true),
     about,
     next_line_help(false),
-    styles(style::STYLES),
+    styles(style::STYLES)
 )]
 struct Cli {
     /// Directory to use as your project root directory.
@@ -76,6 +77,10 @@ struct Cli {
     /// Enable debug logging
     #[arg(long, default_value = "false", global = true, help_heading = heading::GLOBAL_PARAMETERS)]
     debug: bool,
+
+    /// Read identity password from a file instead of prompting
+    #[arg(long, global = true, value_name = "FILE", help_heading = heading::GLOBAL_PARAMETERS)]
+    identity_password_file: Option<PathBuf>,
 
     /// Generate markdown documentation for all commands and exit
     #[arg(long, hide = true)]
@@ -162,7 +167,20 @@ async fn main() -> Result<(), Error> {
         "Starting icp-cli"
     );
 
-    let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug)?;
+    let password_func: icp::identity::PasswordFunc = match cli.identity_password_file {
+        Some(path) => Box::new(move || {
+            icp::fs::read_to_string(&path)
+                .map(|s| s.trim().to_string())
+                .map_err(|e| e.to_string())
+        }),
+        None => Box::new(|| {
+            dialoguer::Password::new()
+                .with_prompt("Enter identity password")
+                .interact()
+                .map_err(|e| e.to_string())
+        }),
+    };
+    let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug, password_func)?;
 
     match command {
         // Build
@@ -341,6 +359,12 @@ async fn main() -> Result<(), Error> {
 
             commands::network::Command::Stop(args) => {
                 commands::network::stop::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::network::Command::Update(args) => {
+                commands::network::update::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }

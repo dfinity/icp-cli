@@ -256,10 +256,35 @@ There are two types of networks:
 - managed - this is a network whose lifecycle icp-cli is responsible for.
 - external - A remote network that is hosted, this could be mainnet or a remote instance of pocket-ic serving as a long lived testnet.
 
-You can define your own networks but there are two implict networks defined:
-- local - A managed network that is spun up with the network launcher and typically used for local development.
-- mainnet - The mainnet, production network.
+You can define your own networks. There are two implicit networks:
+- local - A managed network that is spun up with the network launcher and typically used for local development. This network can be overridden in your icp.yaml if you need custom configuration (e.g., different port, connecting to an existing network).
+- mainnet - The mainnet, production network. This network is protected and cannot be overridden to prevent accidental deployment to production with incorrect settings.
 
+#### Overriding the Local Network
+
+The default "local" network uses `localhost:8000` as a managed network. You can override this if you need different configuration:
+
+**Example: Custom port**
+```yaml
+networks:
+  - name: local
+    mode: managed
+    gateway:
+      port: 9999
+```
+
+**Example: Connect to existing network**
+```yaml
+networks:
+  - name: local
+    mode: connected
+    url: http://192.168.1.100:8000
+    root-key: <root-key-hex>
+```
+
+**Important**: The "mainnet" network cannot be overridden for safety reasons. Attempting to define a network named "mainnet" will result in an error.
+
+#### Defining Custom Networks
 
 ```yaml
 networks:
@@ -317,7 +342,7 @@ There are implicit environments:
 - `local` - Assumes the local network and assumed to be the default
 - `ic` - Assumes mainnet
 
-Canisters can have different settings in each environment.
+Canisters can have different settings in each environment. Settings specified at the environment level will override any settings defined at the canister level.
 
 Example configuration:
 
@@ -390,6 +415,55 @@ settings:
     API_URL: "https://api.example.com"
     FEATURE_FLAGS: "advanced_mode=true,beta_features=false"
     CORS_ORIGINS: "https://myapp.com,https://staging.myapp.com"
+```
+
+### Initialization Arguments
+
+Specify arguments passed to the canister during installation. These arguments are provided to the canister's `init` function when the WASM module is first installed, and to `post_upgrate` when upgrading a canister's WASM module.
+
+```yaml
+canisters:
+  - name: my-canister
+    build:
+      steps:
+        - type: pre-built
+          path: ./canister.wasm
+    
+    # Init args as Candid text format
+    init_args: "(record { owner = principal \"aaaaa-aa\"; name = \"My Canister\" })"
+    
+    # Or as hex-encoded bytes
+    # init_args: "4449444c016d7b0100010203"
+```
+
+The `init_args` field accepts a string that can be in one of two formats:
+
+1. **Candid text format**: Standard Candid notation like `(42)`, `(record { field = "value" })`, etc.
+2. **Hex-encoded bytes**: If the string is valid hexadecimal, it will be decoded as raw bytes
+
+#### Environment-Specific Init Args
+
+Override init args for specific canisters per environment. This is useful for providing different configuration values for development, staging, and production deployments:
+
+```yaml
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: ./backend.wasm
+    
+    # Default init args (production settings for security)
+    init_args: "(record { mode = \"production\"; debug = false })"
+
+environments:
+  - name: development
+    network: local
+    canisters: [backend]
+    
+    # Override init args for development
+    init_args:
+      backend: "(record { mode = \"development\"; debug = true })"
 ```
 
 ## Advanced Configuration Patterns

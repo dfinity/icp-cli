@@ -1,6 +1,6 @@
 /target
 .DS_Store
-.cursor/
+.cursor
 
 # Local (directories)
 .icp

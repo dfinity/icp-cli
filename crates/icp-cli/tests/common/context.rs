@@ -10,6 +10,7 @@ use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
 use ic_agent::Agent;
 use icp::{
+    directories::{Access, Directories},
     network::managed::{
         launcher::{NetworkInstance, wait_for_launcher_status},
         run::initialize_network,
@@ -23,6 +24,7 @@ pub(crate) struct TestContext {
     home_dir: TempDir,
     bin_dir: PathBuf,
     asset_dir: PathBuf,
+    mock_cred_dir: PathBuf,
     os_path: OsString,
     gateway_url: OnceCell<Url>,
     root_key: OnceCell<Vec<u8>>,
@@ -41,6 +43,10 @@ impl TestContext {
         let asset_dir = home_dir.path().join("share");
         fs::create_dir(&asset_dir).expect("failed to create asset dir");
 
+        // Credentials
+        let mock_cred_dir = home_dir.path().join("mock-keyring");
+        fs::create_dir(&mock_cred_dir).expect("failed to create mock keyring dir");
+
         eprintln!("Test environment home directory: {}", home_dir.path());
 
         // OS Path
@@ -50,6 +56,7 @@ impl TestContext {
             home_dir,
             bin_dir,
             asset_dir,
+            mock_cred_dir,
             os_path,
             gateway_url: OnceCell::new(),
             root_key: OnceCell::new(),
@@ -68,8 +75,41 @@ impl TestContext {
         cmd.env("HOME", self.home_path());
         cmd.env("PATH", self.os_path.clone());
         cmd.env_remove("ICP_HOME");
+        cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
 
         cmd
+    }
+
+    pub(crate) async fn launcher_path(&self) -> PathBuf {
+        if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+            PathBuf::from(var)
+        } else {
+            // replicate the command's logic to only perform it if needed, and perform it in the user home instead of the test home
+            let cache = Directories::new()
+                .unwrap()
+                .package_cache()
+                .unwrap()
+                .into_write()
+                .await
+                .unwrap();
+            if let Some(path) = icp::network::managed::cache::get_cached_launcher_version(
+                cache.as_ref().read(),
+                "latest",
+            )
+            .unwrap()
+            {
+                path
+            } else {
+                let (_ver, path) = icp::network::managed::cache::download_launcher_version(
+                    cache.as_ref(),
+                    "latest",
+                    &reqwest::Client::new(),
+                )
+                .await
+                .unwrap();
+                path
+            }
+        }
     }
 
     fn build_os_path(bin_dir: &Path) -> OsString {
@@ -84,11 +124,43 @@ impl TestContext {
         env!("CARGO_MANIFEST_DIR").into()
     }
 
+    fn asset_source_path(&self, name: &str) -> PathBuf {
+        self.pkg_dir().join(format!("tests/assets/{name}"))
+    }
+
     pub(crate) fn make_asset(&self, name: &str) -> PathBuf {
         let target = self.asset_dir.join(name);
-        fs::copy(self.pkg_dir().join(format!("tests/assets/{name}")), &target)
-            .expect("failed to copy asset");
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).expect("failed to create asset parent directories");
+        }
+        fs::copy(self.asset_source_path(name), &target).expect("failed to copy asset");
         target
+    }
+
+    /// Copy an entire asset directory to the specified destination
+    pub(crate) fn copy_asset_dir(&self, asset_name: &str, dest: &Path) {
+        let source = self.asset_source_path(asset_name);
+        if !source.exists() {
+            panic!("Asset directory not found: {}", source);
+        }
+        Self::copy_dir_recursive(&source, dest);
+    }
+
+    fn copy_dir_recursive(src: &Path, dest: &Path) {
+        fs::create_dir_all(dest).expect("failed to create destination directory");
+        for entry in fs::read_dir(src.as_std_path()).expect("failed to read source directory") {
+            let entry = entry.expect("failed to read directory entry");
+            let std_path = entry.path();
+            let file_name = std_path.file_name().expect("failed to get file name");
+            let dest_path = dest.join(file_name.to_str().expect("invalid UTF-8 in filename"));
+
+            if std_path.is_dir() {
+                let src_path = PathBuf::try_from(std_path).expect("invalid UTF-8 in path");
+                Self::copy_dir_recursive(&src_path, &dest_path);
+            } else {
+                fs::copy(&std_path, dest_path.as_std_path()).expect("failed to copy file");
+            }
+        }
     }
     pub(crate) fn create_project_dir(&self, name: &str) -> PathBuf {
         let project_dir = self.home_path().join(name);
@@ -99,7 +171,7 @@ impl TestContext {
 
     /// Calling this method more than once will panic.
     /// Calling this method after calling [TestContext::start_network_with_config] will panic.
-    pub(crate) fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
+    pub(crate) async fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir)
@@ -108,6 +180,9 @@ impl TestContext {
             .arg("network")
             .arg("start")
             .arg(name);
+
+        let launcher_path = self.launcher_path().await;
+        cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
 
         eprintln!("Running network in {project_dir}");
 
@@ -147,10 +222,7 @@ impl TestContext {
         project_dir: &Path,
         flags: &[&str],
     ) -> ChildGuard {
-        let launcher_path = PathBuf::from(
-            env::var("ICP_CLI_NETWORK_LAUNCHER_PATH")
-                .expect("ICP_CLI_NETWORK_LAUNCHER_PATH must be set"),
-        );
+        let launcher_path = self.launcher_path().await;
 
         // Create network directory structure
         let network_dir = project_dir

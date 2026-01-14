@@ -87,7 +87,5 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     )
     .await?;
 
-    let _ = ctx.term.write_line("\nCanisters synced successfully");
-
     Ok(())
 }

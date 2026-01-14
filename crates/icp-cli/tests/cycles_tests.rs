@@ -26,7 +26,7 @@ async fn cycles_balance() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
 
     // Wait for network
     ctx.ping_until_healthy(&project_dir, "random-network");
@@ -119,7 +119,7 @@ async fn cycles_mint_with_explicit_network() {
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Create identity and mint ICP

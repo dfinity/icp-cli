@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Gateway, Managed, ManagedMode, NetworkDirectory, Port,
+        Gateway, Managed, ManagedImageConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
@@ -157,6 +157,16 @@ async fn run_network_launcher(
                     };
                     (ShutdownGuard::Container(guard), instance, gateway, locator)
                 }
+                ManagedMode::Launcher { gateway } if cfg!(windows) /* todo machine setting for unix */ => {
+                    let image_config = transform_native_launcher_to_container(gateway.clone());
+                    let (guard, instance, locator) =
+                        spawn_docker_launcher(&image_config).await?;
+                    let gateway = NetworkDescriptorGatewayPort {
+                        port: instance.gateway_port,
+                        fixed: false,
+                    };
+                    (ShutdownGuard::Container(guard), instance, gateway, locator)
+                }
                 ManagedMode::Launcher { gateway } => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
@@ -231,6 +241,27 @@ async fn run_network_launcher(
         let _ = nd.cleanup_port_descriptor(Some(port)).await;
     }
     Ok(())
+}
+
+fn transform_native_launcher_to_container(gateway: Gateway) -> ManagedImageConfig {
+    let port = match gateway.port {
+        Port::Fixed(port) => port,
+        Port::Random => 0,
+    };
+    ManagedImageConfig {
+        image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+        port_mapping: vec![format!("{port}:4943")],
+        rm_on_exit: true,
+        args: vec![],
+        entrypoint: None,
+        environment: vec![],
+        volumes: vec![],
+        platform: None,
+        user: None,
+        shm_size: None,
+        status_dir: "/app/status".to_string(),
+        mounts: vec![],
+    }
 }
 
 enum ShutdownGuard {

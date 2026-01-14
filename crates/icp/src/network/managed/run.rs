@@ -252,7 +252,7 @@ fn transform_native_launcher_to_container(gateway: Gateway) -> ManagedImageConfi
         image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
         port_mapping: vec![format!("{port}:4943")],
         rm_on_exit: true,
-        args: vec![],
+        args: vec!["--ii".to_string()],
         entrypoint: None,
         environment: vec![],
         volumes: vec![],

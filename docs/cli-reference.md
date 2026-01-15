@@ -12,6 +12,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister delete`↴](#icp-canister-delete)
 * [`icp canister install`↴](#icp-canister-install)
 * [`icp canister list`↴](#icp-canister-list)
+* [`icp canister metadata`↴](#icp-canister-metadata)
 * [`icp canister settings`↴](#icp-canister-settings)
 * [`icp canister settings show`↴](#icp-canister-settings-show)
 * [`icp canister settings update`↴](#icp-canister-settings-update)
@@ -105,6 +106,7 @@ Perform canister operations against a network
 * `delete` — Delete a canister from a network
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
+* `metadata` — Read a metadata section from a canister
 * `settings` — Commands to manage canister settings
 * `start` — Start a canister on a network
 * `status` — Show the status of canister(s)
@@ -224,6 +226,27 @@ List the canisters in an environment
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
+
+
+
+## `icp canister metadata`
+
+Read a metadata section from a canister
+
+**Usage:** `icp canister metadata [OPTIONS] <CANISTER> <METADATA_NAME>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — The canister name or principal to target. When using a name, an environment must be specified
+* `<METADATA_NAME>` — The name of the metadata section to read
+
+###### **Options:**
+
+* `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--mainnet` — Shorthand for --network=mainnet
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--ic` — Shorthand for --environment=ic
+* `--identity <IDENTITY>` — The user identity to run this command as
 
 
 

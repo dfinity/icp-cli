@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: `icp canister metadata <canister> <metadata section>` now fetches metadata sections from specified canisters
+
 # v0.1.0-beta.3
 
 * feat: Remove requirement that the user install `icp-cli-network-launcher`, auto-install it on first use

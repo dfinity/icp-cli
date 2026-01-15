@@ -1,11 +1,10 @@
 use anyhow::bail;
 use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
-use console::Term;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::ProjectLoadError;
-use icp::context::{CanisterSelection, Context};
+use icp::context::{CanisterSelection, Context, TermWriter};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
@@ -413,7 +412,7 @@ fn get_environment_variables(
 }
 
 fn maybe_warn_on_env_vars_change(
-    mut term: &Term,
+    mut term: &TermWriter,
     configured_settings: &icp::canister::Settings,
     environment_variables_opt: &EnvironmentVariableOpt,
 ) -> Result<(), anyhow::Error> {

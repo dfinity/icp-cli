@@ -2,7 +2,7 @@ use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
 use console::Term;
-use icp::prelude::*;
+use icp::{context::TermWriter, prelude::*};
 use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
@@ -109,15 +109,10 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    // Printing for user-facing messages
-    // let term = Term::read_write_pair(
-    //     std::io::stdin(),
-    //     TermWriter {
-    //         debug: cli.debug,
-    //         writer: Box::new(std::io::stdout()),
-    //     },
-    // );
-    let term = Term::stdout();
+    let term = TermWriter {
+        debug: cli.debug,
+        raw_term: Term::stdout(),
+    };
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (

@@ -11,7 +11,6 @@ use predicates::{
 };
 use serde_json::Value;
 use serial_test::file_serial;
-use sysinfo::{ProcessesToUpdate, System};
 use test_tag::tag;
 
 use crate::common::{
@@ -353,12 +352,24 @@ async fn network_run_and_stop_background() {
         .trim()
         .parse()
         .expect("Descriptor file should contain valid JSON");
-    let background_launcher_pid = descriptor
-        .get("child-locator")
-        .and_then(|cl| cl.get("pid"))
-        .and_then(|pid| pid.as_u64())
-        .expect("Descriptor should contain launcher PID");
-    let background_launcher_pid = (background_launcher_pid as usize).into();
+    #[cfg(unix)]
+    let background_launcher_pid = {
+        let background_launcher_pid = descriptor
+            .get("child-locator")
+            .and_then(|cl| cl.get("pid"))
+            .and_then(|pid| pid.as_u64())
+            .expect("Descriptor should contain launcher PID");
+        (background_launcher_pid as usize).into()
+    };
+    #[cfg(windows)]
+    let background_container_id = {
+        let background_container_id = descriptor
+            .get("child-locator")
+            .and_then(|c| c.get("id"))
+            .and_then(|cid| cid.as_str())
+            .expect("Descriptor should contain launcher container ID");
+        background_container_id.to_string()
+    };
 
     // Verify network is healthy with agent.status()
     let agent = ic_agent::Agent::builder()
@@ -373,30 +384,53 @@ async fn network_run_and_stop_background() {
     );
 
     // Stop the network
-    ctx.icp()
+    let mut stop = ctx
+        .icp()
         .current_dir(&project_dir)
         .args(["network", "stop", "random-network"])
         .assert()
-        .success()
-        .stdout(contains(format!(
+        .success();
+    #[cfg(unix)]
+    {
+        stop = stop.stdout(contains(format!(
             "Stopping background network (PID: {})",
             background_launcher_pid
-        )))
-        .stdout(contains("Network stopped successfully"));
+        )));
+    }
+    #[cfg(windows)]
+    {
+        stop = stop.stdout(contains(format!(
+            "Stopping background network (container ID: {})",
+            &background_container_id[..12]
+        )));
+    }
+    stop.stdout(contains("Network stopped successfully"));
 
-    // Verify PID file is removed
+    // Verify descriptor file is removed
     assert!(
         !descriptor_file_path.exists(),
         "Descriptor file should be removed after stopping"
     );
 
     // Verify launcher process is no longer running
-    let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
-    assert!(
-        system.process(background_launcher_pid).is_none(),
-        "Process should no longer be running"
-    );
+    #[cfg(unix)]
+    {
+        use sysinfo::{ProcessesToUpdate, System};
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
+        assert!(
+            system.process(background_launcher_pid).is_none(),
+            "Process should no longer be running"
+        );
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("docker")
+            .args(["inspect", &background_container_id])
+            .output()
+            .expect("Failed to run docker inspect");
+        assert!(!output.status.success(), "Container should no longer exist");
+    }
 
     // Verify network is no longer reachable
     let status_result = agent.status().await;

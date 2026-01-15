@@ -25,6 +25,7 @@ clap-markdown.workspace = true
 clap.workspace = true
 console.workspace = true
 dialoguer.workspace = true
+dunce.workspace = true
 elliptic-curve.workspace = true
 futures.workspace = true
 hex.workspace = true

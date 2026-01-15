@@ -401,7 +401,7 @@ async fn network_run_and_stop_background() {
     {
         stop = stop.stdout(contains(format!(
             "Stopping background network (container ID: {})",
-            background_container_id[..12]
+            &background_container_id[..12]
         )));
     }
     stop.stdout(contains("Network stopped successfully"));

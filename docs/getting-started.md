@@ -254,6 +254,10 @@ Now that you have your first canister running, explore:
 - Ensure all required tools are installed and in PATH
 - Check language-specific prerequisites
 
+**Build scripts fail on Windows**
+- Build scripts require Git for Windows or MSYS2. If detection fails, set `ICP_CLI_BASH_PATH` to the path of your bash executable (e.g., `C:\Program Files\Git\bin\bash.exe` or `C:\msys64\usr\bin\bash.exe`)
+- Note: WSL bash (`C:\Windows\System32\bash.exe`) is not supported
+
 **Network connection fails**
 - Verify `icp network start` is running in another terminal
 - The network launcher is automatically downloaded on first use. If you experience issues, you can manually set `ICP_CLI_NETWORK_LAUNCHER_PATH` to a specific launcher binary for debugging

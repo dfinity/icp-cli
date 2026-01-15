@@ -39,9 +39,14 @@ pub enum ScriptError {
 
     #[cfg(windows)]
     #[snafu(display(
-        "failed to locate Git for Windows (try running in Git Bash or an MSYS2 shell)"
+        "failed to locate Git for Windows (if you prefer MSYS2, set ICP_CLI_BASH_PATH to the bash.exe path)"
     ))]
     LocateGit,
+
+    #[snafu(display(
+        "WSL bash is not supported in the Windows version of icp-cli. Use the Linux version instead."
+    ))]
+    WslBash,
 }
 
 pub(super) async fn execute(
@@ -161,8 +166,11 @@ fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
     #[cfg(unix)]
     let mut cmd = Command::new("sh");
     #[cfg(windows)]
-    let mut cmd = if let Some(_) = std::env::var_os("MSYSTEM") {
-        Command::new("bash")
+    let mut cmd = if let Ok(bash_path) = std::env::var("ICP_CLI_BASH_PATH") {
+        if bash_path == r"C:\Windows\System32\bash.exe" {
+            return WslBashSnafu.fail();
+        }
+        Command::new(bash_path)
     } else {
         use winreg::{RegKey, enums::*};
         let git_for_windows_path = if let Ok(lm_path) = RegKey::predef(HKEY_LOCAL_MACHINE)

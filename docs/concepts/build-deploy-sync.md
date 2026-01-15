@@ -30,9 +30,10 @@ The build phase transforms your source code into WebAssembly (WASM) bytecode.
 
 ### Key Points
 
-- icp-cli **delegates** compilation to your language toolchain (Cargo, moc, etc.)
-- Build output should be **reproducible** — no deployment-specific values baked in
-- The toolchain decides whether rebuilding is necessary
+- icp-cli **delegates** compilation to your language toolchain (Cargo for rust, mops for Motoko, etc.)
+- Build output should be **reproducible** — no environment specific values should be baked in.
+- The toolchain decides whether rebuilding is necessary.
+- As part of the build phase you might build assets to be synchronized to the canister after the was is installed. For example, bundled web assets to serve a frontend.
 
 ### Build Step Types
 
@@ -62,9 +63,9 @@ build:
 ```yaml
 build:
   steps:
-    - type: assets
-      source: www
-      target: /
+    - type: script
+      commands:
+        - npm run build
 ```
 
 ### Environment Variables
@@ -103,8 +104,6 @@ The sync phase handles post-deployment operations that depend on the canister be
 ### Common Use Cases
 
 - **Asset canisters** — Upload static files after the canister is running
-- **Configuration** — Set runtime values that require the canister ID
-- **Inter-canister setup** — Register with other canisters
 
 ### Asset Sync
 
@@ -137,8 +136,8 @@ The `icp deploy` command is a composite command that executes multiple steps in 
 
 1. **Build** — Compile all target canisters to WASM (always runs)
 2. **Create** — Create canisters on the network (only for canisters that don't exist yet)
-3. **Set environment variables** — Configure binding environment variables for canister interactions
-4. **Sync settings** — Apply canister settings (controllers, memory allocation, compute allocation, etc.)
+3. **Update Canister Environment Variables** — Apply the updated Canister Environment Variables. These include variables used by bindings allowing canister interactions.
+4. **Update Settings** — Apply canister settings (controllers, memory allocation, compute allocation, etc.)
 5. **Install** — Install WASM code into canisters (always runs)
 6. **Sync** — Run post-deployment steps like asset uploads (only if sync steps are configured)
 
@@ -147,12 +146,13 @@ The `icp deploy` command is a composite command that executes multiple steps in 
 **First deployment:**
 - All steps run
 - New canisters are created on the network
+- Settings are applied
 - WASM code is installed (install mode)
 
 **Subsequent deployments:**
-- Create step is silently skipped for existing canisters
+- Skip the canister creation
+- Settings and Environment Variables are applied if they've changed.
 - WASM code is upgraded, preserving canister state
-- Settings are synced if changed
 
 Unlike `icp canister create` (which prints "already exists" and exits), `icp deploy` silently skips creation for existing canisters and continues with the remaining steps.
 
@@ -179,12 +179,12 @@ icp deploy --mode reinstall
 What `icp deploy` does can be broken down into:
 
 ```bash
-icp build                    # 1. Build
-icp canister create          # 2. Create (if needed)
-# (env vars set internally)  # 3. Set environment variables
-# (settings synced internally) # 4. Sync settings
+icp build                         # 1. Build
+icp canister create               # 2. Create (if needed)
+# (canister env vars updated)     # 3. Set environment variables
+# (canister settings updated)     # 4. Sync settings
 icp canister install --mode auto  # 5. Install
-icp sync                     # 6. Sync (if configured)
+icp sync                          # 6. Sync (if configured)
 ```
 
 ### Running Phases Separately
@@ -204,7 +204,7 @@ icp sync
 - `icp build` — Verify compilation succeeds before deploying
 - `icp sync` — Update assets without redeploying code (faster iteration for frontends)
 
-**Note:** `icp deploy` always builds first. There's no way to skip the build phase during deploy. If you've already built and want to avoid rebuilding, the build step will be fast since your toolchain (Cargo, moc, etc.) handles incremental compilation.
+**Note:** `icp deploy` always builds first. There's no way to skip the build phase during deploy. The build phase relies on the underlying toolchain (Cargo, moc, etc.) handling incremental compilation.
 
 ## Next Steps
 

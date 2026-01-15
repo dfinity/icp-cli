@@ -12,8 +12,8 @@ sleep 1
 # Function to cleanup server on exit
 cleanup() {
     echo "Stopping HTTP server (PID: $SERVER_PID)"
-    kill $SERVER_PID 2>/dev/null
-    wait $SERVER_PID 2>/dev/null
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
 }
 
 # Ensure cleanup happens on script exit
@@ -21,5 +21,3 @@ trap cleanup EXIT
 
 # Run icp project show
 icp project show
-
-exit $?

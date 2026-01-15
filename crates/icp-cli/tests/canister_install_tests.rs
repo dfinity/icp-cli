@@ -26,7 +26,7 @@ async fn canister_install() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -202,6 +202,7 @@ async fn canister_install_with_wasm_flag() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_install_with_init_args_candid() {
     let ctx = TestContext::new();
@@ -265,6 +266,7 @@ async fn canister_install_with_init_args_candid() {
         .stdout(eq("(\"42\")").trim());
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_install_with_init_args_hex() {
     let ctx = TestContext::new();
@@ -329,6 +331,7 @@ async fn canister_install_with_init_args_hex() {
         .stdout(eq("(\"100\")").trim());
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_install_with_environment_init_args_override() {
     let ctx = TestContext::new();
@@ -397,6 +400,7 @@ async fn canister_install_with_environment_init_args_override() {
         .stdout(eq("(\"200\")").trim());
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_install_with_invalid_init_args() {
     let ctx = TestContext::new();
@@ -469,7 +473,7 @@ async fn canister_install_with_environment_settings_override() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             settings:
               memory_allocation: 1073741824
 

@@ -11,7 +11,6 @@ use predicates::{
 };
 use serde_json::Value;
 use serial_test::file_serial;
-use sysinfo::{ProcessesToUpdate, System};
 use test_tag::tag;
 
 use crate::common::{
@@ -366,7 +365,6 @@ async fn network_run_and_stop_background() {
     let background_container_id = {
         let background_container_id = descriptor
             .get("child-locator")
-            .and_then(|cl| cl.get("container"))
             .and_then(|c| c.get("id"))
             .and_then(|cid| cid.as_str())
             .expect("Descriptor should contain launcher container ID");
@@ -417,6 +415,7 @@ async fn network_run_and_stop_background() {
     // Verify launcher process is no longer running
     #[cfg(unix)]
     {
+        use sysinfo::{ProcessesToUpdate, System};
         let mut system = System::new();
         system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
         assert!(
@@ -430,10 +429,7 @@ async fn network_run_and_stop_background() {
             .args(["inspect", &background_container_id])
             .output()
             .expect("Failed to run docker inspect");
-        assert!(
-            !output.status.success(),
-            "Container should no longer exist"
-        );
+        assert!(!output.status.success(), "Container should no longer exist");
     }
 
     // Verify network is no longer reachable

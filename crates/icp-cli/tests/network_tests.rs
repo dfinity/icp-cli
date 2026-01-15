@@ -408,19 +408,33 @@ async fn network_run_and_stop_background() {
     }
     stop.stdout(contains("Network stopped successfully"));
 
-    // Verify PID file is removed
+    // Verify descriptor file is removed
     assert!(
         !descriptor_file_path.exists(),
         "Descriptor file should be removed after stopping"
     );
 
     // Verify launcher process is no longer running
-    let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
-    assert!(
-        system.process(background_launcher_pid).is_none(),
-        "Process should no longer be running"
-    );
+    #[cfg(unix)]
+    {
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::Some(&[background_launcher_pid]), true);
+        assert!(
+            system.process(background_launcher_pid).is_none(),
+            "Process should no longer be running"
+        );
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("docker")
+            .args(["inspect", &background_container_id])
+            .output()
+            .expect("Failed to run docker inspect");
+        assert!(
+            !output.status.success(),
+            "Container should no longer exist"
+        );
+    }
 
     // Verify network is no longer reachable
     let status_result = agent.status().await;

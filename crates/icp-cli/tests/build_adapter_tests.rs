@@ -24,7 +24,7 @@ fn build_adapter_pre_built_path() {
             build:
               steps:
                 - type: pre-built
-                  path: {wasm}
+                  path: '{wasm}'
     "#};
 
     write_string(
@@ -66,7 +66,7 @@ fn build_adapter_pre_built_path_invalid_checksum() {
             build:
               steps:
                 - type: pre-built
-                  path: {wasm}
+                  path: '{wasm}'
                   sha256: invalid
     "#};
 
@@ -114,7 +114,7 @@ fn build_adapter_pre_built_path_valid_checksum() {
             build:
               steps:
                 - type: pre-built
-                  path: {wasm}
+                  path: '{wasm}'
                   sha256: {actual}
     "#};
 

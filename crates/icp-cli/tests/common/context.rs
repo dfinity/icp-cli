@@ -11,7 +11,6 @@ use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
 use ic_agent::Agent;
 use icp::{
-    directories::{Access, Directories},
     network::managed::{
         launcher::{NetworkInstance, wait_for_launcher_status},
         run::initialize_network,
@@ -48,6 +47,10 @@ impl TestContext {
         let mock_cred_dir = home_dir.path().join("mock-keyring");
         fs::create_dir(&mock_cred_dir).expect("failed to create mock keyring dir");
 
+        // App files
+        let icp_home_dir = home_dir.path().join("icp");
+        fs::create_dir(&icp_home_dir).expect("failed to create icp home dir");
+
         eprintln!("Test environment home directory: {}", home_dir.path());
 
         // OS Path
@@ -73,9 +76,11 @@ impl TestContext {
 
         // Isolate the command
         cmd.current_dir(self.home_path());
-        cmd.env("HOME", self.home_path());
+        #[cfg(unix)]
+        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        #[cfg(windows)]
+        cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.env("PATH", self.os_path.clone());
-        cmd.env_remove("ICP_HOME");
         cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
 
         cmd
@@ -83,6 +88,7 @@ impl TestContext {
 
     #[cfg(unix)]
     pub(crate) async fn launcher_path(&self) -> PathBuf {
+        use icp::directories::{Access, Directories};
         if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
             PathBuf::from(var)
         } else {
@@ -187,12 +193,12 @@ impl TestContext {
     pub(crate) async fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
-        cmd.current_dir(project_dir)
-            .env("HOME", self.home_path())
-            .env_remove("ICP_HOME")
-            .arg("network")
-            .arg("start")
-            .arg(name);
+        cmd.current_dir(project_dir);
+        #[cfg(unix)]
+        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        #[cfg(windows)]
+        cmd.env("ICP_HOME", self.home_path().join("icp"));
+        cmd.arg("network").arg("start").arg(name);
         #[cfg(unix)]
         {
             let launcher_path = self.launcher_path().await;

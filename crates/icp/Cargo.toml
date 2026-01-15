@@ -39,7 +39,6 @@ k256 = { workspace = true }
 keyring = { workspace = true }
 notify = { workspace = true }
 p256 = { workspace = true }
-pathsearch = { workspace = true }
 pem = { workspace = true }
 pkcs8 = { workspace = true }
 rand = { workspace = true }
@@ -64,6 +63,9 @@ tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 zeroize = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = { workspace = true }
 
 [dev-dependencies]
 jsonschema = { workspace = true }

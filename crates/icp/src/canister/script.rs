@@ -172,22 +172,24 @@ fn shell_command(s: &str, cwd: &Path) -> Result<Command, ScriptError> {
     #[cfg(unix)]
     let mut cmd = Command::new("sh");
     #[cfg(windows)]
-    let mut cmd = if let Some(_) = std::env::var_os("BASH_VERSION") {
+    let mut cmd = if let Some(_) = std::env::var_os("MSYSTEM") {
         Command::new("bash")
     } else {
-        if let Some(git_path) = pathsearch::find_executable_in_path("git") {
-            let git_path =
-                PathBuf::try_from(git_path.clone()).context(BadPathSnafu { path: git_path })?;
-            if let Some(cmd_path) = git_path.parent()
-                && cmd_path.ends_with("cmd")
-            {
-                Command::new(cmd_path.parent().unwrap().join("bin/bash.exe"))
-            } else {
-                return LocateBashSnafu { git_path }.fail();
-            }
+        use winreg::{RegKey, enums::*};
+        let git_for_windows_path = if let Ok(lm_path) = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SOFTWARE\GitForWindows")
+            .and_then(|key| key.get_value::<String, _>("InstallPath"))
+        {
+            lm_path
+        } else if let Ok(cu_path) = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(r"SOFTWARE\GitForWindows")
+            .and_then(|key| key.get_value::<String, _>("InstallPath"))
+        {
+            cu_path
         } else {
             return LocateGitSnafu.fail();
-        }
+        };
+        Command::new(git_for_windows_path.join("bin/bash.exe"))
     };
     cmd.args(["-c", s]);
     cmd.current_dir(cwd);

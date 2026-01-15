@@ -353,12 +353,25 @@ async fn network_run_and_stop_background() {
         .trim()
         .parse()
         .expect("Descriptor file should contain valid JSON");
-    let background_launcher_pid = descriptor
-        .get("child-locator")
-        .and_then(|cl| cl.get("pid"))
-        .and_then(|pid| pid.as_u64())
-        .expect("Descriptor should contain launcher PID");
-    let background_launcher_pid = (background_launcher_pid as usize).into();
+    #[cfg(unix)]
+    let background_launcher_pid = {
+        let background_launcher_pid = descriptor
+            .get("child-locator")
+            .and_then(|cl| cl.get("pid"))
+            .and_then(|pid| pid.as_u64())
+            .expect("Descriptor should contain launcher PID");
+        (background_launcher_pid as usize).into()
+    };
+    #[cfg(windows)]
+    let background_container_id = {
+        let background_container_id = descriptor
+            .get("child-locator")
+            .and_then(|cl| cl.get("container"))
+            .and_then(|c| c.get("id"))
+            .and_then(|cid| cid.as_str())
+            .expect("Descriptor should contain launcher container ID");
+        background_container_id.to_string()
+    };
 
     // Verify network is healthy with agent.status()
     let agent = ic_agent::Agent::builder()
@@ -373,16 +386,27 @@ async fn network_run_and_stop_background() {
     );
 
     // Stop the network
-    ctx.icp()
+    let mut stop = ctx
+        .icp()
         .current_dir(&project_dir)
         .args(["network", "stop", "random-network"])
         .assert()
-        .success()
-        .stdout(contains(format!(
+        .success();
+    #[cfg(unix)]
+    {
+        stop = stop.stdout(contains(format!(
             "Stopping background network (PID: {})",
             background_launcher_pid
-        )))
-        .stdout(contains("Network stopped successfully"));
+        )));
+    }
+    #[cfg(windows)]
+    {
+        stop = stop.stdout(contains(format!(
+            "Stopping background network (container ID: {})",
+            background_container_id
+        )));
+    }
+    stop.stdout(contains("Network stopped successfully"));
 
     // Verify PID file is removed
     assert!(

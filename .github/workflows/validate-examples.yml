@@ -1,0 +1,103 @@
+name: Validate Examples
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  # When getting Rust dependencies, retry on network error:
+  CARGO_NET_RETRY: 10
+  # Use the local .curlrc
+  CURL_HOME: .
+
+jobs:
+  validate-examples:
+    name: Validate Examples on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.rustup/
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build icp CLI
+        run: cargo build
+
+      - name: Validate examples
+        run: |
+          # Add icp binary to PATH
+          export PATH="$(pwd)/target/debug:$PATH"
+          echo "icp version: $(icp --version)"
+          
+          # Get all example directories
+          for example_dir in examples/*/; do
+            # Skip if not a directory
+            if [ ! -d "$example_dir" ]; then
+              continue
+            fi
+            
+            example_name=$(basename "$example_dir")
+            echo ""
+            echo "=========================================="
+            echo "Validating example: $example_name"
+            echo "=========================================="
+            
+            pushd "$example_dir"
+            
+            # Run icp project show to validate the project
+            echo "Running: icp project show"
+            if ! icp project show; then
+              echo "❌ Failed to validate project in $example_name"
+              exit 1
+            fi
+            echo "✅ Project validation successful for $example_name"
+            
+            # Check if test.sh exists and run it
+            if [ -f "test.sh" ]; then
+              echo "Found test.sh, running it..."
+              if ! bash test.sh; then
+                echo "❌ test.sh failed in $example_name"
+                exit 1
+              fi
+              echo "✅ test.sh passed for $example_name"
+            else
+              echo "No test.sh found, skipping test execution"
+            fi
+            
+            popd
+          done
+          
+          echo ""
+          echo "=========================================="
+          echo "✅ All examples validated successfully!"
+          echo "=========================================="
+
+  aggregate:
+    name: validate-examples:required
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    needs: [validate-examples]
+    steps:
+      - name: check result
+        if: ${{ needs.validate-examples.result != 'success' }}
+        run: exit 1

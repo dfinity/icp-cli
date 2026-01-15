@@ -72,7 +72,7 @@ async fn network_same_port() {
         .failure()
         .stderr(contains(format!(
             "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
-            project_dir_a.canonicalize().unwrap().display()
+            dunce::canonicalize(&project_dir_a).unwrap().display()
         )));
 }
 

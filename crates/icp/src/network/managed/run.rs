@@ -185,10 +185,6 @@ async fn run_network_launcher(
                         &root.state_dir(),
                     )
                     .await?;
-                    if background {
-                        // background means we're using stdio files - otherwise the launcher already prints this
-                        eprintln!("Network started on port {}", instance.gateway_port);
-                    }
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(gateway.port, Port::Fixed(_)),
@@ -196,6 +192,10 @@ async fn run_network_launcher(
                     (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
             };
+            if background {
+                // background means we're using stdio files - otherwise the launcher already prints this
+                eprintln!("Network started on port {}", instance.gateway_port);
+            }
             let candid_ui_canister_id = initialize_network(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()

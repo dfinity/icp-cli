@@ -4,16 +4,11 @@ Deploy your first canister on the Internet Computer in under 10 minutes.
 
 ## Prerequisites
 
-**Language-specific toolchains:**
-- For Rust canisters: [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
-- For Motoko canisters: [mops](https://cli.mops.one/) (run `mops toolchain init` after installation)
+Install icp-cli and the toolchain for your canister language.
 
-**Building icp-cli from source** (not needed if installing via Homebrew):
-- [Rust](https://rustup.rs/) — The Rust toolchain
+### Install icp-cli
 
-## Install icp-cli
-
-**Via Homebrew (recommended):**
+**Via Homebrew (macOS):**
 
 ```bash
 brew install dfinity/tap/icp-cli
@@ -27,10 +22,19 @@ cd icp-cli && cargo build --release
 export PATH=$(pwd)/target/release:$PATH
 ```
 
-Verify installation:
+For detailed installation options, see the [Installation Guide](guides/installation.md).
+
+### Language Toolchains
+
+Install the toolchain for the language you'll use:
+
+- **Rust canisters**: [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
+- **Motoko canisters**: [mops](https://cli.mops.one/) and `mops toolchain init`
+
+### Verify Installation
 
 ```bash
-icp help
+icp --version
 ```
 
 ## Create a Project
@@ -73,8 +77,16 @@ This single command:
 
 ## Interact with Your Canister
 
+First, find your canister name:
+
 ```bash
-icp canister call my-canister greet '("World")'
+icp canister list
+```
+
+Then call a method on it (replace `<canister-name>` with your actual canister name):
+
+```bash
+icp canister call <canister-name> greet '("World")'
 ```
 
 You should see: `("Hello, World!")`

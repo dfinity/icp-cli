@@ -5,20 +5,23 @@ A command-line tool for building and deploying applications on the Internet Comp
 ## Quick Start
 
 ```bash
-# Install via Homebrew
+# Install via Homebrew (macOS)
 brew install dfinity/tap/icp-cli
-
-# Or build from source
-git clone https://github.com/dfinity/icp-cli.git
-cd icp-cli && cargo build --release
-export PATH=$(pwd)/target/release:$PATH
 
 # Create and deploy a project
 icp new my-project && cd my-project
 icp network start -d
 icp deploy
-icp canister call my-canister greet '("World")'
+# List your canisters and call a method (canister name depends on your template)
+icp canister list
+icp canister call <canister-name> greet '("World")'
 ```
+
+See the [Installation Guide](docs/guides/installation.md) for all installation methods including building from source.
+
+## For dfx Users
+
+If you're coming from dfx (the previous Internet Computer SDK), see the **[Migration Guide](docs/migration/from-dfx.md)** for command mappings, workflow differences, and how to migrate existing projects.
 
 ## Documentation
 
@@ -40,12 +43,9 @@ The [`examples/`](examples/) directory contains project templates:
 
 ## Prerequisites
 
-**Language-specific toolchains:**
-- **For Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
-- **For Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
-
-**Building from source** (not needed if installing via Homebrew):
-- **Rust** — Install via [rustup](https://rustup.rs/) (Rust 2024 edition)
+**Language-specific toolchains** (install for the languages you'll use):
+- **Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
+- **Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
 
 ## Getting Help
 

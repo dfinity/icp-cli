@@ -107,11 +107,13 @@ See all configured environments:
 icp environment list
 ```
 
-View the effective configuration for an environment:
+View the effective project configuration:
 
 ```bash
-icp project show --environment production
+icp project show
 ```
+
+This shows all environments and their settings.
 
 ## Working with Canister IDs
 

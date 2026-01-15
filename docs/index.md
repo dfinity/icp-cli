@@ -10,11 +10,15 @@ Build and deploy applications on the Internet Computer.
 
 Step-by-step instructions for common tasks:
 
+- [Installation](guides/installation.md) — Install icp-cli on your system
 - [Local Development](guides/local-development.md) — The edit-build-deploy cycle
 - [Deploying to Mainnet](guides/deploying-to-mainnet.md) — Go live on the Internet Computer
+- [Tokens and Cycles](guides/tokens-and-cycles.md) — Manage ICP tokens and cycles
 - [Managing Environments](guides/managing-environments.md) — Dev, staging, production workflows
-- [Using Recipes](guides/using-recipes.md) — Reusable build templates
 - [Managing Identities](guides/managing-identities.md) — Keys and authentication
+- [Using Recipes](guides/using-recipes.md) — Reusable build templates
+- [Creating Recipes](guides/creating-recipes.md) — Build custom recipes
+- [Creating Templates](guides/creating-templates.md) — Author project templates
 
 ## Concepts
 

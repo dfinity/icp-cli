@@ -169,5 +169,6 @@ canisters:
 ## Next Steps
 
 - [Recipes](../concepts/recipes.md) — Understand how recipes work
+- [Creating Recipes](creating-recipes.md) — Build custom recipes
 
 [Browse all documentation →](../index.md)

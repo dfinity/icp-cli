@@ -32,58 +32,24 @@ icp identity principal
 
 ## Acquiring Cycles
 
-Canisters need cycles to operate on mainnet. Cycles are the computational fuel for canisters — they're consumed when your canister executes code, stores data, or handles requests.
+Canisters need cycles to operate on mainnet. You'll need cycles before deploying.
 
-### Option 1: Receive Cycles Directly
-
-Someone can transfer cycles to your principal via the cycles ledger. This is the simplest option if you know someone who already has cycles.
-
-To receive cycles, share your principal:
+**Quick start:**
 
 ```bash
-icp identity principal
-```
-
-### Option 2: Convert ICP to Cycles
-
-If you have ICP tokens, you can convert them to cycles. To get ICP:
-
-- **Transfer from another wallet** — Receive ICP from someone who already has tokens
-- **Buy on a secondary market** — Purchase ICP and withdraw to your principal
-
-Note: Displaying the AccountIdentifier of your identity is not yet supported by icp-cli.
-
-#### Converting ICP to Cycles
-
-Once you have ICP tokens, convert them to cycles:
-
-```bash
-# Check your ICP balance
-icp token balance --ic
-
-# Convert 1 ICP to cycles
-icp cycles mint --icp 1 --ic
-
-# Or request a specific amount of cycles (ICP amount determined automatically)
-icp cycles mint --cycles 1000000000000 --ic
-```
-
-The conversion rate is determined automatically based on the current ICP/XDR exchange rate. One trillion cycles (1T = 1,000,000,000,000) costs approximately 1 XDR worth of ICP.
-
-### Check Your Cycles Balance
-
-```bash
+# Check your cycles balance
 icp cycles balance --ic
+
+# Convert ICP to cycles (if you have ICP)
+icp cycles mint --icp 1 --ic
 ```
 
-### How Many Cycles Do You Need?
+**How many cycles do you need?**
+- Creating a canister: ~100B cycles (0.1T)
+- Simple backend: 1-5T cycles lasts weeks to months
+- Start with 1-2T cycles and top up as needed
 
-For getting started:
-- **Creating a canister**: ~100B cycles (0.1T)
-- **Simple backend canister**: 1-5T cycles lasts weeks to months depending on usage
-- **Frontend with assets**: More storage means more cycles consumed
-
-Start with 1-2T cycles for initial development and top up as needed.
+For detailed information on acquiring ICP, converting to cycles, and managing balances, see [Tokens and Cycles](tokens-and-cycles.md).
 
 ## Deploying
 
@@ -163,15 +129,17 @@ icp canister settings update my-canister --freezing-threshold 2592000 --ic
 
 ## Topping Up Cycles
 
-Monitor cycles and top up when needed:
+Monitor canister cycles and top up when needed:
 
 ```bash
-# Check balance
+# Check canister cycles balance
 icp canister status my-canister --ic
 
 # Top up with 1 trillion cycles
 icp canister top-up my-canister --amount 1000000000000 --ic
 ```
+
+See [Tokens and Cycles](tokens-and-cycles.md) for more on managing cycles.
 
 ## Troubleshooting
 
@@ -203,11 +171,12 @@ icp identity default <identity-name>
 Check network connectivity:
 
 ```bash
-icp network ping --network mainnet
+icp network ping mainnet
 ```
 
 ## Next Steps
 
+- [Tokens and Cycles](tokens-and-cycles.md) — Managing ICP and cycles in detail
 - [Managing Environments](managing-environments.md) — Set up staging and production
 
 [Browse all documentation →](../index.md)

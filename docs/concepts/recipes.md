@@ -151,40 +151,9 @@ This displays the effective configuration after all recipes are rendered.
 - You need fine-grained control
 - The overhead of a recipe isn't justified
 
-## Creating Custom Recipes
-
-1. Create a Handlebars template file
-2. Define the configuration schema you need
-3. Reference it from your `icp.yaml`
-
-Example custom recipe:
-
-```yaml
-# recipes/optimized-rust.hb.yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --package {{configuration.package}} --target wasm32-unknown-unknown --release
-          - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
-```
-
-Usage:
-
-```yaml
-canisters:
-  - name: backend
-    recipe:
-      type: ./recipes/optimized-rust.hb.yaml
-      configuration:
-        name: backend
-        package: my-backend-crate
-```
-
 ## Next Steps
 
-- [Using Recipes](../guides/using-recipes.md) — Apply this in practice
+- [Using Recipes](../guides/using-recipes.md) — Apply recipes in your projects
+- [Creating Recipes](../guides/creating-recipes.md) — Build custom recipes
 
 [Browse all documentation →](../index.md)

@@ -25,7 +25,7 @@ This generates a new key pair and stores it securely.
 To back up your identity, save the seed phrase:
 
 ```bash
-icp identity new my-identity --seed-file seed.txt
+icp identity new my-identity --output-seed seed.txt
 ```
 
 Store `seed.txt` securely — it can restore your identity.
@@ -71,19 +71,19 @@ icp identity principal --identity other-identity
 ### From a PEM File
 
 ```bash
-icp identity import my-identity --pem-file ./key.pem
+icp identity import my-identity --from-pem ./key.pem
 ```
 
 ### From a Seed Phrase
 
 ```bash
-icp identity import my-identity --seed-file ./seed.txt
+icp identity import my-identity --from-seed-file ./seed.txt
 ```
 
 Or enter interactively:
 
 ```bash
-icp identity import my-identity --seed-phrase
+icp identity import my-identity --read-seed-phrase
 ```
 
 ## Storage Options

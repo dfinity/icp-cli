@@ -260,27 +260,176 @@ Some dfx features work differently or aren't directly available:
 | `dfx wallet` | Cycles managed differently |
 | `dfx upgrade` | Reinstall icp-cli |
 
-## Migration Steps
+## Migrating Identities
 
-1. **Create icp.yaml** in your project root
+dfx identities can be imported into icp-cli. Both tools use compatible key formats.
 
-2. **Convert canister definitions** using the examples above
+### Identity Storage Locations
 
-3. **Test locally:**
-   ```bash
-   icp network start -d
-   icp build
-   icp deploy
-   ```
+| Tool | Location |
+|------|----------|
+| dfx | `~/.config/dfx/identity/<name>/identity.pem` |
+| icp-cli | `~/.config/icp/identity/` |
 
-4. **Verify canister functionality:**
-   ```bash
-   icp canister call my_canister method '(args)'
-   ```
+### Import a dfx Identity
 
-5. **Set up environments** for staging/production if needed
+```bash
+# Import an unencrypted dfx identity
+icp identity import my-identity --from-pem ~/.config/dfx/identity/my-identity/identity.pem
 
-6. **Update CI/CD** scripts to use icp-cli commands
+# Verify the principal matches
+dfx identity get-principal --identity my-identity
+icp identity principal --identity my-identity
+```
+
+Both commands should display the same principal.
+
+### Import an Encrypted dfx Identity
+
+If your dfx identity is password-protected:
+
+```bash
+icp identity import my-identity \
+  --from-pem ~/.config/dfx/identity/my-identity/identity.pem \
+  --decryption-password-from-file password.txt
+```
+
+Or enter the password interactively when prompted.
+
+### Migrate All Identities
+
+To migrate all dfx identities:
+
+```bash
+# List dfx identities
+ls ~/.config/dfx/identity/
+
+# Import each one
+for id in $(ls ~/.config/dfx/identity/); do
+  if [ -f ~/.config/dfx/identity/$id/identity.pem ]; then
+    echo "Importing $id..."
+    icp identity import $id --from-pem ~/.config/dfx/identity/$id/identity.pem
+  fi
+done
+
+# Verify
+icp identity list
+```
+
+### Setting the Default Identity
+
+After importing, set your default identity:
+
+```bash
+icp identity default my-identity
+```
+
+### Identity Storage Options
+
+When importing, choose how icp-cli stores the key:
+
+```bash
+# System keyring (recommended, default)
+icp identity import my-id --from-pem key.pem --storage keyring
+
+# Password-protected file
+icp identity import my-id --from-pem key.pem --storage password
+
+# Plaintext file (not recommended for production)
+icp identity import my-id --from-pem key.pem --storage plaintext
+```
+
+## Migration Checklist
+
+A complete migration involves these steps:
+
+### 1. Create icp.yaml
+
+Create `icp.yaml` in your project root using the conversion examples above.
+
+### 2. Migrate Identities
+
+Import the identities you use for this project:
+
+```bash
+icp identity import deployer --from-pem ~/.config/dfx/identity/deployer/identity.pem
+```
+
+### 3. Test Locally
+
+```bash
+icp network start -d
+icp build
+icp deploy
+icp canister call my-canister test_method '()'
+```
+
+### 4. Migrate Canister IDs (Optional)
+
+If you have existing canisters on mainnet that you want to continue managing with icp-cli, create a mapping file to preserve their IDs.
+
+Create `.icp/data/mappings/ic.ids.json`:
+
+```json
+{
+  "frontend": "xxxxx-xxxxx-xxxxx-xxxxx-cai",
+  "backend": "yyyyy-yyyyy-yyyyy-yyyyy-cai"
+}
+```
+
+Get the canister IDs from your dfx project:
+
+```bash
+dfx canister --network ic id frontend
+dfx canister --network ic id backend
+```
+
+### 5. Verify Mainnet Access
+
+```bash
+# Check you can reach mainnet
+icp network ping --network mainnet
+
+# Verify identity has correct principal
+icp identity principal
+
+# Check canister status (if you migrated IDs)
+icp canister status my-canister --ic
+```
+
+### 6. Update CI/CD
+
+Replace dfx commands with icp-cli equivalents in your CI/CD scripts:
+
+**Before (dfx):**
+```yaml
+steps:
+  - run: dfx start --background
+  - run: dfx deploy
+  - run: dfx deploy --network ic
+```
+
+**After (icp-cli):**
+```yaml
+steps:
+  - run: icp network start -d
+  - run: icp deploy
+  - run: icp deploy --ic
+```
+
+### 7. Update Documentation
+
+Update any project documentation that references dfx commands.
+
+## Keeping Both Tools
+
+During migration, you can use both tools side-by-side:
+
+- dfx and icp-cli use separate configuration files (`dfx.json` vs `icp.yaml`)
+- Identity files can be shared by importing into icp-cli
+- Canister IDs are stored in different locations
+
+This allows gradual migration without disrupting existing workflows.
 
 ## Getting Help
 

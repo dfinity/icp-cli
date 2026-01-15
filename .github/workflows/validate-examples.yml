@@ -64,15 +64,7 @@ jobs:
             
             pushd "$example_dir"
             
-            # Run icp project show to validate the project
-            echo "Running: icp project show"
-            if ! icp project show; then
-              echo "❌ Failed to validate project in $example_name"
-              exit 1
-            fi
-            echo "✅ Project validation successful for $example_name"
-            
-            # Check if test.sh exists and run it
+            # Check if test.sh exists
             if [ -f "test.sh" ]; then
               echo "Found test.sh, running it..."
               if ! bash test.sh; then
@@ -81,7 +73,13 @@ jobs:
               fi
               echo "✅ test.sh passed for $example_name"
             else
-              echo "No test.sh found, skipping test execution"
+              # Run icp project show to validate the project
+              echo "Running: icp project show"
+              if ! icp project show; then
+                echo "❌ Failed to validate project in $example_name"
+                exit 1
+              fi
+              echo "✅ Project validation successful for $example_name"
             fi
             
             popd

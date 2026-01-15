@@ -3225,6 +3225,7 @@ dependencies = [
  "regex",
  "reqwest",
  "sec1",
+ "send_ctrlc",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -5622,6 +5623,16 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 dependencies = [
  "serde",
  "serde_core",
+]
+
+[[package]]
+name = "send_ctrlc"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d07beb664b54f51140baf2769d12d5eb07d0e3eccee78fb95c3e76c2644a4cad"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.1",
 ]
 
 [[package]]

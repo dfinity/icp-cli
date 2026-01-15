@@ -345,13 +345,13 @@ fn safe_eprintln(msg: &str) {
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
         ShutdownGuard::Container(_) => {
-            _ = ctrl_c().await;
+            stop_signal().await;
             safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {
             select!(
-                _ = ctrl_c() => {
+                _ = stop_signal() => {
                     safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
                     ShutdownReason::CtrlC
                 }
@@ -361,6 +361,28 @@ async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
                 }
             )
         }
+    }
+}
+
+#[cfg(unix)]
+async fn stop_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+    select! {
+        _ = ctrl_c() => {},
+        _ = sigterm.recv() => {},
+    }
+}
+
+#[cfg(windows)]
+async fn stop_signal() {
+    use tokio::signal::windows::{ctrl_break, ctrl_close};
+    let mut ctrl_break = ctrl_break().unwrap();
+    let mut ctrl_close = ctrl_close().unwrap();
+    select! {
+        _ = ctrl_c() => {},
+        _ = ctrl_break.recv() => {},
+        _ = ctrl_close.recv() => {},
     }
 }
 

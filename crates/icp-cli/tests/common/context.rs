@@ -255,7 +255,8 @@ impl TestContext {
         }
         let watcher =
             wait_for_launcher_status(&launcher_dir).expect("Failed to watch launcher status");
-        let child = cmd.spawn().expect("failed to spawn launcher");
+        let guard = ChildGuard::spawn(&mut cmd).expect("Failed to spawn network launcher");
+        let child = &guard.child;
         let launcher_pid = child.id();
 
         // Wait for port file using the function from icp-network
@@ -315,8 +316,7 @@ impl TestContext {
                     .unwrap(),
             )
             .expect("Gateway URL should not be already initialized");
-        // Wrap child in ChildGuard
-        ChildGuard { child }
+        guard
     }
 
     pub(crate) fn ping_until_healthy(&self, project_dir: &Path, name: &str) {

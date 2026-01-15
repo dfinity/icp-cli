@@ -1,0 +1,173 @@
+# Using Recipes
+
+Recipes are reusable build templates that simplify canister configuration. Instead of writing build steps from scratch, you reference a recipe that expands into the full configuration.
+
+## Why Use Recipes?
+
+- **Less boilerplate** — Common patterns are pre-configured
+- **Best practices** — Recipes encode recommended build settings
+- **Consistency** — Share build configurations across projects
+- **Maintainability** — Update the recipe, update all projects
+
+## Using Official Recipes
+
+DFINITY maintains recipes for common use cases at [github.com/dfinity/icp-cli-recipes](https://github.com/dfinity/icp-cli-recipes).
+
+### Rust Canister
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust"
+      configuration:
+        package: backend
+```
+
+### Motoko Canister
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/motoko"
+      configuration:
+        entry: src/main.mo
+```
+
+### Assets Canister
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/assets"
+      configuration:
+        source: dist
+```
+
+### Pre-built WASM
+
+```yaml
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/prebuilt"
+      configuration:
+        path: ./my-canister.wasm
+        sha256: d7c1aba0de1d7152897aeca49bd5fe89a174b076a0ee1cc3b9e45fcf6bde71a6
+```
+
+## Recipe Versioning
+
+Pin recipes to specific versions for reproducible builds:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust@v1.0.0"
+      configuration:
+        package: backend
+```
+
+## Local Recipes
+
+Create project-specific recipes as Handlebars templates:
+
+```yaml
+# recipes/my-rust-canister.hb.yaml
+canister:
+  name: {{configuration.name}}
+  build:
+    steps:
+      - type: script
+        commands:
+          - cargo build --package {{configuration.package}} --target wasm32-unknown-unknown --release
+          - cp target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+```
+
+Reference it in your `icp.yaml`:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: ./recipes/my-rust-canister.hb.yaml
+      configuration:
+        name: backend
+        package: my-backend-crate
+```
+
+## Remote Recipes
+
+Reference recipes from any URL:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: https://example.com/recipes/rust-optimized.hb.yaml
+      sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+      configuration:
+        package: backend
+```
+
+Always include `sha256` for remote recipes to ensure integrity.
+
+## Viewing Expanded Configuration
+
+See what a recipe expands to:
+
+```bash
+icp project show
+```
+
+This displays the effective configuration after all recipes are rendered.
+
+## Recipe Configuration Options
+
+Each recipe defines its own configuration schema. Check the recipe's documentation or source for available options.
+
+Common patterns:
+
+```yaml
+configuration:
+  # Name of the cargo package (Rust recipes)
+  package: my-crate
+
+  # Entry point file (Motoko recipes)
+  entry: src/main.mo
+
+  # Source directory (Assets recipes)
+  source: dist
+
+  # Enable optimizations
+  optimize: true
+
+  # Custom settings
+  custom_option: value
+```
+
+## Combining Recipes with Settings
+
+Recipe configuration and canister settings work together:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust"
+      configuration:
+        package: backend
+    settings:
+      compute_allocation: 10
+      environment_variables:
+        API_KEY: "secret"
+```
+
+## Next Steps
+
+- [Recipes](../concepts/recipes.md) — Understand how recipes work
+
+[Browse all documentation →](../index.md)

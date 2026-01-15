@@ -1,112 +1,74 @@
 # icp-cli
 
-A command-line interface for developing and deploying applications on the Internet Computer Protocol (ICP).
+A command-line tool for building and deploying applications on the Internet Computer.
 
-## Usage
-
-See the [command line reference](docs/cli-reference.md).
-
-## Installing
-
-For now, you have to build icp-cli locally in order to use it.
-
-### Prerequisites
-
-- **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
-- **mops**: Required if you want to build Motoko canisters. See [mops.one](https://cli.mops.one/).
-
-### Building
+## Quick Start
 
 ```bash
-# Build all crates in the workspace
-cargo build
+# Install via Homebrew
+brew install dfinity/tap/icp-cli
 
-# Add target directory to your path
-export PATH=$(pwd)/target/debug:$PATH
+# Or build from source
+git clone https://github.com/dfinity/icp-cli.git
+cd icp-cli && cargo build --release
+export PATH=$(pwd)/target/release:$PATH
 
-# Check that you can run
-icp help
+# Create and deploy a project
+icp new my-project && cd my-project
+icp network start -d
+icp deploy
+icp canister call my-canister greet '("World")'
 ```
 
-### [Optional] Add motoko tools to the path
+## Documentation
 
-You might also need the Motoko compiler if you plan on building canisters with Motoko. The best way
-is to install mops, the motoko package manager, see: https://cli.mops.one/
+- **[Tutorial](docs/tutorial.md)** — Deploy your first canister
+- **[Guides](docs/guides/index.md)** — How to accomplish common tasks
+- **[Concepts](docs/concepts/index.md)** — Understand how icp-cli works
+- **[Reference](docs/reference/index.md)** — Complete CLI and configuration reference
 
-Reminder, when mops is installed the first time, you must initialize the toolchain with:
+## Examples
 
-```bash
-mops toolchain init
-```
+The [`examples/`](examples/) directory contains project templates:
 
-### Examples
+- `icp-motoko/` — Motoko canister
+- `icp-rust/` — Rust canister
+- `icp-static-assets/` — Static website
+- `icp-environments/` — Multi-environment setup
 
-The `examples/` directory contains various project templates and configurations that demonstrate how to use the CLI with different project types:
+[View all examples →](examples/)
 
-- `icp-motoko/` - Motoko canister example
-- `icp-rust/` - Rust canister example  
-- `icp-static-assets/` - Static website deployment
-- `icp-multi-canister/` - Multi-canister project setup
-- And many more...
+## Prerequisites
 
-## Development
+**Language-specific toolchains:**
+- **For Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
+- **For Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
 
-### Prerequisites
+**Building from source** (not needed if installing via Homebrew):
+- **Rust** — Install via [rustup](https://rustup.rs/) (Rust 2024 edition)
 
-- **Rust**: Install Rust using [rustup](https://rustup.rs/). The project uses Rust 2024 edition.
+## Getting Help
 
-### Building
-
-This is a Rust workspace with multiple crates. To build the project:
-
-```bash
-# Build all crates in the workspace
-cargo build
-
-# Build in release mode for better performance
-cargo build --release
-
-# Build only the CLI binary
-cargo build --bin icp
-```
-
-The compiled binary will be available at `target/debug/icp` (or `target/release/icp` for release builds).
-
-### Running Tests
-
-```bash
-cargo test
-```
-
-The network launcher binary is automatically downloaded on first test run. Some tests launch local networks and require available ports.
-
-### Generating CLI Documentation
-
-The project includes automatic CLI documentation generation using `clap_markdown`. To generate comprehensive documentation for all commands:
-
-```bash
-# Run the documentation generation script
-./scripts/generate-cli-docs.sh
-```
-
-This will:
-- Build the CLI in release mode
-- Generate complete markdown documentation at `docs/cli-reference.md`
-
-You can also generate documentation manually:
-
-```bash
-# Build the CLI first
-cargo build --release
-
-# Generate markdown documentation
-./target/release/icp --markdown-help > docs/cli-reference.md
-```
+- **[Documentation](docs/index.md)** — Guides, concepts, and reference
+- **[GitHub Issues](https://github.com/dfinity/icp-cli/issues)** — Bug reports and feature requests
+- **[Developer Forum](https://forum.dfinity.org/)** — Questions and discussions
+- **[Discord](https://discord.internetcomputer.org)** — Real-time community chat
 
 ## Contributing
 
-Contributions are welcome! Please see the [contribution guide](./.github/CONTRIBUTING.md) for more information.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+```bash
+# Build
+cargo build
+
+# Test
+cargo test
+
+# Generate CLI docs
+./scripts/generate-cli-docs.sh
+```
 
 ## License
 
-This project is licensed under the [Apache-2.0](./LICENSE) license.
+[Apache-2.0](LICENSE)

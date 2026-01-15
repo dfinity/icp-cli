@@ -3,6 +3,7 @@ use std::{
     env,
     ffi::OsString,
     fs::{self, create_dir_all},
+    process::Stdio,
 };
 
 use assert_cmd::Command;
@@ -80,6 +81,7 @@ impl TestContext {
         cmd
     }
 
+    #[cfg(unix)]
     pub(crate) async fn launcher_path(&self) -> PathBuf {
         if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
             PathBuf::from(var)
@@ -109,6 +111,17 @@ impl TestContext {
                 .unwrap();
                 path
             }
+        }
+    }
+
+    pub(crate) async fn launcher_path_or_nothing(&self) -> PathBuf {
+        #[cfg(unix)]
+        {
+            self.launcher_path().await
+        }
+        #[cfg(windows)]
+        {
+            PathBuf::new()
         }
     }
 
@@ -180,9 +193,11 @@ impl TestContext {
             .arg("network")
             .arg("start")
             .arg(name);
-
-        let launcher_path = self.launcher_path().await;
-        cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
+        #[cfg(unix)]
+        {
+            let launcher_path = self.launcher_path().await;
+            cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
+        }
 
         eprintln!("Running network in {project_dir}");
 
@@ -222,8 +237,6 @@ impl TestContext {
         project_dir: &Path,
         flags: &[&str],
     ) -> ChildGuard {
-        let launcher_path = self.launcher_path().await;
-
         // Create network directory structure
         let network_dir = project_dir
             .join(".icp")
@@ -241,18 +254,38 @@ impl TestContext {
         eprintln!("Starting network with custom flags");
 
         // Spawn launcher
-        let mut cmd = std::process::Command::new(&launcher_path);
-        cmd.args(["--interface-version=1.0.0", "--status-dir"]);
-        cmd.arg(&launcher_dir);
-        cmd.args(flags);
-        cmd.stdout(std::process::Stdio::inherit());
-        cmd.stderr(std::process::Stdio::inherit());
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0);
-        }
+        let mut cmd = {
+            #[cfg(unix)]
+            {
+                let launcher_path = self.launcher_path().await;
+                let mut cmd = std::process::Command::new(&launcher_path);
+                cmd.args(["--interface-version=1.0.0", "--status-dir"]);
+                cmd.arg(&launcher_dir);
+                cmd.args(flags);
+                cmd.stdout(Stdio::inherit());
+                cmd.stderr(Stdio::inherit());
+                use std::os::unix::process::CommandExt;
+                cmd.process_group(0);
+                cmd
+            }
+            #[cfg(windows)]
+            {
+                let mut cmd = std::process::Command::new("docker");
+                cmd.args([
+                    "run",
+                    "--rm",
+                    "-v",
+                    &format!("{launcher_dir}:/app/status"),
+                    "--cidfile",
+                ]);
+                cmd.arg(network_dir.join("container-id").as_std_path());
+                cmd.args(["-P", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"]);
+                cmd.args(flags);
+                cmd.stdout(Stdio::inherit());
+                cmd.stderr(Stdio::inherit());
+                cmd
+            }
+        };
         let watcher =
             wait_for_launcher_status(&launcher_dir).expect("Failed to watch launcher status");
         let guard = ChildGuard::spawn(&mut cmd).expect("Failed to spawn network launcher");
@@ -261,7 +294,34 @@ impl TestContext {
 
         // Wait for port file using the function from icp-network
         let status = watcher.await.expect("Timeout waiting for port file");
-        let gateway_port = status.gateway_port;
+        let gateway_port = {
+            #[cfg(unix)]
+            {
+                status.gateway_port
+            }
+            #[cfg(windows)]
+            {
+                let container_id = fs::read_to_string(network_dir.join("container-id"))
+                    .expect("Failed to read container ID file");
+                let container_id = container_id.trim();
+                let out = Command::new("docker")
+                    .args([
+                        "port",
+                        container_id,
+                        &format!("{}/tcp", status.gateway_port),
+                    ])
+                    .output()
+                    .expect("Failed to get gateway port from docker")
+                    .stdout;
+                let out = str::from_utf8(&out).unwrap().trim();
+                // Output is like "0.0.0.0:32768" - extract the port
+                out.rsplit(':')
+                    .next()
+                    .expect("Invalid docker port output")
+                    .parse::<u16>()
+                    .expect("Failed to parse port from docker port output")
+            }
+        };
         eprintln!("Gateway started on port {gateway_port}");
 
         let instance = NetworkInstance {

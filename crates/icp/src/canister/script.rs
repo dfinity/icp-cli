@@ -38,7 +38,9 @@ pub enum ScriptError {
     Status { command: String, code: String },
 
     #[cfg(windows)]
-    #[snafu(display("failed to locate git executable in PATH (try running in Git Bash)"))]
+    #[snafu(display(
+        "failed to locate Git for Windows (try running in Git Bash or an MSYS2 shell)"
+    ))]
     LocateGit,
 }
 

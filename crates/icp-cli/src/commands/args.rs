@@ -10,8 +10,8 @@ use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 #[derive(Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
-    /// Name or principal of canister to target
-    /// When using a name an environment must be specified.
+    /// Name or principal of canister to target.
+    /// When using a name, an environment must be specified.
     pub(crate) canister: Canister,
 
     #[command(flatten)]

@@ -1,55 +1,66 @@
 use anyhow::bail;
 use clap::Args;
-use icp::context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection};
-use icp::identity::IdentitySelection;
+use icp::context::Context;
+use serde::Serialize;
 
-use crate::{commands::args, operations::misc::fetch_canister_metadata, options};
+use crate::{commands::args, operations::misc::fetch_canister_metadata};
 
 #[derive(Debug, Args)]
 pub(crate) struct MetadataArgs {
-    /// The canister name or principal to target.
-    /// When using a name, an environment must be specified.
-    pub(crate) canister: args::Canister,
+    #[command(flatten)]
+    pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// The name of the metadata section to read
     pub(crate) metadata_name: String,
 
-    #[command(flatten)]
-    pub(crate) network: options::NetworkOpt,
-
-    #[command(flatten)]
-    pub(crate) environment: options::EnvironmentOpt,
-
-    #[command(flatten)]
-    pub(crate) identity: options::IdentityOpt,
+    /// Format output in json
+    #[arg(long = "json")]
+    pub json_format: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyhow::Error> {
-    let canister_selection: CanisterSelection = args.canister.clone().into();
-    let environment: EnvironmentSelection = args.environment.clone().into();
-    let network: NetworkSelection = args.network.clone().into();
-    let identity: IdentitySelection = args.identity.clone().into();
-
-    // Get the canister principal
-    let canister_id = ctx
-        .get_canister_id(&canister_selection, &network, &environment)
+    let selections = args.cmd_args.selections();
+    let agent = ctx
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+    let cid = ctx
+        .get_canister_id(
+            &selections.canister,
+            &selections.network,
+            &selections.environment,
+        )
         .await?;
 
-    // Get the agent
-    let agent = ctx.get_agent(&identity, &network, &environment).await?;
-
     // Fetch the metadata
-    let metadata = fetch_canister_metadata(&agent, canister_id, &args.metadata_name).await;
+    let metadata = fetch_canister_metadata(&agent, cid, &args.metadata_name).await;
+
+    #[derive(Serialize)]
+    struct MetadataResult {
+        name: String,
+        value: String,
+    }
 
     match metadata {
         Some(value) => {
-            ctx.term.write_line(&value)?;
+            let output = match args.json_format {
+                true => serde_json::to_string(&MetadataResult {
+                    name: args.metadata_name.clone(),
+                    value,
+                })
+                .expect("Serializing status result to json failed"),
+                false => value,
+            };
+            ctx.term.write_line(&output)?;
             Ok(())
         }
         None => bail!(
             "Metadata section '{}' not found in canister {}",
             args.metadata_name,
-            canister_id
+            cid
         ),
     }
 }

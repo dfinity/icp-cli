@@ -123,7 +123,7 @@ Make a canister call
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 * `<METHOD>` — Name of canister method to call into
 * `<ARGS>` — String representation of canister call arguments
 
@@ -147,7 +147,7 @@ Create a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -177,7 +177,7 @@ Delete a canister from a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -197,7 +197,7 @@ Install a built WASM to a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -237,7 +237,7 @@ Read a metadata section from a canister
 
 ###### **Arguments:**
 
-* `<CANISTER>` — The canister name or principal to target. When using a name, an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 * `<METADATA_NAME>` — The name of the metadata section to read
 
 ###### **Options:**
@@ -247,6 +247,7 @@ Read a metadata section from a canister
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Format output in json
 
 
 
@@ -297,7 +298,7 @@ Change a canister's settings to specified values
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -332,7 +333,7 @@ Synchronize a canister's settings with those defined in the project
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -352,7 +353,7 @@ Start a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -397,7 +398,7 @@ Stop a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 
@@ -417,7 +418,7 @@ Top up a canister with cycles
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name, an environment must be specified
 
 ###### **Options:**
 

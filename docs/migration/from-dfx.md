@@ -74,7 +74,8 @@ canisters:
 | Deploy all | `dfx deploy` | `icp deploy` |
 | Deploy to mainnet | `dfx deploy --network ic` | `icp deploy --ic` |
 | Call canister | `dfx canister call my_canister method '(args)'` | `icp canister call my_canister method '(args)'` |
-| List canisters | `dfx canister id my_canister` | `icp canister list` |
+| Get canister ID | `dfx canister id my_canister` | `icp canister status my_canister --id-only` |
+| List canisters | `dfx canister ls` | `icp canister list` |
 | Canister status | `dfx canister status my_canister` | `icp canister status my_canister` |
 | Create identity | `dfx identity new my_id` | `icp identity new my_id` |
 | Use identity | `dfx identity use my_id` | `icp identity default my_id` |
@@ -388,7 +389,7 @@ dfx canister --network ic id backend
 
 ```bash
 # Check you can reach mainnet
-icp network ping --network mainnet
+icp network ping mainnet
 
 # Verify identity has correct principal
 icp identity principal

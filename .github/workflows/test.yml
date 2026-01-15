@@ -39,14 +39,6 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
-      - name: Setup image (Linux)
-        if: ${{ contains(matrix.os, 'ubuntu') }}
-        run: ./.github/scripts/provision-linux-build.sh
-      - name: Setup image (Windows)
-        if: ${{ contains(matrix.os, 'windows') }}
-        run: ./.github/scripts/provision-windows-build.ps1
-        shell: pwsh
-
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -58,6 +50,14 @@ jobs:
             target/
             ${{ contains(matrix.os, 'windows') && 'C:/vcpkg' || '' }}
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+      - name: Setup image (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        run: ./.github/scripts/provision-windows-build.ps1
+        shell: pwsh
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -77,15 +77,6 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
-      - name: Setup image (Linux)
-        if: ${{ contains(matrix.os, 'ubuntu') }}
-        run: ./.github/scripts/provision-linux-build.sh
-
-      - name: Setup image (Windows)
-        if: ${{ contains(matrix.os, 'windows') }}
-        run: ./.github/scripts/provision-windows-build.ps1
-        shell: pwsh
-
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -97,6 +88,15 @@ jobs:
             target/
             ${{ contains(matrix.os, 'windows') && 'C:/vcpkg' || '' }}
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+
+      - name: Setup image (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        run: ./.github/scripts/provision-windows-build.ps1
+        shell: pwsh
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}

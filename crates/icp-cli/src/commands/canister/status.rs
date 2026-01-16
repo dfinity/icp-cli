@@ -270,7 +270,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 
         // Space records out to make things more readable
         if i > 0 && !args.options.json_format {
-            ctx.term.write_line("").expect("Failed to write output to terminal");
+            ctx.term
+                .write_line("")
+                .expect("Failed to write output to terminal");
         }
         ctx.term
             .write_line(output.trim())

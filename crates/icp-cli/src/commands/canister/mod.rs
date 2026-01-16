@@ -5,6 +5,7 @@ pub(crate) mod create;
 pub(crate) mod delete;
 pub(crate) mod install;
 pub(crate) mod list;
+pub(crate) mod metadata;
 pub(crate) mod settings;
 pub(crate) mod start;
 pub(crate) mod status;
@@ -28,6 +29,9 @@ pub(crate) enum Command {
 
     /// List the canisters in an environment
     List(list::ListArgs),
+
+    /// Read a metadata section from a canister
+    Metadata(metadata::MetadataArgs),
 
     /// Commands to manage canister settings
     #[command(subcommand)]

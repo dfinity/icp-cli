@@ -12,6 +12,7 @@ use snafu::{ResultExt, Snafu};
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 #[derive(Debug, Snafu)]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum SyncSettingsOperationError {
     #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
     FetchCurrentSettings {

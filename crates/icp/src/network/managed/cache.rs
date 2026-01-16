@@ -115,17 +115,21 @@ pub async fn download_launcher_version(
     let tmp_read = std::io::BufReader::new(&tmp);
     let decompressor = GzDecoder::new(tmp_read);
     let mut archive = Archive::new(decompressor);
-    let extract_dir = camino_tempfile::tempdir().context(TempDirSnafu)?;
-    archive.unpack(extract_dir.path()).context(ExtractSnafu {
-        path: extract_dir.path(),
-    })?;
+    let extract_dir = paths.launcher_dir().join("tmp");
+    crate::fs::create_dir_all(&extract_dir).context(TempDirSnafu)?;
     let tarball_name = format!("icp-cli-network-launcher-{arch}-{os}-{pkg_version}");
-    let extracted_inner = extract_dir.path().join(&tarball_name);
+    let extracted_dir_path = extract_dir.join(&tarball_name);
+    if extracted_dir_path.exists() {
+        crate::fs::remove_dir_all(&extracted_dir_path).context(RemoveExistingSnafu)?
+    }
+    archive
+        .unpack(&extract_dir)
+        .context(ExtractSnafu { path: &extract_dir })?;
     if version_path.exists() {
         crate::fs::remove_dir_all(&version_path).context(RemoveExistingSnafu)?
     }
-    std::fs::rename(&extracted_inner, &version_path).context(MoveExtractedSnafu {
-        from: extracted_inner,
+    std::fs::rename(&extracted_dir_path, &version_path).context(MoveExtractedSnafu {
+        from: extracted_dir_path,
         to: &version_path,
     })?;
     Ok((pkg_version, version_path.join("icp-cli-network-launcher")))
@@ -156,7 +160,7 @@ pub enum DownloadLauncherError {
     #[snafu(display("failed to create temporary file for download"))]
     TempFile { source: std::io::Error },
     #[snafu(display("failed to create temporary directory for extraction"))]
-    TempDir { source: std::io::Error },
+    TempDir { source: crate::fs::IoError },
     #[snafu(display("buffer failure in temporary file"))]
     Buffer { source: std::io::Error },
     #[snafu(display("failed to extract downloaded network launcher to {path}"))]

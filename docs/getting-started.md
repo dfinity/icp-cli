@@ -171,24 +171,24 @@ icp canister list
 
 ## Networks and Environments
 
-A *network* is a url through which you can reach an ICP network. This could be "mainnet",
+A *network* is a url through which you can reach an ICP network. This could be "ic",
 the official ICP network reachable at https://icp-api.io, a local or remote network started
 for test or development purposes.
 
 An *environment* represents a set of canisters to deploy to a network. For example you could
 have:
 - A local development environment pointing using your local network
-- A staging environment deployed to mainnet
-- A production envrionment deployed to mainnet
+- A staging environment deployed to the IC mainnet
+- A production envrionment deployed to the IC mainnet
 
 For example:
 
 ```yaml
 environments:
   - name: staging
-    network: mainnet
+    network: ic
   - name: prod
-    network: mainnet
+    network: ic
 ```
 There is always an implicit "local" environment using the "local" network which is the default
 and that cannot be overriden.
@@ -274,9 +274,9 @@ If you're familiar with dfx, here are the key differences:
 
 - **Configuration**: Project configuration is in `icp.yaml` vs `dfx.json`.
 - **Environment**: A project is deployed to an "environment" not a network. An environment
-is a logical name that points to a network (could be mainnet or your local network).
+is a logical name that points to a network (could be the IC mainnet or your local network).
 - **Recipe system**: Reusable build templates you can share with your team or the community.
 - **Consistent with mainnet**: Aims to make interacting with the local network the same as interacting
-with mainnet.
+with the IC mainnet.
 
 Ready to build more complex applications? Check out our [examples](../examples/) or dive into [project configuration](project-configuration.md)!

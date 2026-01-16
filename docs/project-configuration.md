@@ -254,11 +254,11 @@ canisters:
 An ICP network that icp-cli can interact with.
 There are two types of networks:
 - managed - this is a network whose lifecycle icp-cli is responsible for.
-- external - A remote network that is hosted, this could be mainnet or a remote instance of pocket-ic serving as a long lived testnet.
+- connected - A remote network that is hosted, this could be IC mainnet or a remote instance of pocket-ic serving as a long lived testnet.
 
 You can define your own networks. There are two implicit networks:
 - local - A managed network that is spun up with the network launcher and typically used for local development. This network can be overridden in your icp.yaml if you need custom configuration (e.g., different port, connecting to an existing network).
-- mainnet - The mainnet, production network. This network is protected and cannot be overridden to prevent accidental deployment to production with incorrect settings.
+- ic - The IC mainnet, production network. This network is protected and cannot be overridden to prevent accidental deployment to production with incorrect settings.
 
 #### Overriding the Local Network
 
@@ -282,7 +282,7 @@ networks:
     root-key: <root-key-hex>
 ```
 
-**Important**: The "mainnet" network cannot be overridden for safety reasons. Attempting to define a network named "mainnet" will result in an error.
+**Important**: The "ic" network cannot be overridden for safety reasons. Attempting to define a network named "ic" will result in an error.
 
 #### Defining Custom Networks
 
@@ -295,7 +295,7 @@ networks:
       host: 127.0.0.1
       port: 4943
     
-  # Reference to external network file
+  # Reference to network file
   - networks/staging.yaml
   - networks/*.yaml  # All network files in directory
 ```
@@ -321,10 +321,10 @@ port-mapping:
 ```
 See the [containers docs](./containers.md).
 
-**External Networks:**
+**Connected Networks:**
 ```yaml
 name: ic-mainnet
-mode: external
+mode: connected
 gateway:
   url: https://ic0.app
 ```
@@ -335,12 +335,12 @@ Environments link canisters to networks with specific settings. For example, you
 and you might define 3 different environments:
 
 - local - that you use for development against a managed local network
-- ic-stage - A staging environment that is deployed to mainnet
-- ic - Your production environment deployed to mainnet
+- ic-stage - A staging environment that is deployed to the IC mainnet
+- ic - Your production environment deployed to the IC mainnet
 
 There are implicit environments:
 - `local` - Assumes the local network and assumed to be the default
-- `ic` - Assumes mainnet
+- `ic` - Assumes the IC mainnet
 
 Canisters can have different settings in each environment. Settings specified at the environment level will override any settings defined at the canister level.
 
@@ -480,11 +480,11 @@ networks:
   - name: local
     mode: managed
   - name: testnet
-    mode: external
+    mode: connected
     gateway:
       url: https://testnet.ic0.app
   - name: mainnet  
-    mode: external
+    mode: connected
     gateway:
       url: https://ic0.app
 

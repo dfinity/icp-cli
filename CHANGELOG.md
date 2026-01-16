@@ -2,6 +2,8 @@
 
 * feat: `icp canister metadata <canister> <metadata section>` now fetches metadata sections from specified canisters
 * fix: Validate explicit canister paths and throw an error if `canister.yaml` is not found
+* feat!: Rename the implicit "mainnet" network to "ic"
+  * The corresponding environment "ic" is defined implicitly which can be overwritten by user configuration
 
 # v0.1.0-beta.3
 

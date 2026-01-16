@@ -81,40 +81,6 @@ pub enum ConsolidateManifestError {
     Environment { source: EnvironmentError },
 }
 
-/// Returns the default mainnet network (protected, non-overridable)
-fn default_mainnet_network() -> Network {
-    Network {
-        // Mainnet at https://icp-api.io
-        name: IC.to_string(),
-        configuration: Configuration::Connected {
-            connected: Connected {
-                url: IC_MAINNET_NETWORK_URL.to_string(),
-                // Will use the IC Root key hard coded in agent-rs.
-                // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
-                root_key: None,
-            },
-        },
-    }
-}
-
-/// Returns the default local network (can be overridden by users)
-fn default_local_network() -> Network {
-    Network {
-        // The local network at localhost:8000
-        name: LOCAL.to_string(),
-        configuration: Configuration::Managed {
-            managed: Managed {
-                mode: ManagedMode::Launcher {
-                    gateway: Gateway {
-                        host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
-                        port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
-                    },
-                },
-            },
-        },
-    }
-}
-
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
@@ -264,10 +230,23 @@ pub async fn consolidate_manifest(
     // Networks
     let mut networks: HashMap<String, Network> = HashMap::new();
 
-    // Add mainnet first - this is always protected and non-overridable
-    networks.insert(IC.to_string(), default_mainnet_network());
+    // Add IC network first - this is always protected and non-overridable
+    networks.insert(
+        IC.to_string(),
+        Network {
+            name: IC.to_string(),
+            configuration: Configuration::Connected {
+                connected: Connected {
+                    url: IC_MAINNET_NETWORK_URL.to_string(),
+                    // Will use the IC Root key hard coded in agent-rs.
+                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
+                    root_key: None,
+                },
+            },
+        },
+    );
 
-    // Track which network names are protected (only mainnet)
+    // Track which network names are protected (only IC network)
     let protected_network_names: HashSet<String> = [IC.to_string()].into_iter().collect();
 
     // Resolve NetworkManifests and add them (including user-defined "local" if provided)
@@ -322,7 +301,22 @@ pub async fn consolidate_manifest(
     // After processing user networks, add default "local" if not already defined
     // This provides backward compatibility for projects that don't define their own "local" network
     if !networks.contains_key(LOCAL) {
-        networks.insert(LOCAL.to_string(), default_local_network());
+        networks.insert(
+            LOCAL.to_string(),
+            Network {
+                name: LOCAL.to_string(),
+                configuration: Configuration::Managed {
+                    managed: Managed {
+                        mode: ManagedMode::Launcher {
+                            gateway: Gateway {
+                                host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                                port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                            },
+                        },
+                    },
+                },
+            },
+        );
     }
 
     // Environments
@@ -429,7 +423,7 @@ pub async fn consolidate_manifest(
     }
 
     // We're done adding all the user environments
-    // Now we add the default `local` environment if the user hasn't overriden it
+    // Now we add the implicit `local` and `ic` environment if the user hasn't overriden it
     if let Entry::Vacant(vacant_entry) = environments.entry(LOCAL.to_string()) {
         vacant_entry.insert(Environment {
             name: LOCAL.to_string(),
@@ -439,6 +433,22 @@ pub async fn consolidate_manifest(
                     InvalidNetworkSnafu {
                         environment: LOCAL.to_owned(),
                         network: LOCAL.to_owned(),
+                    }
+                    .build(),
+                )?
+                .to_owned(),
+            canisters: canisters.clone(),
+        });
+    }
+    if let Entry::Vacant(vacant_entry) = environments.entry(IC.to_string()) {
+        vacant_entry.insert(Environment {
+            name: IC.to_string(),
+            network: networks
+                .get(IC)
+                .ok_or(
+                    InvalidNetworkSnafu {
+                        environment: IC.to_owned(),
+                        network: IC.to_owned(),
                     }
                     .build(),
                 )?

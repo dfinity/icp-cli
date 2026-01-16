@@ -515,18 +515,18 @@ async fn override_local_network_with_custom_port() {
 }
 
 #[tokio::test]
-async fn cannot_override_mainnet() {
+async fn cannot_override_ic() {
     let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("override-mainnet");
+    let project_dir = ctx.create_project_dir("override-ic");
 
-    // Attempt to override mainnet
+    // Attempt to override ic
     write_string(
         &project_dir.join("icp.yaml"),
         indoc! {r#"
             networks:
-              - name: mainnet
+              - name: ic
                 mode: connected
-                url: http://fake-mainnet.local
+                url: http://fake-ic.local
         "#},
     )
     .expect("failed to write project manifest");
@@ -537,7 +537,7 @@ async fn cannot_override_mainnet() {
         .args(["build"])
         .assert()
         .failure()
-        .stderr(contains("`mainnet` is a reserved network name"));
+        .stderr(contains("`ic` is a reserved network name"));
 }
 
 #[tokio::test]

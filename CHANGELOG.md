@@ -5,6 +5,7 @@
 * fix: Validate explicit canister paths and throw an error if `canister.yaml` is not found
 * feat!: Rename the implicit "mainnet" network to "ic"
   * The corresponding environment "ic" is defined implicitly which can be overwritten by user configuration
+  * The `--mainnet` and `--ic` flags are removed. Use `-n/--network ic`, `-e/--environment ic` instead.
 
 # v0.1.0-beta.3
 

@@ -328,8 +328,13 @@ pub async fn stop_docker_launcher(
     container_id: &str,
     rm_on_exit: bool,
 ) -> Result<(), StopContainerError> {
-    let docker = Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
-        .context(ConnectSnafu { socket })?;
+    let docker = if socket.starts_with("tcp://") {
+        let http_addr = socket.replace("tcp://", "http://");
+        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
+    } else {
+        Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
+    }
+    .context(ConnectSnafu { socket })?;
     stop(&docker, container_id, rm_on_exit).await
 }
 

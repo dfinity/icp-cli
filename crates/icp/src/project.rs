@@ -143,7 +143,8 @@ pub async fn consolidate_manifest(
     for i in &m.canisters {
         let ms = match i {
             Item::Path(pattern) => {
-                let paths = match is_glob(pattern) {
+                let is_glob_pattern = is_glob(pattern);
+                let paths = match is_glob_pattern {
                     // Explicit path
                     false => vec![pdir.join(pattern)],
 
@@ -163,11 +164,28 @@ pub async fn consolidate_manifest(
                     }
                 };
 
-                let paths = paths
-                    .into_iter()
-                    .filter(|p| p.is_dir()) // Skip missing directories
-                    .filter(|p| p.join(CANISTER_MANIFEST).exists()) // Skip non-canister directories
-                    .collect::<Vec<_>>();
+                let paths = if is_glob_pattern {
+                    // For glob patterns, filter out non-directories and non-canister directories
+                    paths
+                        .into_iter()
+                        .filter(|p| p.is_dir())
+                        .filter(|p| p.join(CANISTER_MANIFEST).exists())
+                        .collect::<Vec<_>>()
+                } else {
+                    // For explicit paths, validate that they exist and contain canister.yaml
+                    let mut validated_paths = vec![];
+                    for p in paths {
+                        if !p.join(CANISTER_MANIFEST).is_file() {
+                            return NotFoundSnafu {
+                                kind: "canister".to_string(),
+                                path: pattern.to_string(),
+                            }
+                            .fail();
+                        }
+                        validated_paths.push(p);
+                    }
+                    validated_paths
+                };
 
                 let mut ms = vec![];
 

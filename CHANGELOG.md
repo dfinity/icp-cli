@@ -1,6 +1,7 @@
 # Unreleased
 
 * chore!: use `--tcycles` for consistency instead of raw `--cycles` amounts
+* fix: Validate explicit canister paths and throw an error if `canister.yaml` is not found
 
 # v0.1.0-beta.3
 

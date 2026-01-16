@@ -1,7 +1,7 @@
 use clap::{ArgGroup, Args};
 use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
-use icp::project::DEFAULT_LOCAL_ENVIRONMENT_NAME;
+use icp::prelude::LOCAL;
 use url::Url;
 
 mod heading {
@@ -50,9 +50,7 @@ pub(crate) struct EnvironmentOpt {
 impl EnvironmentOpt {
     #[allow(dead_code)]
     pub(crate) fn name(&self) -> &str {
-        self.environment
-            .as_deref()
-            .unwrap_or(DEFAULT_LOCAL_ENVIRONMENT_NAME)
+        self.environment.as_deref().unwrap_or(LOCAL)
     }
 }
 

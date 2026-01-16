@@ -10,7 +10,6 @@ use crate::{
     identity::IdentitySelection,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
-    project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_NETWORK_NAME},
     store_id::{IdMapping, LookupIdError},
 };
 use candid::Principal;
@@ -44,7 +43,7 @@ pub enum EnvironmentSelection {
 impl EnvironmentSelection {
     pub fn name(&self) -> &str {
         match self {
-            EnvironmentSelection::Default => DEFAULT_LOCAL_ENVIRONMENT_NAME,
+            EnvironmentSelection::Default => LOCAL,
             EnvironmentSelection::Named(name) => name,
         }
     }
@@ -158,9 +157,9 @@ impl Context {
                         name: network_name.to_owned(),
                     })?;
                     Ok(net.clone())
-                } else if network_name == DEFAULT_MAINNET_NETWORK_NAME {
+                } else if network_name == IC {
                     Ok(crate::Network {
-                        name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+                        name: IC.to_string(),
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
                                 url: IC_MAINNET_NETWORK_URL.to_string(),

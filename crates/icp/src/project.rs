@@ -17,10 +17,6 @@ use crate::{
     prelude::*,
 };
 
-pub const DEFAULT_LOCAL_ENVIRONMENT_NAME: &str = "local";
-pub const DEFAULT_MAINNET_ENVIRONMENT_NAME: &str = "ic";
-pub const DEFAULT_LOCAL_NETWORK_NAME: &str = "local";
-pub const DEFAULT_MAINNET_NETWORK_NAME: &str = "ic";
 pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
 pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
 pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
@@ -89,7 +85,7 @@ pub enum ConsolidateManifestError {
 fn default_mainnet_network() -> Network {
     Network {
         // Mainnet at https://icp-api.io
-        name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
+        name: IC.to_string(),
         configuration: Configuration::Connected {
             connected: Connected {
                 url: IC_MAINNET_NETWORK_URL.to_string(),
@@ -105,7 +101,7 @@ fn default_mainnet_network() -> Network {
 fn default_local_network() -> Network {
     Network {
         // The local network at localhost:8000
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
                 mode: ManagedMode::Launcher {
@@ -269,15 +265,10 @@ pub async fn consolidate_manifest(
     let mut networks: HashMap<String, Network> = HashMap::new();
 
     // Add mainnet first - this is always protected and non-overridable
-    networks.insert(
-        DEFAULT_MAINNET_NETWORK_NAME.to_string(),
-        default_mainnet_network(),
-    );
+    networks.insert(IC.to_string(), default_mainnet_network());
 
     // Track which network names are protected (only mainnet)
-    let protected_network_names: HashSet<String> = [DEFAULT_MAINNET_NETWORK_NAME.to_string()]
-        .into_iter()
-        .collect();
+    let protected_network_names: HashSet<String> = [IC.to_string()].into_iter().collect();
 
     // Resolve NetworkManifests and add them (including user-defined "local" if provided)
     for i in &m.networks {
@@ -330,11 +321,8 @@ pub async fn consolidate_manifest(
 
     // After processing user networks, add default "local" if not already defined
     // This provides backward compatibility for projects that don't define their own "local" network
-    if !networks.contains_key(DEFAULT_LOCAL_NETWORK_NAME) {
-        networks.insert(
-            DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-            default_local_network(),
-        );
+    if !networks.contains_key(LOCAL) {
+        networks.insert(LOCAL.to_string(), default_local_network());
     }
 
     // Environments
@@ -442,17 +430,15 @@ pub async fn consolidate_manifest(
 
     // We're done adding all the user environments
     // Now we add the default `local` environment if the user hasn't overriden it
-    if let Entry::Vacant(vacant_entry) =
-        environments.entry(DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string())
-    {
+    if let Entry::Vacant(vacant_entry) = environments.entry(LOCAL.to_string()) {
         vacant_entry.insert(Environment {
-            name: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string(),
+            name: LOCAL.to_string(),
             network: networks
-                .get(DEFAULT_LOCAL_NETWORK_NAME)
+                .get(LOCAL)
                 .ok_or(
                     InvalidNetworkSnafu {
-                        environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
-                        network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
+                        environment: LOCAL.to_owned(),
+                        network: LOCAL.to_owned(),
                     }
                     .build(),
                 )?

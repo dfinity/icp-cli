@@ -175,14 +175,7 @@ pub async fn consolidate_manifest(
                     // For explicit paths, validate that they exist and contain canister.yaml
                     let mut validated_paths = vec![];
                     for p in paths {
-                        if !p.is_dir() {
-                            return NotFoundSnafu {
-                                kind: "canister".to_string(),
-                                path: pattern.to_string(),
-                            }
-                            .fail();
-                        }
-                        if !p.join(CANISTER_MANIFEST).exists() {
+                        if !p.join(CANISTER_MANIFEST).is_file() {
                             return NotFoundSnafu {
                                 kind: "canister".to_string(),
                                 path: pattern.to_string(),

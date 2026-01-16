@@ -1,5 +1,7 @@
 # Unreleased
 
+* chore!: use `--tcycles` for consistency instead of raw `--cycles` amounts
+
 # v0.1.0-beta.3
 
 * feat: Remove requirement that the user install `icp-cli-network-launcher`, auto-install it on first use

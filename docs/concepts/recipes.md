@@ -91,7 +91,7 @@ Always include `sha256` for remote recipes.
 |--------|---------|
 | `@dfinity/rust` | Rust canisters with Cargo |
 | `@dfinity/motoko` | Motoko canisters |
-| `@dfinity/assets` | Asset canisters for static files |
+| `@dfinity/asset-canister` | Asset canisters for static files |
 | `@dfinity/prebuilt` | Pre-compiled WASM files |
 
 ## Recipe Template Syntax
@@ -100,34 +100,23 @@ Recipes use Handlebars templating:
 
 ```yaml
 # recipes/example.hb.yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          {{#if configuration.optimize}}
-          - cargo build --release
-          {{else}}
-          - cargo build
-          {{/if}}
-          - cp target/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+build:
+  steps:
+    - type: script
+      commands:
+        {{#if optimize}}
+        - cargo build --release
+        {{else}}
+        - cargo build
+        {{/if}}
+        - cp target/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
 
-  {{#if configuration.settings}}
-  settings:
-    {{#each configuration.settings}}
-    {{@key}}: {{this}}
-    {{/each}}
-  {{/if}}
 ```
 
 ### Template Variables
 
-- `{{configuration.X}}` — Access configuration parameters
-- `{{#if X}}...{{/if}}` — Conditional sections
-- `{{#each X}}...{{/each}}` — Loop over arrays or objects
-- `{{@key}}` — Current key in an each loop
-- `{{this}}` — Current value in an each loop
+icp-cli will essentially render the handlebar template with all the parameters passed
+in the configuration section of the recipe.
 
 ## Viewing Expanded Configuration
 
@@ -142,7 +131,7 @@ This displays the effective configuration after all recipes are rendered.
 ## When to Use Recipes
 
 **Use recipes when:**
-- Building standard canister types (Rust, Motoko, assets)
+- Building standard canister types (Rust, Motoko, Asset Canister)
 - Sharing configurations across multiple canisters
 - Encoding team-specific build conventions
 

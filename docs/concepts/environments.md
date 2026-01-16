@@ -20,6 +20,7 @@ networks:
       host: 127.0.0.1
       port: 8000
 ```
+Managed networks can run natively on your machine or inside a docker container.
 
 Use managed networks for local development and testing.
 
@@ -34,7 +35,7 @@ networks:
     url: https://testnet.ic0.app
 ```
 
-Use connected networks for staging, testnets, and production.
+Use connected networks for shared testnets and production.
 
 ### Implicit Networks
 
@@ -84,15 +85,7 @@ Without environments, you'd need to:
 - Manually specify settings for each deployment
 - Track canister IDs separately
 
-Environments encapsulate all of this:
-
-```bash
-# Instead of remembering flags and settings...
-icp deploy --network mainnet --compute-allocation 10 ...
-
-# Just use an environment
-icp deploy --environment production
-```
+Environments encapsulate all of this.
 
 ### Implicit Environments
 
@@ -134,6 +127,10 @@ canisters:
       compute_allocation: 1  # Default
 
 environments:
+  - name: staging
+    network: mainnet
+    canisters: [backend]
+
   - name: production
     network: mainnet
     canisters: [backend]
@@ -151,11 +148,8 @@ icp deploy
 # Explicit local
 icp deploy --environment local
 
-# Mainnet shorthand
-icp deploy --ic
-
 # Custom environment
-icp deploy --environment staging
+icp deploy --e staging
 ```
 
 ## Networks vs Environments
@@ -184,11 +178,9 @@ Each environment maintains separate canister IDs. The storage location depends o
 - **Managed networks** (local): `.icp/cache/mappings/<environment>.ids.json`
 - **Connected networks** (mainnet): `.icp/data/mappings/<environment>.ids.json`
 
-For example:
-- `icp deploy` → IDs stored in `.icp/cache/mappings/local.ids.json`
-- `icp deploy --ic` → IDs stored in `.icp/data/mappings/ic.ids.json`
-
-This means your local canister IDs are independent of your mainnet IDs.
+**IMPORTANT** Creating canisters on mainnet is like buying real-estate so you should make sure
+not to lose the canister ids. It is common practice to checkin the contents of `.icp/data` in
+source control so as not to lose them.
 
 ## Next Steps
 

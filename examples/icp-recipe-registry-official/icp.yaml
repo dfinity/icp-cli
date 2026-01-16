@@ -17,7 +17,7 @@ canisters:
 
   - name: my-canister-with-version
     recipe:
-      type: "@dfinity/prebuilt@v1.0.5"
+      type: "@dfinity/prebuilt@v2.0.0"
       configuration:
         path: ../icp-pre-built/dist/hello_world.wasm
         sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a

@@ -11,6 +11,8 @@ env:
   CARGO_NET_RETRY: 10
   # Use the local .curlrc
   CURL_HOME: .
+  # Disable incremental compilation
+  CARGO_INCREMENTAL: 0
 
 defaults:
   run:
@@ -86,7 +88,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-            ${{ contains(matrix.os, 'windows') && 'C:/vcpkg' || '' }}
+            ${{ contains(matrix.os, 'windows') && 'C:/vcpkg/installed' || '' }}
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Setup image (Linux)

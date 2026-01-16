@@ -237,7 +237,7 @@ Read a metadata section from a canister
 
 ###### **Arguments:**
 
-* `<CANISTER>` — The canister name or principal to target. When using a name, an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 * `<METADATA_NAME>` — The name of the metadata section to read
 
 ###### **Options:**

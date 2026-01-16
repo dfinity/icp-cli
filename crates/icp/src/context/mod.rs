@@ -10,9 +10,7 @@ use crate::{
     identity::IdentitySelection,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
-    project::{
-        DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_NETWORK_NAME, DEFAULT_MAINNET_NETWORK_URL,
-    },
+    project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_MAINNET_NETWORK_NAME},
     store_id::{IdMapping, LookupIdError},
 };
 use candid::Principal;
@@ -165,7 +163,7 @@ impl Context {
                         name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
-                                url: DEFAULT_MAINNET_NETWORK_URL.to_string(),
+                                url: IC_MAINNET_NETWORK_URL.to_string(),
                                 root_key: None,
                             },
                         },

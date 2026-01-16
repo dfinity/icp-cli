@@ -24,7 +24,6 @@ pub const DEFAULT_MAINNET_NETWORK_NAME: &str = "ic";
 pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
 pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
 pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
-pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
 #[derive(Debug, Snafu)]
 pub enum EnvironmentError {

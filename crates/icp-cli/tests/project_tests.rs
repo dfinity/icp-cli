@@ -139,34 +139,132 @@ fn glob_path() {
         .success();
 }
 
-// TODO(or.ricon): This test is currently not passing, fix it.
-// #[test]
-// fn explicit_path_missing() {
-//     let ctx = TestContext::new();
+#[test]
+fn explicit_path_missing() {
+    let ctx = TestContext::new();
 
-//     // Setup project
-//     let project_dir = ctx.create_project_dir("icp");
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
 
-//     // Project manifest
-//     let pm = r#"
-//     canisters:
-//       - my-canister
-//     "#;
+    // Project manifest
+    let pm = r#"
+    canisters:
+      - my-canister
+    "#;
 
-//     write_string(
-//         &project_dir.join("icp.yaml"), // path
-//         pm,                            // contents
-//     )
-//     .expect("failed to write project manifest");
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
 
-//     // Invoke build
-//     ctx.icp()
-//         .current_dir(project_dir)
-//         .args(["build"])
-//         .assert()
-//         .failure()
-//         .stderr(eq("Error: canister path must exist and be a directory \'my-canister\'").trim());
-// }
+    // Invoke project show
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["project", "show"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "could not locate a canister manifest at: 'my-canister'",
+        ));
+}
+
+#[test]
+fn explicit_path_missing_canister_yaml() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = r#"
+    canisters:
+      - my-canister
+    "#;
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Create directory but no canister.yaml
+    create_dir_all(&project_dir.join("my-canister")).expect("failed to create canister directory");
+
+    // Invoke project show
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["project", "show"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "could not locate a canister manifest at: 'my-canister'",
+        ));
+}
+
+#[test]
+fn explicit_path_with_subdirectory() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = r#"
+    canisters:
+      - canisters/backend
+      - canisters/frontend
+    "#;
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Backend canister manifest
+    let backend_cm = indoc! {r#"
+        name: backend
+        build:
+          steps:
+            - type: script
+              command: echo "build"
+    "#};
+
+    create_dir_all(&project_dir.join("canisters/backend"))
+        .expect("failed to create backend directory");
+
+    write_string(
+        &project_dir.join("canisters/backend/canister.yaml"),
+        backend_cm,
+    )
+    .expect("failed to write backend manifest");
+
+    // Frontend canister manifest
+    let frontend_cm = indoc! {r#"
+        name: frontend
+        build:
+          steps:
+            - type: script
+              command: echo "build"
+    "#};
+
+    create_dir_all(&project_dir.join("canisters/frontend"))
+        .expect("failed to create frontend directory");
+
+    write_string(
+        &project_dir.join("canisters/frontend/canister.yaml"),
+        frontend_cm,
+    )
+    .expect("failed to write frontend manifest");
+
+    // Invoke project show - should succeed
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "show"])
+        .assert()
+        .success();
+}
 
 #[test]
 fn redefine_mainnet_network_disallowed() {
@@ -189,7 +287,7 @@ fn redefine_mainnet_network_disallowed() {
     // Any command that loads the project should fail
     ctx.icp()
         .current_dir(project_dir)
-        .args(["build"])
+        .args(["project", "show"])
         .assert()
         .failure()
         .stderr(contains("`mainnet` is a reserved network name"));

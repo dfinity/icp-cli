@@ -41,7 +41,7 @@ pub fn initialize(
 
     // Project Root
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        current_dir()
+        dunce::canonicalize(current_dir().context(CwdSnafu)?)
             .context(CwdSnafu)?
             .try_into()
             .context(Utf8PathSnafu)?, // cwd

@@ -1,6 +1,7 @@
 # Unreleased
 
 * feat: Show `name` in `canister status` command
+* fix: Validate explicit canister paths and throw an error if `canister.yaml` is not found
 
 # v0.1.0-beta.3
 

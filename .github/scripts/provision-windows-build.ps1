@@ -11,3 +11,5 @@ $env:VCPKG_BUILD_TYPE = 'release'
 .\vcpkg integrate install
 'OPENSSL_STATIC=1' >> $env:GITHUB_ENV
 'OPENSSL_NO_VENDOR=1' >> $env:GITHUB_ENV
+
+'WSLENV=GITHUB_ENV/p' >> $env:GITHUB_ENV

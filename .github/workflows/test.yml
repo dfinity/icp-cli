@@ -98,10 +98,16 @@ jobs:
         run: ./.github/scripts/provision-windows-build.ps1
         shell: pwsh
 
+      - name: Setup WSL2 (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
+        with:
+          distribution: Ubuntu-22.04
+
       - name: Setup Docker in WSL2 (Windows)
         if: ${{ contains(matrix.os, 'windows') }}
-        run: .github/scripts/setup-wsl2-docker.ps1
-        shell: pwsh
+        run: .github/scripts/init-docker.sh
+        shell: wsl-bash_Ubuntu-22.04 {0}
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}

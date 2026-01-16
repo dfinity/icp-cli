@@ -276,6 +276,18 @@ impl TestContext {
             }
             #[cfg(windows)]
             {
+                let convert = std::env::var("ICP_CLI_DOCKER_WSL2_MODE").unwrap_or_default() == "1";
+                let launcher_dir_param = if convert {
+                    wslpath2::convert(
+                        launcher_dir.as_str(),
+                        None,
+                        wslpath2::Conversion::WindowsToWsl,
+                        true,
+                    )
+                    .expect("Failed to convert launcher dir to WSL path")
+                } else {
+                    launcher_dir.to_string()
+                };
                 let mut cmd = std::process::Command::new("docker");
                 cmd.args([
                     "run",
@@ -287,11 +299,12 @@ impl TestContext {
                         "linux/amd64"
                     },
                     "-v",
-                    &format!("{launcher_dir}:/app/status"),
+                    &format!("{launcher_dir_param}:/app/status"),
                     "--cidfile",
+                    network_dir.join("container-id").as_str(),
+                    "-P",
+                    "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
                 ]);
-                cmd.arg(network_dir.join("container-id").as_std_path());
-                cmd.args(["-P", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"]);
                 cmd.args(flags);
                 cmd.stdout(Stdio::inherit());
                 cmd.stderr(Stdio::inherit());

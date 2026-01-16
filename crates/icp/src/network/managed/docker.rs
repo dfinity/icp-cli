@@ -17,6 +17,7 @@ use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;
+use wslpath2::Conversion;
 
 use crate::network::{
     ManagedImageConfig,
@@ -49,7 +50,10 @@ pub async fn spawn_docker_launcher(
     } else {
         "linux/amd64".to_string()
     };
+    let wsl2_convert =
+        cfg!(windows) && std::env::var("ICP_CLI_DOCKER_WSL2_MODE").is_ok_and(|v| v == "1");
     let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
+    let host_status_dir_param = convert_path(wsl2_convert, host_status_dir.path())?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
         #[cfg(unix)]
@@ -113,6 +117,7 @@ pub async fn spawn_docker_launcher(
             let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
             let host = dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
             let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
+            let host_param = convert_path(wsl2_convert, &host)?;
             let (target, flags) = match rest.split_once(':') {
                 Some((t, f)) => (t, Some(f)),
                 None => (rest, None),
@@ -126,7 +131,7 @@ pub async fn spawn_docker_launcher(
                 .transpose()?;
             Ok::<_, DockerLauncherError>(Mount {
                 target: Some(target.to_string()),
-                source: Some(host.to_string()),
+                source: Some(host_param),
                 typ: Some(MountTypeEnum::BIND),
                 read_only,
                 ..<_>::default()
@@ -134,7 +139,7 @@ pub async fn spawn_docker_launcher(
         })
         .chain([Ok(Mount {
             target: Some(status_dir.to_string()),
-            source: Some(host_status_dir.path().to_string()),
+            source: Some(host_status_dir_param),
             typ: Some(MountTypeEnum::BIND),
             read_only: Some(false),
             ..<_>::default()
@@ -188,7 +193,12 @@ pub async fn spawn_docker_launcher(
                 host_config: Some(HostConfig {
                     port_bindings: Some(portmap),
                     mounts: Some(mounts),
-                    binds: Some(volumes.to_vec()),
+                    binds: Some(
+                        volumes
+                            .iter()
+                            .map(|v| convert_volume(wsl2_convert, v))
+                            .try_collect()?,
+                    ),
                     shm_size: *shm_size,
                     ..<_>::default()
                 }),
@@ -360,6 +370,46 @@ pub enum StopContainerError {
     },
 }
 
+fn convert_path(convert: bool, path: &Path) -> Result<String, DockerLauncherError> {
+    if convert {
+        wslpath2::convert(path.as_str(), None, Conversion::WindowsToWsl, true).map_err(|e| {
+            WslPathConvertSnafu {
+                msg: e.to_string(),
+                path: path.to_path_buf(),
+            }
+            .build()
+        })
+    } else {
+        Ok(path.to_string())
+    }
+}
+
+fn convert_volume(convert: bool, volume: &str) -> Result<String, DockerLauncherError> {
+    // docker's actual parsing logic, clunky as it is
+    let (host, rest) = if volume.chars().next().unwrap().is_ascii_alphabetic()
+        && volume.chars().nth(1).unwrap() == ':'
+    {
+        let split_point = volume[2..]
+            .find(':')
+            .map(|idx| idx + 2)
+            .context(ParseMountSnafu { mount: volume })?;
+        (&volume[..split_point], &volume[split_point + 1..])
+    } else {
+        volume
+            .split_once(':')
+            .context(ParseMountSnafu { mount: volume })?
+    };
+    let host_param = if host.contains(&['/', '\\'][..]) {
+        let host_path =
+            dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
+        let host_path = PathBuf::try_from(host_path.clone()).context(BadPathSnafu)?;
+        convert_path(convert, &host_path)?
+    } else {
+        host.to_string()
+    };
+    Ok(format!("{host_param}:{rest}"))
+}
+
 #[derive(Debug, Snafu)]
 pub enum DockerLauncherError {
     #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
@@ -471,6 +521,8 @@ pub enum DockerLauncherError {
         source: std::str::Utf8Error,
         display: String,
     },
+    #[snafu(display("failed to convert path to WSL2: {msg}"))]
+    WslPathConvertError { msg: String, path: PathBuf },
 }
 
 #[derive(Default)]

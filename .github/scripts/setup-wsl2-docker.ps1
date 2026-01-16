@@ -2,8 +2,9 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 
-wsl --install -d Ubuntu-22.04 --no-launch
+wsl --update
 wsl --set-default-version 2
+wsl --install -d Ubuntu-22.04 --no-launch
 
 ubuntu2204.exe install --root
 

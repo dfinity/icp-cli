@@ -159,14 +159,7 @@ async fn cycles_mint_on_ic() {
     // Run mint command with --network ic
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "cycles",
-            "mint",
-            "--icp",
-            "1",
-            "--network",
-            "ic",
-        ])
+        .args(["cycles", "mint", "--icp", "1", "--network", "ic"])
         .assert()
         .stderr(contains(
             "Error: Insufficient funds: 1.00010000 ICP required, 0 ICP available.",

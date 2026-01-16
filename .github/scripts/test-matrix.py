@@ -21,7 +21,7 @@ for test in test_names():
     })
     include.append({
         "test": test,
-        "os": "windows-2022"
+        "os": "windows-2025"
     })
 
     # macOS: only run selected tests

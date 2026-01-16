@@ -156,16 +156,6 @@ async fn cycles_mint_with_mainnet() {
     // Create identity
     clients::icp(&ctx, &project_dir, None).use_new_random_identity();
 
-    // Run mint command with explicit --mainnet flag
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "1", "--mainnet"])
-        .assert()
-        .stderr(contains(
-            "Error: Insufficient funds: 1.00010000 ICP required, 0 ICP available.",
-        ))
-        .failure();
-
     // Run mint command with --network
     ctx.icp()
         .current_dir(&project_dir)

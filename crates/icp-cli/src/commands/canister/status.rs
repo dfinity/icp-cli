@@ -60,8 +60,8 @@ async fn get_principals(
     canister: Option<args::Canister>,
     environment: &EnvironmentSelection,
     network: &NetworkSelection,
-) -> Result<Vec<Principal>, anyhow::Error> {
-    let mut cids = Vec::<Principal>::new();
+) -> Result<Vec<(Option<String>, Principal)>, anyhow::Error> {
+    let mut cids = Vec::<(Option<String>, Principal)>::new();
 
     match canister {
         Some(canister) => {
@@ -69,7 +69,10 @@ async fn get_principals(
             let cid = ctx
                 .get_canister_id(&canister_selection, network, environment)
                 .await?;
-            cids.push(cid);
+            match canister {
+                args::Canister::Name(name) => cids.push((Some(name), cid)),
+                args::Canister::Principal(_) => cids.push((None, cid)),
+            };
         }
         None => {
             let env = ctx.get_environment(environment).await?;
@@ -81,7 +84,7 @@ async fn get_principals(
                         environment,
                     )
                     .await?;
-                cids.push(cid);
+                cids.push((Some(c.name.clone()), cid));
             }
         }
     };
@@ -136,6 +139,7 @@ async fn read_state_tree_canister_module_hash(
 async fn build_public_status(
     agent: &Agent,
     cid: Principal,
+    maybe_name: Option<String>,
 ) -> Result<PublicCanisterStatusResult, anyhow::Error> {
     let controllers = match read_state_tree_canister_controllers(agent, cid).await? {
         Some(controllers) => controllers.iter().map(|p| p.to_string()).collect(),
@@ -152,6 +156,7 @@ async fn build_public_status(
 
     Ok(PublicCanisterStatusResult {
         id: cid,
+        name: maybe_name,
         controllers,
         module_hash,
     })
@@ -179,7 +184,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     .await?;
 
     if args.options.id_only {
-        for cid in cids.iter() {
+        for (_, cid) in cids.iter() {
             let _ = ctx.term.write_line(&format!("{cid}"));
         }
         return Ok(());
@@ -196,11 +201,12 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-    for cid in cids.iter() {
+    for (i, (maybe_name, cid)) in cids.iter().enumerate() {
         let output = match args.options.public {
             true => {
                 // We construct the status out of the state tree
-                let status = build_public_status(&agent, cid.to_owned()).await?;
+                let status =
+                    build_public_status(&agent, cid.to_owned(), maybe_name.clone()).await?;
 
                 match args.options.json_format {
                     true => serde_json::to_string(&status)
@@ -213,8 +219,11 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                 // Retrieve canister status from management canister
                 match mgmt.canister_status(cid).await {
                     Ok((result,)) => {
-                        let status =
-                            SerializableCanisterStatusResult::from(cid.to_owned(), &result);
+                        let status = SerializableCanisterStatusResult::from(
+                            cid.to_owned(),
+                            maybe_name.clone(),
+                            &result,
+                        );
 
                         match args.options.json_format {
                             true => serde_json::to_string(&status)
@@ -242,7 +251,8 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                         }
 
                         // We got E_NOT_A_CONTROLLER so we fallback on fetching the public status
-                        let status = build_public_status(&agent, cid.to_owned()).await?;
+                        let status =
+                            build_public_status(&agent, cid.to_owned(), maybe_name.clone()).await?;
 
                         match args.options.json_format {
                             true => serde_json::to_string(&status)
@@ -258,6 +268,12 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             }
         };
 
+        // Space records out to make things more readable
+        if i > 0 && !args.options.json_format {
+            ctx.term
+                .write_line("")
+                .expect("Failed to write output to terminal");
+        }
         ctx.term
             .write_line(output.trim())
             .expect("Failed to write output to the terminal");
@@ -269,6 +285,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 #[derive(Serialize)]
 struct PublicCanisterStatusResult {
     id: Principal,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+
     controllers: Vec<String>,
     module_hash: Option<String>,
 }
@@ -277,6 +297,10 @@ struct PublicCanisterStatusResult {
 #[derive(Serialize)]
 struct SerializableCanisterStatusResult {
     id: Principal,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+
     status: String,
     settings: SerializableCanisterSettings,
     module_hash: Option<String>,
@@ -317,9 +341,10 @@ struct SerializableQueryStats {
 }
 
 impl SerializableCanisterStatusResult {
-    fn from(id: Principal, result: &CanisterStatusResult) -> Self {
+    fn from(id: Principal, maybe_name: Option<String>, result: &CanisterStatusResult) -> Self {
         Self {
             id,
+            name: maybe_name,
             status: format!("{:?}", result.status),
             settings: SerializableCanisterSettings::from(&result.settings),
             module_hash: result.module_hash.as_ref().map(|hash| {
@@ -379,6 +404,9 @@ impl SerializableQueryStats {
 fn build_public_output(result: &PublicCanisterStatusResult) -> Result<String, anyhow::Error> {
     let mut buf = String::new();
     writeln!(&mut buf, "Canister Id: {}", result.id)?;
+    if let Some(name) = &result.name {
+        writeln!(&mut buf, "Canister Name: {}", name)?;
+    }
     writeln!(&mut buf, "Canister Status Report:")?;
 
     writeln!(&mut buf, "  Controllers: {}", result.controllers.join(", "))?;
@@ -395,6 +423,9 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     let mut buf = String::new();
 
     writeln!(&mut buf, "Canister Id: {}", result.id)?;
+    if let Some(name) = &result.name {
+        writeln!(&mut buf, "Canister Name: {}", name)?;
+    }
     writeln!(&mut buf, "Canister Status Report:")?;
     writeln!(&mut buf, "  Status: {}", &result.status)?;
 

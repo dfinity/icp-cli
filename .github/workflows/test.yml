@@ -98,6 +98,11 @@ jobs:
         run: ./.github/scripts/provision-windows-build.ps1
         shell: pwsh
 
+      - name: Setup Docker in WSL2 (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        run: .github/scripts/setup-wsl2-docker.ps1
+        shell: pwsh
+
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
 

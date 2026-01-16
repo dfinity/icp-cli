@@ -84,8 +84,13 @@ pub async fn spawn_docker_launcher(
         #[cfg(windows)]
         None => r"\\.\pipe\docker_engine".to_string(),
     };
-    let docker = Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
-        .context(ConnectDockerSnafu { socket: &socket })?;
+    let docker = if socket.starts_with("tcp://") || socket.starts_with("http://") {
+        let http_addr = socket.replace("tcp://", "http://");
+        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
+    } else {
+        Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
+    }
+    .context(ConnectDockerSnafu { socket: &socket })?;
     let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {

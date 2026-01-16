@@ -117,8 +117,10 @@ impl CreateCanisterError {
             CreateCanisterError::TooOld => "created_at_time is too old.".to_string(),
             CreateCanisterError::InsufficientFunds { balance } => {
                 format!(
-                    "Insufficient cycles. Requested: {requested_cycles} cycles, available balance: {balance} cycles. 
-                    use `icp cycles mint` to get more cycles or use `--cycles` to specify a different amount."
+                    "Insufficient cycles. Requested: {} TCYCLES, available balance: {} TCYCLES. 
+                    use `icp cycles mint` to get more cycles or use `--tcycles` to specify a different amount.",
+                    BigDecimal::new(requested_cycles.into(), CYCLES_LEDGER_DECIMALS),
+                    BigDecimal::from_biguint(balance.0.clone(), CYCLES_LEDGER_DECIMALS)
                 )
             }
         }

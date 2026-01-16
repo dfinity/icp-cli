@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use bigdecimal::BigDecimal;
 use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
@@ -40,9 +41,9 @@ pub(crate) struct DeployArgs {
     #[arg(long)]
     pub(crate) controller: Vec<Principal>,
 
-    /// Cycles to fund canister creation (in cycles).
-    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES)]
-    pub(crate) cycles: u128,
+    /// Cycles to fund canister creation (in TCYCLES).
+    #[arg(long, default_value = create::DEFAULT_CANISTER_TCYCLES)]
+    pub(crate) tcycles: BigDecimal,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -115,7 +116,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         let create_operation = CreateOperation::new(
             agent.clone(),
             args.subnet,
-            args.cycles,
+            args.tcycles.clone(),
             existing_canisters.into_values().collect(),
         );
         let mut futs = FuturesOrdered::new();

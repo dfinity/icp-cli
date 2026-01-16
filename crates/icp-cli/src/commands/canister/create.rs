@@ -1,8 +1,9 @@
 use anyhow::anyhow;
+use bigdecimal::BigDecimal;
 use candid::{Nat, Principal};
 use clap::Args;
 use icp::context::Context;
-use icp::{Canister, context::CanisterSelection, prelude::*};
+use icp::{Canister, context::CanisterSelection};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
     progress::{ProgressManager, ProgressManagerSettings},
 };
 
-pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
+pub(crate) const DEFAULT_CANISTER_TCYCLES: &str = "2";
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct CanisterSettings {
@@ -49,9 +50,9 @@ pub(crate) struct CreateArgs {
     #[arg(long, short = 'q')]
     pub(crate) quiet: bool,
 
-    /// Cycles to fund canister creation (in raw cycles).
-    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
-    pub(crate) cycles: u128,
+    /// Cycles to fund canister creation (in TCYCLES).
+    #[arg(long, default_value = DEFAULT_CANISTER_TCYCLES)]
+    pub(crate) tcycles: BigDecimal,
 
     /// The subnet to create canisters on.
     #[arg(long)]
@@ -128,7 +129,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .collect();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
     let create_operation =
-        CreateOperation::new(agent, args.subnet, args.cycles, existing_canisters);
+        CreateOperation::new(agent, args.subnet, args.tcycles.clone(), existing_canisters);
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
     let pb = progress_manager.create_progress_bar(&canister);

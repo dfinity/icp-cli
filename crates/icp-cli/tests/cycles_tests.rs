@@ -74,8 +74,8 @@ async fn cycles_balance() {
         .args([
             "cycles",
             "mint",
-            "--cycles",
-            "1000000000",
+            "--tcycles",
+            "0.001",
             "--environment",
             "random-environment",
         ])
@@ -89,8 +89,8 @@ async fn cycles_balance() {
         .args([
             "cycles",
             "mint",
-            "--cycles",
-            "1500000000",
+            "--tcycles",
+            "0.0015",
             "--environment",
             "random-environment",
         ])

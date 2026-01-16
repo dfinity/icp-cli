@@ -64,9 +64,9 @@ pub struct MintInfo {
 ///
 /// * `agent` - The IC agent to use for queries and updates
 /// * `icp_amount` - Optional ICP amount to convert to cycles
-/// * `cycles_amount` - Optional desired cycles amount (will calculate required ICP)
+/// * `tcycles_amount` - Optional desired cycles amount in TCYCLES (will calculate required ICP)
 ///
-/// One of `icp_amount` or `cycles_amount` must be provided (but not both).
+/// One of `icp_amount` or `tcycles_amount` must be provided (but not both).
 ///
 /// # Returns
 ///
@@ -74,7 +74,7 @@ pub struct MintInfo {
 pub async fn mint_cycles(
     agent: &Agent,
     icp_amount: Option<&BigDecimal>,
-    cycles_amount: Option<u128>,
+    tcycles_amount: Option<&BigDecimal>,
 ) -> Result<MintInfo, MintCyclesError> {
     // Get user principal
     let user_principal = agent
@@ -86,7 +86,11 @@ pub async fn mint_cycles(
         (icp_amount * 100_000_000_u64)
             .to_u64()
             .ok_or(MintCyclesError::IcpAmountOverflow)?
-    } else if let Some(cycles_amount) = cycles_amount {
+    } else if let Some(tcycles_amount) = tcycles_amount {
+        let cycles_amount = (tcycles_amount.clone() * 10u128.pow(CYCLES_LEDGER_DECIMALS as u32))
+            .to_u128()
+            .ok_or(MintCyclesError::IcpAmountOverflow)?;
+
         // Query CMC for conversion rate
         let cmc_response = agent
             .query(

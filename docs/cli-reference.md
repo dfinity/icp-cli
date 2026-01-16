@@ -160,9 +160,9 @@ Create a canister on a network
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
-* `--cycles <CYCLES>` — Cycles to fund canister creation (in raw cycles)
+* `--tcycles <TCYCLES>` — Cycles to fund canister creation (in TCYCLES)
 
-  Default value: `2000000000000`
+  Default value: `2`
 * `--subnet <SUBNET>` — The subnet to create canisters on
 
 
@@ -445,7 +445,7 @@ Convert icp to cycles
 ###### **Options:**
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles
-* `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed
+* `--tcycles <TCYCLES>` — Amount of cycles to mint (in TCYCLES). Automatically determines the amount of ICP needed
 * `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `--mainnet` — Shorthand for --network=mainnet
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
@@ -474,9 +474,9 @@ Deploy a project to an environment
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
-* `--cycles <CYCLES>` — Cycles to fund canister creation (in cycles)
+* `--tcycles <TCYCLES>` — Cycles to fund canister creation (in TCYCLES)
 
-  Default value: `2000000000000`
+  Default value: `2`
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--ic` — Shorthand for --environment=ic

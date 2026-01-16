@@ -682,8 +682,8 @@ async fn canister_settings_update_miscellaneous() {
             "deploy",
             "--subnet",
             common::SUBNET_ID,
-            "--cycles",
-            &format!("{}", 120 * TRILLION), // 120 TCYCLES because compute allocation is expensive
+            "--tcycles",
+            "120", // 120 TCYCLES because compute allocation is expensive
             "--environment",
             "random-environment",
         ])

@@ -4,11 +4,10 @@ Project templates let users scaffold new ICP projects with `icp new`. This guide
 
 ## Overview
 
-icp-cli uses [cargo-generate](https://cargo-generate.github.io/cargo-generate/) for project templating. Templates are Git repositories containing:
+icp-cli uses [cargo-generate](https://cargo-generate.github.io/cargo-generate/) for project templating. Templates are folders or git repositories repositories containing:
 
 - Project files with placeholder variables
 - A `cargo-generate.toml` configuration file
-- Optional prompts for user customization
 
 ## Quick Start
 
@@ -20,6 +19,7 @@ Create a basic template:
 my-template/
 ├── cargo-generate.toml
 ├── icp.yaml
+├── {{project-name}}.did
 └── src/
     └── main.mo
 ```
@@ -42,6 +42,8 @@ canisters:
       configuration:
         entry: src/main.mo
 ```
+
+Filenames with handlebar placeholders like `{{project-name}}.did` will be renamed with value.
 
 ### Using Your Template
 
@@ -74,7 +76,6 @@ Define custom variables in `cargo-generate.toml`:
 name = "My Template"
 
 [placeholders]
-canister_type = { type = "string", prompt = "Canister language?", choices = ["motoko", "rust"], default = "motoko" }
 include_frontend = { type = "bool", prompt = "Include frontend?", default = true }
 ```
 
@@ -83,15 +84,8 @@ Use them in templates:
 ```yaml
 # icp.yaml
 canisters:
-  - name: {{project-name}}-backend
-    recipe:
-      type: "@dfinity/{{canister_type}}"
-      configuration:
-        {{#if (eq canister_type "rust")}}
-        package: {{crate_name}}
-        {{else}}
-        entry: src/backend/main.mo
-        {{/if}}
+
+  # ... snip snip for brevity ...
 
   {{#if include_frontend}}
   - name: {{project-name}}-frontend
@@ -100,6 +94,7 @@ canisters:
       configuration:
         source: dist
   {{/if}}
+
 ```
 
 ## Template Structure
@@ -214,67 +209,10 @@ icp new my-project --git https://github.com/org/icp-templates --subfolder motoko
 
 ## Example Templates
 
-### Basic Motoko Template
+The default templates in [github.com/dfinity/icp-cli-templates](https://github.com/dfinity/icp-cli-templates) serve as good
+examples to follow.
 
-```toml
-# cargo-generate.toml
-[template]
-name = "Motoko Starter"
-description = "A simple Motoko canister"
-```
-
-```yaml
-# icp.yaml
-canisters:
-  - name: {{project-name}}
-    recipe:
-      type: "@dfinity/motoko"
-      configuration:
-        entry: src/main.mo
-```
-
-```motoko
-// src/main.mo
-actor {
-    public func greet(name : Text) : async Text {
-        return "Hello, " # name # "!";
-    };
-};
-```
-
-### Basic Rust Template
-
-```toml
-# cargo-generate.toml
-[template]
-name = "Rust Starter"
-description = "A simple Rust canister"
-```
-
-```yaml
-# icp.yaml
-canisters:
-  - name: {{project-name}}
-    recipe:
-      type: "@dfinity/rust"
-      configuration:
-        package: {{crate_name}}
-```
-
-```toml
-# Cargo.toml
-[package]
-name = "{{crate_name}}"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-candid = "0.10"
-ic-cdk = "0.13"
-```
+To use more advanced features of cargo-generate, it is recommended you check out the book [https://cargo-generate.github.io/cargo-generate/](https://cargo-generate.github.io/cargo-generate/).
 
 ## Testing Templates
 
@@ -298,7 +236,7 @@ Before publishing, verify:
 
 - [ ] `icp new` completes without errors
 - [ ] Generated project builds: `icp build`
-- [ ] Generated project deploys: `icp deploy`
+- [ ] Generated project deploys to the local network: `icp deploy`
 - [ ] Variables are substituted correctly
 - [ ] Conditional content works as expected
 - [ ] README is helpful and accurate

@@ -201,7 +201,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     // Management Interface
     let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
-    for (maybe_name, cid) in cids.iter() {
+    for (i, (maybe_name, cid)) in cids.iter().enumerate() {
         let output = match args.options.public {
             true => {
                 // We construct the status out of the state tree
@@ -268,6 +268,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             }
         };
 
+        // Space records out to make things more readable
+        if i > 0 && !args.options.json_format {
+            ctx.term.write_line("").expect("Failed to write output to terminal");
+        }
         ctx.term
             .write_line(output.trim())
             .expect("Failed to write output to the terminal");
@@ -279,7 +283,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 #[derive(Serialize)]
 struct PublicCanisterStatusResult {
     id: Principal,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+
     controllers: Vec<String>,
     module_hash: Option<String>,
 }
@@ -288,7 +295,10 @@ struct PublicCanisterStatusResult {
 #[derive(Serialize)]
 struct SerializableCanisterStatusResult {
     id: Principal,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+
     status: String,
     settings: SerializableCanisterSettings,
     module_hash: Option<String>,

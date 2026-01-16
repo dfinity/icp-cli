@@ -1,48 +1,66 @@
 # Creating Recipes
 
-Recipes are reusable build templates that you can create to encode your team's build conventions or share with the community.
+Recipes are reusable build templates that you can create to encode your team's build conventions or share them with the community.
 
 ## Recipe File Structure
 
-A recipe is a YAML file with Handlebars templating. The file extension should be `.hb.yaml`:
+A recipe is a [handlebars](https://handlebarsjs.com) template that renders to yaml and contains the `build` and `sync` steps
+of a canister configuration.
 
-```yaml
-# recipes/my-recipe.hb.yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - echo "Building {{configuration.name}}..."
+```
+{{! # recipes/my-recipe.hbs }}
+build:
+  steps:
+    - type: script
+      commands:
+        - echo "Building {{ name }}..."
+
+{{! # optional sync step }}
+sync:
+  steps:
+    - type: script
+      commands:
+        - echo "Syncing {{ name }}..."
 ```
 
 ## Basic Recipe Example
 
-A simple recipe for optimized Rust builds:
+A simple recipe for Rust builds:
 
-```yaml
-# recipes/optimized-rust.hb.yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --package {{configuration.package}} --target wasm32-unknown-unknown --release
-          - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+```
+{{! file: ./recipes/rust-example.hbs }}
+{{! A recipe for building a rust canister }}
+{{! `package: string` The package to build }}
+{{! `shrink: boolean` Optimizes the wasm with ic-wasm }}
+
+build:
+  steps:
+    - type: script
+      commands:
+        - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
+        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+
+    - type: script
+      commands:
+        - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 'ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n'; exit 1; }
+        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "cargo:version" -d "$(cargo --version)" --keep-name-section
+        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "template:type" -d "rust" --keep-name-section
+        {{#if shrink}}
+        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" shrink --keep-name-section
+        {{/if}}
 ```
 
 Usage:
 
 ```yaml
+# file: icp.yaml
 canisters:
   - name: backend
     recipe:
-      type: ./recipes/optimized-rust.hb.yaml
+      type: ./recipes/rust-example.hbs
       configuration:
-        name: backend
         package: my-backend-crate
+        shrink: true
 ```
 
 ## Template Syntax
@@ -51,102 +69,79 @@ Recipes use [Handlebars](https://handlebarsjs.com/) templating:
 
 ### Variables
 
-Access configuration parameters:
+Access configuration parameters passed in the `configuration` section of the recipe.
 
-```yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --package {{configuration.package}}
+```
+build:
+  steps:
+    - type: script
+      commands:
+        - cargo build --package {{configuration.package}}
 ```
 
 ### Conditionals
 
 Use `{{#if}}` for optional configuration:
 
-```yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          {{#if configuration.optimize}}
-          - cargo build --release --target wasm32-unknown-unknown
-          - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
-          {{else}}
-          - cargo build --target wasm32-unknown-unknown
-          - cp target/wasm32-unknown-unknown/debug/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
-          {{/if}}
+```
+build:
+  steps:
+    - type: script
+      commands:
+        {{#if shrink}}
+        - cargo build --release --target wasm32-unknown-unknown
+        - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+        {{else}}
+        - cargo build --target wasm32-unknown-unknown
+        - cp target/wasm32-unknown-unknown/debug/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        {{/if}}
 ```
 
 ### Loops
 
 Use `{{#each}}` for dynamic lists:
 
+```
+{{! file: ./recipes/rust-example-metadata.hbs }}
+{{! A recipe for building a rust canister }}
+{{! `package: string` The package to build }}
+{{! `metadata: [name: string, value: string]`: An array of name/value pairs that get injected into the wasm metadata section }}
+
+build:
+  steps:
+    - type: script
+      commands:
+        - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
+        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+
+    - type: script
+      commands:
+        - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 'ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm \n'; exit 1; }
+        {{#if metadata}}
+        {{#each metadata}}
+        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "${ICP_WASM_OUTPUT_PATH}" metadata "{{ name }}" -d "{{ value }}" --keep-name-section
+        {{/each}}
+        {{/if}}
+```
+
 ```yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          {{#each configuration.prebuild_commands}}
-          - {{this}}
-          {{/each}}
-          - cargo build --target wasm32-unknown-unknown --release
+# file: icp.yaml
+canisters:
+  - name: backend
+    recipe:
+      type: ./recipes/rust-example-metadata.hbs
+      configuration:
+        package: my-backend-crate
+        metadata:
+          - name: "crate:version"
+            value: "1.0.0"
+          - name: "build:profile"
+            value: "release"
 ```
 
 ### Default Values
 
-Use `{{#if}}` with `{{else}}` for defaults:
-
-```yaml
-canister:
-  name: {{configuration.name}}
-  settings:
-    compute_allocation: {{#if configuration.compute_allocation}}{{configuration.compute_allocation}}{{else}}0{{/if}}
-```
-
-### Nested Configuration
-
-Access nested objects:
-
-```yaml
-canister:
-  name: {{configuration.name}}
-  {{#if configuration.settings}}
-  settings:
-    {{#if configuration.settings.compute_allocation}}
-    compute_allocation: {{configuration.settings.compute_allocation}}
-    {{/if}}
-    {{#if configuration.settings.memory_allocation}}
-    memory_allocation: {{configuration.settings.memory_allocation}}
-    {{/if}}
-  {{/if}}
-```
-
-## Recipe with Sync Steps
-
-Include post-deployment operations:
-
-```yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - npm run build
-  sync:
-    steps:
-      - type: assets
-        source: {{configuration.source}}
-        target: /
-```
+Use `{{#if}}` with `{{else}}` for defaults, refer to the examples above.
 
 ## Testing Recipes
 
@@ -167,15 +162,23 @@ icp deploy
 
 ## Sharing Recipes
 
-### Within a Team
+### Within a project
 
 Store recipes in your project's `recipes/` directory and reference with relative paths:
 
 ```yaml
-recipe:
-  type: ./recipes/my-recipe.hb.yaml
-  configuration:
-    name: my-canister
+# file: icp.yaml
+canisters:
+  - name: canister1
+    recipe:
+      type: ./recipes/my-recipe.hbs
+      configuration:
+        package: my-crate1
+  - name: canister2
+    recipe:
+      type: ./recipes/my-recipe.hbs
+      configuration:
+        package: my-other-crate
 ```
 
 ### Across Projects
@@ -206,46 +209,8 @@ To contribute recipes to the official registry at [github.com/dfinity/icp-cli-re
 
 ## Recipe Examples
 
-### Frontend Build with Asset Upload
+For examples of recipes, you can check out [github.com/dfinity/icp-cli-recipes](https://github.com/dfinity/icp-cli-recipes).
 
-```yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - npm install
-          - npm run build
-  sync:
-    steps:
-      - type: assets
-        source: {{configuration.source}}
-        target: /
-```
-
-### Multi-Step Build Process
-
-```yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          # Install dependencies
-          {{#each configuration.dependencies}}
-          - {{this}}
-          {{/each}}
-          # Run build
-          - {{configuration.build_command}}
-          # Optimize WASM
-          {{#if configuration.optimize}}
-          - ic-wasm {{configuration.wasm_path}} -o "$ICP_WASM_OUTPUT_PATH" shrink
-          {{else}}
-          - cp {{configuration.wasm_path}} "$ICP_WASM_OUTPUT_PATH"
-          {{/if}}
-```
 
 ## Best Practices
 

@@ -1,5 +1,7 @@
+use bigdecimal::BigDecimal;
 use candid::Principal;
 use icp::{prelude::*, project::DEFAULT_LOCAL_ENVIRONMENT_NAME};
+use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_DECIMALS;
 
 use crate::common::TestContext;
 
@@ -78,14 +80,15 @@ impl<'a> Client<'a> {
     }
 
     pub(crate) fn mint_cycles(&self, amount: u128) {
+        let tcycles = BigDecimal::new(amount.into(), CYCLES_LEDGER_DECIMALS);
         self.ctx
             .icp()
             .current_dir(&self.current_dir)
             .args([
                 "cycles",
                 "mint",
-                "--cycles",
-                &amount.to_string(),
+                "--tcycles",
+                &tcycles.to_string(),
                 "--environment",
                 &self.environment,
             ])

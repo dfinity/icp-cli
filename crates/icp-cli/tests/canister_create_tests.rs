@@ -122,8 +122,8 @@ async fn canister_create_with_settings() {
             "my-canister",
             "--environment",
             "random-environment",
-            "--cycles",
-            &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
+            "--tcycles",
+            "70", /* 70 TCYCLES because compute allocation is expensive */
         ])
         .assert()
         .success();
@@ -202,8 +202,8 @@ async fn canister_create_with_settings_cmdline_override() {
             "2",
             "--environment",
             "random-environment",
-            "--cycles",
-            &format!("{}", 70 * TRILLION), /* 70 TCYCLES because compute allocation is expensive */
+            "--tcycles",
+            "70", /* 70 TCYCLES because compute allocation is expensive */
         ])
         .assert()
         .success();

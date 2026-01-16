@@ -1,9 +1,10 @@
+use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{Agent, AgentError};
 use icp_canister_interfaces::{
     cycles_ledger::{
-        CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
-        CreationArgs, SubnetSelectionArg,
+        CYCLES_LEDGER_DECIMALS, CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs,
+        CreateCanisterResponse, CreationArgs, SubnetSelectionArg,
     },
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
     registry::{GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL},
@@ -44,12 +45,15 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to resolve subnet: {message}"))]
     SubnetResolution { message: String },
+
+    #[snafu(display("cycles amount overflow"))]
+    CyclesAmountOverflow,
 }
 
 struct CreateOperationInner {
     agent: Agent,
     subnet: Option<Principal>,
-    cycles: u128,
+    tcycles: BigDecimal,
     existing_canisters: Vec<Principal>,
     resolved_subnet: OnceCell<Result<Principal, String>>,
 }
@@ -70,14 +74,14 @@ impl CreateOperation {
     pub fn new(
         agent: Agent,
         subnet: Option<Principal>,
-        cycles: u128,
+        tcycles: BigDecimal,
         existing_canisters: Vec<Principal>,
     ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
                 agent,
                 subnet,
-                cycles,
+                tcycles,
                 existing_canisters,
                 resolved_subnet: OnceCell::new(),
             }),
@@ -92,6 +96,10 @@ impl CreateOperation {
         &self,
         settings: &CanisterSettingsArg,
     ) -> Result<Principal, CreateOperationError> {
+        let raw_cycles = (&self.inner.tcycles * 10u128.pow(CYCLES_LEDGER_DECIMALS as u32))
+            .to_u128()
+            .ok_or(CreateOperationError::CyclesAmountOverflow)?;
+
         let creation_args = CreationArgs {
             subnet_selection: Some(SubnetSelectionArg::Subnet {
                 subnet: self
@@ -104,7 +112,7 @@ impl CreateOperation {
         let arg = CreateCanisterArgs {
             from_subaccount: None,
             created_at_time: None,
-            amount: Nat::from(self.inner.cycles),
+            amount: Nat::from(raw_cycles),
             creation_args: Some(creation_args),
         };
 
@@ -123,7 +131,7 @@ impl CreateOperation {
             CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
             CreateCanisterResponse::Err(err) => {
                 return CreateCanisterSnafu {
-                    message: err.format_error(self.inner.cycles),
+                    message: err.format_error(raw_cycles),
                 }
                 .fail();
             }

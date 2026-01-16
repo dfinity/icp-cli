@@ -42,6 +42,13 @@ pub async fn spawn_docker_launcher(
         status_dir,
         mounts,
     } = image_config;
+    let platform = if let Some(p) = platform {
+        p.clone()
+    } else if cfg!(target_arch = "aarch64") {
+        "linux/arm64".to_string()
+    } else {
+        "linux/amd64".to_string()
+    };
     let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
@@ -139,7 +146,7 @@ pub async fn spawn_docker_launcher(
                 .create_image(
                     Some(CreateImageOptions {
                         from_image: Some(image.clone()),
-                        platform: platform.clone().unwrap_or_default(),
+                        platform: platform.clone(),
                         ..<_>::default()
                     }),
                     None,
@@ -154,8 +161,8 @@ pub async fn spawn_docker_launcher(
     };
     let container_resp = docker
         .create_container(
-            platform.clone().map(|p| CreateContainerOptions {
-                platform: p,
+            Some(CreateContainerOptions {
+                platform: platform.clone(),
                 ..<_>::default()
             }),
             ContainerCreateBody {

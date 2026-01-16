@@ -280,6 +280,12 @@ impl TestContext {
                 cmd.args([
                     "run",
                     "--rm",
+                    "--platform",
+                    if cfg!(target_arch = "aarch64") {
+                        "linux/arm64"
+                    } else {
+                        "linux/amd64"
+                    },
                     "-v",
                     &format!("{launcher_dir}:/app/status"),
                     "--cidfile",
@@ -491,8 +497,18 @@ impl TestContext {
     }
 
     pub(crate) fn docker_pull_network(&self) {
+        let platform = if cfg!(target_arch = "aarch64") {
+            "linux/arm64"
+        } else {
+            "linux/amd64"
+        };
         Command::new("docker")
-            .args(["pull", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"])
+            .args([
+                "pull",
+                "--platform",
+                platform,
+                "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
+            ])
             .assert()
             .success();
     }

@@ -67,7 +67,7 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOpt {
     /// Name of the network to target, conflicts with environment argument
-    #[arg(long, env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS)]
+    #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS)]
     network: Option<String>,
 }
 

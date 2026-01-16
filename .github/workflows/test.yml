@@ -34,7 +34,7 @@ jobs:
       matrix:
         # Make the os matrix match .github/scripts/test-matrix.py so that
         # we optimize caching
-        os: [ubuntu-22.04, macos-15, windows-2022]
+        os: [ubuntu-22.04, macos-15, windows-2025]
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0

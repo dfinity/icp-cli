@@ -471,11 +471,16 @@ impl TestContext {
                     .args(["inspect", cid.trim()])
                     .output()
                     .unwrap();
-                let inspect = format!(
-                    "{}\n{}",
-                    String::from_utf8_lossy(&inspect.stdout),
-                    String::from_utf8_lossy(&inspect.stderr)
-                );
+                let inspect = String::from_utf8_lossy(&inspect.stdout);
+                let inspect_v = serde_json::from_str::<serde_json::Value>(&inspect).unwrap();
+                std::process::Command::new("docker")
+                    .args(["exec", cid.trim(), "touch", "/app/status/test.txt"])
+                    .output()
+                    .unwrap();
+                let statusdir = inspect_v[0]["Mounts"][0]["Source"].as_str().unwrap();
+                let hostside =
+                    wslpath2::convert(statusdir, None, wslpath2::Conversion::WslToWindows, false)
+                        .unwrap();
                 panic!(
                     "\
 Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s
@@ -484,7 +489,9 @@ Container logs:
 Status dir listing:
 {ls}
 Container inspect:
-{inspect}"
+{inspect}
+Hostside file exists: {}",
+                    Path::new(&hostside).join("test.txt").exists()
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));

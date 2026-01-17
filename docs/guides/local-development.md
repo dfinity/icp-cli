@@ -153,9 +153,8 @@ icp network start -d
 
 **Deployment fails**
 
-1. Verify the build succeeded: `icp build my-canister`
+1. Verify the build succeeded: `icp build`
 2. Check network health: `icp network ping`
-3. Review canister list: `icp canister list`
 
 ## Next Steps
 

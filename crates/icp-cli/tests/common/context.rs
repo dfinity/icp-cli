@@ -458,7 +458,7 @@ impl TestContext {
                     String::from_utf8_lossy(&logs.stdout),
                     String::from_utf8_lossy(&logs.stderr)
                 );
-                std::process::Command::new("docker")
+                let touch_status = std::process::Command::new("docker")
                     .args(["exec", cid.trim(), "touch", "/app/status/test.txt"])
                     .status()
                     .unwrap();
@@ -490,8 +490,9 @@ Status dir listing:
 {ls}
 Container inspect:
 {inspect}
-Hostside file exists: {}",
-                    Path::new(&hostside).join("test.txt").exists()
+Hostside file exists: {}, touch status: {}",
+                    Path::new(&hostside).join("test.txt").exists(),
+                    touch_status.code().unwrap()
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));

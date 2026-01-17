@@ -458,8 +458,33 @@ impl TestContext {
                     String::from_utf8_lossy(&logs.stdout),
                     String::from_utf8_lossy(&logs.stderr)
                 );
+                let ls = std::process::Command::new("docker")
+                    .args(["exec", cid.trim(), "ls", "-la", "/app/status"])
+                    .output()
+                    .unwrap();
+                let ls = format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&ls.stdout),
+                    String::from_utf8_lossy(&ls.stderr)
+                );
+                let inspect = std::process::Command::new("docker")
+                    .args(["inspect", cid.trim()])
+                    .output()
+                    .unwrap();
+                let inspect = format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&inspect.stdout),
+                    String::from_utf8_lossy(&inspect.stderr)
+                );
                 panic!(
-                    "Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s\nContainer logs:\n{logs}"
+                    "\
+Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s
+Container logs:
+{logs}
+Status dir listing:
+{ls}
+Container inspect:
+{inspect}"
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));

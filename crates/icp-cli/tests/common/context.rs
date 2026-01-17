@@ -458,6 +458,10 @@ impl TestContext {
                     String::from_utf8_lossy(&logs.stdout),
                     String::from_utf8_lossy(&logs.stderr)
                 );
+                std::process::Command::new("docker")
+                    .args(["exec", cid.trim(), "touch", "/app/status/test.txt"])
+                    .status()
+                    .unwrap();
                 let ls = std::process::Command::new("docker")
                     .args(["exec", cid.trim(), "ls", "-la", "/app/status"])
                     .output()
@@ -473,10 +477,6 @@ impl TestContext {
                     .unwrap();
                 let inspect = String::from_utf8_lossy(&inspect.stdout);
                 let inspect_v = serde_json::from_str::<serde_json::Value>(&inspect).unwrap();
-                std::process::Command::new("docker")
-                    .args(["exec", cid.trim(), "touch", "/app/status/test.txt"])
-                    .output()
-                    .unwrap();
                 let statusdir = inspect_v[0]["Mounts"][0]["Source"].as_str().unwrap();
                 let hostside =
                     wslpath2::convert(statusdir, None, wslpath2::Conversion::WslToWindows, false)

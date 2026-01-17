@@ -458,6 +458,15 @@ impl TestContext {
                     String::from_utf8_lossy(&logs.stdout),
                     String::from_utf8_lossy(&logs.stderr)
                 );
+                let tail = std::process::Command::new("docker")
+                    .args(["logs", cid.trim(), "--tail", "100"])
+                    .output()
+                    .unwrap();
+                let tail = format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&tail.stdout),
+                    String::from_utf8_lossy(&tail.stderr)
+                );
                 let touch_status = std::process::Command::new("docker")
                     .args(["exec", cid.trim(), "touch", "/app/status/test.txt"])
                     .status()
@@ -501,6 +510,8 @@ Container inspect:
 {inspect}
 Mount output:
 {mount}
+Logs tail:
+{tail}
 Hostside file exists: {}, touch status: {}",
                     Path::new(&hostside).join("test.txt").exists(),
                     touch_status.code().unwrap()

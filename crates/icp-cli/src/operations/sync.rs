@@ -1,9 +1,9 @@
-use console::Term;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, export::Principal};
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
+    context::TermWriter,
     prelude::PathBuf,
 };
 use snafu::prelude::*;
@@ -19,7 +19,7 @@ pub struct SyncOperationError;
 async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
-    _term: &Term,
+    _term: &TermWriter,
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
@@ -60,7 +60,7 @@ async fn sync_canister(
 pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
-    term: Arc<Term>,
+    term: Arc<TermWriter>,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     debug: bool,
 ) -> Result<(), SyncOperationError> {

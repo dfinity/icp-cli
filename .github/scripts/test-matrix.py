@@ -14,10 +14,14 @@ def test_names():
 
 include = []
 for test in test_names():
-    # Ubuntu: run everything
+    # Ubuntu/Windows: run everything
     include.append({
         "test": test,
         "os": "ubuntu-22.04"
+    })
+    include.append({
+        "test": test,
+        "os": "windows-2025"
     })
 
     # macOS: only run selected tests

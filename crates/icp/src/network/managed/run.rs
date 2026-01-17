@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Gateway, Managed, ManagedMode, NetworkDirectory, Port,
+        Gateway, Managed, ManagedImageConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
@@ -157,6 +157,16 @@ async fn run_network_launcher(
                     };
                     (ShutdownGuard::Container(guard), instance, gateway, locator)
                 }
+                ManagedMode::Launcher { gateway } if cfg!(windows) /* todo machine setting for unix */ => {
+                    let image_config = transform_native_launcher_to_container(gateway.clone());
+                    let (guard, instance, locator) =
+                        spawn_docker_launcher(&image_config).await?;
+                    let gateway = NetworkDescriptorGatewayPort {
+                        port: instance.gateway_port,
+                        fixed: false,
+                    };
+                    (ShutdownGuard::Container(guard), instance, gateway, locator)
+                }
                 ManagedMode::Launcher { gateway } => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
@@ -175,10 +185,6 @@ async fn run_network_launcher(
                         &root.state_dir(),
                     )
                     .await?;
-                    if background {
-                        // background means we're using stdio files - otherwise the launcher already prints this
-                        eprintln!("Network started on port {}", instance.gateway_port);
-                    }
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(gateway.port, Port::Fixed(_)),
@@ -186,6 +192,10 @@ async fn run_network_launcher(
                     (ShutdownGuard::Process(child), instance, gateway, locator)
                 }
             };
+            if background {
+                // background means we're using stdio files - otherwise the launcher already prints this
+                eprintln!("Network started on port {}", instance.gateway_port);
+            }
             let candid_ui_canister_id = initialize_network(
                 &format!("http://localhost:{}", instance.gateway_port)
                     .parse()
@@ -231,6 +241,27 @@ async fn run_network_launcher(
         let _ = nd.cleanup_port_descriptor(Some(port)).await;
     }
     Ok(())
+}
+
+fn transform_native_launcher_to_container(gateway: Gateway) -> ManagedImageConfig {
+    let port = match gateway.port {
+        Port::Fixed(port) => port,
+        Port::Random => 0,
+    };
+    ManagedImageConfig {
+        image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+        port_mapping: vec![format!("{port}:4943")],
+        rm_on_exit: true,
+        args: vec!["--ii".to_string()],
+        entrypoint: None,
+        environment: vec![],
+        volumes: vec![],
+        platform: None,
+        user: None,
+        shm_size: None,
+        status_dir: "/app/status".to_string(),
+        mounts: vec![],
+    }
 }
 
 enum ShutdownGuard {
@@ -314,13 +345,13 @@ fn safe_eprintln(msg: &str) {
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
         ShutdownGuard::Container(_) => {
-            _ = ctrl_c().await;
+            stop_signal().await;
             safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {
             select!(
-                _ = ctrl_c() => {
+                _ = stop_signal() => {
                     safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
                     ShutdownReason::CtrlC
                 }
@@ -330,6 +361,28 @@ async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
                 }
             )
         }
+    }
+}
+
+#[cfg(unix)]
+async fn stop_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+    select! {
+        _ = ctrl_c() => {},
+        _ = sigterm.recv() => {},
+    }
+}
+
+#[cfg(windows)]
+async fn stop_signal() {
+    use tokio::signal::windows::{ctrl_break, ctrl_close};
+    let mut ctrl_break = ctrl_break().unwrap();
+    let mut ctrl_close = ctrl_close().unwrap();
+    select! {
+        _ = ctrl_c() => {},
+        _ = ctrl_break.recv() => {},
+        _ = ctrl_close.recv() => {},
     }
 }
 

@@ -6,8 +6,13 @@ use bollard::{
     Docker,
     errors::Error as BollardError,
     query_parameters::{
-        CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
-        RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
+        CreateContainerOptions,
+        CreateImageOptions,
+        InspectContainerOptions,
+        // RemoveContainerOptions,
+        StartContainerOptions,
+        StopContainerOptions,
+        WaitContainerOptions,
     },
     secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
@@ -17,6 +22,7 @@ use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;
+use wslpath2::Conversion;
 
 use crate::network::{
     ManagedImageConfig,
@@ -42,7 +48,31 @@ pub async fn spawn_docker_launcher(
         status_dir,
         mounts,
     } = image_config;
-    let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
+    let platform = if let Some(p) = platform {
+        p.clone()
+    } else if cfg!(target_arch = "aarch64") {
+        "linux/arm64".to_string()
+    } else {
+        "linux/amd64".to_string()
+    };
+    let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_MODE").ok();
+    let wsl2_distro = wsl2_distro.as_deref();
+    let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
+    let host_status_tmpdir = if wsl2_convert {
+        let host_tmp = wslpath2::convert("/tmp", wsl2_distro, Conversion::WslToWindows, true)
+            .map_err(|e| {
+                WslPathConvertSnafu {
+                    msg: e.to_string(),
+                    path: "/tmp",
+                }
+                .build()
+            })?;
+        Utf8TempDir::new_in(&host_tmp).context(WslCreateTmpDirSnafu)?
+    } else {
+        Utf8TempDir::new().context(CreateStatusDirSnafu)?
+    };
+    let host_status_dir = host_status_tmpdir.path();
+    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
         #[cfg(unix)]
@@ -77,8 +107,13 @@ pub async fn spawn_docker_launcher(
         #[cfg(windows)]
         None => r"\\.\pipe\docker_engine".to_string(),
     };
-    let docker = Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
-        .context(ConnectDockerSnafu { socket: &socket })?;
+    let docker = if socket.starts_with("tcp://") || socket.starts_with("http://") {
+        let http_addr = socket.replace("tcp://", "http://");
+        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
+    } else {
+        Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
+    }
+    .context(ConnectDockerSnafu { socket: &socket })?;
     let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {
@@ -101,6 +136,7 @@ pub async fn spawn_docker_launcher(
             let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
             let host = dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
             let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
+            let host_param = convert_path(wsl2_convert, wsl2_distro, &host)?;
             let (target, flags) = match rest.split_once(':') {
                 Some((t, f)) => (t, Some(f)),
                 None => (rest, None),
@@ -114,7 +150,7 @@ pub async fn spawn_docker_launcher(
                 .transpose()?;
             Ok::<_, DockerLauncherError>(Mount {
                 target: Some(target.to_string()),
-                source: Some(host.to_string()),
+                source: Some(host_param),
                 typ: Some(MountTypeEnum::BIND),
                 read_only,
                 ..<_>::default()
@@ -122,7 +158,7 @@ pub async fn spawn_docker_launcher(
         })
         .chain([Ok(Mount {
             target: Some(status_dir.to_string()),
-            source: Some(host_status_dir.path().to_string()),
+            source: Some(host_status_dir_param),
             typ: Some(MountTypeEnum::BIND),
             read_only: Some(false),
             ..<_>::default()
@@ -139,7 +175,7 @@ pub async fn spawn_docker_launcher(
                 .create_image(
                     Some(CreateImageOptions {
                         from_image: Some(image.clone()),
-                        platform: platform.clone().unwrap_or_default(),
+                        platform: platform.clone(),
                         ..<_>::default()
                     }),
                     None,
@@ -154,8 +190,8 @@ pub async fn spawn_docker_launcher(
     };
     let container_resp = docker
         .create_container(
-            platform.clone().map(|p| CreateContainerOptions {
-                platform: p,
+            Some(CreateContainerOptions {
+                platform: platform.clone(),
                 ..<_>::default()
             }),
             ContainerCreateBody {
@@ -176,8 +212,14 @@ pub async fn spawn_docker_launcher(
                 host_config: Some(HostConfig {
                     port_bindings: Some(portmap),
                     mounts: Some(mounts),
-                    binds: Some(volumes.to_vec()),
+                    binds: Some(
+                        volumes
+                            .iter()
+                            .map(|v| convert_volume(wsl2_convert, wsl2_distro, v))
+                            .try_collect()?,
+                    ),
                     shm_size: *shm_size,
+
                     ..<_>::default()
                 }),
                 ..<_>::default()
@@ -187,6 +229,7 @@ pub async fn spawn_docker_launcher(
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
     eprintln!("Created container {}", &container_id[..12]);
+    std::fs::write("container_id.txt", &container_id).unwrap();
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
@@ -194,7 +237,7 @@ pub async fn spawn_docker_launcher(
     });
     let container_id = guard.container_id.as_ref().unwrap();
     let docker = guard.docker.as_ref().unwrap();
-    let watcher = wait_for_launcher_status(host_status_dir.path())?;
+    let watcher = wait_for_launcher_status(host_status_dir)?;
     docker
         .start_container(container_id, None::<StartContainerOptions>)
         .await
@@ -306,26 +349,31 @@ pub async fn stop_docker_launcher(
     container_id: &str,
     rm_on_exit: bool,
 ) -> Result<(), StopContainerError> {
-    let docker = Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
-        .context(ConnectSnafu { socket })?;
+    let docker = if socket.starts_with("tcp://") {
+        let http_addr = socket.replace("tcp://", "http://");
+        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
+    } else {
+        Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
+    }
+    .context(ConnectSnafu { socket })?;
     stop(&docker, container_id, rm_on_exit).await
 }
 
 async fn stop(
     docker: &Docker,
     container_id: &str,
-    rm_on_exit: bool,
+    _rm_on_exit: bool,
 ) -> Result<(), StopContainerError> {
     docker
         .stop_container(container_id, None::<StopContainerOptions>)
         .await
         .context(StopSnafu { container_id })?;
-    if rm_on_exit {
-        docker
-            .remove_container(container_id, None::<RemoveContainerOptions>)
-            .await
-            .context(RemoveSnafu { container_id })?;
-    }
+    // if rm_on_exit {
+    //     docker
+    //         .remove_container(container_id, None::<RemoveContainerOptions>)
+    //         .await
+    //         .context(RemoveSnafu { container_id })?;
+    // }
     Ok(())
 }
 
@@ -346,6 +394,54 @@ pub enum StopContainerError {
         source: bollard::errors::Error,
         container_id: String,
     },
+}
+
+fn convert_path(
+    convert: bool,
+    distro: Option<&str>,
+    path: &Path,
+) -> Result<String, DockerLauncherError> {
+    if convert {
+        wslpath2::convert(path.as_str(), distro, Conversion::WindowsToWsl, true).map_err(|e| {
+            WslPathConvertSnafu {
+                msg: e.to_string(),
+                path: path.to_path_buf(),
+            }
+            .build()
+        })
+    } else {
+        Ok(path.to_string())
+    }
+}
+
+fn convert_volume(
+    convert: bool,
+    distro: Option<&str>,
+    volume: &str,
+) -> Result<String, DockerLauncherError> {
+    // docker's actual parsing logic, clunky as it is
+    let (host, rest) = if volume.chars().next().unwrap().is_ascii_alphabetic()
+        && volume.chars().nth(1).unwrap() == ':'
+    {
+        let split_point = volume[2..]
+            .find(':')
+            .map(|idx| idx + 2)
+            .context(ParseMountSnafu { mount: volume })?;
+        (&volume[..split_point], &volume[split_point + 1..])
+    } else {
+        volume
+            .split_once(':')
+            .context(ParseMountSnafu { mount: volume })?
+    };
+    let host_param = if host.contains(&['/', '\\'][..]) {
+        let host_path =
+            dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
+        let host_path = PathBuf::try_from(host_path.clone()).context(BadPathSnafu)?;
+        convert_path(convert, distro, &host_path)?
+    } else {
+        host.to_string()
+    };
+    Ok(format!("{host_param}:{rest}"))
 }
 
 #[derive(Debug, Snafu)]
@@ -459,6 +555,10 @@ pub enum DockerLauncherError {
         source: std::str::Utf8Error,
         display: String,
     },
+    #[snafu(display("failed to convert path to WSL2: {msg}"))]
+    WslPathConvertError { msg: String, path: PathBuf },
+    #[snafu(display("failed to create temporary directory in WSL2"))]
+    WslCreateTmpDirError { source: std::io::Error },
 }
 
 #[derive(Default)]

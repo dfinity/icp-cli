@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use camino_tempfile::tempdir;
-use console::Term;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     Canister,
     canister::build::{Build, BuildError, Params},
+    context::TermWriter,
     prelude::*,
 };
 use snafu::{ResultExt, Snafu};
@@ -82,7 +82,7 @@ pub(crate) async fn build_many_with_progress_bar(
     canisters: Vec<(PathBuf, Canister)>,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    term: &Term,
+    term: &TermWriter,
     debug: bool,
 ) -> Result<(), anyhow::Error> {
     let mut futs = FuturesOrdered::new();

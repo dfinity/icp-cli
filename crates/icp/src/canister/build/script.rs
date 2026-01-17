@@ -38,7 +38,7 @@ mod tests {
         // Define adapter
         let v = Adapter {
             command: CommandField::Command(format!(
-                "echo test > {} && echo {}",
+                "echo test > '{}' && echo '{}'",
                 f.path(),
                 f.path()
             )),
@@ -72,10 +72,10 @@ mod tests {
         // Define adapter
         let v = Adapter {
             command: CommandField::Commands(vec![
-                format!("echo cmd-1 >> {}", f.path()),
-                format!("echo cmd-2 >> {}", f.path()),
-                format!("echo cmd-3 >> {}", f.path()),
-                format!("echo {}", f.path()),
+                format!("echo cmd-1 >> '{}'", f.path()),
+                format!("echo cmd-2 >> '{}'", f.path()),
+                format!("echo cmd-3 >> '{}'", f.path()),
+                format!("echo '{}'", f.path()),
             ]),
         };
 

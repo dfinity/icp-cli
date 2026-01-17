@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::process::{Child, Command};
+use std::process::Command;
 
 use httptest::{Expectation, Server, matchers::*, responders::*};
 
@@ -8,6 +8,7 @@ pub(crate) mod clients;
 mod context;
 
 pub(crate) use context::TestContext;
+use send_ctrlc::{InterruptibleChild, InterruptibleCommand};
 
 #[cfg(unix)]
 pub(crate) const PATH_SEPARATOR: &str = ":";
@@ -79,7 +80,7 @@ pub(crate) struct TestNetwork {
 }
 
 pub(crate) struct ChildGuard {
-    child: Child,
+    child: InterruptibleChild,
 }
 
 impl ChildGuard {
@@ -89,7 +90,12 @@ impl ChildGuard {
             use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
-        let child = cmd.spawn()?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x00000200); // CREATE_NEW_PROCESS_GROUP
+        }
+        let child = cmd.spawn_interruptible()?;
         Ok(Self { child })
     }
 
@@ -102,6 +108,13 @@ impl ChildGuard {
             let pid = self.child.id();
             let pgid = Pid::from_raw(pid as i32); // Child PID = PGID
             let _ = killpg(pgid, Signal::SIGINT);
+            // Give the process some time to shut down gracefully
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+        #[cfg(windows)]
+        {
+            use send_ctrlc::Interruptible;
+            _ = self.child.terminate(); // CTRL_BREAK_EVENT, required to target process group
             // Give the process some time to shut down gracefully
             std::thread::sleep(std::time::Duration::from_secs(2));
         }

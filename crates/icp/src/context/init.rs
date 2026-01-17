@@ -1,12 +1,11 @@
 use std::{env::current_dir, sync::Arc};
 
-use console::Term;
 use snafu::prelude::*;
 
 use crate::canister::build::Builder;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::sync::Syncer;
-use crate::context::Context;
+use crate::context::{Context, TermWriter};
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
@@ -33,7 +32,7 @@ pub enum ContextInitError {
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
-    term: Term,
+    term: TermWriter,
     debug: bool,
     password_func: PasswordFunc,
 ) -> Result<Context, ContextInitError> {
@@ -42,7 +41,7 @@ pub fn initialize(
 
     // Project Root
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        current_dir()
+        dunce::canonicalize(current_dir().context(CwdSnafu)?)
             .context(CwdSnafu)?
             .try_into()
             .context(Utf8PathSnafu)?, // cwd

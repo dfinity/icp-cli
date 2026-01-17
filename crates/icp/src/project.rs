@@ -17,14 +17,9 @@ use crate::{
     prelude::*,
 };
 
-pub const DEFAULT_LOCAL_ENVIRONMENT_NAME: &str = "local";
-pub const DEFAULT_MAINNET_ENVIRONMENT_NAME: &str = "ic";
-pub const DEFAULT_LOCAL_NETWORK_NAME: &str = "local";
-pub const DEFAULT_MAINNET_NETWORK_NAME: &str = "mainnet";
 pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
 pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
 pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
-pub const DEFAULT_MAINNET_NETWORK_URL: &str = IC_MAINNET_NETWORK_URL;
 
 #[derive(Debug, Snafu)]
 pub enum EnvironmentError {
@@ -84,62 +79,6 @@ pub enum ConsolidateManifestError {
 
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
-}
-
-/// Returns the default mainnet network (protected, non-overridable)
-fn default_mainnet_network() -> Network {
-    Network {
-        // Mainnet at https://icp-api.io
-        name: DEFAULT_MAINNET_NETWORK_NAME.to_string(),
-        configuration: Configuration::Connected {
-            connected: Connected {
-                url: IC_MAINNET_NETWORK_URL.to_string(),
-                // Will use the IC Root key hard coded in agent-rs.
-                // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
-                root_key: None,
-            },
-        },
-    }
-}
-
-/// Returns the default local network (can be overridden by users)
-fn default_local_network() -> Network {
-    Network {
-        // The local network at localhost:8000
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-        configuration: Configuration::Managed {
-            managed: Managed {
-                mode: {
-                    #[cfg(unix)]
-                    {
-                        ManagedMode::Launcher {
-                            gateway: crate::network::Gateway {
-                                host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
-                                port: crate::network::Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
-                            },
-                        }
-                    }
-                    #[cfg(windows)]
-                    {
-                        ManagedMode::Image(Box::new(crate::network::ManagedImageConfig {
-                            image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
-                            port_mapping: vec![format!("{}:4943", DEFAULT_LOCAL_NETWORK_PORT)],
-                            rm_on_exit: true,
-                            args: vec![],
-                            entrypoint: None,
-                            environment: vec![],
-                            volumes: vec![],
-                            platform: None,
-                            user: None,
-                            shm_size: None,
-                            status_dir: "/app/status".to_string(),
-                            mounts: vec![],
-                        }))
-                    }
-                },
-            },
-        },
-    }
 }
 
 fn is_glob(s: &str) -> bool {
@@ -291,16 +230,24 @@ pub async fn consolidate_manifest(
     // Networks
     let mut networks: HashMap<String, Network> = HashMap::new();
 
-    // Add mainnet first - this is always protected and non-overridable
+    // Add IC network first - this is always protected and non-overridable
     networks.insert(
-        DEFAULT_MAINNET_NETWORK_NAME.to_string(),
-        default_mainnet_network(),
+        IC.to_string(),
+        Network {
+            name: IC.to_string(),
+            configuration: Configuration::Connected {
+                connected: Connected {
+                    url: IC_MAINNET_NETWORK_URL.to_string(),
+                    // Will use the IC Root key hard coded in agent-rs.
+                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
+                    root_key: None,
+                },
+            },
+        },
     );
 
-    // Track which network names are protected (only mainnet)
-    let protected_network_names: HashSet<String> = [DEFAULT_MAINNET_NETWORK_NAME.to_string()]
-        .into_iter()
-        .collect();
+    // Track which network names are protected (only IC network)
+    let protected_network_names: HashSet<String> = [IC.to_string()].into_iter().collect();
 
     // Resolve NetworkManifests and add them (including user-defined "local" if provided)
     for i in &m.networks {
@@ -353,10 +300,22 @@ pub async fn consolidate_manifest(
 
     // After processing user networks, add default "local" if not already defined
     // This provides backward compatibility for projects that don't define their own "local" network
-    if !networks.contains_key(DEFAULT_LOCAL_NETWORK_NAME) {
+    if !networks.contains_key(LOCAL) {
         networks.insert(
-            DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-            default_local_network(),
+            LOCAL.to_string(),
+            Network {
+                name: LOCAL.to_string(),
+                configuration: Configuration::Managed {
+                    managed: Managed {
+                        mode: ManagedMode::Launcher {
+                            gateway: Gateway {
+                                host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                                port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                            },
+                        },
+                    },
+                },
+            },
         );
     }
 
@@ -464,18 +423,32 @@ pub async fn consolidate_manifest(
     }
 
     // We're done adding all the user environments
-    // Now we add the default `local` environment if the user hasn't overriden it
-    if let Entry::Vacant(vacant_entry) =
-        environments.entry(DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string())
-    {
+    // Now we add the implicit `local` and `ic` environment if the user hasn't overriden it
+    if let Entry::Vacant(vacant_entry) = environments.entry(LOCAL.to_string()) {
         vacant_entry.insert(Environment {
-            name: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_string(),
+            name: LOCAL.to_string(),
             network: networks
-                .get(DEFAULT_LOCAL_NETWORK_NAME)
+                .get(LOCAL)
                 .ok_or(
                     InvalidNetworkSnafu {
-                        environment: DEFAULT_LOCAL_ENVIRONMENT_NAME.to_owned(),
-                        network: DEFAULT_LOCAL_NETWORK_NAME.to_owned(),
+                        environment: LOCAL.to_owned(),
+                        network: LOCAL.to_owned(),
+                    }
+                    .build(),
+                )?
+                .to_owned(),
+            canisters: canisters.clone(),
+        });
+    }
+    if let Entry::Vacant(vacant_entry) = environments.entry(IC.to_string()) {
+        vacant_entry.insert(Environment {
+            name: IC.to_string(),
+            network: networks
+                .get(IC)
+                .ok_or(
+                    InvalidNetworkSnafu {
+                        environment: IC.to_owned(),
+                        network: IC.to_owned(),
                     }
                     .build(),
                 )?

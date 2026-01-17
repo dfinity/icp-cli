@@ -24,12 +24,6 @@ impl NetworkAccess {
     }
 }
 
-impl NetworkAccess {
-    pub fn mainnet() -> Self {
-        Self::new(&Url::parse(IC_MAINNET_NETWORK_URL).unwrap())
-    }
-}
-
 #[derive(Debug, Snafu)]
 pub enum GetNetworkAccessError {
     #[snafu(display("failed to load port {port} descriptor"))]

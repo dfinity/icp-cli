@@ -448,9 +448,6 @@ impl TestContext {
                 }
             }
             if elapsed > timeout {
-                eprintln!(
-                    "Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s"
-                );
                 let cid = std::fs::read_to_string(project_dir.join("container_id.txt")).unwrap();
                 let logs = std::process::Command::new("docker")
                     .args(["logs", cid.trim()])
@@ -461,7 +458,9 @@ impl TestContext {
                     String::from_utf8_lossy(&logs.stdout),
                     String::from_utf8_lossy(&logs.stderr)
                 );
-                eprintln!("Container logs:\n{logs}");
+                panic!(
+                    "Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s\nContainer logs:\n{logs}"
+                );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         };

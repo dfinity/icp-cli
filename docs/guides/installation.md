@@ -10,7 +10,19 @@ This guide covers all methods for installing icp-cli on your system.
 brew install dfinity/tap/icp-cli
 ```
 
+**Curl**
+
+```bash
+# install icp-cli
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
+
+# install ic-wasm which is a dependency for many recipes
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
+```
+
 **From source:**
+
+Cargo is required as a pre-requisite.
 
 ```bash
 git clone https://github.com/dfinity/icp-cli.git
@@ -38,6 +50,23 @@ To update:
 
 ```bash
 brew upgrade dfinity/tap/icp-cli
+```
+
+### Downloading binaries
+
+You can download binaries for your platform:
+
+- icp-cli at https://github.com/dfinity/icp-cli/releases
+- ic-wasm at https://github.com/dfinity/ic-wasm/releases
+
+Alternatively, you can curl and run the installation scripts:
+
+```bash
+# install icp-cli
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
+
+# install ic-wasm which is a dependency for many recipes
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
 ```
 
 ### Building from Source

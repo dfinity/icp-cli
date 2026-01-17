@@ -38,10 +38,10 @@ Canisters need cycles to operate on mainnet. You'll need cycles before deploying
 
 ```bash
 # Check your cycles balance
-icp cycles balance --ic
+icp cycles balance --network ic
 
 # Convert ICP to cycles (if you have ICP)
-icp cycles mint --icp 1 --ic
+icp cycles mint --icp 1 --network ic
 ```
 
 **How many cycles do you need?**
@@ -53,10 +53,10 @@ For detailed information on acquiring ICP, converting to cycles, and managing ba
 
 ## Deploying
 
-Deploy to mainnet using the `--ic` flag:
+To deploy to mainnet, you need to target implicit `ic` environment using the `--environment ic` flag or the `-e ic` shorthand:
 
 ```bash
-icp deploy --ic
+icp deploy --environment ic
 ```
 
 This will:
@@ -70,15 +70,26 @@ This will:
 Deploy only certain canisters:
 
 ```bash
-icp deploy frontend --ic
+icp deploy frontend --environment ic
 ```
 
 ### Using Environments
 
-If you've configured environments in your `icp.yaml`:
+You can configure multiple enviroments pointing to mainnet in `icp.yaml`:
+
+```yaml
+
+environments:
+  - name: prod
+    network: ic  # ic is an implicit network
+  - name: staging
+    network: ic
+```
+This allows you to deploy independent sets of canisters for each environment:
 
 ```bash
-icp deploy --environment production
+icp deploy -e staging
+icp deploy --environment prod
 ```
 
 See [Managing Environments](managing-environments.md) for setup details.
@@ -88,19 +99,15 @@ See [Managing Environments](managing-environments.md) for setup details.
 List canisters configured in this environment:
 
 ```bash
-icp canister list --ic
-```
 
-Check canister status:
+# List the canisters in an environment
+icp canister list -e myenv
 
-```bash
-icp canister status my-canister --ic
-```
+# Check canister status:
+icp canister status my-canister -e myenv
 
-Call a method to verify it's working:
-
-```bash
-icp canister call my-canister greet '("World")' --ic
+# Call a method to verify it's working:
+icp canister call my-canister greet '("World")' -e myenv
 ```
 
 ## Updating Deployed Canisters
@@ -108,7 +115,7 @@ icp canister call my-canister greet '("World")' --ic
 After making changes, redeploy:
 
 ```bash
-icp deploy --ic
+icp deploy --environment prod
 ```
 
 This rebuilds and upgrades your existing canisters, preserving their state.
@@ -118,13 +125,13 @@ This rebuilds and upgrades your existing canisters, preserving their state.
 View current settings:
 
 ```bash
-icp canister settings show my-canister --ic
+icp canister settings show my-canister -e prod
 ```
 
 Update settings:
 
 ```bash
-icp canister settings update my-canister --freezing-threshold 2592000 --ic
+icp canister settings update my-canister --freezing-threshold 2592000 -e prod
 ```
 
 ## Topping Up Cycles
@@ -133,10 +140,10 @@ Monitor canister cycles and top up when needed:
 
 ```bash
 # Check canister cycles balance
-icp canister status my-canister --ic
+icp canister status my-canister -e prod
 
 # Top up with 1 trillion cycles
-icp canister top-up my-canister --amount 1000000000000 --ic
+icp canister top-up my-canister --amount 1000000000000 -e prod
 ```
 
 See [Tokens and Cycles](tokens-and-cycles.md) for more on managing cycles.
@@ -148,7 +155,7 @@ See [Tokens and Cycles](tokens-and-cycles.md) for more on managing cycles.
 Your canister needs more cycles. Top up using:
 
 ```bash
-icp canister top-up my-canister --amount 1000000000000 --ic
+icp canister top-up my-canister --amount 1000000000000 -e prod
 ```
 
 **"Not a controller"**
@@ -164,14 +171,6 @@ If needed, switch to the correct identity:
 
 ```bash
 icp identity default <identity-name>
-```
-
-**Deployment hangs**
-
-Check network connectivity:
-
-```bash
-icp network ping mainnet
 ```
 
 ## Next Steps

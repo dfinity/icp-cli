@@ -50,10 +50,16 @@ pub async fn spawn_docker_launcher(
     } else {
         "linux/amd64".to_string()
     };
-    let wsl2_convert =
-        cfg!(windows) && std::env::var("ICP_CLI_DOCKER_WSL2_MODE").is_ok_and(|v| v == "1");
-    let host_status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    let host_status_dir_param = convert_path(wsl2_convert, host_status_dir.path())?;
+    let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_MODE").ok();
+    let wsl2_distro = wsl2_distro.as_deref();
+    let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
+    let host_status_dir = if wsl2_convert {
+        Utf8TempDir::new_in(format!(r"\\wsl$\{}\tmp", wsl2_distro.unwrap()))
+            .context(CreateStatusDirSnafu)?
+    } else {
+        Utf8TempDir::new().context(CreateStatusDirSnafu)?
+    };
+    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_dir.path())?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
         #[cfg(unix)]
@@ -117,7 +123,7 @@ pub async fn spawn_docker_launcher(
             let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
             let host = dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
             let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
-            let host_param = convert_path(wsl2_convert, &host)?;
+            let host_param = convert_path(wsl2_convert, wsl2_distro, &host)?;
             let (target, flags) = match rest.split_once(':') {
                 Some((t, f)) => (t, Some(f)),
                 None => (rest, None),
@@ -196,7 +202,7 @@ pub async fn spawn_docker_launcher(
                     binds: Some(
                         volumes
                             .iter()
-                            .map(|v| convert_volume(wsl2_convert, v))
+                            .map(|v| convert_volume(wsl2_convert, wsl2_distro, v))
                             .try_collect()?,
                     ),
                     shm_size: *shm_size,
@@ -375,9 +381,13 @@ pub enum StopContainerError {
     },
 }
 
-fn convert_path(convert: bool, path: &Path) -> Result<String, DockerLauncherError> {
+fn convert_path(
+    convert: bool,
+    distro: Option<&str>,
+    path: &Path,
+) -> Result<String, DockerLauncherError> {
     if convert {
-        wslpath2::convert(path.as_str(), None, Conversion::WindowsToWsl, true).map_err(|e| {
+        wslpath2::convert(path.as_str(), distro, Conversion::WindowsToWsl, true).map_err(|e| {
             WslPathConvertSnafu {
                 msg: e.to_string(),
                 path: path.to_path_buf(),
@@ -389,7 +399,11 @@ fn convert_path(convert: bool, path: &Path) -> Result<String, DockerLauncherErro
     }
 }
 
-fn convert_volume(convert: bool, volume: &str) -> Result<String, DockerLauncherError> {
+fn convert_volume(
+    convert: bool,
+    distro: Option<&str>,
+    volume: &str,
+) -> Result<String, DockerLauncherError> {
     // docker's actual parsing logic, clunky as it is
     let (host, rest) = if volume.chars().next().unwrap().is_ascii_alphabetic()
         && volume.chars().nth(1).unwrap() == ':'
@@ -408,7 +422,7 @@ fn convert_volume(convert: bool, volume: &str) -> Result<String, DockerLauncherE
         let host_path =
             dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
         let host_path = PathBuf::try_from(host_path.clone()).context(BadPathSnafu)?;
-        convert_path(convert, &host_path)?
+        convert_path(convert, distro, &host_path)?
     } else {
         host.to_string()
     };

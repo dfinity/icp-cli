@@ -53,13 +53,21 @@ pub async fn spawn_docker_launcher(
     let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_MODE").ok();
     let wsl2_distro = wsl2_distro.as_deref();
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
-    let host_status_dir = if wsl2_convert {
-        Utf8TempDir::new_in(format!(r"\\wsl$\{}\tmp", wsl2_distro.unwrap()))
-            .context(CreateStatusDirSnafu)?
+    let host_status_tmpdir = if wsl2_convert {
+        let host_tmp = wslpath2::convert("/tmp", wsl2_distro, Conversion::WslToWindows, true)
+            .map_err(|e| {
+                WslPathConvertSnafu {
+                    msg: e.to_string(),
+                    path: "/tmp",
+                }
+                .build()
+            })?;
+        Utf8TempDir::new_in(&host_tmp).context(WslCreateTmpDirSnafu)?
     } else {
         Utf8TempDir::new().context(CreateStatusDirSnafu)?
     };
-    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_dir.path())?;
+    let host_status_dir = host_status_tmpdir.path();
+    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
         #[cfg(unix)]
@@ -222,7 +230,7 @@ pub async fn spawn_docker_launcher(
     });
     let container_id = guard.container_id.as_ref().unwrap();
     let docker = guard.docker.as_ref().unwrap();
-    let watcher = wait_for_launcher_status(host_status_dir.path())?;
+    let watcher = wait_for_launcher_status(host_status_dir)?;
     docker
         .start_container(container_id, None::<StartContainerOptions>)
         .await
@@ -542,6 +550,8 @@ pub enum DockerLauncherError {
     },
     #[snafu(display("failed to convert path to WSL2: {msg}"))]
     WslPathConvertError { msg: String, path: PathBuf },
+    #[snafu(display("failed to create temporary directory in WSL2"))]
+    WslCreateTmpDirError { source: std::io::Error },
 }
 
 #[derive(Default)]

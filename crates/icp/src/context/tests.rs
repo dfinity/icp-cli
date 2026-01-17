@@ -6,7 +6,7 @@ use crate::{
         Configuration, Gateway, Managed, ManagedMode, MockNetworkAccessor, Port,
         access::NetworkAccess,
     },
-    project::{DEFAULT_LOCAL_NETWORK_NAME, DEFAULT_LOCAL_NETWORK_URL},
+    project::DEFAULT_LOCAL_NETWORK_URL,
     store_id::{Access as IdAccess, mock::MockInMemoryIdStore},
 };
 use candid::Principal;
@@ -102,13 +102,11 @@ async fn test_get_network_success() {
     };
 
     let network = ctx
-        .get_network(&NetworkSelection::Named(
-            DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-        ))
+        .get_network(&NetworkSelection::Named(LOCAL.to_string()))
         .await
         .unwrap();
 
-    assert_eq!(network.name, DEFAULT_LOCAL_NETWORK_NAME);
+    assert_eq!(network.name, LOCAL);
 }
 
 #[tokio::test]
@@ -594,7 +592,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
 
     // Create a project with a "local" environment (the default environment name)
     let local_network = Network {
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
                 mode: ManagedMode::Launcher {
@@ -608,19 +606,16 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
     };
 
     let mut networks = HashMap::new();
-    networks.insert(
-        DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-        local_network.clone(),
-    );
+    networks.insert(LOCAL.to_string(), local_network.clone());
 
     let local_env = Environment {
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         network: local_network,
         canisters: HashMap::new(), // No canisters needed for get_agent test
     };
 
     let mut environments = HashMap::new();
-    environments.insert(DEFAULT_LOCAL_NETWORK_NAME.to_string(), local_env);
+    environments.insert(LOCAL.to_string(), local_env);
 
     let project = Project {
         dir: "/project".into(),
@@ -632,7 +627,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
     let ctx = Context {
         project: Arc::new(crate::MockProjectLoader::new(project)),
         network: Arc::new(MockNetworkAccessor::new().with_network(
-            DEFAULT_LOCAL_NETWORK_NAME,
+            LOCAL,
             NetworkAccess {
                 root_key: Some(local_root_key.clone()),
                 url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
@@ -658,7 +653,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
 async fn test_get_agent_defaults_with_overridden_local_network() {
     // Create a project where "local" network is overridden to use port 9000
     let custom_local_network = Network {
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
                 mode: ManagedMode::Launcher {
@@ -672,19 +667,16 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
     };
 
     let mut networks = HashMap::new();
-    networks.insert(
-        DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-        custom_local_network.clone(),
-    );
+    networks.insert(LOCAL.to_string(), custom_local_network.clone());
 
     let local_env = Environment {
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         network: custom_local_network,
         canisters: HashMap::new(), // No canisters needed for get_agent test
     };
 
     let mut environments = HashMap::new();
-    environments.insert(DEFAULT_LOCAL_NETWORK_NAME.to_string(), local_env);
+    environments.insert(LOCAL.to_string(), local_env);
 
     let project = Project {
         dir: "/project".into(),
@@ -698,7 +690,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
     let ctx = Context {
         project: Arc::new(crate::MockProjectLoader::new(project)),
         network: Arc::new(MockNetworkAccessor::new().with_network(
-            DEFAULT_LOCAL_NETWORK_NAME,
+            LOCAL,
             NetworkAccess {
                 root_key: Some(custom_root_key.clone()),
                 url: Url::parse("http://localhost:9000").unwrap(), // Custom port
@@ -724,7 +716,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
 async fn test_get_agent_defaults_with_overridden_local_environment() {
     // Create project where "local" environment uses a custom network
     let default_local_network = Network {
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
                 mode: ManagedMode::Launcher {
@@ -752,21 +744,18 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
     };
 
     let mut networks = HashMap::new();
-    networks.insert(
-        DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-        default_local_network,
-    );
+    networks.insert(LOCAL.to_string(), default_local_network);
     networks.insert("custom".to_string(), custom_network.clone());
 
     // "local" environment uses "custom" network
     let local_env = Environment {
-        name: DEFAULT_LOCAL_NETWORK_NAME.to_string(),
+        name: LOCAL.to_string(),
         network: custom_network,
         canisters: HashMap::new(), // No canisters needed for get_agent test
     };
 
     let mut environments = HashMap::new();
-    environments.insert(DEFAULT_LOCAL_NETWORK_NAME.to_string(), local_env);
+    environments.insert(LOCAL.to_string(), local_env);
 
     let project = Project {
         dir: "/project".into(),
@@ -782,7 +771,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
         network: Arc::new(
             MockNetworkAccessor::new()
                 .with_network(
-                    DEFAULT_LOCAL_NETWORK_NAME,
+                    LOCAL,
                     NetworkAccess {
                         root_key: None,
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
@@ -821,7 +810,7 @@ async fn test_get_agent_explicit_network_inside_project() {
         network: Arc::new(
             MockNetworkAccessor::new()
                 .with_network(
-                    DEFAULT_LOCAL_NETWORK_NAME,
+                    LOCAL,
                     NetworkAccess {
                         root_key: None,
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
@@ -861,7 +850,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
         network: Arc::new(
             MockNetworkAccessor::new()
                 .with_network(
-                    DEFAULT_LOCAL_NETWORK_NAME,
+                    LOCAL,
                     NetworkAccess {
                         root_key: None,
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),

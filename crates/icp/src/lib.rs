@@ -288,7 +288,7 @@ impl MockProjectLoader {
     /// - Networks:
     ///   - "local" (managed, localhost:8000)
     ///   - "staging" (managed, localhost:8001)
-    ///   - "ic" (connected to mainnet)
+    ///   - "ic" (connected to the IC mainnet)
     /// - Environments:
     ///   - "dev" (local network, all three canisters)
     ///   - "test" (staging network, backend and frontend only)

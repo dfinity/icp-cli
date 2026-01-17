@@ -109,11 +109,18 @@ Two network types in `crates/icp/src/network/`:
 
 The network launcher is automatically downloaded on first use. For development/debugging, you can override with `ICP_CLI_NETWORK_LAUNCHER_PATH`.
 
-##### Network Overrides
+##### Implicit Networks and Environments
 
-- Users can override the "local" network definition in their `icp.yaml` to customize the local development environment
-- The "mainnet" network is protected and cannot be overridden to prevent production deployment accidents
-- If no "local" network is defined, a default managed network on `localhost:8000` is automatically added
+The CLI provides two implicit networks and environments that are always available:
+
+- **`local` network**: A default managed network on `localhost:8000`. Users can override this in their `icp.yaml` to customize the local development environment (e.g., different port or connecting to an existing network).
+- **`ic` network**: The IC mainnet at `https://icp-api.io`. This network is **protected** and cannot be overridden to prevent accidental production deployment with incorrect settings.
+
+Corresponding implicit environments are also provided:
+- **`local` environment**: Uses the `local` network with all project canisters. This is the default environment when none is specified.
+- **`ic` environment**: Uses the `ic` network with all project canisters.
+
+These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` and are used throughout the codebase.
 
 #### Identity & Canister IDs
 

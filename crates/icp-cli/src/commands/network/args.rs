@@ -1,5 +1,5 @@
 use clap::Args;
-use icp::{context::NetworkOrEnvironmentSelection, project::DEFAULT_LOCAL_NETWORK_NAME};
+use icp::{context::NetworkOrEnvironmentSelection, prelude::LOCAL};
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct NetworkOrEnvironmentArgs {
@@ -51,8 +51,6 @@ impl From<NetworkOrEnvironmentArgs> for Result<NetworkOrEnvironmentSelection, an
         }
 
         // Precedence 4: Default to "local" network (lowest)
-        Ok(NetworkOrEnvironmentSelection::Network(
-            DEFAULT_LOCAL_NETWORK_NAME.to_string(),
-        ))
+        Ok(NetworkOrEnvironmentSelection::Network(LOCAL.to_string()))
     }
 }

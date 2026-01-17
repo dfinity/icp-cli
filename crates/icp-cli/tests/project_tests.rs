@@ -267,7 +267,7 @@ fn explicit_path_with_subdirectory() {
 }
 
 #[test]
-fn redefine_mainnet_network_disallowed() {
+fn redefine_ic_network_disallowed() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -277,9 +277,9 @@ fn redefine_mainnet_network_disallowed() {
         &project_dir.join("icp.yaml"),
         r#"
         networks:
-          - name: mainnet
+          - name: ic
             mode: connected
-            url: https://fake-mainnet.io
+            url: https://fake-ic.io
         "#,
     )
     .expect("failed to write project manifest");
@@ -290,5 +290,5 @@ fn redefine_mainnet_network_disallowed() {
         .args(["project", "show"])
         .assert()
         .failure()
-        .stderr(contains("`mainnet` is a reserved network name"));
+        .stderr(contains("`ic` is a reserved network name"));
 }

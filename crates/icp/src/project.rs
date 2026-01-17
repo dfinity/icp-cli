@@ -13,7 +13,7 @@ use crate::{
         load_manifest_from_path,
         recipe::RecipeType,
     },
-    network::{Configuration, Connected, Managed, ManagedMode},
+    network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
     prelude::*,
 };
 

@@ -198,7 +198,7 @@ impl TestContext {
         cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
-        cmd.arg("network").arg("start").arg(name).arg("--debug");
+        cmd.arg("network").arg("start").arg(name);
         #[cfg(unix)]
         {
             let launcher_path = self.launcher_path().await;
@@ -448,9 +448,20 @@ impl TestContext {
                 }
             }
             if elapsed > timeout {
-                panic!(
+                eprintln!(
                     "Timed out waiting for network descriptor at {descriptor_path} after {elapsed}s"
                 );
+                let cid = std::fs::read_to_string(project_dir.join("container_id.txt")).unwrap();
+                let logs = std::process::Command::new("docker")
+                    .args(["logs", cid.trim()])
+                    .output()
+                    .unwrap();
+                let logs = format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&logs.stdout),
+                    String::from_utf8_lossy(&logs.stderr)
+                );
+                eprintln!("Container logs:\n{logs}");
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         };

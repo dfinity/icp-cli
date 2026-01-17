@@ -6,8 +6,13 @@ use bollard::{
     Docker,
     errors::Error as BollardError,
     query_parameters::{
-        CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
-        RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
+        CreateContainerOptions,
+        CreateImageOptions,
+        InspectContainerOptions,
+        // RemoveContainerOptions,
+        StartContainerOptions,
+        StopContainerOptions,
+        WaitContainerOptions,
     },
     secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
@@ -200,6 +205,7 @@ pub async fn spawn_docker_launcher(
                             .try_collect()?,
                     ),
                     shm_size: *shm_size,
+
                     ..<_>::default()
                 }),
                 ..<_>::default()
@@ -209,6 +215,7 @@ pub async fn spawn_docker_launcher(
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
     eprintln!("Created container {}", &container_id[..12]);
+    std::fs::write("container_id.txt", &container_id).unwrap();
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
@@ -341,18 +348,18 @@ pub async fn stop_docker_launcher(
 async fn stop(
     docker: &Docker,
     container_id: &str,
-    rm_on_exit: bool,
+    _rm_on_exit: bool,
 ) -> Result<(), StopContainerError> {
     docker
         .stop_container(container_id, None::<StopContainerOptions>)
         .await
         .context(StopSnafu { container_id })?;
-    if rm_on_exit {
-        docker
-            .remove_container(container_id, None::<RemoveContainerOptions>)
-            .await
-            .context(RemoveSnafu { container_id })?;
-    }
+    // if rm_on_exit {
+    //     docker
+    //         .remove_container(container_id, None::<RemoveContainerOptions>)
+    //         .await
+    //         .context(RemoveSnafu { container_id })?;
+    // }
     Ok(())
 }
 

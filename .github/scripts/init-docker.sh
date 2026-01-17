@@ -8,7 +8,7 @@ for i in $(seq 1 30); do
         echo Docker ready
         {
             echo DOCKER_HOST=tcp://127.0.0.1:2375
-            echo ICP_CLI_DOCKER_WSL2_MODE=1
+            echo ICP_CLI_DOCKER_WSL2_MODE="$DISTRO"
         } >> $GITHUB_ENV
         exit 0
     fi

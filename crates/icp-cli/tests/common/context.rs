@@ -471,6 +471,15 @@ impl TestContext {
                     String::from_utf8_lossy(&ls.stdout),
                     String::from_utf8_lossy(&ls.stderr)
                 );
+                let mount = std::process::Command::new("docker")
+                    .args(["exec", cid.trim(), "mount"])
+                    .output()
+                    .unwrap();
+                let mount = format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&mount.stdout),
+                    String::from_utf8_lossy(&mount.stderr)
+                );
                 let inspect = std::process::Command::new("docker")
                     .args(["inspect", cid.trim()])
                     .output()
@@ -490,6 +499,8 @@ Status dir listing:
 {ls}
 Container inspect:
 {inspect}
+Mount output:
+{mount}
 Hostside file exists: {}, touch status: {}",
                     Path::new(&hostside).join("test.txt").exists(),
                     touch_status.code().unwrap()

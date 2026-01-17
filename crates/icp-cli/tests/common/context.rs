@@ -198,7 +198,7 @@ impl TestContext {
         cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
-        cmd.arg("network").arg("start").arg(name);
+        cmd.arg("network").arg("start").arg(name).arg("--debug");
         #[cfg(unix)]
         {
             let launcher_path = self.launcher_path().await;

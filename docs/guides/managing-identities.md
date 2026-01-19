@@ -156,19 +156,19 @@ icp deploy --identity my-identity --identity-password-file ./password.txt
 Your identity's principal can be a controller of canisters. View canister controllers:
 
 ```bash
-icp canister settings show my-canister -e ic
+icp canister settings show <canister-id> -n ic
 ```
 
 Add a controller:
 
 ```bash
-icp canister settings update my-canister --add-controller <principal> -e ic
+icp canister settings update <canister-id> --add-controller <principal> -n ic
 ```
 
 Remove a controller:
 
 ```bash
-icp canister settings update my-canister --remove-controller <principal> -e ic
+icp canister settings update <canister-id> --remove-controller <principal> -n ic
 ```
 
 ## Troubleshooting

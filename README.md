@@ -12,6 +12,7 @@ brew install dfinity/tap/icp-cli
 icp new my-project && cd my-project
 icp network start -d
 icp deploy
+
 # List your canisters and call a method (canister name depends on your template)
 icp canister list
 icp canister call <canister-name> greet '("World")'
@@ -32,7 +33,7 @@ If you're coming from dfx (the previous Internet Computer SDK), see the **[Migra
 
 ## Examples
 
-The [`examples/`](examples/) directory contains project templates:
+The [`examples/`](examples/) directory contains example projects to help you get started:
 
 - `icp-motoko/` — Motoko canister
 - `icp-rust/` — Rust canister
@@ -52,11 +53,11 @@ The [`examples/`](examples/) directory contains project templates:
 - **[Documentation](docs/index.md)** — Guides, concepts, and reference
 - **[GitHub Issues](https://github.com/dfinity/icp-cli/issues)** — Bug reports and feature requests
 - **[Developer Forum](https://forum.dfinity.org/)** — Questions and discussions
-- **[Discord](https://discord.internetcomputer.org)** — Real-time community chat
+- **[Discord](https://discord.internetcomputer.org)** — Real-time community chat in #dx-feedback
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 
 ```bash
 # Build
@@ -67,6 +68,9 @@ cargo test
 
 # Generate CLI docs
 ./scripts/generate-cli-docs.sh
+
+# Update the yaml file schemas
+./scripts/config-schemas.sh
 ```
 
 ## License

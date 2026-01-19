@@ -161,7 +161,7 @@ canisters:
       wasm_memory_threshold: 536870912    # 512MB
       log_visibility: controllers
       environment_variables:
-        NODE_ENV: "production"
+        ENV: "production"
         API_BASE_URL: "https://api.example.com"
 ```
 
@@ -184,7 +184,7 @@ environments:
         compute_allocation: 20              # Production override
         freezing_threshold: 7776000         # 90 days
         environment_variables:
-          NODE_ENV: "production"
+          ENV: "production"
 ```
 
 ## CLI Commands

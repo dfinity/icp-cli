@@ -225,7 +225,7 @@ See [Containerized Networks](../containers.md) for full options.
 ```yaml
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters:
       - frontend
       - backend
@@ -286,14 +286,14 @@ init_args: "4449444c016d7b0100010203"
 | Name | Mode | Description |
 |------|------|-------------|
 | `local` | managed | `localhost:8000`, can be overridden |
-| `mainnet` | connected | ICP mainnet, cannot be overridden |
+| `ic` | connected | ICP mainnet, cannot be overridden |
 
 ### Environments
 
 | Name | Network | Canisters |
 |------|---------|-----------|
 | `local` | local | All |
-| `ic` | mainnet | All |
+| `ic` | ic | All |
 
 ## Complete Example
 
@@ -326,7 +326,7 @@ networks:
 
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
@@ -335,7 +335,7 @@ environments:
           ENV: "staging"
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       frontend:

@@ -22,7 +22,9 @@ dfx deploy --network ic
 **icp-cli** deploys to environments (which reference networks):
 ```bash
 icp deploy --environment production
+
 # or use the implicit ic environment:
+icp deploy --environment ic
 icp deploy -e ic
 ```
 
@@ -50,7 +52,8 @@ canisters:
 
 ### Build Process
 
-dfx has built-in build logic. icp-cli delegates to recipes or explicit build steps:
+dfx has built-in build logic. icp-cli delegates to the appropriate toolchain as specified in the
+build configuration or through the use of a recipe.
 
 ```yaml
 canisters:
@@ -62,6 +65,22 @@ canisters:
             - cargo build --target wasm32-unknown-unknown --release
             - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
 ```
+
+### Build parallelism
+
+dfx requires users to specify the inter canister dependencies so it can build canisters in order.
+
+icp-cli assumes users will use canister environment variables to connect canisters and builds all canisters in parallel.
+
+### Local networks
+
+| Operation | dfx | icp-cli |
+|-----------|-----|---------|
+| Launching a local network | Shared local network for all projects | Local network is local to the project |
+| System canisters | Requires that you pass additional parameters to setup system canisters | Launches a network with system canisters and seeds accounts with ICP and Cycles |
+| Tokens | User must mint tokens | Anonymous principal and local account are seeded with tokens |
+| docker support | N/A | Supports launching a dockerized network |
+
 
 ## Command Mapping
 
@@ -98,14 +117,14 @@ canisters:
 }
 ```
 
-**icp.yaml:**
+**canister.yaml:**
 ```yaml
-canisters:
-  - name: backend
-    recipe:
-      type: "@dfinity/rust"
-      configuration:
-        package: backend
+name: backend
+recipe:
+  type: "@dfinity/rust"
+  configuration:
+    package: backend
+    candid: "src/backend/backend.did"
 ```
 
 ### Basic Motoko Canister
@@ -122,14 +141,14 @@ canisters:
 }
 ```
 
-**icp.yaml:**
+**canister.yaml:**
 ```yaml
-canisters:
-  - name: backend
-    recipe:
-      type: "@dfinity/motoko"
-      configuration:
-        entry: src/backend/main.mo
+name: backend
+recipe:
+  type: "@dfinity/motoko"
+  configuration:
+    entry: src/backend/main.mo
+    candid: src/backend/candid.did
 ```
 
 ### Asset Canister
@@ -146,14 +165,13 @@ canisters:
 }
 ```
 
-**icp.yaml:**
+**canister.yaml:**
 ```yaml
-canisters:
-  - name: frontend
-    recipe:
-      type: "@dfinity/assets"
-      configuration:
-        source: dist
+name: frontend
+recipe:
+  type: "@dfinity/asset-canister"
+  configuration:
+    source: dist
 ```
 
 ### Multi-Canister Project
@@ -193,34 +211,6 @@ canisters:
 
 Note: icp-cli doesn't have explicit dependencies between canisters. Deploy order is determined automatically or you can deploy specific canisters.
 
-### Custom Build Commands
-
-**dfx.json:**
-```json
-{
-  "canisters": {
-    "custom": {
-      "type": "custom",
-      "build": "make build",
-      "wasm": "build/custom.wasm",
-      "candid": "custom.did"
-    }
-  }
-}
-```
-
-**icp.yaml:**
-```yaml
-canisters:
-  - name: custom
-    build:
-      steps:
-        - type: script
-          commands:
-            - make build
-            - cp build/custom.wasm "$ICP_WASM_OUTPUT_PATH"
-```
-
 ### Network Configuration
 
 **dfx.json:**
@@ -255,7 +245,7 @@ Some dfx features work differently or aren't directly available:
 | dfx Feature | icp-cli Equivalent |
 |-------------|-------------------|
 | `dfx.json` defaults | Use recipes or explicit configuration |
-| Canister dependencies | Deploy in desired order manually |
+| Canister dependencies | Use bindings compatible with Canister Environment Variables |
 | `dfx generate` | Use language-specific tooling |
 | `dfx ledger` | `icp token` commands |
 | `dfx wallet` | Cycles managed differently |

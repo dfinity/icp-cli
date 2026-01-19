@@ -77,14 +77,12 @@ Create project-specific recipes as Handlebars templates:
 
 ```yaml
 # recipes/my-rust-canister.hb.yaml
-canister:
-  name: {{configuration.name}}
-  build:
-    steps:
-      - type: script
-        commands:
-          - cargo build --package {{configuration.package}} --target wasm32-unknown-unknown --release
-          - cp target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+build:
+  steps:
+    - type: script
+      commands:
+        - cargo build --package {{configuration.package}} --target wasm32-unknown-unknown --release
+        - cp target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
 ```
 
 Reference it in your `icp.yaml`:
@@ -93,7 +91,7 @@ Reference it in your `icp.yaml`:
 canisters:
   - name: backend
     recipe:
-      type: ./recipes/my-rust-canister.hb.yaml
+      type: file://recipes/my-rust-canister.hb.yaml
       configuration:
         name: backend
         package: my-backend-crate

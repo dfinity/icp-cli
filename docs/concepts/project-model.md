@@ -57,13 +57,13 @@ Networks can be defined in three ways:
 
 There are two implicit networks defined:
 - `local` - is a local managed network
-- `mainnet` - is the connected ICP network
+- `ic` - is the IC mainnet (connected network)
 
 Their configuration is equivalent to:
 
-```
+```yaml
 networks:
-  - name: mainnet
+  - name: ic
     configuration:
       mode: connected
       url: https://icp-api.io
@@ -103,14 +103,20 @@ networks:
 
 Environments can be defined in three ways:
 
-### Implicit Environment
+### Implicit Environments
 
-There is an implicit `local` environment. It is defined like this:
+There are two implicit environments:
+- `local` - uses the local managed network
+- `ic` - uses the IC mainnet
 
-```
+They are defined like this:
+
+```yaml
 environments:
   - name: local
     network: local
+  - name: ic
+    network: ic
 ```
 
 ### Inline Definition

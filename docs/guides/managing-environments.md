@@ -9,9 +9,9 @@ An **environment** combines:
 - A set of **canisters** to deploy
 - **Settings** specific to that environment
 
-Two environments are always available:
+Two implicit environments are always available:
 - `local` — Uses the local managed network (default)
-- `ic` — Uses mainnet
+- `ic` — Uses the IC mainnet
 
 ## Basic Environment Configuration
 
@@ -28,11 +28,11 @@ canisters:
 
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
 ```
 
@@ -43,7 +43,7 @@ Override canister settings per environment:
 ```yaml
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
@@ -52,7 +52,7 @@ environments:
           LOG_LEVEL: "debug"
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
@@ -76,8 +76,8 @@ icp deploy --environment staging
 # Production
 icp deploy --environment production
 
-# Shorthand for mainnet (ic environment)
-icp deploy --ic
+# IC mainnet (using implicit ic environment)
+icp deploy -e ic
 ```
 
 ## Environment-Specific Init Args
@@ -93,7 +93,7 @@ canisters:
 
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [backend]
     init_args:
       backend: "(record { mode = \"staging\" })"
@@ -120,7 +120,7 @@ This shows all environments and their settings.
 Each environment maintains separate canister IDs. The storage location depends on network type:
 
 - **Managed networks** (local): `.icp/cache/mappings/<environment>.ids.json`
-- **Connected networks** (mainnet): `.icp/data/mappings/<environment>.ids.json`
+- **Connected networks** (IC mainnet): `.icp/data/mappings/<environment>.ids.json`
 
 List canisters configured for an environment:
 
@@ -156,7 +156,7 @@ canisters:
 
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       frontend:
@@ -168,7 +168,7 @@ environments:
           API_ENV: "staging"
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       frontend:

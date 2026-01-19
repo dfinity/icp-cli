@@ -147,7 +147,7 @@ async fn cycles_mint_with_explicit_network() {
 }
 
 #[tokio::test]
-async fn cycles_mint_with_mainnet() {
+async fn cycles_mint_on_ic() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -156,10 +156,10 @@ async fn cycles_mint_with_mainnet() {
     // Create identity
     clients::icp(&ctx, &project_dir, None).use_new_random_identity();
 
-    // Run mint command with explicit --mainnet flag
+    // Run mint command with --network ic
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "mint", "--icp", "1", "--mainnet"])
+        .args(["cycles", "mint", "--icp", "1", "--network", "ic"])
         .assert()
         .stderr(contains(
             "Error: Insufficient funds: 1.00010000 ICP required, 0 ICP available.",

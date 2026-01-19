@@ -123,7 +123,7 @@ Only use for testing or non-sensitive deployments.
 Override the default identity for a single command:
 
 ```bash
-icp deploy --identity production-deployer --ic
+icp deploy --identity production-deployer -e ic
 ```
 
 ## Using Password Files
@@ -156,19 +156,19 @@ icp deploy --identity my-identity --identity-password-file ./password.txt
 Your identity's principal can be a controller of canisters. View canister controllers:
 
 ```bash
-icp canister settings show my-canister --ic
+icp canister settings show my-canister -e ic
 ```
 
 Add a controller:
 
 ```bash
-icp canister settings update my-canister --add-controller <principal> --ic
+icp canister settings update my-canister --add-controller <principal> -e ic
 ```
 
 Remove a controller:
 
 ```bash
-icp canister settings update my-canister --remove-controller <principal> --ic
+icp canister settings update my-canister --remove-controller <principal> -e ic
 ```
 
 ## Troubleshooting
@@ -191,6 +191,6 @@ icp identity list
 
 ## Next Steps
 
-- [Deploying to Mainnet](deploying-to-mainnet.md) — Use your identity to deploy
+- [Deploying to IC Mainnet](deploying-to-mainnet.md) — Use your identity to deploy
 
 [Browse all documentation →](../index.md)

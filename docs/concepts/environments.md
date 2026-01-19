@@ -44,9 +44,9 @@ Two networks are always available:
 | Network | Type | Description |
 |---------|------|-------------|
 | `local` | Managed | Local development network on `localhost:8000` |
-| `mainnet` | Connected | The Internet Computer mainnet |
+| `ic` | Connected | The Internet Computer mainnet at `https://icp-api.io` |
 
-The `local` network can be overridden. The `mainnet` network is protected and cannot be overridden.
+The `local` network can be overridden in your `icp.yaml`. The `ic` network is **protected** and cannot be overridden to prevent accidental production deployment with incorrect settings.
 
 ### Overriding Local
 
@@ -94,21 +94,21 @@ Two environments are always available:
 | Environment | Network | Canisters |
 |-------------|---------|-----------|
 | `local` | `local` | All canisters |
-| `ic` | `mainnet` | All canisters |
+| `ic` | `ic` | All canisters |
 
 ### Defining Environments
 
 ```yaml
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
         compute_allocation: 5
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
@@ -128,11 +128,11 @@ canisters:
 
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [backend]
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [backend]
     settings:
       backend:
@@ -158,15 +158,15 @@ icp deploy --e staging
 |--------|---------|-------------|
 | **Purpose** | Where to connect | What to deploy and how |
 | **Contains** | URL, connection details | Network reference, canisters, settings |
-| **Examples** | `local`, `mainnet`, `testnet` | `local`, `ic`, `staging`, `production` |
+| **Examples** | `local`, `ic`, `testnet` | `local`, `ic`, `staging`, `production` |
 
 A common pattern:
 
 ```
-Networks: local, mainnet
+Networks: local, ic
 Environments: local, staging, production
                  ↓        ↓         ↓
-              local   mainnet   mainnet
+              local      ic        ic
 ```
 
 Multiple environments can target the same network with different settings.
@@ -176,10 +176,10 @@ Multiple environments can target the same network with different settings.
 Each environment maintains separate canister IDs. The storage location depends on network type:
 
 - **Managed networks** (local): `.icp/cache/mappings/<environment>.ids.json`
-- **Connected networks** (mainnet): `.icp/data/mappings/<environment>.ids.json`
+- **Connected networks** (IC mainnet): `.icp/data/mappings/<environment>.ids.json`
 
-**IMPORTANT** Creating canisters on mainnet is like buying real-estate so you should make sure
-not to lose the canister ids. It is common practice to checkin the contents of `.icp/data` in
+**IMPORTANT** Creating canisters on the IC mainnet is like buying real-estate so you should make sure
+not to lose the canister IDs. It is common practice to check in the contents of `.icp/data` in
 source control so as not to lose them.
 
 ## Next Steps

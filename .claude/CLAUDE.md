@@ -125,7 +125,9 @@ These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` a
 #### Identity & Canister IDs
 
 - **Identities**: Stored in `~/.config/icp/identity/` as PEM files (Secp256k1 or Ed25519)
-- **Canister IDs**: Persisted in `.icp/data/<network-name>/canister_ids.json` within project directories
+- **Canister IDs**: Persisted in `.icp/{cache,data}/mappings/<environment>.ids.json` within project directories
+  - Managed networks (local) use `.icp/cache/mappings/`
+  - Connected networks (mainnet) use `.icp/data/mappings/`
 
 Store management is in `crates/icp/src/store_id.rs`.
 
@@ -193,8 +195,18 @@ The project includes JSON schemas for manifest validation:
 
 ### Docs generation
 
-- The cli reference is generated in `docs/cli-reference.md`.
-- Regenerate the cli reference when commands changes by running: `./scripts/generate-cli-docs.sh`
+- The CLI reference is generated in `docs/reference/cli.md`.
+- Regenerate the CLI reference when commands change by running: `./scripts/generate-cli-docs.sh`
+
+### Documentation Structure
+
+Documentation follows the Diátaxis framework:
+
+- `docs/tutorial.md` — Learning-oriented first deployment guide
+- `docs/guides/` — Task-oriented how-to guides
+- `docs/concepts/` — Understanding-oriented explanations
+- `docs/reference/` — Information-oriented technical specifications
+- `docs/migration/` — Migration guides (e.g., from dfx)
 
 ### Paths
 

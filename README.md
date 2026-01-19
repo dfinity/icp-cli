@@ -14,8 +14,11 @@ icp network start -d
 icp deploy
 
 # List your canisters and call a method (canister name depends on your template)
-icp canister list
-icp canister call <canister-name> greet '("World")'
+icp canister status
+
+# Call a function on yout canister
+# The ones generated from the templates are typically called `backend`
+icp canister call backend greet '("World")'
 ```
 
 See the [Installation Guide](docs/guides/installation.md) for all installation methods including building from source.

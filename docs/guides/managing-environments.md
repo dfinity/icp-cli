@@ -1,6 +1,6 @@
 # Managing Environments
 
-Environments let you deploy the same canisters with different settings to different networks. This guide covers setting up development, staging, and production environments.
+Environments let allow to deploy multiple instances of a set of canisters to the same network with each set having independent settings. This guide covers setting up development, staging, and production environments.
 
 ## Understanding Environments
 
@@ -11,7 +11,7 @@ An **environment** combines:
 
 Two environments are always available:
 - `local` — Uses the local managed network (default)
-- `ic` — Uses mainnet
+- `ic` — Uses the ic network sometimes referred to as mainnet.
 
 ## Basic Environment Configuration
 
@@ -28,11 +28,11 @@ canisters:
 
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
 ```
 
@@ -43,7 +43,7 @@ Override canister settings per environment:
 ```yaml
 environments:
   - name: staging
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
@@ -52,7 +52,7 @@ environments:
           LOG_LEVEL: "debug"
 
   - name: production
-    network: mainnet
+    network: ic
     canisters: [frontend, backend]
     settings:
       backend:
@@ -76,8 +76,6 @@ icp deploy --environment staging
 # Production
 icp deploy --environment production
 
-# Shorthand for mainnet (ic environment)
-icp deploy --ic
 ```
 
 ## Environment-Specific Init Args
@@ -128,7 +126,11 @@ List canisters configured for an environment:
 icp canister list --environment staging
 ```
 
-This shows all canisters defined in the environment's configuration, along with their canister IDs if they have been deployed.
+This shows the network status of the canisters in that environment:
+
+```bash
+icp canister status --environment staging
+```
 
 ## Example: Full Multi-Environment Setup
 

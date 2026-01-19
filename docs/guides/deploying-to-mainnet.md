@@ -1,4 +1,4 @@
-# Deploying to Mainnet
+# Deploying to IC Mainnet
 
 This guide walks through deploying your canisters to the Internet Computer mainnet.
 
@@ -38,10 +38,10 @@ Canisters need cycles to operate on mainnet. You'll need cycles before deploying
 
 ```bash
 # Check your cycles balance
-icp cycles balance --network ic
+icp cycles balance -e ic
 
 # Convert ICP to cycles (if you have ICP)
-icp cycles mint --icp 1 --network ic
+icp cycles mint --icp 1 -e ic
 ```
 
 **How many cycles do you need?**
@@ -53,7 +53,7 @@ For detailed information on acquiring ICP, converting to cycles, and managing ba
 
 ## Deploying
 
-To deploy to mainnet, you need to target implicit `ic` environment using the `--environment ic` flag or the `-e ic` shorthand:
+To deploy to the IC mainnet, use the implicit `ic` environment with the `--environment ic` flag or the `-e ic` shorthand:
 
 ```bash
 icp deploy --environment ic
@@ -75,7 +75,7 @@ icp deploy frontend --environment ic
 
 ### Using Environments
 
-You can configure multiple enviroments pointing to mainnet in `icp.yaml`:
+You can configure multiple environments pointing to the IC mainnet in `icp.yaml`:
 
 ```yaml
 

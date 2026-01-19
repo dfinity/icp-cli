@@ -22,8 +22,8 @@ dfx deploy --network ic
 **icp-cli** deploys to environments (which reference networks):
 ```bash
 icp deploy --environment production
-# or shorthand for mainnet:
-icp deploy --ic
+# or use the implicit ic environment:
+icp deploy -e ic
 ```
 
 Environments add a layer of abstraction, allowing different settings for the same network.
@@ -72,7 +72,7 @@ canisters:
 | Stop local network | `dfx stop` | `icp network stop` |
 | Build canister | `dfx build my_canister` | `icp build my_canister` |
 | Deploy all | `dfx deploy` | `icp deploy` |
-| Deploy to mainnet | `dfx deploy --network ic` | `icp deploy --ic` |
+| Deploy to mainnet | `dfx deploy --network ic` | `icp deploy -e ic` |
 | Call canister | `dfx canister call my_canister method '(args)'` | `icp canister call my_canister method '(args)'` |
 | Get canister ID | `dfx canister id my_canister` | `icp canister status my_canister --id-only` |
 | List canisters | `dfx canister ls` | `icp canister list` |
@@ -388,14 +388,14 @@ dfx canister --network ic id backend
 ### 5. Verify Mainnet Access
 
 ```bash
-# Check you can reach mainnet
-icp network ping mainnet
+# Check you can reach IC mainnet
+icp network ping ic
 
 # Verify identity has correct principal
 icp identity principal
 
 # Check canister status (if you migrated IDs)
-icp canister status my-canister --ic
+icp canister status my-canister -e ic
 ```
 
 ### 6. Update CI/CD
@@ -415,7 +415,7 @@ steps:
 steps:
   - run: icp network start -d
   - run: icp deploy
-  - run: icp deploy --ic
+  - run: icp deploy -e ic
 ```
 
 ### 7. Update Documentation

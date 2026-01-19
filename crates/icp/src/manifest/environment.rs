@@ -4,10 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 use snafu::prelude::*;
 
-use crate::{
-    canister::Settings,
-    project::{DEFAULT_LOCAL_ENVIRONMENT_NAME, DEFAULT_LOCAL_NETWORK_NAME},
-};
+use crate::{canister::Settings, prelude::LOCAL};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 pub struct EnvironmentInner {
@@ -74,12 +71,12 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
         } = v;
 
         // Name
-        if name == DEFAULT_LOCAL_ENVIRONMENT_NAME {
+        if name == LOCAL {
             return OverrideLocalSnafu.fail();
         }
 
         // Network
-        let network = network.unwrap_or(DEFAULT_LOCAL_NETWORK_NAME.to_string());
+        let network = network.unwrap_or(LOCAL.to_string());
 
         // Canisters
         let canisters = match canisters {

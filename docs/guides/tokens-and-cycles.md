@@ -11,7 +11,7 @@ The Internet Computer uses two types of currency:
 | **ICP** | Governance token | Trading, staking, converting to cycles |
 | **Cycles** | Computational fuel | Running canisters, paying for storage and compute |
 
-Canisters consume cycles to operate. To deploy and run canisters on mainnet, you need cycles.
+Canisters consume cycles to operate. To deploy and run canisters on the IC mainnet, you need cycles.
 
 ## Checking Balances
 
@@ -20,8 +20,8 @@ Canisters consume cycles to operate. To deploy and run canisters on mainnet, you
 Check your ICP balance:
 
 ```bash
-# On mainnet
-icp token balance --ic
+# On IC mainnet
+icp token balance -e ic
 
 # On local network (for testing)
 icp token balance
@@ -32,8 +32,8 @@ icp token balance
 Check your cycles balance:
 
 ```bash
-# On mainnet
-icp cycles balance --ic
+# On IC mainnet
+icp cycles balance -e ic
 
 # On local network
 icp cycles balance
@@ -44,7 +44,7 @@ icp cycles balance
 Check how many cycles a specific canister has:
 
 ```bash
-icp canister status my-canister --ic
+icp canister status my-canister -e ic
 ```
 
 The output includes the canister's cycles balance.
@@ -54,17 +54,17 @@ The output includes the canister's cycles balance.
 Send ICP tokens to another principal:
 
 ```bash
-icp token transfer <AMOUNT> <RECEIVER> --ic
+icp token transfer <AMOUNT> <RECEIVER> -e ic
 ```
 
 Example:
 
 ```bash
 # Send 1 ICP
-icp token transfer 1 aaaaa-aa --ic
+icp token transfer 1 aaaaa-aa -e ic
 
 # Send 0.5 ICP
-icp token transfer 0.5 xxxxx-xxxxx-xxxxx-xxxxx-cai --ic
+icp token transfer 0.5 xxxxx-xxxxx-xxxxx-xxxxx-cai -e ic
 ```
 
 The receiver can be a principal ID or account identifier.
@@ -77,10 +77,10 @@ Convert ICP tokens to cycles for use with canisters:
 
 ```bash
 # Convert a specific amount of ICP
-icp cycles mint --icp 1 --ic
+icp cycles mint -e icp 1 -e ic
 
 # Or request a specific amount of cycles (ICP calculated automatically)
-icp cycles mint --cycles 1000000000000 --ic
+icp cycles mint --cycles 1000000000000 -e ic
 ```
 
 The conversion rate is determined by the current ICP/XDR exchange rate. One trillion cycles (1T = 1,000,000,000,000) costs approximately 1 XDR worth of ICP.
@@ -90,7 +90,7 @@ The conversion rate is determined by the current ICP/XDR exchange rate. One tril
 Add cycles to a canister to keep it running:
 
 ```bash
-icp canister top-up my-canister --amount 1000000000000 --ic
+icp canister top-up my-canister --amount 1000000000000 -e ic
 ```
 
 The `--amount` is specified in cycles (not ICP).
@@ -109,15 +109,15 @@ Regularly check canister cycles to avoid running out:
 
 ```bash
 # Check all canisters in an environment
-icp canister status --ic
+icp canister status -e ic
 
 # Check specific canister
-icp canister status my-canister --ic
+icp canister status my-canister -e ic
 ```
 
 ## Getting ICP and Cycles
 
-### On Mainnet
+### On IC Mainnet
 
 To get ICP tokens:
 
@@ -139,10 +139,10 @@ icp-cli supports ICRC-1 tokens beyond ICP:
 
 ```bash
 # Check balance of a specific token
-icp token <TOKEN_CANISTER_ID> balance --ic
+icp token <TOKEN_CANISTER_ID> balance -e ic
 
 # Transfer a specific token
-icp token <TOKEN_CANISTER_ID> transfer 100 <RECEIVER> --ic
+icp token <TOKEN_CANISTER_ID> transfer 100 <RECEIVER> -e ic
 ```
 
 Replace `<TOKEN_CANISTER_ID>` with the canister ID of the token ledger.
@@ -153,10 +153,10 @@ Specify which identity to use for token operations:
 
 ```bash
 # Check balance for a specific identity
-icp token balance --identity my-other-identity --ic
+icp token balance --identity my-other-identity -e ic
 
 # Transfer using a specific identity
-icp token transfer 1 <RECEIVER> --identity my-wallet --ic
+icp token transfer 1 <RECEIVER> --identity my-wallet -e ic
 ```
 
 ## Troubleshooting
@@ -166,8 +166,8 @@ icp token transfer 1 <RECEIVER> --identity my-wallet --ic
 Your account doesn't have enough ICP or cycles. Check your balance:
 
 ```bash
-icp token balance --ic
-icp cycles balance --ic
+icp token balance -e ic
+icp cycles balance -e ic
 ```
 
 **"Canister out of cycles"**
@@ -175,7 +175,7 @@ icp cycles balance --ic
 Top up the canister:
 
 ```bash
-icp canister top-up my-canister --amount 1000000000000 --ic
+icp canister top-up my-canister --amount 1000000000000 -e ic
 ```
 
 **Transfer fails**

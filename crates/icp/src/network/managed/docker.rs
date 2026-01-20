@@ -548,7 +548,7 @@ pub enum DockerLauncherError {
         source: std::str::Utf8Error,
         display: String,
     },
-    #[snafu(display("failed to convert path to WSL2: {msg}"))]
+    #[snafu(display("failed to convert path {path} to WSL2: {msg}"))]
     WslPathConvertError { msg: String, path: PathBuf },
     #[snafu(display("failed to create temporary directory in WSL2"))]
     WslCreateTmpDirError { source: std::io::Error },

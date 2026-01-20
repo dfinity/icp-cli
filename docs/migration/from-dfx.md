@@ -380,17 +380,17 @@ for id in $(dfx identity list | grep -v "^anonymous"); do
   echo "Migrating $id..."
 
   # Export from dfx (handles all storage types)
-  dfx identity export $id > /tmp/${id}.pem
+  dfx identity export "$id" > "/tmp/${id}.pem"
 
   # Import to icp-cli (uses keyring by default)
-  icp identity import $id --from-pem /tmp/${id}.pem
+  icp identity import "$id" --from-pem "/tmp/${id}.pem"
 
   # Clean up
-  rm /tmp/${id}.pem
+  rm "/tmp/${id}.pem"
 
   # Verify principals match
-  echo "  dfx principal:     $(dfx identity get-principal --identity $id)"
-  echo "  icp-cli principal: $(icp identity principal --identity $id)"
+  echo "  dfx principal:     $(dfx identity get-principal --identity "$id")"
+  echo "  icp-cli principal: $(icp identity principal --identity "$id")"
   echo ""
 done
 
@@ -398,7 +398,7 @@ done
 icp identity list
 ```
 
-**Note:** This script will prompt for passwords if any dfx identities are password-protected or stored in keyring.
+**Note:** This script copies identities to icp-cli without removing them from dfx. Your original dfx identities remain intact and both tools can be used side-by-side. The script will prompt for passwords if any dfx identities are password-protected or stored in keyring.
 
 ### Setting the Default Identity
 

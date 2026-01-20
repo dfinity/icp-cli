@@ -40,7 +40,7 @@ canisters:
     recipe:
       type: "@dfinity/motoko"
       configuration:
-        entry: src/main.mo
+        main: src/main.mo
 ```
 
 ### Assets Canister
@@ -53,7 +53,7 @@ canisters:
     recipe:
       type: "@dfinity/asset-canister"
       configuration:
-        source: dist
+        dir: dist
 ```
 
 ### Pre-built WASM

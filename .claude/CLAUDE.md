@@ -47,7 +47,7 @@ icp help
 
 
 # if the manifest types change regenerate the schema:
-./scripts/generate-config-schema.sh
+./scripts/generate-config-schemas.sh
 
 # After making changes and if the tests pass run cargo fmt and cargo clippy:
 cargo fmt && cargo clippy

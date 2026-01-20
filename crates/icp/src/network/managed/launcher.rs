@@ -235,6 +235,7 @@ pub fn wait_for_single_line_file(
     poll_watcher
         .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
         .context(WatchSnafu { path: &dir })?;
+    _ = poll_watcher.poll();
     let path = path.to_path_buf();
     let dir = dir.to_path_buf();
     Ok(async move {

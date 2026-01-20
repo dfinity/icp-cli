@@ -293,7 +293,7 @@ Both dfx and icp-cli support three storage modes:
 | Tool | Metadata Location | Private Key Storage |
 |------|-------------------|---------------------|
 | **dfx** | `~/.config/dfx/identity/<name>/` | System keyring (default), or encrypted/plaintext in `identity.pem` |
-| **icp-cli** | **macOS:** `~/Library/Application Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | System keyring (default), or encrypted/plaintext file |
+| **icp-cli** | **macOS:** `~/Library/Application\ Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | System keyring (default), or encrypted/plaintext file |
 
 **Note:** Both tools use the same keyring service (`internet_computer_identities`), so keyring-stored identities coexist without conflicts.
 

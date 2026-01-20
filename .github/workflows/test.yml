@@ -13,6 +13,8 @@ env:
   CURL_HOME: .
   # Disable incremental compilation
   CARGO_INCREMENTAL: 0
+  # These variables should be shared with WSL
+  WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p:DISTRO
 
 defaults:
   run:
@@ -50,16 +52,11 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-            ${{ contains(matrix.os, 'windows') && 'C:/vcpkg' || '' }}
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
-      - name: Setup image (Windows)
-        if: ${{ contains(matrix.os, 'windows') }}
-        run: ./.github/scripts/provision-windows-build.ps1
-        shell: pwsh
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -88,17 +85,11 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-            ${{ contains(matrix.os, 'windows') && 'C:/vcpkg/installed' || '' }}
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
-
-      - name: Setup image (Windows)
-        if: ${{ contains(matrix.os, 'windows') }}
-        run: ./.github/scripts/provision-windows-build.ps1
-        shell: pwsh
 
       - name: Setup WSL2 (Windows)
         if: ${{ contains(matrix.os, 'windows') }}

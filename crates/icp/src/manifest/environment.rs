@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
-use snafu::prelude::*;
 
 use crate::{canister::Settings, prelude::LOCAL};
 
@@ -52,16 +51,8 @@ pub struct EnvironmentManifest {
     pub init_args: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Snafu)]
-pub enum ParseError {
-    #[snafu(display("Overriding the local environment is not supported."))]
-    OverrideLocal,
-}
-
-impl TryFrom<EnvironmentInner> for EnvironmentManifest {
-    type Error = ParseError;
-
-    fn try_from(v: EnvironmentInner) -> Result<Self, Self::Error> {
+impl From<EnvironmentInner> for EnvironmentManifest {
+    fn from(v: EnvironmentInner) -> Self {
         let EnvironmentInner {
             name,
             network,
@@ -69,11 +60,6 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
             settings,
             init_args,
         } = v;
-
-        // Name
-        if name == LOCAL {
-            return OverrideLocalSnafu.fail();
-        }
 
         // Network
         let network = network.unwrap_or(LOCAL.to_string());
@@ -93,7 +79,7 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
             None => CanisterSelection::Everything,
         };
 
-        Ok(Self {
+        Self {
             name,
             network,
             canisters,
@@ -101,14 +87,14 @@ impl TryFrom<EnvironmentInner> for EnvironmentManifest {
             // Keep as-is, setting overrides is optional
             settings,
             init_args,
-        })
+        }
     }
 }
 
 impl<'de> Deserialize<'de> for EnvironmentManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: EnvironmentInner = Deserialize::deserialize(d)?;
-        inner.try_into().map_err(serde::de::Error::custom)
+        Ok(inner.into())
     }
 }
 

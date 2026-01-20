@@ -101,7 +101,7 @@ jobs:
         if: ${{ contains(matrix.os, 'windows') }}
         run: .github/scripts/init-docker.sh
         env:
-          DISTRO: Ubuntu-22.04
+          DISTRO: Ubuntu
         shell: wsl-bash_Ubuntu-22.04 {0}
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047

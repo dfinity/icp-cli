@@ -293,7 +293,7 @@ Both dfx and icp-cli support three storage modes:
 | Tool | Identity Directory | Structure |
 |------|-------------------|-----------|
 | **dfx** | `~/.config/dfx/identity/` | Per-identity subdirectories:<br>`<name>/identity.json` (metadata)<br>`<name>/identity.pem` (key, if not in keyring) |
-| **icp-cli** | **macOS:** `~/Library/Application\ Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | Centralized files:<br>`identity_list.json` (all identities)<br>`identity_defaults.json` (default selection)<br>`keys/<name>.pem` (keys, if not in keyring) |
+| **icp-cli** | **macOS:** `~/Library/Application Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | Centralized files:<br>`identity_list.json` (all identities)<br>`identity_defaults.json` (default selection)<br>`keys/<name>.pem` (keys, if not in keyring) |
 
 **Private key storage (both tools):** System keyring (default), or encrypted/plaintext PEM files
 

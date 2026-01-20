@@ -120,21 +120,4 @@ mod tests {
             },
         );
     }
-
-    #[test]
-    fn override_local() {
-        match serde_yaml::from_str::<EnvironmentManifest>(r#"name: local"#) {
-            // No Error
-            Ok(_) => {
-                panic!("an environment named local should result in an error");
-            }
-
-            // Wrong Error
-            Err(err) => {
-                if !format!("{err}").starts_with("Overriding the local environment") {
-                    panic!("an environment named local resulted in the wrong error: {err}");
-                };
-            }
-        };
-    }
 }

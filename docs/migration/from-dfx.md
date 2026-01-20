@@ -297,7 +297,7 @@ Both dfx and icp-cli support three storage modes:
 
 **Private key storage (both tools):** System keyring (default), or encrypted/plaintext PEM files
 
-**Note:** Both tools use the same keyring service (`internet_computer_identities`), so keyring-stored identities coexist without conflicts.
+**Note:** dfx and icp-cli use different service names in the system keyring (`internet_computer_identities` vs `icp-cli`), so identities must be explicitly migrated using the import/export process described below.
 
 ### Checking Your dfx Identity Storage Mode
 

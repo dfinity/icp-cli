@@ -290,12 +290,14 @@ Both dfx and icp-cli support three storage modes:
 
 ### Identity Storage Locations
 
-| Tool | Metadata Location | Private Key Storage |
-|------|-------------------|---------------------|
-| **dfx** | `~/.config/dfx/identity/<name>/` | System keyring (default), or encrypted/plaintext in `identity.pem` |
-| **icp-cli** | **macOS:** `~/Library/Application Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | System keyring (default), or encrypted/plaintext file |
+| Tool | Identity Directory | Structure |
+|------|-------------------|-----------|
+| **dfx** | `~/.config/dfx/identity/` | Per-identity subdirectories:<br>`<name>/identity.json` (metadata)<br>`<name>/identity.pem` (key, if not in keyring) |
+| **icp-cli** | **macOS:** `~/Library/Application Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | Centralized files:<br>`identity_list.json` (all identities)<br>`identity_defaults.json` (default selection)<br>`keys/<name>.pem` (keys, if not in keyring) |
 
-**Note:** Both tools use the same keyring service (`internet_computer_identities`), so keyring-stored identities coexist without conflicts.
+**Private key storage (both tools):** System keyring (default), or encrypted/plaintext PEM files
+
+**Note:** dfx and icp-cli use different service names in the system keyring (`internet_computer_identities` vs `icp-cli`), so identities must be explicitly migrated using the import/export process described below.
 
 ### Checking Your dfx Identity Storage Mode
 
@@ -378,17 +380,17 @@ for id in $(dfx identity list | grep -v "^anonymous"); do
   echo "Migrating $id..."
 
   # Export from dfx (handles all storage types)
-  dfx identity export $id > /tmp/${id}.pem
+  dfx identity export "$id" > "/tmp/${id}.pem"
 
   # Import to icp-cli (uses keyring by default)
-  icp identity import $id --from-pem /tmp/${id}.pem
+  icp identity import "$id" --from-pem "/tmp/${id}.pem"
 
   # Clean up
-  rm /tmp/${id}.pem
+  rm "/tmp/${id}.pem"
 
   # Verify principals match
-  echo "  dfx principal:     $(dfx identity get-principal --identity $id)"
-  echo "  icp-cli principal: $(icp identity principal --identity $id)"
+  echo "  dfx principal:     $(dfx identity get-principal --identity "$id")"
+  echo "  icp-cli principal: $(icp identity principal --identity "$id")"
   echo ""
 done
 
@@ -396,7 +398,7 @@ done
 icp identity list
 ```
 
-**Note:** This script will prompt for passwords if any dfx identities are password-protected or stored in keyring.
+**Note:** This script copies identities to icp-cli without removing them from dfx. Your original dfx identities remain intact and both tools can be used side-by-side. The script will prompt for passwords if any dfx identities are password-protected or stored in keyring.
 
 ### Setting the Default Identity
 

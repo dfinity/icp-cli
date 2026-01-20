@@ -236,12 +236,14 @@ canisters:
 
 ### Network Configuration
 
+**Remote network example:**
+
 **dfx.json:**
 ```json
 {
   "networks": {
     "staging": {
-      "providers": ["https://ic0.app"],
+      "providers": ["https://icp-api.io"],
       "type": "persistent"
     }
   }
@@ -253,13 +255,69 @@ canisters:
 networks:
   - name: staging
     mode: connected
-    url: https://ic0.app
+    url: https://icp-api.io
 
 environments:
   - name: staging
     network: staging
     canisters: [frontend, backend]
 ```
+
+**Testnet with root key:**
+
+**dfx.json:**
+```json
+{
+  "networks": {
+    "testnet": {
+      "providers": ["https://testnet.example.com"],
+      "type": "persistent"
+    }
+  }
+}
+```
+
+**icp.yaml:**
+```yaml
+networks:
+  - name: testnet
+    mode: connected
+    url: https://testnet.example.com
+    root-key: 308182301d060d2b0601040182dc7c05030102...  # Hex-encoded root key
+```
+
+**Local network with custom bind address:**
+
+**dfx.json:**
+```json
+{
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  }
+}
+```
+
+**icp.yaml:**
+```yaml
+networks:
+  - name: local
+    mode: managed
+    gateway:
+      host: 127.0.0.1
+      port: 4943
+```
+
+**Key differences:**
+- dfx's `"type": "persistent"` maps to icp-cli's `mode: connected` (external networks)
+- dfx's `"type": "ephemeral"` maps to icp-cli's `mode: managed` (local networks that icp-cli controls)
+- dfx's `"providers"` array (which can list multiple URLs for redundancy) becomes a single `url` field in icp-cli
+- dfx's `"bind"` address for local networks maps to icp-cli's `gateway.host` and `gateway.port`
+- **Root key handling**: dfx automatically fetches the root key from non-mainnet networks at runtime. icp-cli requires you to specify the `root-key` explicitly in the configuration for testnets (connected networks). For local managed networks, icp-cli retrieves the root key from the network launcher. The root key is the public key used to verify responses from the network. Explicit configuration ensures the root key comes from a trusted source rather than the network itself.
+
+**Note:** icp-cli uses `https://icp-api.io` as the default IC mainnet URL, while dfx currently uses `https://icp0.io`. Both URLs point to the same IC mainnet, but `https://icp-api.io` is the recommended API gateway. The implicit `ic` network in icp-cli is configured with `https://icp-api.io`.
 
 ## Features Not in icp-cli
 

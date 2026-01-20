@@ -544,7 +544,9 @@ mod tests {
     #[async_trait]
     impl Resolve for MockRecipeResolver {
         async fn resolve(&self, _recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-            use crate::manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField};
+            use crate::manifest::adapter::prebuilt::{
+                Adapter as PrebuiltAdapter, LocalSource, SourceField,
+            };
             use crate::manifest::canister::BuildStep;
 
             // Create a minimal BuildSteps with a dummy prebuilt step
@@ -591,11 +593,26 @@ mod tests {
         assert!(result.is_ok());
         let project = result.unwrap();
         assert_eq!(project.dir, project_dir);
-        assert!(project.canisters.contains_key("backend"), "The backend canister was not found");
-        assert!(project.environments.contains_key("local"), "The default `local` environment was not injected");
-        assert!(project.environments.contains_key("ic"), "The default `ic` environment was not injected");
-        assert!(project.networks.contains_key("local"), "The default `local` network was not injected");
-        assert!(project.networks.contains_key("ic"), "The default `ic` network was not injected");
+        assert!(
+            project.canisters.contains_key("backend"),
+            "The backend canister was not found"
+        );
+        assert!(
+            project.environments.contains_key("local"),
+            "The default `local` environment was not injected"
+        );
+        assert!(
+            project.environments.contains_key("ic"),
+            "The default `ic` environment was not injected"
+        );
+        assert!(
+            project.networks.contains_key("local"),
+            "The default `local` network was not injected"
+        );
+        assert!(
+            project.networks.contains_key("ic"),
+            "The default `ic` network was not injected"
+        );
     }
 
     #[tokio::test]
@@ -635,13 +652,27 @@ mod tests {
         assert!(result.is_ok(), "The project did not load: {:?}", result);
         let project = result.unwrap();
         assert_eq!(project.dir, project_dir);
-        assert!(project.canisters.contains_key("backend"), "The backend canister was not found");
-        assert!(project.environments.contains_key("local"), "The default `local` environment was not injected");
+        assert!(
+            project.canisters.contains_key("backend"),
+            "The backend canister was not found"
+        );
+        assert!(
+            project.environments.contains_key("local"),
+            "The default `local` environment was not injected"
+        );
         let e = project.environments.get("local").unwrap();
         assert_eq!(e.network.name, "test-network");
-        assert!(project.environments.contains_key("ic"), "The default `ic` environment was not injected");
-        assert!(project.networks.contains_key("local"), "The default `local` network was not injected");
-        assert!(project.networks.contains_key("ic"), "The default `ic` network was not injected");
+        assert!(
+            project.environments.contains_key("ic"),
+            "The default `ic` environment was not injected"
+        );
+        assert!(
+            project.networks.contains_key("local"),
+            "The default `local` network was not injected"
+        );
+        assert!(
+            project.networks.contains_key("ic"),
+            "The default `ic` network was not injected"
+        );
     }
-
 }

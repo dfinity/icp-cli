@@ -2,12 +2,12 @@ use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
 use camino_tempfile::Utf8TempDir;
 use candid::Principal;
-use notify::Watcher;
+use notify::{EventHandler, Watcher};
 use serde::Deserialize;
 use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
-use tokio::{process::Child, select, time::Instant};
+use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
 
 use crate::{
     network::{Port, config::ChildLocator},
@@ -216,47 +216,51 @@ pub fn wait_for_single_line_file(
     path: &Path,
 ) -> Result<impl Future<Output = Result<String, WaitForFileError>> + use<>, WaitForFileError> {
     let dir = path.parent().unwrap();
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let mut tx = Some(tx);
-    let mut watcher = notify::recommended_watcher({
-        let path = path.to_path_buf();
-        let dir = dir.to_path_buf();
-        move |res: notify::Result<notify::Event>| match res {
-            Ok(event) => {
-                if event.kind.is_modify() {
-                    let content_res = crate::fs::read_to_string(&path);
-                    match content_res {
-                        Ok(content) => {
-                            if content.ends_with('\n')
-                                && let Some(tx) = tx.take()
-                            {
-                                let _ = tx.send(Ok(content));
-                            }
-                        }
-                        Err(e) if e.kind() == ErrorKind::NotFound => {}
-                        Err(e) => {
-                            if let Some(tx) = tx.take() {
-                                let _ = tx.send(Err(e.into()));
-                            }
+    // notify will get here faster
+    let (rec_tx, mut rec_rx) = tokio::sync::mpsc::channel(10);
+    let mut rec_watcher =
+        notify::recommended_watcher(WatchRecv(rec_tx)).context(WatchSnafu { path: &dir })?;
+    // poll is more reliable when dealing with vfs like 9p, notably in WSL2
+    let (poll_tx, mut poll_rx) = tokio::sync::mpsc::channel(10);
+    let mut poll_watcher = notify::PollWatcher::new(
+        WatchRecv(poll_tx),
+        notify::Config::default()
+            .with_poll_interval(Duration::from_millis(100))
+            .with_compare_contents(true),
+    )
+    .context(WatchSnafu { path: &dir })?;
+    rec_watcher
+        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
+        .context(WatchSnafu { path: &dir })?;
+    poll_watcher
+        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
+        .context(WatchSnafu { path: &dir })?;
+    let path = path.to_path_buf();
+    let dir = dir.to_path_buf();
+    Ok(async move {
+        let _rec_watcher = rec_watcher;
+        let _poll_watcher = poll_watcher;
+        loop {
+            let evt = select! {
+                rec = rec_rx.recv() => rec,
+                poll = poll_rx.recv() => poll,
+            };
+            let Some(res) = evt else {
+                unreachable!("watcher dropped while waiting for file");
+            };
+            let event = res.context(ReadEventSnafu { path: &dir })?;
+            if event.kind.is_modify() || event.kind.is_create() {
+                match crate::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        if content.ends_with('\n') {
+                            return Ok(content);
                         }
                     }
-                }
-            }
-            Err(e) => {
-                if let Some(tx) = tx.take() {
-                    let _ = tx.send(Err(e).context(ReadEventSnafu { path: &dir }));
+                    Err(e) if e.kind() == ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
             }
         }
-    })
-    .context(WatchSnafu { path: &dir })?;
-    watcher
-        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
-        .context(WatchSnafu { path: &dir })?;
-    Ok(async {
-        let _watcher = watcher;
-        let res = rx.await;
-        res.unwrap()
     })
 }
 
@@ -299,4 +303,12 @@ pub struct LauncherStatus {
     pub gateway_port: u16,
     pub root_key: String,
     pub default_effective_canister_id: Option<Principal>,
+}
+
+struct WatchRecv(Sender<notify::Result<notify::Event>>);
+
+impl EventHandler for WatchRecv {
+    fn handle_event(&mut self, event: notify::Result<notify::Event>) {
+        let _ = self.0.blocking_send(event);
+    }
 }

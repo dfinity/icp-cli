@@ -563,7 +563,7 @@ During migration, you can use both tools side-by-side with some considerations:
 
 **What works side-by-side:**
 - ✅ **Configuration files**: dfx uses `dfx.json`, icp-cli uses `icp.yaml` (no conflicts)
-- ✅ **Identities**: Both use the same keyring service (`internet_computer_identities`), so keyring-stored identities are accessible to both tools
+- ✅ **Identities**: Both store identities separately (dfx uses `internet_computer_identities` keyring service, icp-cli uses `icp-cli`), so they don't interfere with each other
 - ✅ **Canister IDs**: Stored in different locations (`.dfx/` vs `.icp/`), no conflicts
 - ✅ **Remote networks**: Both can deploy to IC mainnet independently
 

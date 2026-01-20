@@ -16,8 +16,10 @@ icp deploy
 # List your canisters and call a method (canister name depends on your template)
 icp canister status
 
-# Call a function on yout canister
+# Call a function on your canister
+# icp canister call <canister-name> greet '("World")'
 # The ones generated from the templates are typically called `backend`
+
 icp canister call backend greet '("World")'
 ```
 

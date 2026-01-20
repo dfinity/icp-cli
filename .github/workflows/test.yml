@@ -14,7 +14,7 @@ env:
   # Disable incremental compilation
   CARGO_INCREMENTAL: 0
   # These variables should be shared with WSL
-  WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p:DISTRO
+  WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p
 
 defaults:
   run:
@@ -100,8 +100,6 @@ jobs:
       - name: Setup Docker in WSL2 (Windows)
         if: ${{ contains(matrix.os, 'windows') }}
         run: .github/scripts/init-docker.sh
-        env:
-          DISTRO: Ubuntu
         shell: wsl-bash_Ubuntu-22.04 {0}
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047

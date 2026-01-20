@@ -13,7 +13,7 @@ icp new my-project && cd my-project
 icp network start -d
 icp deploy
 
-# List your canisters and call a method (canister name depends on your template)
+# Show the status of your canisters
 icp canister status
 
 # Call a function on your canister

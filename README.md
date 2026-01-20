@@ -75,7 +75,7 @@ cargo test
 ./scripts/generate-cli-docs.sh
 
 # Update the yaml file schemas
-./scripts/config-schemas.sh
+./scripts/generate-config-schemas.sh
 ```
 
 ## License

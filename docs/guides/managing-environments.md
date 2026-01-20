@@ -147,8 +147,7 @@ canisters:
     sync:
       steps:
         - type: assets
-          source: dist
-          target: /
+          dir: dist
 
   - name: backend
     build:

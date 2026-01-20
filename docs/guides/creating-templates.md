@@ -40,7 +40,7 @@ canisters:
     recipe:
       type: "@dfinity/motoko"
       configuration:
-        entry: src/main.mo
+        main: src/main.mo
 ```
 
 Filenames with handlebar placeholders like `{{project-name}}.did` will be renamed with value.
@@ -90,9 +90,9 @@ canisters:
   {{#if include_frontend}}
   - name: {{project-name}}-frontend
     recipe:
-      type: "@dfinity/assets"
+      type: "@dfinity/asset-canister"
       configuration:
-        source: dist
+        dir: dist
   {{/if}}
 
 ```
@@ -161,7 +161,7 @@ canisters:
     recipe:
       type: "@dfinity/motoko"
       configuration:
-        entry: src/backend/main.mo
+        main: src/backend/main.mo
     {{/if}}
 ```
 

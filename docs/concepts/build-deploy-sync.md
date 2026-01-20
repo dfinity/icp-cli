@@ -113,8 +113,7 @@ For frontend canisters, sync uploads your built assets:
 sync:
   steps:
     - type: assets
-      source: dist
-      target: /
+      dir: dist
 ```
 
 ### When Sync Runs

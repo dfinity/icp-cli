@@ -510,3 +510,169 @@ impl ProjectLoad for NoProjectLoader {
         Ok(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canister::recipe::{Resolve, ResolveError};
+    use crate::manifest::{
+        ProjectRootLocate, ProjectRootLocateError,
+        canister::{BuildSteps, SyncSteps},
+        recipe::Recipe,
+    };
+    use camino_tempfile::Utf8TempDir;
+    use indoc::indoc;
+
+    struct MockProjectRootLocate {
+        path: PathBuf,
+    }
+
+    impl MockProjectRootLocate {
+        fn new(path: PathBuf) -> Self {
+            Self { path }
+        }
+    }
+
+    impl ProjectRootLocate for MockProjectRootLocate {
+        fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.path.clone())
+        }
+    }
+
+    struct MockRecipeResolver;
+
+    #[async_trait]
+    impl Resolve for MockRecipeResolver {
+        async fn resolve(&self, _recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+            use crate::manifest::adapter::prebuilt::{
+                Adapter as PrebuiltAdapter, LocalSource, SourceField,
+            };
+            use crate::manifest::canister::BuildStep;
+
+            // Create a minimal BuildSteps with a dummy prebuilt step
+            let build_steps = BuildSteps {
+                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
+                    source: SourceField::Local(LocalSource {
+                        path: "dummy.wasm".into(),
+                    }),
+                    sha256: None,
+                })],
+            };
+
+            Ok((build_steps, SyncSteps::default()))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_minimal_project() {
+        // Create temp directory with icp.yaml
+        let temp_dir = Utf8TempDir::new().unwrap();
+        let project_dir = temp_dir.path();
+
+        // Write a minimal icp.yaml
+        let manifest_content = indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "#};
+        std::fs::write(project_dir.join("icp.yaml"), manifest_content).unwrap();
+
+        // Create ProjectLoadImpl with mocks
+        let loader = ProjectLoadImpl {
+            project_root_locate: Arc::new(MockProjectRootLocate::new(project_dir.to_path_buf())),
+            recipe: Arc::new(MockRecipeResolver),
+        };
+
+        // Call load
+        let result = loader.load().await;
+
+        // Assert success and check project contents
+        assert!(result.is_ok());
+        let project = result.unwrap();
+        assert_eq!(project.dir, project_dir);
+        assert!(
+            project.canisters.contains_key("backend"),
+            "The backend canister was not found"
+        );
+        assert!(
+            project.environments.contains_key("local"),
+            "The default `local` environment was not injected"
+        );
+        assert!(
+            project.environments.contains_key("ic"),
+            "The default `ic` environment was not injected"
+        );
+        assert!(
+            project.networks.contains_key("local"),
+            "The default `local` network was not injected"
+        );
+        assert!(
+            project.networks.contains_key("ic"),
+            "The default `ic` network was not injected"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_load_project_local_override() {
+        // Create temp directory with icp.yaml
+        let temp_dir = Utf8TempDir::new().unwrap();
+        let project_dir = temp_dir.path();
+
+        // Write a minimal icp.yaml
+        let manifest_content = indoc! {r#"
+            networks:
+              - name: test-network
+                mode: connected
+                url: https://somenetwork.icp
+            environments:
+              - name: local
+                network: test-network
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "#};
+        std::fs::write(project_dir.join("icp.yaml"), manifest_content).unwrap();
+
+        // Create ProjectLoadImpl with mocks
+        let loader = ProjectLoadImpl {
+            project_root_locate: Arc::new(MockProjectRootLocate::new(project_dir.to_path_buf())),
+            recipe: Arc::new(MockRecipeResolver),
+        };
+
+        // Call load
+        let result = loader.load().await;
+
+        // Assert success and check project contents
+        assert!(result.is_ok(), "The project did not load: {:?}", result);
+        let project = result.unwrap();
+        assert_eq!(project.dir, project_dir);
+        assert!(
+            project.canisters.contains_key("backend"),
+            "The backend canister was not found"
+        );
+        assert!(
+            project.environments.contains_key("local"),
+            "The default `local` environment was not injected"
+        );
+        let e = project.environments.get("local").unwrap();
+        assert_eq!(e.network.name, "test-network");
+        assert!(
+            project.environments.contains_key("ic"),
+            "The default `ic` environment was not injected"
+        );
+        assert!(
+            project.networks.contains_key("local"),
+            "The default `local` network was not injected"
+        );
+        assert!(
+            project.networks.contains_key("ic"),
+            "The default `ic` network was not injected"
+        );
+    }
+}

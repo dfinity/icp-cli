@@ -14,9 +14,9 @@ echo "Building the CLI..."
 cargo build
 
 echo "Generating markdown documentation..."
-$(git rev-parse --show-toplevel)/target/debug/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/cli-reference.md
+$(git rev-parse --show-toplevel)/target/debug/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/reference/cli.md
 
-echo "Documentation generated successfully at docs/cli-reference.md"
+echo "Documentation generated successfully at docs/reference/cli.md"
 
 echo ""
 echo "✅ Documentation generation complete!"

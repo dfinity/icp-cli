@@ -23,7 +23,7 @@ icp canister status
 icp canister call backend greet '("World")'
 ```
 
-See the [Installation Guide](docs/guides/installation.md) for all installation methods including building from source.
+See the [Installation Guide](docs/guides/installation.md) for all installation methods.
 
 ## For dfx Users
 
@@ -64,17 +64,41 @@ The [`examples/`](examples/) directory contains example projects to help you get
 
 Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 
+### Prerequisites
+
+- Rust 1.88.0+ ([rustup.rs](https://rustup.rs/))
+- Platform dependencies:
+
+| Platform | Install |
+|----------|---------|
+| macOS | `xcode-select --install` |
+| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev` |
+| Fedora/RHEL | `sudo dnf install gcc pkg-config openssl-devel` |
+| Arch Linux | `sudo pacman -S base-devel openssl` |
+
+### Build and Test
+
 ```bash
-# Build
+git clone https://github.com/dfinity/icp-cli.git
+cd icp-cli
 cargo build
-
-# Test
 cargo test
+```
 
-# Generate CLI docs
+### Development
+
+```bash
+# Run the CLI during development
+cargo run -- <command>
+
+# Build release binary
+cargo build --release
+# Binary is at target/release/icp
+
+# Generate CLI docs (after changing commands)
 ./scripts/generate-cli-docs.sh
 
-# Update the yaml file schemas
+# Update config schemas (after changing manifest types)
 ./scripts/generate-config-schemas.sh
 ```
 

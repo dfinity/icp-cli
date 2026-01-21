@@ -20,7 +20,7 @@ brew upgrade dfinity/tap/icp-cli
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/latest/download/icp-cli-installer.sh | sh
 ```
 
-The installer adds icp-cli to your PATH automatically. Restart your shell or run the source command shown by the installer.
+The installer adds icp-cli to your PATH automatically. Restart your shell or run the `source` command shown by the installer.
 
 ## Verify Installation
 

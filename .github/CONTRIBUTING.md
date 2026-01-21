@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to the Response Verification package for the Internet Computer.
+Thank you for your interest in contributing to icp-cli for the Internet Computer.
 By participating in this project, you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
 As a member of the community, you are invited and encouraged to contribute by submitting issues, offering suggestions for improvements, adding review comments to existing pull requests, or creating new pull requests to fix issues.
@@ -77,3 +77,110 @@ If you want to submit a pull request to fix an issue or add a feature, here's a 
 11. Wait for the pull request to be reviewed.
 12. Make changes to the pull request, if requested.
 13. Celebrate your success after your pull request is merged!
+
+## Contributing to Documentation
+
+The documentation lives in the `docs/` directory and is deployed to https://dfinity.github.io/icp-cli/.
+
+### Documentation Structure
+
+Documentation follows the [Diátaxis framework](https://diataxis.fr/):
+- `docs/guides/` - Task-oriented how-to guides
+- `docs/concepts/` - Understanding-oriented explanations
+- `docs/reference/` - Information-oriented technical specifications
+- `docs/migration/` - Migration guides (e.g., from dfx)
+
+### How Documentation is Built
+
+The documentation site uses [Astro](https://astro.build/) with [Starlight](https://starlight.astro.build/):
+
+1. **Source files** (`docs/`) are plain Markdown without frontmatter
+2. **Build script** (`scripts/prepare-docs.sh`) runs before each build and:
+   - Copies docs to `.docs-temp/` directory (excluding schemas and READMEs)
+   - Adjusts relative paths for Starlight's `/category/page/` URL structure
+   - Keeps `.md` extensions (Starlight strips them automatically; better GitHub compatibility)
+   - Extracts titles from H1 headings and adds frontmatter
+3. **Starlight** reads from `.docs-temp/` and builds the site
+4. **GitHub Actions** automatically deploys to GitHub Pages on push to main
+
+This architecture keeps source docs clean and GitHub-friendly while providing a polished documentation site.
+
+### Writing Documentation
+
+1. **Create a markdown file** in the appropriate directory:
+   ```bash
+   # Example: Add a new guide
+   touch docs/guides/my-new-guide.md
+   ```
+
+2. **Start with an H1 heading** (used as the page title):
+   ```markdown
+   # My New Guide
+
+   Content here...
+   ```
+
+3. **Use plain Markdown** - No frontmatter needed in source files:
+   - Standard GitHub-flavored Markdown
+   - Relative links with `.md` extension: `[text](./other-doc.md)`
+   - Code blocks with language: ` ```bash `
+   - The build process handles transformations automatically
+
+4. **Add to the sidebar** - Update `docs-site/astro.config.mjs`:
+   ```js
+   sidebar: [
+     {
+       label: 'Guides',
+       items: [
+         { label: 'My New Guide', slug: 'guides/my-new-guide' },
+         // ...
+       ],
+     },
+   ]
+   ```
+
+   Note: The sidebar must be manually updated because Starlight's autogenerate feature doesn't work with Astro's glob loader.
+
+5. **Preview your changes locally**:
+   ```bash
+   cd docs-site
+   npm install  # First time only
+   npm run dev
+   ```
+   Opens the site at http://localhost:4321
+
+### Generated Documentation
+
+Some documentation is auto-generated:
+
+- **CLI reference** (`docs/reference/cli.md`) - Run `./scripts/generate-cli-docs.sh` when commands change
+- **Config schemas** (`docs/schemas/*.json`) - Run `./scripts/generate-config-schemas.sh` when manifest types change
+
+These scripts should be run before committing changes to code that affects CLI commands or configuration types.
+
+### Documentation Guidelines
+
+- **Keep it simple** - Plain Markdown is easier to maintain and renders well on GitHub
+- **Be concise** - Users value clear, direct explanations
+- **Use examples** - Show concrete code examples rather than abstract descriptions
+- **Test your examples** - Make sure code examples actually work
+- **Link related docs** - Help users discover related content
+- **Follow Diátaxis** - Place content in the correct category:
+  - **Tutorial**: Learning-oriented, takes users by the hand
+  - **Guides**: Task-oriented, shows how to solve specific problems
+  - **Concepts**: Understanding-oriented, explains how things work
+  - **Reference**: Information-oriented, technical descriptions
+
+### Documentation Pull Requests
+
+When submitting a documentation PR:
+- Ensure the sidebar in `docs-site/astro.config.mjs` is updated if adding new pages
+- Preview the site locally before submitting
+- Check that all links work (both in GitHub and on the site)
+- Follow the Diátaxis framework for placing content in the right section
+- Verify your examples work by testing them
+- Run `./scripts/prepare-docs.sh` locally to check for build errors
+
+For more details on the documentation system, see:
+- [docs/README.md](../docs/README.md) - Documentation writing guide
+- [docs-site/README.md](../docs-site/README.md) - Technical documentation site details

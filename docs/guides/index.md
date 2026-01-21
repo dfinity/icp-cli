@@ -20,6 +20,7 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 
 - [Using Recipes](using-recipes.md) — Reusable build templates for common patterns
 - [Managing Identities](managing-identities.md) — Keys, principals, and authentication
+- [Containerized Networks](containerized-networks.md) — Run managed networks in Docker containers
 
 ## Advanced
 

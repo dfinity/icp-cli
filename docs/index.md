@@ -1,5 +1,3 @@
-# icp-cli Documentation
-
 Build and deploy applications on the Internet Computer.
 
 ## Start Here
@@ -39,6 +37,6 @@ Complete technical specifications:
 
 ## Additional Resources
 
-- [Containerized Networks](containers.md) — Docker-based local networks
+- [Containerized Networks](guides/containerized-networks.md) — Docker-based local networks
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
 - [Examples](../examples/) — Sample projects for various use cases

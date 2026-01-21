@@ -31,10 +31,14 @@ If you're coming from dfx (the previous Internet Computer SDK), see the **[Migra
 
 ## Documentation
 
+📚 **[Full Documentation Site](https://dfinity.github.io/icp-cli/)** — Complete guides, tutorials, and reference
+
+Or browse the markdown docs directly:
+
 - **[Tutorial](docs/tutorial.md)** — Deploy your first canister
-- **[Guides](docs/guides/index.md)** — How to accomplish common tasks
-- **[Concepts](docs/concepts/index.md)** — Understand how icp-cli works
-- **[Reference](docs/reference/index.md)** — Complete CLI and configuration reference
+- **[Guides](docs/guides/)** — How to accomplish common tasks
+- **[Concepts](docs/concepts/)** — Understand how icp-cli works
+- **[Reference](docs/reference/cli.md)** — Complete CLI and configuration reference
 
 ## Examples
 
@@ -62,21 +66,45 @@ The [`examples/`](examples/) directory contains example projects to help you get
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
+Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines.
+
+### Development Quick Start
 
 ```bash
-# Build
+# Build the project
 cargo build
 
-# Test
+# Run tests
 cargo test
 
-# Generate CLI docs
+# Format and lint
+cargo fmt && cargo clippy
+```
+
+### Working with Documentation
+
+```bash
+# Preview documentation site locally
+cd docs-site && npm install && npm run dev
+# Opens at http://localhost:4321
+
+# Generate CLI reference (when commands change)
 ./scripts/generate-cli-docs.sh
 
-# Update the yaml file schemas
+# Generate config schemas (when manifest types change)
 ./scripts/generate-config-schemas.sh
+
+# Prepare docs for build (runs automatically during build)
+./scripts/prepare-docs.sh
 ```
+
+Documentation structure follows the [Diátaxis framework](https://diataxis.fr/):
+- [`docs/guides/`](docs/guides/) - Task-oriented how-to guides
+- [`docs/concepts/`](docs/concepts/) - Understanding-oriented explanations
+- [`docs/reference/`](docs/reference/) - Information-oriented specifications
+- [`docs/migration/`](docs/migration/) - Migration guides
+
+See [docs/README.md](docs/README.md) for documentation writing guidelines.
 
 ## License
 

@@ -4,7 +4,7 @@ Project templates let users scaffold new ICP projects with `icp new`. This guide
 
 ## Overview
 
-icp-cli uses [cargo-generate](https://cargo-generate.github.io/cargo-generate/) for project templating. Templates are folders or git repositories repositories containing:
+icp-cli uses [cargo-generate](https://cargo-generate.github.io/cargo-generate/) for project templating. Templates are folders or git repositories containing:
 
 - Project files with placeholder variables
 - A `cargo-generate.toml` configuration file
@@ -79,7 +79,7 @@ name = "My Template"
 include_frontend = { type = "bool", prompt = "Include frontend?", default = true }
 ```
 
-Use them in templates:
+Use them in templates with [Liquid syntax](https://shopify.github.io/liquid/):
 
 ```yaml
 # icp.yaml
@@ -87,13 +87,13 @@ canisters:
 
   # ... snip snip for brevity ...
 
-  {{#if include_frontend}}
+  {% if include_frontend %}
   - name: {{project-name}}-frontend
     recipe:
       type: "@dfinity/asset-canister"
       configuration:
         dir: dist
-  {{/if}}
+  {% endif %}
 
 ```
 
@@ -135,57 +135,71 @@ include_frontend = { type = "bool", prompt = "Include frontend?", default = true
 frontend_framework = { type = "string", prompt = "Frontend framework?", choices = ["vanilla", "react", "svelte"], default = "vanilla" }
 
 # Conditional files based on selections
-[conditional]
-# Include Cargo.toml only for Rust projects
-"Cargo.toml" = { condition = "backend_language == 'rust'" }
-"src/backend/lib.rs" = { condition = "backend_language == 'rust'" }
-"src/backend/main.mo" = { condition = "backend_language == 'motoko'" }
+# Ignore Rust files when Motoko is selected
+[conditional.'backend_language == "motoko"']
+ignore = ["Cargo.toml", "src/backend/lib.rs"]
+
+# Ignore Motoko files when Rust is selected
+[conditional.'backend_language == "rust"']
+ignore = ["src/backend/main.mo"]
 ```
 
 ## Advanced Features
 
 ### Conditional Content
 
-Use Handlebars conditionals in any file:
+Use [Liquid](https://shopify.github.io/liquid/) conditionals in any file:
 
 ```yaml
 # icp.yaml
 canisters:
   - name: {{project-name}}
-    {{#if (eq backend_language "rust")}}
+    {% if backend_language == "rust" %}
     recipe:
       type: "@dfinity/rust"
       configuration:
         package: {{crate_name}}
-    {{else}}
+    {% else %}
     recipe:
       type: "@dfinity/motoko"
       configuration:
         main: src/backend/main.mo
-    {{/if}}
+    {% endif %}
 ```
 
 ### Conditional Files
 
-Include files based on user choices:
+Ignore files based on user choices:
 
 ```toml
 # cargo-generate.toml
-[conditional]
-"src/frontend/" = { condition = "include_frontend" }
-"package.json" = { condition = "include_frontend" }
+# Ignore frontend files when include_frontend is false
+[conditional.'!include_frontend']
+ignore = ["src/frontend/", "package.json"]
 ```
 
 ### Post-Generation Hooks
 
-Run commands after generation:
+Run [Rhai scripts](https://rhai.rs/) after generation:
 
 ```toml
 [hooks]
-post = ["npm install"]
+post = ["post-generate.rhai"]
 ```
 
-Note: Hooks require the user to have the necessary tools installed.
+Example `post-generate.rhai` script:
+
+```rhai
+// Rename a directory based on user selection
+let backend = variable::get("backend_type");
+if backend == "rust" {
+    file::rename("rust-backend", "backend");
+} else {
+    file::rename("motoko-backend", "backend");
+}
+```
+
+Note: Hooks execute Rhai scripts, not shell commands directly. See the [cargo-generate scripting documentation](https://cargo-generate.github.io/cargo-generate/templates/scripting.html) for available functions.
 
 ### Subfolders for Multiple Templates
 

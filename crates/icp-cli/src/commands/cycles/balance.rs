@@ -19,7 +19,7 @@ pub(crate) async fn exec(
         .await?;
 
     // Get the balance from the ledger
-    let balance_info = get_balance(&agent, "cycles").await?;
+    let balance_info = get_balance(&agent, "tcycles").await?;
 
     // Output information
     let _ = ctx.term.write_line(&format!(

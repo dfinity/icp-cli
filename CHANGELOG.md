@@ -10,6 +10,7 @@
   * The corresponding environment "ic" is defined implicitly which can be overwritten by user configuration.
   * The `--mainnet` and `--ic` flags are removed. Use `-n/--network ic`, `-e/--environment ic` instead.
 * feat: Allow overriding the implicit `local` network and environment.
+* chore: rename the `cycles` token under `icp cycles` to `tcycles`
 
 # v0.1.0-beta.3
 

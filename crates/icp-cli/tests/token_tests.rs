@@ -43,7 +43,7 @@ async fn token_balance() {
         .current_dir(&project_dir)
         .args([
             "token",
-            "cycles",
+            "tcycles",
             "balance",
             "--environment",
             "random-environment",
@@ -151,7 +151,7 @@ async fn token_transfer() {
         .current_dir(&project_dir)
         .args([
             "token",
-            "cycles",
+            "tcycles",
             "transfer",
             "2",
             &bob_principal.to_string(),

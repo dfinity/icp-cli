@@ -131,6 +131,11 @@ async fn do_install_operation(
         // Large wasm: use chunked installation
         debug!("Installing wasm for {canister_name} using chunked installation");
 
+        // Clear any existing chunks to ensure a clean state
+        mgmt.clear_chunk_store(canister_id)
+            .await
+            .map_err(|source| InstallOperationError::Agent { source })?;
+
         // Split wasm into chunks and upload them
         let chunks: Vec<&[u8]> = wasm.chunks(CHUNK_SIZE).collect();
         let mut chunk_hashes: Vec<ChunkHash> = Vec::new();
@@ -174,6 +179,11 @@ async fn do_install_operation(
         }
 
         builder
+            .await
+            .map_err(|source| InstallOperationError::Agent { source })?;
+
+        // Clear chunk store after successful installation to free up storage
+        mgmt.clear_chunk_store(canister_id)
             .await
             .map_err(|source| InstallOperationError::Agent { source })?;
     }

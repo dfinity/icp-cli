@@ -276,11 +276,11 @@ impl TestContext {
             }
             #[cfg(windows)]
             {
-                let convert = std::env::var("ICP_CLI_DOCKER_WSL2_MODE").unwrap_or_default() == "1";
-                let launcher_dir_param = if convert {
+                let distro = std::env::var("ICP_CLI_DOCKER_WSL2_MODE");
+                let launcher_dir_param = if let Ok(distro) = distro {
                     wslpath2::convert(
                         launcher_dir.as_str(),
-                        None,
+                        Some(&distro),
                         wslpath2::Conversion::WindowsToWsl,
                         true,
                     )

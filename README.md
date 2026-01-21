@@ -23,7 +23,7 @@ icp canister status
 icp canister call backend greet '("World")'
 ```
 
-See the [Installation Guide](docs/guides/installation.md) for all installation methods including building from source.
+See the [Installation Guide](docs/guides/installation.md) for all installation methods.
 
 ## For dfx Users
 
@@ -70,15 +70,45 @@ Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for de
 
 ### Development Quick Start
 
-```bash
-# Build the project
-cargo build
+### Prerequisites
 
-# Run tests
+- Rust 1.88.0+ ([rustup.rs](https://rustup.rs/))
+- Platform dependencies:
+
+| Platform | Install |
+|----------|---------|
+| macOS | `xcode-select --install` |
+| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev` |
+| Fedora/RHEL | `sudo dnf install gcc pkg-config openssl-devel` |
+| Arch Linux | `sudo pacman -S base-devel openssl` |
+
+### Build and Test
+
+```bash
+git clone https://github.com/dfinity/icp-cli.git
+cd icp-cli
+cargo build
 cargo test
+```
+
+### Development
+
+```bash
+# Run the CLI during development
+cargo run -- <command>
+
+# Build release binary
+cargo build --release
+# Binary is at target/release/icp
 
 # Format and lint
 cargo fmt && cargo clippy
+
+# Generate CLI docs (after changing commands)
+./scripts/generate-cli-docs.sh
+
+# Update config schemas (after changing manifest types)
+./scripts/generate-config-schemas.sh
 ```
 
 ### Working with Documentation
@@ -87,12 +117,6 @@ cargo fmt && cargo clippy
 # Preview documentation site locally
 cd docs-site && npm install && npm run dev
 # Opens at http://localhost:4321
-
-# Generate CLI reference (when commands change)
-./scripts/generate-cli-docs.sh
-
-# Generate config schemas (when manifest types change)
-./scripts/generate-config-schemas.sh
 
 # Prepare docs for build (runs automatically during build)
 ./scripts/prepare-docs.sh

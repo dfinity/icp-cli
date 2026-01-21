@@ -2,6 +2,8 @@ use anyhow::bail;
 use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
 use console::Term;
+use dialoguer::Confirm;
+use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::ProjectLoadError;
@@ -13,12 +15,20 @@ use crate::commands::args;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
+    /// Add one or more principals to the canister's controller list.
     #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
     add_controller: Option<Vec<Principal>>,
 
+    /// Remove one or more principals from the canister's controller list.
+    ///
+    /// Warning: Removing yourself will cause you to lose control of the canister.
     #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
     remove_controller: Option<Vec<Principal>>,
 
+    /// Replace the canister's controller list with the specified principals.
+    ///
+    /// Warning: This removes all existing controllers not in the new list.
+    /// If you don't include yourself, you will lose control of the canister.
     #[arg(long, action = ArgAction::Append)]
     set_controller: Option<Vec<Principal>>,
 }
@@ -76,6 +86,10 @@ pub(crate) struct UpdateArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
 
+    /// Force the operation without confirmation prompts
+    #[arg(short = 'f', long)]
+    force: bool,
+
     #[command(flatten)]
     controllers: Option<ControllerOpt>,
 
@@ -106,6 +120,11 @@ pub(crate) struct UpdateArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
+    let identity = ctx.get_identity(&selections.identity).await?;
+    let caller_principal = identity
+        .sender()
+        .map_err(|e| anyhow::anyhow!("failed to get caller principal: {e}"))?;
+
     let agent = ctx
         .get_agent(
             &selections.identity,
@@ -139,14 +158,34 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         current_status = Some(mgmt.canister_status(&cid).await?.0);
     }
 
-    // TODO(VZ): Ask for consent
-    // - if the freezing threshold is too long or too short.
-    // - if trying to remove the caller itself from the controllers.
+    // TODO(VZ): Ask for consent if the freezing threshold is too long or too short.
 
     // Handle controllers.
     let mut controllers: Option<Vec<Principal>> = None;
     if let Some(controllers_opt) = &args.controllers {
         controllers = get_controllers(controllers_opt, current_status.as_ref());
+
+        // Check if the caller is being removed from controllers
+        if let Some(new_controllers) = &controllers
+            && !new_controllers.contains(&caller_principal)
+            && !args.force
+        {
+            ctx.term.write_line(
+                "Warning: You are about to remove yourself from the controllers list.",
+            )?;
+            ctx.term.write_line(
+                "This will cause you to lose control of the canister and cannot be undone.",
+            )?;
+
+            let confirmed = Confirm::new()
+                .with_prompt("Do you want to proceed?")
+                .default(false)
+                .interact()?;
+
+            if !confirmed {
+                bail!("Operation cancelled by user");
+            }
+        }
     }
 
     // Handle log visibility.

@@ -271,7 +271,7 @@ async fn canister_settings_update_controllers() {
                 .and(contains(principal_bob.as_str()).not()),
         );
 
-    // Set multiple controllers
+    // Set multiple controllers (uses --force since we're removing ourselves as controller)
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -281,6 +281,7 @@ async fn canister_settings_update_controllers() {
             "my-canister",
             "--environment",
             "random-environment",
+            "--force",
             "--set-controller",
             principal_alice.as_str(),
             "--set-controller",

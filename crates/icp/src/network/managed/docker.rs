@@ -53,19 +53,7 @@ pub async fn spawn_docker_launcher(
     let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO").ok();
     let wsl2_distro = wsl2_distro.as_deref();
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
-    let host_status_tmpdir = if wsl2_convert {
-        let host_tmp = wslpath2::convert("/tmp", wsl2_distro, Conversion::WslToWindows, true)
-            .map_err(|e| {
-                WslPathConvertSnafu {
-                    msg: e.to_string(),
-                    path: "/tmp",
-                }
-                .build()
-            })?;
-        Utf8TempDir::new_in(&host_tmp).context(WslCreateTmpDirSnafu)?
-    } else {
-        Utf8TempDir::new().context(CreateStatusDirSnafu)?
-    };
+    let host_status_tmpdir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let host_status_dir = host_status_tmpdir.path();
     let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
     let socket = match std::env::var("DOCKER_HOST").ok() {

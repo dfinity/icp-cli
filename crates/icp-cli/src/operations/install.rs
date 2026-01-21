@@ -1,9 +1,12 @@
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
-use ic_management_canister_types::{UpgradeFlags, WasmMemoryPersistence};
+use ic_management_canister_types::{
+    CanisterId, ChunkHash, UpgradeFlags, UploadChunkArgs, WasmMemoryPersistence,
+};
 use ic_utils::interfaces::{
     ManagementCanister, management_canister::builders::CanisterInstallMode,
 };
+use sha2::{Digest, Sha256};
 use snafu::Snafu;
 use std::sync::Arc;
 use tracing::debug;
@@ -76,15 +79,104 @@ pub(crate) async fn install_canister(
         canister_name, install_mode
     );
 
-    let mut builder = mgmt.install_code(canister_id, wasm).with_mode(install_mode);
+    do_install_operation(
+        agent,
+        canister_id,
+        canister_name,
+        wasm,
+        install_mode,
+        init_args,
+    )
+    .await
+}
 
-    if let Some(args) = init_args {
-        builder = builder.with_raw_arg(args.into());
+async fn do_install_operation(
+    agent: &Agent,
+    canister_id: &Principal,
+    canister_name: &str,
+    wasm: &[u8],
+    mode: CanisterInstallMode,
+    init_args: Option<&[u8]>,
+) -> Result<(), InstallOperationError> {
+    let mgmt = ManagementCanister::create(agent);
+
+    // Threshold for chunked installation: 2 MB
+    // Raw install_code messages are limited to 2 MiB
+    const CHUNK_THRESHOLD: usize = 2 * 1024 * 1024;
+
+    // Chunk size: 1 MB (spec limit is 1 MiB per chunk)
+    const CHUNK_SIZE: usize = 1024 * 1024;
+
+    // Generous overhead for encoding, target canister ID, install mode, etc.
+    const ENCODING_OVERHEAD: usize = 500;
+
+    // Calculate total install message size
+    let init_args_len = init_args.map_or(0, |args| args.len());
+    let total_install_size = wasm.len() + init_args_len + ENCODING_OVERHEAD;
+
+    if total_install_size <= CHUNK_THRESHOLD {
+        // Small wasm: use regular install_code
+        debug!("Installing wasm for {canister_name} using install_code");
+
+        let mut builder = mgmt.install_code(canister_id, wasm).with_mode(mode);
+
+        if let Some(args) = init_args {
+            builder = builder.with_raw_arg(args.into());
+        }
+
+        builder
+            .await
+            .map_err(|source| InstallOperationError::Agent { source })?;
+    } else {
+        // Large wasm: use chunked installation
+        debug!("Installing wasm for {canister_name} using chunked installation");
+
+        // Split wasm into chunks and upload them
+        let chunks: Vec<&[u8]> = wasm.chunks(CHUNK_SIZE).collect();
+        let mut chunk_hashes: Vec<ChunkHash> = Vec::new();
+
+        for (i, chunk) in chunks.iter().enumerate() {
+            debug!(
+                "Uploading chunk {}/{} ({} bytes)",
+                i + 1,
+                chunks.len(),
+                chunk.len()
+            );
+
+            let upload_args = UploadChunkArgs {
+                canister_id: CanisterId::from(*canister_id),
+                chunk: chunk.to_vec(),
+            };
+
+            let (chunk_hash,) = mgmt
+                .upload_chunk(canister_id, &upload_args)
+                .await
+                .map_err(|source| InstallOperationError::Agent { source })?;
+
+            chunk_hashes.push(chunk_hash);
+        }
+
+        // Compute SHA-256 hash of the entire wasm module
+        let mut hasher = Sha256::new();
+        hasher.update(wasm);
+        let wasm_module_hash = hasher.finalize().to_vec();
+
+        debug!("Installing chunked code with {} chunks", chunk_hashes.len());
+
+        // Build and execute install_chunked_code
+        let mut builder = mgmt
+            .install_chunked_code(canister_id, &wasm_module_hash)
+            .with_chunk_hashes(chunk_hashes)
+            .with_install_mode(mode);
+
+        if let Some(args) = init_args {
+            builder = builder.with_raw_arg(args.to_vec());
+        }
+
+        builder
+            .await
+            .map_err(|source| InstallOperationError::Agent { source })?;
     }
-
-    builder
-        .await
-        .map_err(|source| InstallOperationError::Agent { source })?;
 
     Ok(())
 }

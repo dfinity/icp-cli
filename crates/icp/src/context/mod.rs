@@ -524,11 +524,13 @@ impl Write for TermWriter {
 
 impl Write for &TermWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        if !self.debug {
-            (&self.raw_term).write(buf)?;
-        }
-        debug!("{}", String::from_utf8_lossy(buf).trim());
-        Ok(buf.len())
+        let written = if !self.debug {
+            (&self.raw_term).write(buf)?
+        } else {
+            buf.len()
+        };
+        debug!("{}", String::from_utf8_lossy(&buf[..written]).trim());
+        Ok(written)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {

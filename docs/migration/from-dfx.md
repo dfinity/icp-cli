@@ -117,14 +117,15 @@ icp-cli assumes users will use canister environment variables to connect caniste
 }
 ```
 
-**canister.yaml:**
+**icp.yaml:**
 ```yaml
-name: backend
-recipe:
-  type: "@dfinity/rust"
-  configuration:
-    package: backend
-    candid: "src/backend/backend.did"
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust"
+      configuration:
+        package: backend
+        candid: "src/backend/backend.did"
 ```
 
 ### Basic Motoko Canister
@@ -141,14 +142,15 @@ recipe:
 }
 ```
 
-**canister.yaml:**
+**icp.yaml:**
 ```yaml
-name: backend
-recipe:
-  type: "@dfinity/motoko"
-  configuration:
-    entry: src/backend/main.mo
-    candid: src/backend/candid.did
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/motoko"
+      configuration:
+        main: src/backend/main.mo
+        candid: src/backend/candid.did
 ```
 
 ### Asset Canister
@@ -165,13 +167,28 @@ recipe:
 }
 ```
 
-**canister.yaml:**
+**icp.yaml:**
 ```yaml
-name: frontend
-recipe:
-  type: "@dfinity/asset-canister"
-  configuration:
-    source: dist
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister"
+      configuration:
+        dir: dist
+```
+
+**Note:** dfx automatically builds frontend assets by looking for `package.json` and running `npm run build`. With icp-cli, you need to specify build commands explicitly if your assets need to be built:
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister"
+      configuration:
+        dir: dist
+        build:
+          - npm install
+          - npm run build
 ```
 
 ### Multi-Canister Project
@@ -198,9 +215,12 @@ recipe:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/assets"
+      type: "@dfinity/asset-canister"
       configuration:
-        source: dist
+        dir: dist
+        build:
+          - npm install
+          - npm run build
 
   - name: backend
     recipe:
@@ -209,16 +229,21 @@ canisters:
         package: backend
 ```
 
-Note: icp-cli doesn't have explicit dependencies between canisters. Deploy order is determined automatically or you can deploy specific canisters.
+**Key differences:**
+- icp-cli doesn't have explicit dependencies between canisters (dfx's `dependencies` field)
+- Frontend build commands must be specified explicitly in icp-cli
+- Deploy order is determined automatically or you can deploy specific canisters
 
 ### Network Configuration
+
+**Remote network example:**
 
 **dfx.json:**
 ```json
 {
   "networks": {
     "staging": {
-      "providers": ["https://ic0.app"],
+      "providers": ["https://icp-api.io"],
       "type": "persistent"
     }
   }
@@ -230,13 +255,69 @@ Note: icp-cli doesn't have explicit dependencies between canisters. Deploy order
 networks:
   - name: staging
     mode: connected
-    url: https://ic0.app
+    url: https://icp-api.io
 
 environments:
   - name: staging
     network: staging
     canisters: [frontend, backend]
 ```
+
+**Testnet with root key:**
+
+**dfx.json:**
+```json
+{
+  "networks": {
+    "testnet": {
+      "providers": ["https://testnet.example.com"],
+      "type": "persistent"
+    }
+  }
+}
+```
+
+**icp.yaml:**
+```yaml
+networks:
+  - name: testnet
+    mode: connected
+    url: https://testnet.example.com
+    root-key: 308182301d060d2b0601040182dc7c05030102...  # Hex-encoded root key
+```
+
+**Local network with custom bind address:**
+
+**dfx.json:**
+```json
+{
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  }
+}
+```
+
+**icp.yaml:**
+```yaml
+networks:
+  - name: local
+    mode: managed
+    gateway:
+      host: 127.0.0.1
+      port: 4943
+```
+
+**Key differences:**
+- dfx's `"type": "persistent"` maps to icp-cli's `mode: connected` (external networks)
+- dfx's `"type": "ephemeral"` maps to icp-cli's `mode: managed` (local networks that icp-cli controls)
+- dfx's `"providers"` array (which can list multiple URLs for redundancy) becomes a single `url` field in icp-cli
+- dfx's `"bind"` address for local networks maps to icp-cli's `gateway.host` and `gateway.port`
+- **Root key handling**: dfx automatically fetches the root key from non-mainnet networks at runtime. icp-cli requires you to specify the `root-key` explicitly in the configuration for testnets (connected networks). For local managed networks, icp-cli retrieves the root key from the network launcher. The root key is the public key used to verify responses from the network. Explicit configuration ensures the root key comes from a trusted source rather than the network itself.
+
+**Note:** icp-cli uses `https://icp-api.io` as the default IC mainnet URL, while dfx currently uses `https://icp0.io`. Both URLs point to the same IC mainnet, but `https://icp-api.io` is the recommended API gateway. The implicit `ic` network in icp-cli is configured with `https://icp-api.io`.
 
 ## Features Not in icp-cli
 
@@ -253,20 +334,59 @@ Some dfx features work differently or aren't directly available:
 
 ## Migrating Identities
 
-dfx identities can be imported into icp-cli. Both tools use compatible key formats.
+dfx identities can be imported into icp-cli. Both tools use compatible key formats and support the same storage modes.
+
+### Understanding Identity Storage
+
+Both dfx and icp-cli support three storage modes:
+
+- **Keyring** (default): Stores private keys in your system keychain/keyring
+- **Password-protected**: Encrypts keys with a password in a file
+- **Plaintext**: Stores unencrypted keys in a file (not recommended except for CI/CD)
+
+**Default behavior:** Both tools try to use the system keyring first. If unavailable, dfx falls back to password-protected files.
 
 ### Identity Storage Locations
 
-| Tool | Location |
-|------|----------|
-| dfx | `~/.config/dfx/identity/<name>/identity.pem` |
-| icp-cli | `~/.config/icp/identity/` |
+| Tool | Identity Directory | Structure |
+|------|-------------------|-----------|
+| **dfx** | `~/.config/dfx/identity/` | Per-identity subdirectories:<br>`<name>/identity.json` (metadata)<br>`<name>/identity.pem` (key, if not in keyring) |
+| **icp-cli** | **macOS:** `~/Library/Application Support/org.dfinity.icp-cli/identity/`<br>**Linux:** `~/.local/share/icp-cli/identity/`<br>**Windows:** `%APPDATA%\icp-cli\data\identity\` | Centralized files:<br>`identity_list.json` (all identities)<br>`identity_defaults.json` (default selection)<br>`keys/<name>.pem` (keys, if not in keyring) |
 
-### Import a dfx Identity
+**Private key storage (both tools):** System keyring (default), or encrypted/plaintext PEM files
+
+**Note:** dfx and icp-cli use different service names in the system keyring (`internet_computer_identities` vs `icp-cli`), so identities must be explicitly migrated using the import/export process described below.
+
+### Checking Your dfx Identity Storage Mode
+
+To see how your dfx identity is stored:
 
 ```bash
-# Import an unencrypted dfx identity
-icp identity import my-identity --from-pem ~/.config/dfx/identity/my-identity/identity.pem
+cat ~/.config/dfx/identity/<name>/identity.json
+```
+
+Look for:
+- `"keyring_identity_suffix": "<name>"` → Stored in system keyring
+- `"encryption": {...}` → Password-protected file
+- No `identity.json` or neither field present → Plaintext file
+
+### Import dfx Identities
+
+The import process depends on your dfx identity's storage mode.
+
+#### For Keyring or Password-Protected Identities
+
+Export from dfx first (this works for both storage types):
+
+```bash
+# Export from dfx (will prompt for password if encrypted)
+dfx identity export my-identity > /tmp/my-identity.pem
+
+# Import to icp-cli (uses keyring by default)
+icp identity import my-identity --from-pem /tmp/my-identity.pem
+
+# Clean up temporary file
+rm /tmp/my-identity.pem
 
 # Verify the principal matches
 dfx identity get-principal --identity my-identity
@@ -275,52 +395,28 @@ icp identity principal --identity my-identity
 
 Both commands should display the same principal.
 
-### Import an Encrypted dfx Identity
+#### For Plaintext Identities
 
-If your dfx identity is password-protected:
+If your dfx identity is stored as plaintext (has `identity.pem` file with no encryption):
 
 ```bash
+# Direct import from dfx location
+icp identity import my-identity \
+  --from-pem ~/.config/dfx/identity/my-identity/identity.pem
+
+# By default, icp-cli will store securely in keyring
+# To keep as plaintext (not recommended):
 icp identity import my-identity \
   --from-pem ~/.config/dfx/identity/my-identity/identity.pem \
-  --decryption-password-from-file password.txt
+  --storage plaintext
 ```
 
-Or enter the password interactively when prompted.
+### Choosing Storage Mode in icp-cli
 
-### Migrate All Identities
-
-To migrate all dfx identities:
+When importing, you can specify how icp-cli should store the private key:
 
 ```bash
-# List dfx identities
-ls ~/.config/dfx/identity/
-
-# Import each one
-for id in $(ls ~/.config/dfx/identity/); do
-  if [ -f ~/.config/dfx/identity/$id/identity.pem ]; then
-    echo "Importing $id..."
-    icp identity import $id --from-pem ~/.config/dfx/identity/$id/identity.pem
-  fi
-done
-
-# Verify
-icp identity list
-```
-
-### Setting the Default Identity
-
-After importing, set your default identity:
-
-```bash
-icp identity default my-identity
-```
-
-### Identity Storage Options
-
-When importing, choose how icp-cli stores the key:
-
-```bash
-# System keyring (recommended, default)
+# System keyring (default, recommended)
 icp identity import my-id --from-pem key.pem --storage keyring
 
 # Password-protected file
@@ -328,6 +424,46 @@ icp identity import my-id --from-pem key.pem --storage password
 
 # Plaintext file (not recommended for production)
 icp identity import my-id --from-pem key.pem --storage plaintext
+```
+
+If keyring is unavailable, icp-cli will prompt for a password to use password-protected storage.
+
+### Migrate All Identities
+
+To migrate all dfx identities at once:
+
+```bash
+# Export and import each identity
+for id in $(dfx identity list | grep -v "^anonymous"); do
+  echo "Migrating $id..."
+
+  # Export from dfx (handles all storage types)
+  dfx identity export "$id" > "/tmp/${id}.pem"
+
+  # Import to icp-cli (uses keyring by default)
+  icp identity import "$id" --from-pem "/tmp/${id}.pem"
+
+  # Clean up
+  rm "/tmp/${id}.pem"
+
+  # Verify principals match
+  echo "  dfx principal:     $(dfx identity get-principal --identity "$id")"
+  echo "  icp-cli principal: $(icp identity principal --identity "$id")"
+  echo ""
+done
+
+# List all imported identities
+icp identity list
+```
+
+**Note:** This script copies identities to icp-cli without removing them from dfx. Your original dfx identities remain intact and both tools can be used side-by-side. The script will prompt for passwords if any dfx identities are password-protected or stored in keyring.
+
+### Setting the Default Identity
+
+After importing, set your default identity:
+
+```bash
+icp identity default my-identity
 ```
 
 ## Migration Checklist
@@ -359,7 +495,11 @@ icp canister call my-canister test_method '()'
 
 If you have existing canisters on mainnet that you want to continue managing with icp-cli, create a mapping file to preserve their IDs.
 
-Create `.icp/data/mappings/ic.ids.json`:
+**icp-cli uses different storage paths based on network type:**
+- **Connected networks (ic, mainnet):** `.icp/data/mappings/<environment>.ids.json`
+- **Managed networks (local):** `.icp/cache/mappings/<environment>.ids.json`
+
+For the ic environment, create `.icp/data/mappings/ic.ids.json`:
 
 ```json
 {
@@ -371,8 +511,13 @@ Create `.icp/data/mappings/ic.ids.json`:
 Get the canister IDs from your dfx project:
 
 ```bash
-dfx canister --network ic id frontend
-dfx canister --network ic id backend
+# dfx stores IDs in different locations depending on network type:
+# - Persistent networks: canister_ids.json (project root)
+# - Ephemeral networks: .dfx/<network>/canister_ids.json
+
+# For mainnet/ic network:
+dfx canister id frontend --network ic
+dfx canister id backend --network ic
 ```
 
 ### 5. Verify Mainnet Access
@@ -414,13 +559,29 @@ Update any project documentation that references dfx commands.
 
 ## Keeping Both Tools
 
-During migration, you can use both tools side-by-side:
+During migration, you can use both tools side-by-side with some considerations:
 
-- dfx and icp-cli use separate configuration files (`dfx.json` vs `icp.yaml`)
-- Identity files can be shared by importing into icp-cli
-- Canister IDs are stored in different locations
+**What works side-by-side:**
+- ✅ **Configuration files**: dfx uses `dfx.json`, icp-cli uses `icp.yaml` (no conflicts)
+- ✅ **Identities**: Both store identities separately (dfx uses `internet_computer_identities` keyring service, icp-cli uses `icp-cli`), so they don't interfere with each other
+- ✅ **Canister IDs**: Stored in different locations (`.dfx/` vs `.icp/`), no conflicts
+- ✅ **Remote networks**: Both can deploy to IC mainnet independently
 
-This allows gradual migration without disrupting existing workflows.
+**Potential conflicts:**
+- ⚠️ **Local networks**: Both default to `localhost:8000` for local development networks
+  - **If running both local networks simultaneously**, they will conflict on port 8000
+  - **Solution**: Configure icp-cli to use a different port by overriding the `local` network:
+    ```yaml
+    # icp.yaml
+    networks:
+      - name: local
+        mode: managed
+        gateway:
+          port: 8001  # Use different port from dfx
+    ```
+  - Or stop dfx's local network before starting icp-cli's: `dfx stop` then `icp network start`
+
+This allows gradual migration without disrupting existing workflows, as long as you manage local network ports.
 
 ## Getting Help
 

@@ -33,8 +33,7 @@ canisters:
     sync:
       steps:
         - type: assets
-          source: www
-          target: /
+          dir: www
     settings:
       compute_allocation: 5
     init_args: "()"
@@ -96,30 +95,6 @@ build:
 | `path` | string | Yes | Path to WASM file |
 | `sha256` | string | No | SHA256 hash for verification |
 
-### Assets Step
-
-Bundle static files:
-
-```yaml
-build:
-  steps:
-    - type: assets
-      source: www
-      target: /
-      include_patterns:
-        - "*.html"
-        - "*.js"
-      exclude_patterns:
-        - "*.map"
-```
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `source` | string | Yes | Source directory |
-| `target` | string | Yes | Target path in canister |
-| `include_patterns` | array | No | Glob patterns to include |
-| `exclude_patterns` | array | No | Glob patterns to exclude |
-
 ## Sync Steps
 
 ### Assets Sync
@@ -130,11 +105,8 @@ Upload files to asset canister:
 sync:
   steps:
     - type: assets
-      source: dist
-      target: /
+      dir: dist
 ```
-
-Same properties as assets build step.
 
 ## Recipes
 
@@ -301,9 +273,9 @@ init_args: "4449444c016d7b0100010203"
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/assets"
+      type: "@dfinity/asset-canister"
       configuration:
-        source: dist
+        dir: dist
     settings:
       memory_allocation: 1073741824
 

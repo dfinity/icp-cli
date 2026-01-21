@@ -1,10 +1,8 @@
 # Installation
 
-This guide covers all methods for installing icp-cli on your system.
+Install icp-cli on macOS, Linux, or Windows (WSL).
 
-## Quick Install
-
-**macOS (Homebrew):**
+## macOS
 
 ```bash
 brew install dfinity/tap/icp-cli
@@ -56,169 +54,77 @@ The recommended installation method for macOS:
 brew install dfinity/tap/icp-cli
 ```
 
-To update:
+To update later:
 
 ```bash
 brew upgrade dfinity/tap/icp-cli
 ```
 
-### Downloading binaries
-
-You can download binaries for your platform:
-
-- icp-cli at https://github.com/dfinity/icp-cli/releases
-- ic-wasm at https://github.com/dfinity/ic-wasm/releases
-
-Alternatively, you can curl and run the installation scripts:
+## Linux / WSL
 
 ```bash
-# install icp-cli
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
-
-# install ic-wasm which is a dependency for many recipes
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
 ```
 
-### Building from Source
+The installer adds icp-cli to your PATH automatically. Restart your shell or run the `source` command shown by the installer.
 
-Building from source works on macOS, Linux, and Windows (WSL).
+## Windows
 
-#### Prerequisites
-
-**Rust toolchain:**
-
-Install Rust via [rustup](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```ps1
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.ps1 | iex"
 ```
 
-icp-cli requires Rust 1.88.0 or later (Rust 2024 edition).
+The installer adds icp-cli to your PATH automatically. Restart your shell (and if it's inside another program, e.g. the VS Code embedded shell, restart that program too).
 
-**Platform-specific dependencies:**
-
-| Platform      | Dependencies                                                                                             |
-|---------------|----------------------------------------------------------------------------------------------------------|
-| macOS         | Xcode Command Line Tools: `xcode-select --install`                                                       |
-| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev`                                                 |
-| Fedora/RHEL   | `sudo dnf install gcc pkg-config openssl-devel`                                                          |
-| Arch Linux    | `sudo pacman -S base-devel openssl`                                                                      |
-| Windows       | VS build tools (see [Rustup's guide](https://rust-lang.github.io/rustup/installation/windows-msvc.html)) |
-
-#### Build Steps
-
-Clone and build:
+## Verify Installation
 
 ```bash
-git clone https://github.com/dfinity/icp-cli.git
-cd icp-cli
-cargo build --release
-```
-
-The binary is at `target/release/icp`. Add it to your PATH:
-
-```bash
-# Add to current session
-export PATH=$(pwd)/target/release:$PATH
-
-# Or copy to a location in your PATH
-cp target/release/icp ~/.local/bin/
-```
-
-To update, pull the latest changes and rebuild:
-
-```bash
-git pull
-cargo build --release
-```
-
-### Cargo Install
-
-If icp-cli is published to crates.io:
-
-```bash
-cargo install icp-cli
+icp --version
 ```
 
 ## Language Toolchains
 
-icp-cli builds canisters using your language's toolchain. Install the toolchains for the languages you'll use:
+icp-cli uses your language's compiler to build canisters. Install what you need:
 
-### Rust Canisters
-
-Install the WebAssembly target:
+**Rust canisters:**
 
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
 
-### Motoko Canisters
-
-Install [mops](https://cli.mops.one/) and initialize the toolchain:
+**Motoko canisters:**
 
 ```bash
-# Install mops (see https://cli.mops.one/ for latest instructions)
 npm install -g ic-mops
-
-# Initialize Motoko toolchain
 mops toolchain init
 ```
 
-## Verifying Installation
+## Other dependencies
 
-After installation, verify everything works:
+### Docker/WSL2 (Windows)
 
-```bash
-# Check icp-cli version
-icp --version
-
-# View available commands
-icp help
-
-# Test creating a project (optional)
-icp new test-project
-cd test-project
-icp network start -d
-icp deploy
-icp network stop
-cd ..
-rm -rf test-project
-```
-
-## Other Dependencies
-
-### Docker/WSL2
-
-On Windows, the local network will be run in a Docker container inside WSL2. It is recommended to install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 integration, but a manually run `dockerd` instance is [also supported](../containers.md).
+On Windows, the local network will be run in a Docker container inside WSL2. It is recommended to install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 integration, but a manually run `dockerd` instance is [also supported](docs/containers.md).
 
 Docker is also a dependency for projects that manually configure their network to be container-based.
 
 ## Troubleshooting
 
-**"command not found: icp"**
+**"command not found: icp" (after curl install)**
 
-The binary isn't in your PATH. Either:
-- Add the directory containing `icp` to your PATH
-- Use the full path to the binary
-
-**Build fails with OpenSSL errors**
-
-Install OpenSSL development libraries for your platform (see prerequisites above).
-
-**Build fails with "rustc too old"**
-
-Update Rust:
+The binary isn't in your PATH. Add this to your shell config (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```bash
-rustup update
+export PATH="$HOME/.cargo/bin:$PATH"
 ```
+
+Then restart your shell or run `source ~/.bashrc` (or `~/.zshrc`).
 
 **Network launcher download fails**
 
-The network launcher is automatically downloaded on first use. If it fails:
+The network launcher downloads automatically on first use. If it fails:
 - Check your internet connection
-- Try again — transient failures are possible
-- For manual installation, download from [github.com/dfinity/icp-cli-network-launcher/releases](https://github.com/dfinity/icp-cli-network-launcher/releases) and set `ICP_CLI_NETWORK_LAUNCHER_PATH`
+- Try again (transient failures are possible)
+- Download manually from [icp-cli-network-launcher releases](https://github.com/dfinity/icp-cli-network-launcher/releases) and set `ICP_CLI_NETWORK_LAUNCHER_PATH`
 
 ## Next Steps
 

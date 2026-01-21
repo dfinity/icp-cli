@@ -1,6 +1,6 @@
 use console::Term;
 use std::{io::Write, sync::Arc};
-use tracing::debug;
+use tracing::info;
 use url::Url;
 
 use crate::{
@@ -504,10 +504,11 @@ pub struct TermWriter {
 
 impl TermWriter {
     pub fn write_line(&self, line: &str) -> std::io::Result<()> {
-        if !self.debug {
-            writeln!(&self.raw_term, "{}", line)?;
+        if self.debug {
+            info!("{line}");
+        } else {
+            writeln!(&self.raw_term, "{line}")?;
         }
-        debug!("{}", line);
         Ok(())
     }
 }
@@ -524,13 +525,12 @@ impl Write for TermWriter {
 
 impl Write for &TermWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let written = if !self.debug {
-            (&self.raw_term).write(buf)?
+        if self.debug {
+            info!("{}", String::from_utf8_lossy(buf).trim());
+            Ok(buf.len())
         } else {
-            buf.len()
-        };
-        debug!("{}", String::from_utf8_lossy(&buf[..written]).trim());
-        Ok(written)
+            (&self.raw_term).write(buf)
+        }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {

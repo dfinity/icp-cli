@@ -9,15 +9,14 @@ set -euo pipefail
 #
 # What it does:
 # 1. Copies docs/ to docs-site/.docs-temp/ (excluding schemas directory and README files)
-# 2. Adjusts relative paths in links for Starlight's /category/page/ URL structure
-#    (keeps .md extensions - Starlight strips them automatically)
+# 2. Adjusts relative paths and strips .md extensions for Starlight's clean URLs
 # 3. Extracts page titles from H1 headings and adds YAML frontmatter
 # 4. Removes H1 headings from content to prevent duplicate titles on the site
 #
 # Why this approach?
-# - Keeps source docs plain Markdown (GitHub-friendly, framework-agnostic)
-# - Preserves .md extensions in links (better GitHub compatibility)
-# - Build-time transformation keeps content DRY (single source of truth)
+# - Keeps source docs plain Markdown with .md extensions (GitHub-friendly)
+# - Build-time transformation creates clean URLs for the documentation site
+# - Single source of truth for documentation content
 # - Cross-platform compatible (works on macOS and Linux)
 #
 # Usage:
@@ -50,35 +49,34 @@ echo "✓ Files copied"
 echo ""
 echo "Step 2: Fixing markdown links..."
 find "$TARGET_DIR" -name "*.md" -type f | while read -r file; do
-  # Adjust relative paths for Starlight's /category/page/ directory structure
-  # Starlight automatically strips .md extensions, so we keep them for GitHub compatibility
-  # We only need to add ../ prefixes so links resolve correctly
-  # Use .bak extension for cross-platform compatibility (works on both macOS and Linux)
+  # Adjust relative paths and strip .md extensions for Starlight's clean URLs
 
   basename_file=$(basename "$file")
   dirname_file=$(dirname "$file")
   parent_dirname=$(basename "$dirname_file")
 
-  # Skip if file is index.md at root or in subdirectory (they don't need path adjustments)
+  # For index.md files, only strip .md extensions (no path adjustments needed)
   if [[ "$basename_file" == "index.md" ]]; then
+    sed -i.bak -E 's|\]\(([^:)]+)\.md\)|\]\(\1\)|g' "$file"
+    rm "${file}.bak"
     continue
   fi
 
   # For root-level files (tutorial.md -> /tutorial/)
   if [[ "$parent_dirname" == ".docs-temp" ]]; then
-    # Links to subdirectories: guides/file.md -> ../guides/file.md
-    sed -i.bak -E 's|\]\(([^/)]+)/([^/)]+\.md)\)|\]\(../\1/\2\)|g' "$file"
-    # Links to root-level pages: index.md -> ../index.md
-    sed -i.bak -E 's|\]\(([^/)(]+\.md)\)|\]\(../\1\)|g' "$file"
+    # Links to subdirectories: guides/file.md -> ../guides/file
+    sed -i.bak -E 's|\]\(([^/)]+)/([^/)]+)\.md\)|\]\(../\1/\2\)|g' "$file"
+    # Links to root-level pages: index.md -> ../index
+    sed -i.bak -E 's|\]\(([^/)(]+)\.md\)|\]\(../\1\)|g' "$file"
     rm "${file}.bak"
   else
     # For files in subdirectories (guides/using-recipes.md -> /guides/using-recipes/)
-    # Links to other categories: ../concepts/file.md -> ../../concepts/file.md
-    sed -i.bak -E 's|\]\(\.\./([^/)]+)/([^/)]+\.md)\)|\]\(../../\1/\2\)|g' "$file"
-    # Links up to root: ../index.md -> ../../index.md
-    sed -i.bak -E 's|\]\(\.\./([^/)(]+\.md)\)|\]\(../../\1\)|g' "$file"
-    # Same-directory links: file.md -> ../file.md
-    sed -i.bak -E 's|\]\(([^/.)][^/)]*\.md)\)|\]\(../\1\)|g' "$file"
+    # Links to other categories: ../concepts/file.md -> ../../concepts/file
+    sed -i.bak -E 's|\]\(\.\./([^/)]+)/([^/)]+)\.md\)|\]\(../../\1/\2\)|g' "$file"
+    # Links up to root: ../index.md -> ../../index
+    sed -i.bak -E 's|\]\(\.\./([^/)(]+)\.md\)|\]\(../../\1\)|g' "$file"
+    # Same-directory links: file.md -> ../file
+    sed -i.bak -E 's|\]\(([^/.)][^/)]*)\.md\)|\]\(../\1\)|g' "$file"
     rm "${file}.bak"
   fi
 done

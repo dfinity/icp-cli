@@ -97,8 +97,7 @@ The documentation site uses [Astro](https://astro.build/) with [Starlight](https
 1. **Source files** (`docs/`) are plain Markdown without frontmatter
 2. **Build script** (`scripts/prepare-docs.sh`) runs before each build and:
    - Copies docs to `.docs-temp/` directory (excluding schemas and READMEs)
-   - Adjusts relative paths for Starlight's `/category/page/` URL structure
-   - Keeps `.md` extensions (Starlight strips them automatically; better GitHub compatibility)
+   - Adjusts relative paths and strips `.md` extensions for Starlight's clean URLs
    - Extracts titles from H1 headings and adds frontmatter
 3. **Starlight** reads from `.docs-temp/` and builds the site
 4. **GitHub Actions** automatically deploys to GitHub Pages on push to main

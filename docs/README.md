@@ -49,7 +49,7 @@ Run these scripts when command-line options or config types change.
 The documentation website is built using [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/). The build process is handled by `scripts/prepare-docs.sh`, which:
 
 1. Copies markdown files from `docs/` to `docs-site/.docs-temp/` (excluding schemas and READMEs)
-2. Adjusts relative paths for Starlight's `/category/page/` URL structure (keeps `.md` extensions - Starlight strips them automatically)
+2. Adjusts relative paths and strips `.md` extensions for Starlight's clean URLs
 3. Adds frontmatter (extracts title from H1 heading)
 
 This keeps source docs clean and framework-agnostic while enabling a polished documentation site. The script runs automatically during the build process (`npm run build` in `docs-site/`), but you can also run it manually:

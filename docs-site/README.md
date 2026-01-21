@@ -32,9 +32,9 @@ The build pipeline ensures source documentation remains clean while producing a 
 
 **Step 1: Prepare Docs** (`../scripts/prepare-docs.sh`)
 - Copies `../docs/` to `.docs-temp/` (excluding `schemas/` directory and README files)
-- Adjusts relative paths in links for Starlight's `/category/page/` URL structure
-  - Keeps `.md` extensions (Starlight strips them automatically during build)
-  - Better GitHub compatibility (follows Docusaurus best practice)
+- Adjusts relative paths and strips `.md` extensions for Starlight's clean URLs
+  - Source files use `.md` extensions (work on GitHub)
+  - Build transforms to clean URLs without `.md` (work on site)
 - Extracts page title from first H1 heading
 - Adds YAML frontmatter with the title
 - Removes the H1 heading from content (prevents duplicate titles)
@@ -54,6 +54,11 @@ The build pipeline ensures source documentation remains clean while producing a 
 - Custom CSS copied from `icp-js-sdk-docs` for DFINITY branding
 - Files: `layers.css`, `theme.css`, `overrides.css`, `elements.css`
 - Maintains consistent look with other DFINITY documentation sites
+
+### External Links
+- External links automatically open in new tabs with security attributes (`rel="noopener noreferrer"`)
+- Implemented via `rehype-external-links` plugin for content links
+- Custom script in `astro.config.mjs` handles social/header links
 
 ### Navigation
 - Sidebar is **manually configured** in `astro.config.mjs`
@@ -93,10 +98,10 @@ Removes `.docs-temp/`, `dist/`, and `.astro/` directories
 ## Scripts
 
 - `prepare-docs` - Runs `../scripts/prepare-docs.sh` to prepare documentation files
-- `dev` - Prepares docs and starts development server
+- `dev` - Cleans artifacts, prepares docs, and starts development server
 - `build` - Prepares docs and builds for production
 - `preview` - Previews production build locally
-- `clean` - Removes build artifacts
+- `clean` - Removes build artifacts (`.docs-temp/`, `dist/`, `.astro/`)
 
 ## Deployment
 
@@ -121,6 +126,7 @@ In `astro.config.mjs`:
 - `logo`: ICP logo configuration
 - `favicon`: Site favicon
 - `customCss`: DFINITY theme files
+- `markdown.rehypePlugins`: External link handling with `rehype-external-links`
 
 ### Sidebar Configuration
 Manual sidebar definition in `astro.config.mjs`:
@@ -170,7 +176,7 @@ Check that:
 
 ### Broken links
 - Use relative links with `.md` extension in source docs: `[text](./file.md)`
-- The build process adjusts paths; Starlight strips `.md` extensions automatically
+- The build process (`prepare-docs.sh`) adjusts paths and strips `.md` extensions
 - External links should use full URLs
 
 ## Notes

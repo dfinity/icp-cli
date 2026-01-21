@@ -1,15 +1,37 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import rehypeExternalLinks from 'rehype-external-links';
 
 // https://astro.build/config
 export default defineConfig({
   site: 'https://dfinity.github.io/icp-cli',
   base: '/',
+  markdown: {
+    rehypePlugins: [
+      // Open external links in new tab
+      [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
+    ],
+  },
   integrations: [
     starlight({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
       favicon: '/favicon.png',
+      head: [
+        {
+          tag: 'script',
+          attrs: {},
+          content: `
+            // Open social links in new tab
+            document.addEventListener('DOMContentLoaded', () => {
+              document.querySelectorAll('.social-icons a[href^="http"]').forEach(link => {
+                link.setAttribute('target', '_blank');
+                link.setAttribute('rel', 'noopener noreferrer');
+              });
+            });
+          `,
+        },
+      ],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/dfinity/icp-cli' },
       ],

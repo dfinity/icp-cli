@@ -55,28 +55,34 @@ find "$TARGET_DIR" -name "*.md" -type f | while read -r file; do
   dirname_file=$(dirname "$file")
   parent_dirname=$(basename "$dirname_file")
 
-  # For index.md files, only strip .md extensions (no path adjustments needed)
+  # For index.md files, only strip .md extensions and add trailing slashes
   if [[ "$basename_file" == "index.md" ]]; then
-    sed -i.bak -E 's|\]\(([^:)]+)\.md\)|\]\(\1\)|g' "$file"
+    sed -i.bak -E 's|\]\(([^:)]+)\.md\)|\]\(\1/\)|g' "$file"
     rm "${file}.bak"
     continue
   fi
 
   # For root-level files (tutorial.md -> /tutorial/)
   if [[ "$parent_dirname" == ".docs-temp" ]]; then
-    # Links to subdirectories: guides/file.md -> ../guides/file
-    sed -i.bak -E 's|\]\(([^/)]+)/([^/)]+)\.md\)|\]\(../\1/\2\)|g' "$file"
-    # Links to root-level pages: index.md -> ../index
-    sed -i.bak -E 's|\]\(([^/)(]+)\.md\)|\]\(../\1\)|g' "$file"
+    # Links to subdirectories: guides/file.md -> ../guides/file/
+    sed -i.bak -E 's|\]\(([^/)]+)/([^/)]+)\.md\)|\]\(../\1/\2/\)|g' "$file"
+    # Links to root index: index.md -> ../ (root is served at /, not /index)
+    sed -i.bak -E 's|\]\(index\.md\)|\]\(../\)|g' "$file"
+    # Links to other root-level pages: file.md -> ../file/
+    sed -i.bak -E 's|\]\(([^/)(]+)\.md\)|\]\(../\1/\)|g' "$file"
     rm "${file}.bak"
   else
     # For files in subdirectories (guides/using-recipes.md -> /guides/using-recipes/)
-    # Links to other categories: ../concepts/file.md -> ../../concepts/file
-    sed -i.bak -E 's|\]\(\.\./([^/)]+)/([^/)]+)\.md\)|\]\(../../\1/\2\)|g' "$file"
-    # Links up to root: ../index.md -> ../../index
-    sed -i.bak -E 's|\]\(\.\./([^/)(]+)\.md\)|\]\(../../\1\)|g' "$file"
-    # Same-directory links: file.md -> ../file
-    sed -i.bak -E 's|\]\(([^/.)][^/)]*)\.md\)|\]\(../\1\)|g' "$file"
+    # Links to category index: ../concepts/index.md -> ../../concepts/ (not ../../concepts/index/)
+    sed -i.bak -E 's|\]\(\.\./([^/)]+)/index\.md\)|\]\(../../\1/\)|g' "$file"
+    # Links to other categories: ../concepts/file.md -> ../../concepts/file/
+    sed -i.bak -E 's|\]\(\.\./([^/)]+)/([^/)]+)\.md\)|\]\(../../\1/\2/\)|g' "$file"
+    # Links to root index: ../index.md -> ../../ (root is served at /, not /index)
+    sed -i.bak -E 's|\]\(\.\./index\.md\)|\]\(../../\)|g' "$file"
+    # Links up to other root pages: ../file.md -> ../../file/
+    sed -i.bak -E 's|\]\(\.\./([^/)(]+)\.md\)|\]\(../../\1/\)|g' "$file"
+    # Same-directory links: file.md -> ../file/
+    sed -i.bak -E 's|\]\(([^/.)][^/)]*)\.md\)|\]\(../\1/\)|g' "$file"
     rm "${file}.bak"
   fi
 done

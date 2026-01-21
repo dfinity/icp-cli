@@ -58,10 +58,10 @@ export default defineConfig({
           items: [
             { label: 'Installation', slug: 'guides/installation' },
             { label: 'Local Development', slug: 'guides/local-development' },
+            { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
-            { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Containerized Networks', slug: 'guides/containerized-networks' },
             { label: 'Using Recipes', slug: 'guides/using-recipes' },
             { label: 'Creating Recipes', slug: 'guides/creating-recipes' },

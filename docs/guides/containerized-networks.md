@@ -417,6 +417,8 @@ port-mapping:
 
 ## Related Documentation
 
-- [Managing Environments](managing-environments.md) - Configure environments that use containerized networks
-- [Local Development](local-development.md) - Development workflow with test networks
-- [Configuration Reference](../reference/configuration.md) - Full network configuration options
+- [Managing Environments](managing-environments.md) — Configure environments that use containerized networks
+- [Local Development](local-development.md) — Development workflow with test networks
+- [Configuration Reference](../reference/configuration.md) — Full network configuration options
+
+[Browse all documentation →](../index.md)

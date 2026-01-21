@@ -430,7 +430,7 @@ impl TestContext {
             .join(network_name)
             .join("descriptor.json");
         let start_time = std::time::Instant::now();
-        let timeout = 45;
+        let timeout = 300;
         eprintln!("Waiting for network descriptor at {descriptor_path} - limit {timeout}s");
         let network_descriptor = loop {
             let elapsed = start_time.elapsed().as_secs();

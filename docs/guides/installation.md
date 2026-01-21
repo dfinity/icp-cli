@@ -10,7 +10,7 @@ This guide covers all methods for installing icp-cli on your system.
 brew install dfinity/tap/icp-cli
 ```
 
-**Curl**
+**Bash/Curl**
 
 ```bash
 # install icp-cli
@@ -18,6 +18,16 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/release
 
 # install ic-wasm which is a dependency for many recipes
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
+```
+
+**PowerShell (Windows)**
+
+```ps1
+# install icp-cli
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.30.3/cargo-dist-installer.ps1 | iex"
+
+# install ic-wasm which is a dependency for many recipes
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinitiy/ic-wasm/releases/download/v0.9.11/ic-wasm-installer.ps1 | iex"
 ```
 
 **From source:**
@@ -87,12 +97,13 @@ icp-cli requires Rust 1.88.0 or later (Rust 2024 edition).
 
 **Platform-specific dependencies:**
 
-| Platform | Dependencies |
-|----------|--------------|
-| macOS | Xcode Command Line Tools: `xcode-select --install` |
-| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev` |
-| Fedora/RHEL | `sudo dnf install gcc pkg-config openssl-devel` |
-| Arch Linux | `sudo pacman -S base-devel openssl` |
+| Platform      | Dependencies                                                                                             |
+|---------------|----------------------------------------------------------------------------------------------------------|
+| macOS         | Xcode Command Line Tools: `xcode-select --install`                                                       |
+| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev`                                                 |
+| Fedora/RHEL   | `sudo dnf install gcc pkg-config openssl-devel`                                                          |
+| Arch Linux    | `sudo pacman -S base-devel openssl`                                                                      |
+| Windows       | VS build tools (see [Rustup's guide](https://rust-lang.github.io/rustup/installation/windows-msvc.html)) |
 
 #### Build Steps
 
@@ -173,6 +184,14 @@ icp network stop
 cd ..
 rm -rf test-project
 ```
+
+## Other Dependencies
+
+### Docker/WSL2
+
+On Windows, the local network will be run in a Docker container inside WSL2. It is recommended to install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 integration, but a manually run `dockerd` instance is [also supported](../containers.md).
+
+Docker is also a dependency for projects that manually configure their network to be container-based.
 
 ## Troubleshooting
 

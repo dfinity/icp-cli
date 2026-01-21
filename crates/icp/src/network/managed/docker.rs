@@ -50,7 +50,7 @@ pub async fn spawn_docker_launcher(
     } else {
         "linux/amd64".to_string()
     };
-    let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_MODE").ok();
+    let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO").ok();
     let wsl2_distro = wsl2_distro.as_deref();
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
     let host_status_tmpdir = if wsl2_convert {

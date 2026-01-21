@@ -61,3 +61,7 @@ The gateway port of the network must be bound to a host port (permitted to be 0)
 - `user`: string, the user to run the container as, in `user:group` format
 - `shm-size`: uint, size of `/dev/shm` in bytes.
 - `status-dir`: string, default `/app/status`, the status directory mentioned above.
+
+## Windows with WSL2 `dockerd`
+
+`icp-cli` will automatically integrate with Docker Desktop's support for WSL2; if unconfigured, it should Just Work. However, if you want to use a manually instantiated `dockerd` in a WSL2 instance serving local TCP, you can set `ICP_CLI_DOCKER_WSL2_DISTRO=<distro>` (as well as `DOCKER_HOST=tcp://<ip>:<port>`). Remote containers are not supported since `icp-cli` makes use of bind mounts; for this purpose you can use 'connected' networks instead of 'managed'.

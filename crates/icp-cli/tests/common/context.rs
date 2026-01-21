@@ -76,8 +76,10 @@ impl TestContext {
 
         // Isolate the command
         cmd.current_dir(self.home_path());
+        // Isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
         cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        // Run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.env("PATH", self.os_path.clone());
@@ -194,8 +196,10 @@ impl TestContext {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir);
+        // isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
         cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        // run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.arg("network").arg("start").arg(name);
@@ -276,7 +280,7 @@ impl TestContext {
             }
             #[cfg(windows)]
             {
-                let distro = std::env::var("ICP_CLI_DOCKER_WSL2_MODE");
+                let distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO");
                 let launcher_dir_param = if let Ok(distro) = distro {
                     wslpath2::convert(
                         launcher_dir.as_str(),

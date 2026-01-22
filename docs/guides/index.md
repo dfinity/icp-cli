@@ -10,8 +10,8 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 
 ## Deployment
 
-- [Deploying to Mainnet](deploying-to-mainnet.md) — Go live on the Internet Computer
 - [Tokens and Cycles](tokens-and-cycles.md) — Manage ICP tokens and cycles
+- [Deploying to Mainnet](deploying-to-mainnet.md) — Go live on the Internet Computer
 - [Managing Environments](managing-environments.md) — Configure dev, staging, and production
 
 ## Configuration

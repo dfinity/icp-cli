@@ -190,7 +190,7 @@ networks:
       - "0:4943"
 ```
 
-See [Containerized Networks](../containers.md) for full options.
+See [Containerized Networks](../guides/containerized-networks.md) for full options.
 
 ## Environments
 
@@ -323,12 +323,16 @@ environments:
 
 ## Schema
 
-JSON schemas for editor integration are available in [docs/schemas/](../schemas/).
+JSON schemas for editor integration are available in [docs/schemas/](https://github.com/dfinity/icp-cli/tree/main/docs/schemas):
+- [`icp-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/icp-yaml-schema.json) - Main project configuration
+- [`canister-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/canister-yaml-schema.json) - Canister configuration
+- [`network-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/network-yaml-schema.json) - Network configuration
+- [`environment-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/environment-yaml-schema.json) - Environment configuration
 
-Configure your editor to use them:
+Configure your editor to use them for autocomplete and validation:
 
 ```yaml
-# yaml-language-server: $schema=./docs/schemas/icp-yaml-schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/icp-yaml-schema.json
 canisters:
   - name: my-canister
     # ...

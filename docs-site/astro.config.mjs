@@ -4,8 +4,8 @@ import rehypeExternalLinks from 'rehype-external-links';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://dfinity.github.io/icp-cli',
-  base: '/',
+  site: 'https://dfinity.github.io',
+  base: '/icp-cli/',
   markdown: {
     rehypePlugins: [
       // Open external links in new tab

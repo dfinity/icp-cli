@@ -8,7 +8,7 @@ use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 async fn status_when_network_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path().await;
+    let launcher_path = ctx.launcher_path_or_nothing().await;
 
     // Project manifest
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
@@ -47,7 +47,7 @@ async fn status_when_network_running() {
 async fn status_with_json() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path().await;
+    let launcher_path = ctx.launcher_path_or_nothing().await;
 
     // Project manifest
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
@@ -96,7 +96,7 @@ async fn status_with_json() {
 async fn status_fixed_port() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path().await;
+    let launcher_path = ctx.launcher_path_or_nothing().await;
 
     // Project manifest with fixed port
     write_string(

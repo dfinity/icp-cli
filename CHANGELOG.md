@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Release for Windows
 * feat: Add safety controls for `--set-controller` and `--remove-controller`
   * Warn and prompt for confirmation when removing yourself from controllers
   * Add `-f/--force` flag to skip confirmation prompts

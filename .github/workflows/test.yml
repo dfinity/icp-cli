@@ -11,6 +11,14 @@ env:
   CARGO_NET_RETRY: 10
   # Use the local .curlrc
   CURL_HOME: .
+  # Disable incremental compilation
+  CARGO_INCREMENTAL: 0
+  # These variables should be shared with WSL
+  WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   discover:
@@ -30,14 +38,10 @@ jobs:
       matrix:
         # Make the os matrix match .github/scripts/test-matrix.py so that
         # we optimize caching
-        os: [ubuntu-22.04, macos-15]
+        os: [ubuntu-22.04, macos-15, windows-2025]
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-
-      - name: Setup image (Linux)
-        if: ${{ contains(matrix.os, 'ubuntu') }}
-        run: ./.github/scripts/provision-linux-build.sh
 
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -49,6 +53,10 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -68,10 +76,6 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
-      - name: Setup image (Linux)
-        if: ${{ contains(matrix.os, 'ubuntu') }}
-        run: ./.github/scripts/provision-linux-build.sh
-
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -82,6 +86,21 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+
+      - name: Setup WSL2 (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
+        with:
+          distribution: Ubuntu-22.04
+
+      - name: Setup Docker in WSL2 (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        run: .github/scripts/init-docker.sh
+        shell: wsl-bash_Ubuntu-22.04 {0}
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -105,6 +124,7 @@ jobs:
       - name: install network launcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ !contains(matrix.os, 'windows') }}
         run: |
           VERSION=v11.0.0
           OS=""
@@ -142,6 +162,7 @@ jobs:
           echo "ICP_CLI_NETWORK_LAUNCHER_PATH=$DEST/icp-cli-network-launcher" >> "$GITHUB_ENV"
 
       - name: Run ${{ matrix.test }}
+        # the macos runners do not support Docker
         run: cargo test --test ${{ matrix.test }} -- ${{ contains(matrix.os, 'macos') && '--skip :docker:' || '' }}
 
   aggregate:

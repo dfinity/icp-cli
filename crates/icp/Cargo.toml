@@ -62,7 +62,11 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
+wslpath2 = { workspace = true }
 zeroize = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = { workspace = true }
 
 [dev-dependencies]
 jsonschema = { workspace = true }

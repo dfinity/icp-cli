@@ -27,7 +27,7 @@ fn build_adapter_script_single() {
             build:
               steps:
                 - type: script
-                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{path}' "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -64,7 +64,7 @@ fn build_adapter_script_multiple() {
                 - type: script
                   command: echo "before"
                 - type: script
-                  command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{path}' "$ICP_WASM_OUTPUT_PATH"
                 - type: script
                   command: echo "after"
     "#};
@@ -254,7 +254,7 @@ fn build_adapter_script_with_explicit_sh_c() {
             build:
               steps:
                 - type: script
-                  command: sh -c 'echo "nested shell" > {path} && cp {path} "$ICP_WASM_OUTPUT_PATH"'
+                  command: sh -c 'echo "nested shell" > '"'"'{path}'"'"' && cp '"'"'{path}'"'"' "$ICP_WASM_OUTPUT_PATH"'
     "#};
 
     write_string(
@@ -373,17 +373,17 @@ fn build_multiple_canisters() {
             build:
               steps:
                 - type: script
-                  command: echo "building canister-a" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: echo "building canister-a" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
           - name: canister-b
             build:
               steps:
                 - type: script
-                  command: echo "building canister-b" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: echo "building canister-b" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
           - name: canister-c
             build:
               steps:
                 - type: script
-                  command: echo "building canister-c" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: echo "building canister-c" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
     "#};
 
     write_string(
@@ -423,17 +423,17 @@ fn build_all_canisters_in_environment() {
             build:
               steps:
                 - type: script
-                  command: echo "building canister-a" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: echo "building canister-a" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
           - name: canister-b
             build:
               steps:
                 - type: script
-                  command: echo "building canister-b" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: echo "building canister-b" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
           - name: canister-c
             build:
               steps:
                 - type: script
-                  command: echo "building canister-c" && cp {path} "$ICP_WASM_OUTPUT_PATH"
+                  command: echo "building canister-c" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
         
         environments:
           - name: test-env

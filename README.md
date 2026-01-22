@@ -53,6 +53,9 @@ The [`examples/`](examples/) directory contains example projects to help you get
 - **Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
 - **Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
 
+**Other dependencies:**
+- Docker — always required on Windows (with WSL2), and some projects may require it on other platforms.
+
 ## Getting Help
 
 - **[Documentation](docs/index.md)** — Guides, concepts, and reference
@@ -69,12 +72,13 @@ Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for gu
 - Rust 1.88.0+ ([rustup.rs](https://rustup.rs/))
 - Platform dependencies:
 
-| Platform | Install |
-|----------|---------|
-| macOS | `xcode-select --install` |
-| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev` |
-| Fedora/RHEL | `sudo dnf install gcc pkg-config openssl-devel` |
-| Arch Linux | `sudo pacman -S base-devel openssl` |
+| Platform      | Install                                                                                                  |
+|---------------|----------------------------------------------------------------------------------------------------------|
+| macOS         | `xcode-select --install`                                                                                 |
+| Ubuntu/Debian | `sudo apt install build-essential pkg-config libssl-dev`                                                 |
+| Fedora/RHEL   | `sudo dnf install gcc pkg-config openssl-devel`                                                          |
+| Arch Linux    | `sudo pacman -S base-devel openssl`                                                                      |
+| Windows       | VS build tools (see [Rustup's guide](https://rust-lang.github.io/rustup/installation/windows-msvc.html)) |
 
 ### Build and Test
 

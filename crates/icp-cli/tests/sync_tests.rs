@@ -30,7 +30,7 @@ async fn sync_adapter_script_single() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -102,7 +102,7 @@ async fn sync_adapter_script_multiple() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -314,7 +314,7 @@ async fn sync_multiple_canisters() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -323,7 +323,7 @@ async fn sync_multiple_canisters() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -332,7 +332,7 @@ async fn sync_multiple_canisters() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -408,7 +408,7 @@ async fn sync_all_canisters_in_environment() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -417,7 +417,7 @@ async fn sync_all_canisters_in_environment() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script
@@ -426,7 +426,7 @@ async fn sync_all_canisters_in_environment() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
                 - type: script

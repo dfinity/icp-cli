@@ -2,9 +2,15 @@
 
 Run ICP test networks in Docker containers for isolated, reproducible development environments.
 
+## Windows Users
+
+On Windows, icp-cli automatically uses Docker for all local networks—no configuration needed. Just ensure [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) is installed and running, then use `icp network start` as normal.
+
+For advanced WSL2 setups without Docker Desktop, see [Manual dockerd in WSL2](#advanced-manual-dockerd-in-wsl2).
+
 ## When to Use This
 
-Use containerized networks when you:
+On macOS and Linux, icp-cli runs the network launcher natively by default. You may want to use containerized networks when you:
 - Want network isolation from your host system
 - Need to run multiple independent network instances
 - Want reproducible environments across your team
@@ -42,6 +48,8 @@ The `ghcr.io/dfinity/icp-cli-network-launcher` image is the official ICP test ne
 - Cycles ledger canister
 - Cycles minting canister
 - Pre-funded anonymous principal for development
+
+**Note:** Network state is ephemeral—deployed canisters and their data are lost when the network stops. Persistence is not yet supported.
 
 ### 2. Start the Network
 
@@ -103,29 +111,9 @@ networks:
 
 Find the assigned port:
 ```bash
-icp network info docker-local
-# Shows: Gateway: http://localhost:54321 (example)
+icp network status docker-local
+# Shows: Port: 54321 (example)
 ```
-
-### Persistent Storage
-
-Keep network state between restarts using Docker volumes:
-
-```yaml
-networks:
-  - name: docker-local
-    mode: managed
-    image: ghcr.io/dfinity/icp-cli-network-launcher
-    port-mapping:
-      - "8000:4943"
-    volumes:
-      - icp-network-data:/data  # Persists canister state
-```
-
-This preserves:
-- Deployed canisters
-- Canister state
-- Identity balances
 
 ### Multiple Networks
 
@@ -192,9 +180,8 @@ Useful for CI/CD or temporary testing.
 
 **Solution**: Start Docker Desktop or the Docker daemon:
 ```bash
-# macOS: Open Docker Desktop application
-# Linux:
-sudo systemctl start docker
+sudo systemctl start docker  # Linux
+# On macOS/Windows, open the Docker Desktop application
 ```
 
 ### "Port already in use"
@@ -414,6 +401,12 @@ port-mapping:
    ```bash
    icp network start custom-network
    ```
+
+## Advanced: Manual `dockerd` in WSL2
+
+If you're on Windows and want to use a manually instantiated `dockerd` in a WSL2 instance instead of Docker Desktop, set these environment variables:
+- `ICP_CLI_DOCKER_WSL2_DISTRO=<distro>` — the WSL2 distribution name running dockerd
+- `DOCKER_HOST=tcp://<ip>:<port>` — the TCP address where dockerd is listening
 
 ## Related Documentation
 

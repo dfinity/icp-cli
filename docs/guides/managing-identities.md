@@ -23,17 +23,7 @@ Create a new identity:
 icp identity new my-identity
 ```
 
-This generates a new key pair and stores it securely.
-
-### Saving the Seed Phrase
-
-To back up your identity, save the seed phrase:
-
-```bash
-icp identity new my-identity --output-seed seed.txt
-```
-
-Store `seed.txt` securely — it can restore your identity.
+This generates a new key pair and displays a seed phrase. **Save the seed phrase** — it's only shown once and is required to restore your identity later.
 
 ## Listing Identities
 
@@ -155,26 +145,6 @@ icp deploy --identity my-identity --identity-password-file ./password.txt
 - Store keys as secrets in your CI system
 - Use password files for automated deployments
 - Consider separate identities with limited permissions
-
-## Managing Controllers
-
-Your identity's principal can be a controller of canisters. View canister controllers:
-
-```bash
-icp canister settings show <canister-id> -n ic
-```
-
-Add a controller:
-
-```bash
-icp canister settings update <canister-id> --add-controller <principal> -n ic
-```
-
-Remove a controller:
-
-```bash
-icp canister settings update <canister-id> --remove-controller <principal> -n ic
-```
 
 ## Troubleshooting
 

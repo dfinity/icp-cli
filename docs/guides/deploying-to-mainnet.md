@@ -8,7 +8,7 @@ Before deploying to mainnet, ensure you have:
 
 1. **A working project** — Test locally first with `icp deploy` on your local network
 2. **An identity** — See [Managing Identities](managing-identities.md)
-3. **Cycles** — Canisters require cycles to run on mainnet
+3. **Cycles** — Canisters require cycles to run. See [Tokens and Cycles](tokens-and-cycles.md)
 
 ## Setting Up an Identity
 
@@ -132,6 +132,20 @@ Update settings:
 
 ```bash
 icp canister settings update my-canister --freezing-threshold 2592000 -e prod
+```
+
+### Managing Controllers
+
+Add a controller:
+
+```bash
+icp canister settings update my-canister --add-controller <principal> -e prod
+```
+
+Remove a controller:
+
+```bash
+icp canister settings update my-canister --remove-controller <principal> -e prod
 ```
 
 ## Topping Up Cycles

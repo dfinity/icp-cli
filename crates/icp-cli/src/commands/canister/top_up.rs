@@ -15,7 +15,6 @@ use crate::operations::token::TokenAmount;
 pub(crate) struct TopUpArgs {
     /// Amount of cycles to top up.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    /// Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
     #[arg(long, value_parser = parse_cycles_amount)]
     pub(crate) amount: u128,
 

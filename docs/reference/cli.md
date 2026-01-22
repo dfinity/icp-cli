@@ -157,7 +157,7 @@ Create a canister on a network
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
-* `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion). Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
+* `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
@@ -301,7 +301,7 @@ Change a canister's settings to specified values
 * `--compute-allocation <COMPUTE_ALLOCATION>`
 * `--memory-allocation <MEMORY_ALLOCATION>`
 * `--freezing-threshold <FREEZING_THRESHOLD>`
-* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Reserved cycles limit for the canister. Supports suffixes: k (thousand), m (million), b (billion), t (trillion). Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Reserved cycles limit for the canister. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--wasm-memory-limit <WASM_MEMORY_LIMIT>`
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>`
 * `--log-visibility <LOG_VISIBILITY>`
@@ -402,7 +402,7 @@ Top up a canister with cycles
 
 ###### **Options:**
 
-* `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion). Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
+* `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -445,7 +445,7 @@ Convert icp to cycles
 ###### **Options:**
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion). Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
+* `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as

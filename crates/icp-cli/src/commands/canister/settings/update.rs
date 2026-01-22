@@ -105,7 +105,6 @@ pub(crate) struct UpdateArgs {
 
     /// Reserved cycles limit for the canister.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    /// Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
     #[arg(long, value_parser = parse_cycles_amount)]
     reserved_cycles_limit: Option<u128>,
 

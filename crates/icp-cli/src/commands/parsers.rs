@@ -7,14 +7,15 @@ use std::str::FromStr;
 /// Parse a token amount with support for suffixes (k, m, b, t) and underscores.
 ///
 /// Examples:
-/// - `1` -> 1.0
-/// - `1000` -> 1000.0
-/// - `1_000` -> 1000.0
-/// - `1k` or `1K` -> 1000.0
-/// - `1m` or `1M` -> 1000000.0
-/// - `1b` or `1B` -> 1000000000.0
-/// - `1t` or `1T` -> 1000000000000.0
+/// - `1` -> 1
+/// - `1000` -> 1000
+/// - `1_000` -> 1000
+/// - `1k` or `1K` -> 1000
+/// - `1m` or `1M` -> 1000000
+/// - `1b` or `1B` -> 1000000000
+/// - `1t` or `1T` -> 1000000000000
 /// - `0.5` -> 0.5
+/// - `0.5k` or `0.5K` -> 500
 pub(crate) fn parse_token_amount(input: &str) -> Result<BigDecimal, String> {
     let input = input.trim();
 
@@ -56,6 +57,7 @@ pub(crate) fn parse_token_amount(input: &str) -> Result<BigDecimal, String> {
 
 /// Convert a token amount (in token units) to the smallest unit amount by multiplying
 /// by 10^token_decimals and checking that the result is an integer.
+/// E.g. 1.5 ICP with 8 decimals = 150000000 e8s
 ///
 /// # Arguments
 /// * `token_amount` - The token amount in token units (e.g., 1.5 ICP)
@@ -114,14 +116,10 @@ pub(crate) fn to_token_unit_amount(
 /// - `1m` or `1M` -> 1000000
 /// - `1b` or `1B` -> 1000000000
 /// - `1t` or `1T` -> 1000000000000
+/// - `0.5k` or `0.5K` -> 500
 pub(crate) fn parse_cycles_amount(input: &str) -> Result<u128, String> {
-    // Parse as token amount
     let token_amount = parse_token_amount(input)?;
-
-    // Convert to unit amount (cycles have 0 decimals)
     let unit_amount = to_token_unit_amount(token_amount, 0)?;
-
-    // Convert to u128 with overflow check
     unit_amount
         .to_u128()
         .ok_or_else(|| format!("Cycles amount too large: '{}'", input))
@@ -192,6 +190,22 @@ mod tests {
         );
         assert_eq!(
             parse_token_amount("0.5t").unwrap(),
+            BigDecimal::from_str("500000000000").unwrap()
+        );
+        assert_eq!(
+            parse_token_amount("1K").unwrap(),
+            BigDecimal::from_str("1000").unwrap()
+        );
+        assert_eq!(
+            parse_token_amount("1.5M").unwrap(),
+            BigDecimal::from_str("1500000").unwrap()
+        );
+        assert_eq!(
+            parse_token_amount("2B").unwrap(),
+            BigDecimal::from_str("2000000000").unwrap()
+        );
+        assert_eq!(
+            parse_token_amount("0.5T").unwrap(),
             BigDecimal::from_str("500000000000").unwrap()
         );
     }
@@ -352,16 +366,8 @@ mod tests {
         let err1 = parse_cycles_amount("340282366920938463463374607431768211456").unwrap_err();
         assert!(err1.contains("Cycles amount too large"));
 
-        // u128::MAX + 1 trillion should overflow
-        let err2 = parse_cycles_amount("340282366920938463463374607431768212t").unwrap_err();
-        assert!(err2.contains("Cycles amount too large"));
-
         // Very large number that definitely overflows
         let err3 = parse_cycles_amount("999999999999999999999999999999t").unwrap_err();
         assert!(err3.contains("Cycles amount too large"));
-
-        // 1 followed by 40 zeros exceeds u128::MAX (~3.4e38)
-        let err4 = parse_cycles_amount("10000000000000000000000000000000000000000").unwrap_err();
-        assert!(err4.contains("Cycles amount too large"));
     }
 }

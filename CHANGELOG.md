@@ -11,6 +11,7 @@
   * The `--mainnet` and `--ic` flags are removed. Use `-n/--network ic`, `-e/--environment ic` instead.
 * feat: Allow overriding the implicit `local` network and environment.
 * chore: get rid of `TCYCLES` mentions and replace them with `cycles`
+* chore!: Change display format of token and cycles amounts
 * feat: Token and cycles amounts now support new formats. Valid examples: `1_000`, `1k`, `1.5m`, `1_234.5b`, `4T`
 
 # v0.1.0-beta.3

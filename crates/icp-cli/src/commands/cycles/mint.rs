@@ -16,7 +16,6 @@ pub(crate) struct MintArgs {
 
     /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    /// Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
     #[arg(long, conflicts_with = "icp", value_parser = parse_cycles_amount)]
     pub(crate) cycles: Option<u128>,
 

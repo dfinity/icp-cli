@@ -533,3 +533,94 @@ async fn canister_install_with_environment_settings_override() {
         output_str
     );
 }
+
+#[cfg(unix)] // requires bash and wasm-tools in PATH
+#[tokio::test]
+async fn canister_install_large_wasm_chunked() {
+    // Generate large.wasm which is greater than 3MB
+    let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("assets");
+    std::process::Command::new("bash")
+        .current_dir(&assets_dir)
+        .arg("generate_large_wasm.sh")
+        .status()
+        .expect("failed to run generate_large_wasm.sh");
+
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use the 3MB wasm file to test chunked installation
+    let wasm = ctx.make_asset("large.wasm");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: large-canister
+            build:
+              steps:
+                - type: script
+                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Build canister
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "large-canister"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "large-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Install large canister (should use chunked installation)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "large-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify the installation by checking the canister status
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "--environment",
+            "random-environment",
+            "large-canister",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Running"));
+}

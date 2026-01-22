@@ -41,10 +41,10 @@ Use connected networks for shared testnets and production.
 
 Two networks are always available:
 
-| Network | Type | Description |
-|---------|------|-------------|
-| `local` | Managed | Local development network on `localhost:8000` |
-| `ic` | Connected | The Internet Computer mainnet at `https://icp-api.io` |
+| Network | Type      | Description                                           |
+|---------|-----------|-------------------------------------------------------|
+| `local` | Managed   | Local development network on `localhost:8000`         |
+| `ic`    | Connected | The Internet Computer mainnet at `https://icp-api.io` |
 
 The `local` network can be overridden in your `icp.yaml`. The `ic` network is **protected** and cannot be overridden to prevent accidental production deployment with incorrect settings.
 
@@ -58,6 +58,7 @@ networks:
     mode: managed
     gateway:
       port: 9999  # Different port
+    ii: true # Use the Internet Identity canister
 ```
 
 Or connect to an existing network instead of managing one:
@@ -91,10 +92,10 @@ Environments encapsulate all of this.
 
 Two environments are always available:
 
-| Environment | Network | Canisters |
-|-------------|---------|-----------|
-| `local` | `local` | All canisters |
-| `ic` | `ic` | All canisters |
+| Environment | Network | Canisters     |
+|-------------|---------|---------------|
+| `local`     | `local` | All canisters |
+| `ic`        | `ic`    | All canisters |
 
 ### Defining Environments
 
@@ -154,10 +155,10 @@ icp deploy --e staging
 
 ## Networks vs Environments
 
-| Aspect | Network | Environment |
-|--------|---------|-------------|
-| **Purpose** | Where to connect | What to deploy and how |
-| **Contains** | URL, connection details | Network reference, canisters, settings |
+| Aspect       | Network                  | Environment                            |
+|--------------|--------------------------|----------------------------------------|
+| **Purpose**  | Where to connect         | What to deploy and how                 |
+| **Contains** | URL, connection details  | Network reference, canisters, settings |
 | **Examples** | `local`, `ic`, `testnet` | `local`, `ic`, `staging`, `production` |
 
 A common pattern:

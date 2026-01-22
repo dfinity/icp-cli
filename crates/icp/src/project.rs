@@ -13,7 +13,9 @@ use crate::{
         load_manifest_from_path,
         recipe::RecipeType,
     },
-    network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
+    network::{
+        Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode, Port,
+    },
     prelude::*,
 };
 
@@ -307,12 +309,16 @@ pub async fn consolidate_manifest(
                 name: LOCAL.to_string(),
                 configuration: Configuration::Managed {
                     managed: Managed {
-                        mode: ManagedMode::Launcher {
+                        mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                             gateway: Gateway {
                                 host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
                                 port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
                             },
-                        },
+                            artificial_delay_ms: None,
+                            ii: false,
+                            nns: false,
+                            subnets: None,
+                        })),
                     },
                 },
             },

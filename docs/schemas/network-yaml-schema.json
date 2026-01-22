@@ -150,6 +150,15 @@
         },
         {
           "properties": {
+            "artificial-delay-ms": {
+              "description": "Artificial delay to add to every update call",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "gateway": {
               "anyOf": [
                 {
@@ -158,6 +167,31 @@
                 {
                   "type": "null"
                 }
+              ],
+              "description": "HTTP gateway configuration"
+            },
+            "ii": {
+              "description": "Set up the Internet Identity canister",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "nns": {
+              "description": "Set up the NNS",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "subnets": {
+              "description": "Configure the list of subnets (one application subnet by default)",
+              "items": {
+                "$ref": "#/$defs/SubnetKind"
+              },
+              "type": [
+                "array",
+                "null"
               ]
             }
           },
@@ -165,6 +199,18 @@
         }
       ],
       "type": "object"
+    },
+    "SubnetKind": {
+      "enum": [
+        "application",
+        "system",
+        "verified-application",
+        "bitcoin",
+        "fiduciary",
+        "nns",
+        "sns"
+      ],
+      "type": "string"
     }
   },
   "$id": "NetworkManifest",

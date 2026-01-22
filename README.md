@@ -36,9 +36,9 @@ If you're coming from dfx (the previous Internet Computer SDK), see the **[Migra
 Or browse the markdown docs directly:
 
 - **[Tutorial](docs/tutorial.md)** — Deploy your first canister
-- **[Guides](docs/guides/)** — How to accomplish common tasks
-- **[Concepts](docs/concepts/)** — Understand how icp-cli works
-- **[Reference](docs/reference/cli.md)** — Complete CLI and configuration reference
+- **[Guides](docs/guides/index.md)** — How to accomplish common tasks
+- **[Concepts](docs/concepts/index.md)** — Understand how icp-cli works
+- **[Reference](docs/reference/index.md)** — Complete CLI and configuration reference
 
 ## Examples
 
@@ -127,10 +127,10 @@ cd docs-site && npm install && npm run dev
 ```
 
 Documentation structure follows the [Diátaxis framework](https://diataxis.fr/):
-- [`docs/guides/`](docs/guides/) - Task-oriented how-to guides
-- [`docs/concepts/`](docs/concepts/) - Understanding-oriented explanations
-- [`docs/reference/`](docs/reference/) - Information-oriented specifications
-- [`docs/migration/`](docs/migration/) - Migration guides
+- [`docs/guides/`](docs/guides/index.md) - Task-oriented how-to guides
+- [`docs/concepts/`](docs/concepts/index.md) - Understanding-oriented explanations
+- [`docs/reference/`](docs/reference/index.md) - Information-oriented specifications
+- [`docs/migration/`](docs/migration/from-dfx.md) - Migration guides
 
 See [docs/README.md](docs/README.md) for documentation writing guidelines.
 

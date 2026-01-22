@@ -2,8 +2,6 @@
 
 Complete reference for all canister settings available in icp-cli.
 
-## Overview
-
 Canister settings control resource allocation, behavior, and runtime configuration. They can be specified:
 
 1. At the **canister level** in `icp.yaml` or `canister.yaml`

@@ -2,8 +2,6 @@
 
 Canisters go through three distinct phases when moving from source code to running on the Internet Computer.
 
-## Overview
-
 ```
 Source Code → [Build] → WASM → [Deploy] → Running Canister → [Sync] → Configured State
 ```

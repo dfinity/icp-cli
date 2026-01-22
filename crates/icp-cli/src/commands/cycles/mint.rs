@@ -4,16 +4,20 @@ use clap::Args;
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
+use crate::commands::parsers::{parse_cycles_amount, parse_token_amount};
 use crate::operations::token::mint::mint_cycles;
 
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
     /// Amount of ICP to mint to cycles.
-    #[arg(long, conflicts_with = "cycles")]
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(long, conflicts_with = "cycles", value_parser = parse_token_amount)]
     pub(crate) icp: Option<BigDecimal>,
 
     /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
-    #[arg(long, conflicts_with = "icp")]
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    /// Examples: 1000, 1_000, 1k, 1.5m, 2b, 3t
+    #[arg(long, conflicts_with = "icp", value_parser = parse_cycles_amount)]
     pub(crate) cycles: Option<u128>,
 
     #[command(flatten)]
@@ -42,7 +46,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
 
     // Display results
     let _ = ctx.term.write_line(&format!(
-        "Minted {} TCYCLES to your account, new balance: {} TCYCLES.",
+        "Minted {} to your account, new balance: {}.",
         mint_info.deposited, mint_info.new_balance
     ));
 

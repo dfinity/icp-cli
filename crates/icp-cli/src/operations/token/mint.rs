@@ -5,14 +5,16 @@ use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use icp_canister_interfaces::{
-    cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_DECIMALS},
+    cycles_ledger::CYCLES_LEDGER_BLOCK_FEE,
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
         NotifyMintArgs, NotifyMintResponse,
     },
-    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
+    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL, ICP_LEDGER_SYMBOL},
 };
 use snafu::{ResultExt, Snafu};
+
+use super::TokenAmount;
 
 #[derive(Debug, Snafu)]
 pub enum MintCyclesError {
@@ -34,10 +36,10 @@ pub enum MintCyclesError {
     #[snafu(display("Failed ICP ledger transfer: {message}"))]
     TransferFailed { message: String },
 
-    #[snafu(display("Insufficient funds: {required} ICP required, {available} ICP available."))]
+    #[snafu(display("Insufficient funds: {required} required, {available} available."))]
     InsufficientFunds {
-        required: BigDecimal,
-        available: BigDecimal,
+        required: TokenAmount,
+        available: TokenAmount,
     },
 
     #[snafu(display("No amount specified. Must provide either ICP or cycles amount."))]
@@ -48,8 +50,8 @@ pub enum MintCyclesError {
 }
 
 pub struct MintInfo {
-    pub deposited: BigDecimal,
-    pub new_balance: BigDecimal,
+    pub deposited: TokenAmount,
+    pub new_balance: TokenAmount,
 }
 
 /// Mint cycles from ICP
@@ -143,12 +145,18 @@ pub async fn mint_cycles(
         Err(err) => match err {
             TransferError::TxDuplicate { duplicate_of } => duplicate_of,
             TransferError::InsufficientFunds { balance } => {
-                let required =
+                let required_amount =
                     BigDecimal::new((icp_e8s_to_deposit + ICP_LEDGER_BLOCK_FEE_E8S).into(), 8);
-                let available = BigDecimal::new(balance.e8s().into(), 8);
+                let available_amount = BigDecimal::new(balance.e8s().into(), 8);
                 return InsufficientFundsSnafu {
-                    required,
-                    available,
+                    required: TokenAmount {
+                        amount: required_amount,
+                        symbol: ICP_LEDGER_SYMBOL.to_string(),
+                    },
+                    available: TokenAmount {
+                        amount: available_amount,
+                        symbol: ICP_LEDGER_SYMBOL.to_string(),
+                    },
                 }
                 .fail();
             }
@@ -189,15 +197,17 @@ pub async fn mint_cycles(
         }
     };
 
-    // Calculate display values in TCYCLES (12 decimals)
-    let deposited = BigDecimal::new(
-        (minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(),
-        CYCLES_LEDGER_DECIMALS,
-    );
-    let new_balance = BigDecimal::new(minted.balance.into(), CYCLES_LEDGER_DECIMALS);
+    let deposited_amount = BigDecimal::new((minted.minted - CYCLES_LEDGER_BLOCK_FEE).into(), 0);
+    let new_balance_amount = BigDecimal::new(minted.balance.into(), 0);
 
     Ok(MintInfo {
-        deposited,
-        new_balance,
+        deposited: TokenAmount {
+            amount: deposited_amount,
+            symbol: "cycles".to_string(),
+        },
+        new_balance: TokenAmount {
+            amount: new_balance_amount,
+            symbol: "cycles".to_string(),
+        },
     })
 }

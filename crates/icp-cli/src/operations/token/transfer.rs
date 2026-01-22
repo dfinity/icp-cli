@@ -7,7 +7,7 @@ use icrc_ledger_types::icrc1::{
 };
 use snafu::{ResultExt, Snafu};
 
-use super::TOKEN_LEDGER_CIDS;
+use super::{TOKEN_LEDGER_INFO, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum TokenTransferError {
@@ -47,13 +47,10 @@ pub enum TokenTransferError {
     #[snafu(display("failed to decode transfer response"))]
     DecodeTransferResponse { source: candid::Error },
 
-    #[snafu(display(
-        "insufficient funds. balance: {balance} {symbol}, required: {required} {symbol}"
-    ))]
+    #[snafu(display("insufficient funds. balance: {balance}, required: {required}"))]
     InsufficientFunds {
-        symbol: String,
-        balance: BigDecimal,
-        required: BigDecimal,
+        balance: TokenAmount,
+        required: TokenAmount,
     },
 
     #[snafu(display("transfer failed: {message}"))]
@@ -62,8 +59,7 @@ pub enum TokenTransferError {
 
 pub struct TransferInfo {
     pub block_index: Nat,
-    pub amount: BigDecimal,
-    pub symbol: String,
+    pub transferred: TokenAmount,
     pub receiver: Principal,
 }
 
@@ -95,14 +91,16 @@ pub async fn transfer(
     amount: &BigDecimal,
     receiver: Principal,
 ) -> Result<TransferInfo, TokenTransferError> {
-    // Obtain ledger address
-    let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
+    // Obtain token info
+    let (canister_id, token_metadata_override) = match TOKEN_LEDGER_INFO.get(token) {
         // Given token matched known token names
-        Some(cid) => cid.to_string(),
+        Some((cid, token_metadata_override)) => {
+            (cid.to_string(), token_metadata_override.to_owned())
+        }
 
         // Given token is not known, indicating it's either already a canister id
         // or is simply a name of a token we do not know of
-        None => token.to_string(),
+        None => (token.to_string(), None),
     };
 
     // Parse the canister id
@@ -128,28 +126,36 @@ pub async fn transfer(
         //
         // Obtain the number of decimals the token uses
         async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_decimals")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await
-                .context(QueryDecimalsSnafu)?;
+            if let Some(metadata) = &token_metadata_override {
+                Ok(metadata.decimals)
+            } else {
+                // Perform query
+                let resp = agent
+                    .query(&cid, "icrc1_decimals")
+                    .with_arg(Encode!(&()).expect("failed to encode arg"))
+                    .await
+                    .context(QueryDecimalsSnafu)?;
 
-            // Decode response
-            Decode!(&resp, u8).context(DecodeDecimalsSnafu)
+                // Decode response
+                Decode!(&resp, u8).context(DecodeDecimalsSnafu)
+            }
         },
         //
         // Obtain the symbol of the token
         async {
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_symbol")
-                .with_arg(Encode!(&()).expect("failed to encode arg"))
-                .await
-                .context(QuerySymbolSnafu)?;
+            if let Some(metadata) = &token_metadata_override {
+                Ok(metadata.symbol.to_owned())
+            } else {
+                // Perform query
+                let resp = agent
+                    .query(&cid, "icrc1_symbol")
+                    .with_arg(Encode!(&()).expect("failed to encode arg"))
+                    .await
+                    .context(QuerySymbolSnafu)?;
 
-            // Decode response
-            Decode!(&resp, String).context(DecodeSymbolSnafu)
+                // Decode response
+                Decode!(&resp, String).context(DecodeSymbolSnafu)
+            }
         },
     );
 
@@ -206,7 +212,7 @@ pub async fn transfer(
     let block_index = resp.map_err(|err| match err {
         // Special case for insufficient funds
         Icrc1TransferError::InsufficientFunds { balance } => {
-            let balance = BigDecimal::from_biguint(
+            let balance_amount = BigDecimal::from_biguint(
                 balance.0,       // balance
                 decimals as i64, // decimals
             );
@@ -217,9 +223,14 @@ pub async fn transfer(
             );
 
             TokenTransferError::InsufficientFunds {
-                symbol: symbol.clone(),
-                balance,
-                required: amount.clone() + fee_decimal,
+                balance: TokenAmount {
+                    amount: balance_amount,
+                    symbol: symbol.clone(),
+                },
+                required: TokenAmount {
+                    amount: amount.clone() + fee_decimal,
+                    symbol: symbol.clone(),
+                },
             }
         }
 
@@ -230,8 +241,10 @@ pub async fn transfer(
 
     Ok(TransferInfo {
         block_index,
-        amount: display_amount,
-        symbol,
+        transferred: TokenAmount {
+            amount: display_amount,
+            symbol,
+        },
         receiver,
     })
 }

@@ -499,9 +499,9 @@ checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
 
 [[package]]
 name = "bigdecimal"
-version = "0.4.8"
+version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a22f228ab7a1b23027ccc6c350b72868017af7ea8356fbdf19f8d991c690013"
+checksum = "4d6867f1565b3aad85681f1015055b087fcfd840d6aeee6eee7f2da317603695"
 dependencies = [
  "autocfg",
  "libm",
@@ -3215,6 +3215,9 @@ dependencies = [
  "k256",
  "lazy_static",
  "nix 0.30.1",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
  "p256",
  "pem 3.0.5",
  "phf",

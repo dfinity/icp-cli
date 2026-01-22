@@ -4,11 +4,14 @@ use clap::Args;
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
+use crate::commands::parsers::parse_token_amount;
 use crate::operations::token::transfer::transfer;
 
 #[derive(Debug, Args)]
 pub(crate) struct TransferArgs {
-    /// Token amount to transfer
+    /// Token amount to transfer.
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(value_parser = parse_token_amount)]
     pub(crate) amount: BigDecimal,
 
     /// The receiver of the token transfer
@@ -39,11 +42,8 @@ pub(crate) async fn exec(
 
     // Output information
     let _ = ctx.term.write_line(&format!(
-        "Transferred {} {} to {} in block {}",
-        transfer_info.amount,
-        transfer_info.symbol,
-        transfer_info.receiver,
-        transfer_info.block_index
+        "Transferred {} to {} in block {}",
+        transfer_info.transferred, transfer_info.receiver, transfer_info.block_index
     ));
 
     Ok(())

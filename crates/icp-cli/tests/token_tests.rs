@@ -43,13 +43,13 @@ async fn token_balance() {
         .current_dir(&project_dir)
         .args([
             "token",
-            "tcycles",
+            "cycles",
             "balance",
             "--environment",
             "random-environment",
         ])
         .assert()
-        .stdout(contains("Balance: 0 TCYCLES"))
+        .stdout(contains("Balance: 0 cycles"))
         .success();
 
     // mint icp to identity
@@ -151,16 +151,16 @@ async fn token_transfer() {
         .current_dir(&project_dir)
         .args([
             "token",
-            "tcycles",
+            "cycles",
             "transfer",
-            "2",
+            "2t",
             &bob_principal.to_string(),
             "--environment",
             "random-environment",
         ])
         .assert()
         .stdout(contains(format!(
-            "Transferred 2.000000000000 TCYCLES to {bob_principal}"
+            "Transferred 2_000_000_000_000 cycles to {bob_principal}"
         )))
         .success();
     icp_client.use_identity("bob");
@@ -168,6 +168,6 @@ async fn token_transfer() {
         .current_dir(&project_dir)
         .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
-        .stdout(contains("Balance: 2.000000000000 TCYCLES"))
+        .stdout(contains("Balance: 2_000_000_000_000 cycles"))
         .success();
 }

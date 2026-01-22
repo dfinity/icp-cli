@@ -39,7 +39,7 @@ async fn cycles_balance() {
         .current_dir(&project_dir)
         .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
-        .stdout(contains("Balance: 0 TCYCLES"))
+        .stdout(contains("Balance: 0 cycles"))
         .success();
 
     // Mint ICP to cycles, specify ICP amount
@@ -58,7 +58,7 @@ async fn cycles_balance() {
         ])
         .assert()
         .stdout(contains(
-            "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",
+            "Minted 3_519_900_000_000 cycles to your account, new balance: 3_519_900_000_000 cycles.",
         ))
         .success();
 
@@ -75,13 +75,13 @@ async fn cycles_balance() {
             "cycles",
             "mint",
             "--cycles",
-            "1000000000",
+            "1T",
             "--environment",
             "random-environment",
         ])
         .assert()
         .stdout(contains(
-            "Minted 0.001000000000 TCYCLES to your account, new balance: 0.001000000000 TCYCLES.",
+            "Minted 1_000_000_006_400 cycles to your account, new balance: 1_000_000_006_400 cycles.",
         ))
         .success();
     ctx.icp()
@@ -90,13 +90,13 @@ async fn cycles_balance() {
             "cycles",
             "mint",
             "--cycles",
-            "1500000000",
+            "1.5t",
             "--environment",
             "random-environment",
         ])
         .assert()
         .stdout(contains(
-            "Minted 0.001500016000 TCYCLES to your account, new balance: 0.002500016000 TCYCLES.",
+            "Minted 1_500_000_025_600 cycles to your account, new balance: 2_500_000_032_000 cycles.",
         ))
         .success();
 }
@@ -141,7 +141,7 @@ async fn cycles_mint_with_explicit_network() {
         ])
         .assert()
         .stdout(contains(
-            "Minted 3.519900000000 TCYCLES to your account, new balance: 3.519900000000 TCYCLES.",
+            "Minted 3_519_900_000_000 cycles to your account, new balance: 3_519_900_000_000 cycles.",
         ))
         .success();
 }

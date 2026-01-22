@@ -328,7 +328,7 @@ async fn identity_storage_forms() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

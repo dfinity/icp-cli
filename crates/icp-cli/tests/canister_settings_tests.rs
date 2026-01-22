@@ -34,7 +34,7 @@ async fn canister_settings_update_controllers() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -340,7 +340,7 @@ async fn canister_settings_update_log_visibility() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -657,7 +657,7 @@ async fn canister_settings_update_miscellaneous() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -780,7 +780,7 @@ async fn canister_settings_update_environment_variables() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -965,7 +965,7 @@ async fn canister_settings_sync() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -1034,7 +1034,7 @@ async fn canister_settings_sync() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             settings:
 
         {NETWORK_RANDOM_PORT}
@@ -1047,7 +1047,7 @@ async fn canister_settings_sync() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             settings:
               wasm_memory_limit: ~
 
@@ -1061,7 +1061,7 @@ async fn canister_settings_sync() {
             build:
               steps:
                 - type: script
-                  command: cp {wasm} "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             settings:
               wasm_memory_limit: 4000000000
 

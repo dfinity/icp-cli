@@ -2,7 +2,7 @@ use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
 use console::Term;
-use icp::prelude::*;
+use icp::{context::TermWriter, prelude::*};
 use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
@@ -11,7 +11,7 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    logging::{TermWriter, debug_layer},
+    logging::debug_layer,
     telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
@@ -109,14 +109,10 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    // Printing for user-facing messages
-    let term = Term::read_write_pair(
-        std::io::stdin(),
-        TermWriter {
-            debug: cli.debug,
-            writer: Box::new(std::io::stdout()),
-        },
-    );
+    let term = TermWriter {
+        debug: cli.debug,
+        raw_term: Term::stdout(),
+    };
 
     // Logging and Telemetry
     let (debug_layer, event_layer) = (
@@ -130,10 +126,7 @@ async fn main() -> Result<(), Error> {
                 filter::filter_fn(|_| true)
                     //
                     // Only log if `debug` is set
-                    .and(filter::filter_fn(move |_| cli.debug))
-                    //
-                    // Only log if event level is debug
-                    .and(filter::filter_fn(|md| md.level() == &Level::DEBUG)),
+                    .and(filter::filter_fn(move |_| cli.debug)),
             ),
         )
         .with(

@@ -16,11 +16,20 @@ icp-cli controls the lifecycle — starting, stopping, and resetting:
 networks:
   - name: local
     mode: managed
+    ii: true
     gateway:
       host: 127.0.0.1
       port: 8000
 ```
-Managed networks can run natively on your machine or inside a docker container.
+
+Managed networks can run natively on your machine or inside a [docker container](../guides/containerized-networks.md).
+
+Unless a custom Docker image is used, the following settings can be specified:
+
+* `ii` (bool): Enable the Internet Identity canister
+* `nns` (bool): Enable the NNS and SNS system
+* `artificial-delay-ms` (int): Add artificial latency to update calls to simulate mainnet conditions
+* `subnets` ([]string): Configure the subnet layout (by default, one application subnet is created)
 
 Use managed networks for local development and testing.
 

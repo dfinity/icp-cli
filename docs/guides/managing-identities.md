@@ -8,7 +8,12 @@ An identity consists of:
 - A **private key** — Used to sign messages
 - A **principal** — Your public identifier derived from the key
 
-Identities are stored in `~/.config/icp/identity/`.
+Identity data is stored in OS-specific locations:
+- **macOS**: `~/Library/Application Support/org.dfinity.icp-cli/identity/`
+- **Linux**: `~/.local/share/icp-cli/identity/`
+- **Windows**: `%APPDATA%\icp-cli\data\identity\`
+
+Set `ICP_HOME` to use a custom base directory instead (e.g., `ICP_HOME=/custom/path` stores identities in `/custom/path/identity/`).
 
 ## Creating an Identity
 

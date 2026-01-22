@@ -1,0 +1,19 @@
+@layer overrides {
+  .sl-link-button {
+    border-radius: var(--dfn-border-radius);
+  }
+
+  .card {
+    border-radius: var(--dfn-border-radius);
+  }
+
+  /* Ensure dropdowns in the title area (e.g., ProjectSwitcher) are not clipped */
+  .header .title-wrapper {
+    overflow: visible;
+  }
+
+  .sl-markdown-content :not(pre) > code {
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+  }
+}

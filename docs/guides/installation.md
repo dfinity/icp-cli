@@ -78,7 +78,7 @@ Then restart your shell or run `source ~/.bashrc` (or `~/.zshrc`).
 
 On Windows, Docker Desktop must be running before starting a local network. Ensure:
 - Docker Desktop is installed and running
-- For manual `dockerd` setup with WSL2, see [containers.md](../containers.md)
+- For manual `dockerd` setup with WSL2, see the [containerized networks guide](containerized-networks.md)
 
 **Network launcher download fails**
 

@@ -537,7 +537,7 @@ async fn canister_install_with_environment_settings_override() {
 #[tokio::test]
 async fn canister_install_large_wasm_chunked() {
     // Generate large.wasm which is greater than 3MB
-    let assets_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("assets");
     std::process::Command::new("bash")

@@ -534,6 +534,7 @@ async fn canister_install_with_environment_settings_override() {
     );
 }
 
+#[cfg(unix)] // requires bash and wasm-tools in PATH
 #[tokio::test]
 async fn canister_install_large_wasm_chunked() {
     // Generate large.wasm which is greater than 3MB

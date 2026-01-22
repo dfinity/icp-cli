@@ -3,6 +3,7 @@ use std::{
     env,
     ffi::OsString,
     fs::{self, create_dir_all},
+    process::Stdio,
 };
 
 use assert_cmd::Command;
@@ -10,7 +11,6 @@ use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use candid::Principal;
 use ic_agent::Agent;
 use icp::{
-    directories::{Access, Directories},
     network::managed::{
         launcher::{NetworkInstance, wait_for_launcher_status},
         run::initialize_network,
@@ -47,6 +47,10 @@ impl TestContext {
         let mock_cred_dir = home_dir.path().join("mock-keyring");
         fs::create_dir(&mock_cred_dir).expect("failed to create mock keyring dir");
 
+        // App files
+        let icp_home_dir = home_dir.path().join("icp");
+        fs::create_dir(&icp_home_dir).expect("failed to create icp home dir");
+
         eprintln!("Test environment home directory: {}", home_dir.path());
 
         // OS Path
@@ -72,15 +76,21 @@ impl TestContext {
 
         // Isolate the command
         cmd.current_dir(self.home_path());
-        cmd.env("HOME", self.home_path());
+        // Isolate the whole user directory in Unix, test in normal mode
+        #[cfg(unix)]
+        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        // Run in portable mode on Windows, the user directory cannot be mocked
+        #[cfg(windows)]
+        cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.env("PATH", self.os_path.clone());
-        cmd.env_remove("ICP_HOME");
         cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
 
         cmd
     }
 
+    #[cfg(unix)]
     pub(crate) async fn launcher_path(&self) -> PathBuf {
+        use icp::directories::{Access, Directories};
         if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
             PathBuf::from(var)
         } else {
@@ -109,6 +119,17 @@ impl TestContext {
                 .unwrap();
                 path
             }
+        }
+    }
+
+    pub(crate) async fn launcher_path_or_nothing(&self) -> PathBuf {
+        #[cfg(unix)]
+        {
+            self.launcher_path().await
+        }
+        #[cfg(windows)]
+        {
+            PathBuf::new()
         }
     }
 
@@ -174,15 +195,19 @@ impl TestContext {
     pub(crate) async fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
         let icp_path = env!("CARGO_BIN_EXE_icp");
         let mut cmd = std::process::Command::new(icp_path);
-        cmd.current_dir(project_dir)
-            .env("HOME", self.home_path())
-            .env_remove("ICP_HOME")
-            .arg("network")
-            .arg("start")
-            .arg(name);
-
-        let launcher_path = self.launcher_path().await;
-        cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
+        cmd.current_dir(project_dir);
+        // isolate the whole user directory in Unix, test in normal mode
+        #[cfg(unix)]
+        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        // run in portable mode on Windows, the user directory cannot be mocked
+        #[cfg(windows)]
+        cmd.env("ICP_HOME", self.home_path().join("icp"));
+        cmd.arg("network").arg("start").arg(name);
+        #[cfg(unix)]
+        {
+            let launcher_path = self.launcher_path().await;
+            cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
+        }
 
         eprintln!("Running network in {project_dir}");
 
@@ -222,8 +247,6 @@ impl TestContext {
         project_dir: &Path,
         flags: &[&str],
     ) -> ChildGuard {
-        let launcher_path = self.launcher_path().await;
-
         // Create network directory structure
         let network_dir = project_dir
             .join(".icp")
@@ -241,26 +264,93 @@ impl TestContext {
         eprintln!("Starting network with custom flags");
 
         // Spawn launcher
-        let mut cmd = std::process::Command::new(&launcher_path);
-        cmd.args(["--interface-version=1.0.0", "--status-dir"]);
-        cmd.arg(&launcher_dir);
-        cmd.args(flags);
-        cmd.stdout(std::process::Stdio::inherit());
-        cmd.stderr(std::process::Stdio::inherit());
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0);
-        }
+        let mut cmd = {
+            #[cfg(unix)]
+            {
+                let launcher_path = self.launcher_path().await;
+                let mut cmd = std::process::Command::new(&launcher_path);
+                cmd.args(["--interface-version=1.0.0", "--status-dir"]);
+                cmd.arg(&launcher_dir);
+                cmd.args(flags);
+                cmd.stdout(Stdio::inherit());
+                cmd.stderr(Stdio::inherit());
+                use std::os::unix::process::CommandExt;
+                cmd.process_group(0);
+                cmd
+            }
+            #[cfg(windows)]
+            {
+                let distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO");
+                let launcher_dir_param = if let Ok(distro) = distro {
+                    wslpath2::convert(
+                        launcher_dir.as_str(),
+                        Some(&distro),
+                        wslpath2::Conversion::WindowsToWsl,
+                        true,
+                    )
+                    .expect("Failed to convert launcher dir to WSL path")
+                } else {
+                    launcher_dir.to_string()
+                };
+                let mut cmd = std::process::Command::new("docker");
+                cmd.args([
+                    "run",
+                    "--rm",
+                    "--platform",
+                    if cfg!(target_arch = "aarch64") {
+                        "linux/arm64"
+                    } else {
+                        "linux/amd64"
+                    },
+                    "-v",
+                    &format!("{launcher_dir_param}:/app/status"),
+                    "--cidfile",
+                    network_dir.join("container-id").as_str(),
+                    "-P",
+                    "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
+                ]);
+                cmd.args(flags);
+                cmd.stdout(Stdio::inherit());
+                cmd.stderr(Stdio::inherit());
+                cmd
+            }
+        };
         let watcher =
             wait_for_launcher_status(&launcher_dir).expect("Failed to watch launcher status");
-        let child = cmd.spawn().expect("failed to spawn launcher");
+        let guard = ChildGuard::spawn(&mut cmd).expect("Failed to spawn network launcher");
+        let child = &guard.child;
         let launcher_pid = child.id();
 
         // Wait for port file using the function from icp-network
         let status = watcher.await.expect("Timeout waiting for port file");
-        let gateway_port = status.gateway_port;
+        let gateway_port = {
+            #[cfg(unix)]
+            {
+                status.gateway_port
+            }
+            #[cfg(windows)]
+            {
+                let container_id = fs::read_to_string(network_dir.join("container-id"))
+                    .expect("Failed to read container ID file");
+                let container_id = container_id.trim();
+                let out = Command::new("docker")
+                    .args([
+                        "port",
+                        container_id,
+                        &format!("{}/tcp", status.gateway_port),
+                    ])
+                    .output()
+                    .expect("Failed to get gateway port from docker")
+                    .stdout;
+                let out = str::from_utf8(&out).unwrap().trim();
+                // Output is like "0.0.0.0:32768" - extract the port
+                out.rsplit(':')
+                    .next()
+                    .expect("Invalid docker port output")
+                    .parse::<u16>()
+                    .expect("Failed to parse port from docker port output")
+            }
+        };
         eprintln!("Gateway started on port {gateway_port}");
 
         let instance = NetworkInstance {
@@ -315,8 +405,7 @@ impl TestContext {
                     .unwrap(),
             )
             .expect("Gateway URL should not be already initialized");
-        // Wrap child in ChildGuard
-        ChildGuard { child }
+        guard
     }
 
     pub(crate) fn ping_until_healthy(&self, project_dir: &Path, name: &str) {
@@ -345,7 +434,7 @@ impl TestContext {
             .join(network_name)
             .join("descriptor.json");
         let start_time = std::time::Instant::now();
-        let timeout = 45;
+        let timeout = 300;
         eprintln!("Waiting for network descriptor at {descriptor_path} - limit {timeout}s");
         let network_descriptor = loop {
             let elapsed = start_time.elapsed().as_secs();
@@ -425,8 +514,18 @@ impl TestContext {
     }
 
     pub(crate) fn docker_pull_network(&self) {
+        let platform = if cfg!(target_arch = "aarch64") {
+            "linux/arm64"
+        } else {
+            "linux/amd64"
+        };
         Command::new("docker")
-            .args(["pull", "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0"])
+            .args([
+                "pull",
+                "--platform",
+                platform,
+                "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
+            ])
             .assert()
             .success();
     }

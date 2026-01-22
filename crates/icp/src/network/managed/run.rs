@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Gateway, Managed, ManagedMode, NetworkDirectory, Port,
+        Gateway, Managed, ManagedImageConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
@@ -120,18 +120,22 @@ async fn run_network_launcher(
     verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
+    let port = if let ManagedMode::Launcher {
+        gateway: Gateway {
+            port: Port::Fixed(port),
+            ..
+        },
+    } = &config.mode
+    {
+        Some(*port)
+    } else {
+        None
+    };
     // hold port_claim until the end of this function
-    let (mut guard, port, _port_claim) = network_root
+    let (mut guard, instance, gateway, locator, _port_claim) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let ManagedMode::Launcher {
-                gateway:
-                    Gateway {
-                        port: Port::Fixed(port),
-                        ..
-                    },
-            } = &config.mode
-            {
-                Some(nd.port(*port)?.into_write().await?)
+            let port_lock = if let Some(port) = port {
+                Some(nd.port(port)?.into_write().await?)
             } else {
                 None
             };
@@ -147,15 +151,24 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            eprintln!("Starting network");
-            let (guard, instance, gateway, locator) = match &config.mode {
+            match &config.mode {
                 ManagedMode::Image(image_config) => {
                     let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: false,
                     };
-                    (ShutdownGuard::Container(guard), instance, gateway, locator)
+                    Ok((ShutdownGuard::Container(guard), instance, gateway, locator, port_claim))
+                }
+                ManagedMode::Launcher { gateway } if cfg!(windows) /* todo machine setting for unix */ => {
+                    let image_config = transform_native_launcher_to_container(gateway.clone());
+                    let (guard, instance, locator) =
+                        spawn_docker_launcher(&image_config).await?;
+                    let gateway = NetworkDescriptorGatewayPort {
+                        port: instance.gateway_port,
+                        fixed: false,
+                    };
+                    Ok((ShutdownGuard::Container(guard), instance, gateway, locator, port_claim))
                 }
                 ManagedMode::Launcher { gateway } => {
                     if root.state_dir().exists() {
@@ -175,26 +188,36 @@ async fn run_network_launcher(
                         &root.state_dir(),
                     )
                     .await?;
-                    if background {
-                        // background means we're using stdio files - otherwise the launcher already prints this
-                        eprintln!("Network started on port {}", instance.gateway_port);
-                    }
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(gateway.port, Port::Fixed(_)),
                     };
-                    (ShutdownGuard::Process(child), instance, gateway, locator)
+                    Ok((ShutdownGuard::Process(child), instance, gateway, locator, port_claim))
                 }
+            }
+        }).await??;
+
+    if background {
+        // background means we're using stdio files - otherwise the launcher already prints this
+        eprintln!("Network started on port {}", instance.gateway_port);
+    }
+    let candid_ui_canister_id = initialize_network(
+        &format!("http://localhost:{}", instance.gateway_port)
+            .parse()
+            .unwrap(),
+        &instance.root_key,
+        seed_accounts,
+        candid_ui_wasm,
+    )
+    .await?;
+
+    network_root
+        .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
+            let port_lock = if let Some(port) = port {
+                Some(nd.port(port)?.into_write().await?)
+            } else {
+                None
             };
-            let candid_ui_canister_id = initialize_network(
-                &format!("http://localhost:{}", instance.gateway_port)
-                    .parse()
-                    .unwrap(),
-                &instance.root_key,
-                seed_accounts,
-                candid_ui_wasm,
-            )
-            .await?;
             let descriptor = NetworkDescriptorModel {
                 v: "1".to_string(),
                 id: Uuid::new_v4(),
@@ -208,14 +231,9 @@ async fn run_network_launcher(
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
             };
-
-            save_network_descriptors(
-                root,
-                port_lock.as_ref().map(|lock| lock.as_ref()),
-                &descriptor,
-            )
-            .await?;
-            Ok((guard, instance.gateway_port, port_claim))
+            save_network_descriptors(root, port_lock.as_ref().map(|p| p.as_ref()), &descriptor)
+                .await?;
+            Ok(())
         })
         .await??;
     if background {
@@ -228,9 +246,30 @@ async fn run_network_launcher(
         guard.async_drop().await;
 
         let _ = nd.cleanup_project_network_descriptor().await;
-        let _ = nd.cleanup_port_descriptor(Some(port)).await;
+        let _ = nd.cleanup_port_descriptor(port).await;
     }
     Ok(())
+}
+
+fn transform_native_launcher_to_container(gateway: Gateway) -> ManagedImageConfig {
+    let port = match gateway.port {
+        Port::Fixed(port) => port,
+        Port::Random => 0,
+    };
+    ManagedImageConfig {
+        image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+        port_mapping: vec![format!("{port}:4943")],
+        rm_on_exit: true,
+        args: vec!["--ii".to_string()],
+        entrypoint: None,
+        environment: vec![],
+        volumes: vec![],
+        platform: None,
+        user: None,
+        shm_size: None,
+        status_dir: "/app/status".to_string(),
+        mounts: vec![],
+    }
 }
 
 enum ShutdownGuard {
@@ -314,13 +353,13 @@ fn safe_eprintln(msg: &str) {
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
         ShutdownGuard::Container(_) => {
-            _ = ctrl_c().await;
+            stop_signal().await;
             safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {
             select!(
-                _ = ctrl_c() => {
+                _ = stop_signal() => {
                     safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
                     ShutdownReason::CtrlC
                 }
@@ -330,6 +369,28 @@ async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
                 }
             )
         }
+    }
+}
+
+#[cfg(unix)]
+async fn stop_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+    select! {
+        _ = ctrl_c() => {},
+        _ = sigterm.recv() => {},
+    }
+}
+
+#[cfg(windows)]
+async fn stop_signal() {
+    use tokio::signal::windows::{ctrl_break, ctrl_close};
+    let mut ctrl_break = ctrl_break().unwrap();
+    let mut ctrl_close = ctrl_close().unwrap();
+    select! {
+        _ = ctrl_c() => {},
+        _ = ctrl_break.recv() => {},
+        _ = ctrl_close.recv() => {},
     }
 }
 

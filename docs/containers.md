@@ -50,7 +50,7 @@ The network is expected to have the ICP ledger, the cycles ledger, and the cycle
 
 The gateway port of the network must be bound to a host port (permitted to be 0). Containerized network configurations can have the following fields:
 
-- `port-bindings`: []string, mandatory if an image is specified, in `host:container` format. There must be an entry for the gateway port.
+- `port-mapping`: []string, mandatory if an image is specified, in `host:container` format. There must be an entry for the gateway port.
 - `rm-on-exit`: bool, default false, deletes the container when the network is stopped
 - `args`: []string, appended to the container's entrypoint
 - `entrypoint`: []string, entrypoint executable for the container
@@ -61,3 +61,13 @@ The gateway port of the network must be bound to a host port (permitted to be 0)
 - `user`: string, the user to run the container as, in `user:group` format
 - `shm-size`: uint, size of `/dev/shm` in bytes.
 - `status-dir`: string, default `/app/status`, the status directory mentioned above.
+
+## Windows
+
+`icp-cli` automatically integrates with Docker Desktop on Windows (works with both Hyper-V and WSL2 backends). No configuration is needed—it should Just Work.
+
+### Advanced: Manual `dockerd` in WSL2
+
+If you want to use a manually instantiated `dockerd` in a WSL2 instance (instead of Docker Desktop), you can set:
+- `ICP_CLI_DOCKER_WSL2_DISTRO=<distro>` — the WSL2 distribution name running dockerd
+- `DOCKER_HOST=tcp://<ip>:<port>` — the TCP address where dockerd is listening

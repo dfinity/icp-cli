@@ -532,13 +532,20 @@ async fn canister_install_with_environment_settings_override() {
 
 #[tokio::test]
 async fn canister_install_large_wasm_chunked() {
+    // Generate large.wasm which is greater than 3MB
+    std::process::Command::new("bash")
+        .current_dir(env!("CARGO_MANIFEST_DIR").to_owned() + "/tests/assets")
+        .arg("generate_large_wasm.sh")
+        .status()
+        .expect("failed to run generate_large_wasm.sh");
+
     let ctx = TestContext::new();
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
 
     // Use the 3MB wasm file to test chunked installation
-    let wasm = ctx.make_asset("3mb_hello_world.wasm");
+    let wasm = ctx.make_asset("large.wasm");
 
     // Project manifest
     let pm = formatdoc! {r#"
@@ -595,19 +602,17 @@ async fn canister_install_large_wasm_chunked() {
         .assert()
         .success();
 
-    // Verify the installation by calling the canister
+    // Verify the installation by checking the canister status
     ctx.icp()
         .current_dir(&project_dir)
         .args([
             "canister",
-            "call",
+            "status",
             "--environment",
             "random-environment",
             "large-canister",
-            "greet",
-            "(\"chunked\")",
         ])
         .assert()
         .success()
-        .stdout(eq("(\"Hello, chunked!\")").trim());
+        .stdout(contains("Status: Running"));
 }

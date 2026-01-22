@@ -102,6 +102,16 @@ jobs:
           which ic-wasm
           ic-wasm --version
 
+      - name: Install wasm-tools
+        uses: taiki-e/install-action@3ae7038495f79cd771208b38319ff728a8b24538 # v2.67.3
+        with:
+          tool: wasm-tools
+
+      - name: Verify wasm-tools installation
+        run: |
+          which wasm-tools
+          wasm-tools --version
+
       - name: install network launcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

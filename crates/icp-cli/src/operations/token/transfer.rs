@@ -72,7 +72,7 @@ pub struct TransferInfo {
 /// - Returns transfer information including the block index
 ///
 /// The token parameter supports two flows:
-/// 1. Specifying a known token name (e.g., "icp", "tcycles") which will be looked up
+/// 1. Specifying a known token name (e.g., "icp", "cycles") which will be looked up
 /// 2. Specifying a canister ID directly for any ICRC-1 compatible ledger
 ///
 /// # Arguments

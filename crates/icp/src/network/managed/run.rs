@@ -368,7 +368,7 @@ pub async fn initialize_network(
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
     candid_ui_wasm: Option<&[u8]>,
 ) -> Result<Option<Principal>, InitializeNetworkError> {
-    eprintln!("Seeding ICP and TCYCLES account balances");
+    eprintln!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
         .with_identity(AnonymousIdentity)
@@ -390,12 +390,12 @@ pub async fn initialize_network(
                 acquire_icp_to_account(&agent, account, icp_amount)
             }),
     );
-    let cycles_amount = 1_000_000_000_000_000u128; // 1k TCYCLES
+    let cycles_amount = 1_000_000_000_000_000u128; // 1_000T cycles
     let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
 
     let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
         debug!(
-            "Seeding {} TCYCLES to account {}",
+            "Seeding {}T cycles to account {}",
             display_cycles_amount, account
         );
         mint_cycles_to_account(&agent, account, cycles_amount, icp_xdr_conversion_rate)
@@ -593,7 +593,7 @@ async fn install_candid_ui(
     candid_ui_wasm: &[u8],
 ) -> Result<Principal, InitializeNetworkError> {
     debug!("Creating canister for Candid UI");
-    let amount = 10_000_000_000_000u64; // 10 TCYCLES
+    let amount = 10 * TRILLION;
     let response = agent
         .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
         .with_arg(
@@ -620,7 +620,7 @@ async fn install_candid_ui(
             return Err(InitializeNetworkError::CandidUI {
                 error: format!(
                     "Failed to create canister for Candid UI: {}",
-                    err.format_error(amount as u128)
+                    err.format_error(amount)
                 ),
             });
         }

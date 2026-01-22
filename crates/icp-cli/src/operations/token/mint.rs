@@ -72,7 +72,7 @@ pub struct MintInfo {
 ///
 /// # Returns
 ///
-/// A `MintInfo` struct containing the deposited amount (minus fees) and new balance in TCYCLES
+/// A `MintInfo` struct containing the deposited amount (minus fees) and new balance
 pub async fn mint_cycles(
     agent: &Agent,
     icp_amount: Option<&BigDecimal>,

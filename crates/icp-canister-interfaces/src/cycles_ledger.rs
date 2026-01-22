@@ -1,4 +1,3 @@
-use bigdecimal::BigDecimal;
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
 
@@ -214,9 +213,9 @@ impl WithdrawError {
             WithdrawError::TooOld => "created_at_time is too old.".to_string(),
             WithdrawError::InsufficientFunds { balance } => {
                 format!(
-                    "Insufficient cycles. Requested: {}T cycles, balance: {}T cycles.",
-                    BigDecimal::new(requested_amount.into(), CYCLES_LEDGER_DECIMALS),
-                    BigDecimal::from_biguint(balance.0.clone(), CYCLES_LEDGER_DECIMALS)
+                    "Insufficient cycles. Requested: {} cycles, balance: {} cycles.",
+                    Nat::from(requested_amount), // Convert to Nat to get underscores in the output
+                    balance.0
                 )
             }
         }

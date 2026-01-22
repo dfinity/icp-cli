@@ -4,11 +4,12 @@ use candid::{Decode, Encode, Nat};
 use clap::Args;
 use icp::context::Context;
 use icp_canister_interfaces::cycles_ledger::{
-    CYCLES_LEDGER_DECIMALS, CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
+    CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
 };
 
 use crate::commands::args;
 use crate::commands::parsers::parse_cycles_amount;
+use crate::operations::token::TokenAmount;
 
 #[derive(Debug, Args)]
 pub(crate) struct TopUpArgs {
@@ -57,10 +58,14 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
         bail!("failed to top up: {}", err.format_error(args.amount));
     }
 
+    let amount = TokenAmount {
+        amount: BigDecimal::new(args.amount.into(), 0),
+        symbol: "cycles".to_string(),
+    };
+
     let _ = ctx.term.write_line(&format!(
-        "Topped up canister {} with {}T cycles",
-        args.cmd_args.canister,
-        BigDecimal::new(args.amount.into(), CYCLES_LEDGER_DECIMALS)
+        "Topped up canister {} with {}",
+        args.cmd_args.canister, amount
     ));
 
     Ok(())

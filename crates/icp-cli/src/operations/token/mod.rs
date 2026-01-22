@@ -1,5 +1,7 @@
 use bigdecimal::BigDecimal;
+use candid::Nat;
 use icp_canister_interfaces::{cycles_ledger::CYCLES_LEDGER_CID, icp_ledger::ICP_LEDGER_CID};
+use num_bigint::ToBigInt;
 use phf::phf_map;
 use std::fmt;
 
@@ -49,20 +51,12 @@ impl fmt::Display for TokenAmount {
 }
 
 fn format_integer_with_underscores(amount: &BigDecimal) -> String {
-    let amount_str = amount.to_string();
-    let chars: Vec<char> = amount_str.chars().collect();
-    let len = chars.len();
-    let mut result = String::new();
-
-    for (i, ch) in chars.iter().enumerate() {
-        // Add underscore before this character if:
-        // - We're not at the start
-        // - The number of remaining characters (including current) is divisible by 3
-        if i > 0 && (len - i).is_multiple_of(3) {
-            result.push('_');
-        }
-        result.push(*ch);
+    // Nat displays numbers with underscores
+    if let Some(bigint) = amount.to_bigint()
+        && let Some(biguint) = bigint.to_biguint()
+    {
+        return format!("{}", Nat::from(biguint));
     }
-
-    result
+    // Fallback to plain string if conversion fails
+    amount.to_string()
 }

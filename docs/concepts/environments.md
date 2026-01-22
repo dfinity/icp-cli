@@ -59,6 +59,7 @@ networks:
     gateway:
       port: 9999  # Different port
     ii: true # Use the Internet Identity canister
+    artificial-delay-ms: 1000 # Slow down the network to simulate mainnet latency
 ```
 
 Or connect to an existing network instead of managing one:

@@ -4,7 +4,13 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   schedule:
     # * is a special character in YAML so you have to quote this string
     - cron: "0 14 * * *"

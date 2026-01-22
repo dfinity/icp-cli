@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Add IC options to network manifest (`ii`, `nns`, `subnets`, `artificial-delay-ms`)
 * feat: Release for Windows
 * feat: Add safety controls for `--set-controller` and `--remove-controller`
   * Warn and prompt for confirmation when removing yourself from controllers

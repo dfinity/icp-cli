@@ -451,7 +451,12 @@ async fn network_starts_with_canisters_preset() {
     write_string(
         &project_dir.join("icp.yaml"), // path
         &formatdoc! {r#"
-            {NETWORK_RANDOM_PORT}
+            networks:
+              - name: random-network
+                mode: managed
+                gateway:
+                    port: 0
+                ii: true
             {ENVIRONMENT_RANDOM_PORT}
         "#}, // contents
     )

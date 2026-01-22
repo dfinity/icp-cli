@@ -260,7 +260,13 @@ mod tests {
                 networks: vec![Item::Manifest(NetworkManifest {
                     name: "my-network".to_string(),
                     configuration: Mode::Managed(Managed {
-                        mode: Box::new(ManagedMode::Launcher { gateway: None }),
+                        mode: Box::new(ManagedMode::Launcher {
+                            gateway: None,
+                            artificial_delay_ms: None,
+                            ii: None,
+                            nns: None,
+                            subnets: None
+                        }),
                     }),
                 })],
                 environments: vec![],

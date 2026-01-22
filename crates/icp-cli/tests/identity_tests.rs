@@ -405,3 +405,34 @@ async fn identity_storage_forms() {
         .success()
         .stdout(eq("(\"Hello, password!\")").trim());
 }
+
+#[test]
+fn identity_account_id() {
+    let ctx = TestContext::new();
+
+    // Test account-id for anonymous identity (default in test context)
+    ctx.icp()
+        .args(["identity", "account-id"])
+        .assert()
+        .success()
+        .stdout(eq("1c7a48ba6a562aa9eaa2481a9049cdf0433b9738c992d698c31d8abf89cadc79").trim());
+
+    // Test account-id with --of-principal flag
+    ctx.icp()
+        .args(["identity", "account-id", "--of-principal", "aaaaa-aa"])
+        .assert()
+        .success()
+        .stdout(eq("2d0e897f7e862d2b57d9bc9ea5c65f9a24ac6c074575f47898314b8d6cb0929d").trim());
+
+    // Import an identity and test its account-id
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "account-id", "--identity", "alice"])
+        .assert()
+        .success()
+        .stdout(eq("4f3d4b40cdb852732601fccf8bd24dffe44957a647cb867913e982d98cf85676").trim());
+}

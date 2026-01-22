@@ -28,6 +28,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp environment`↴](#icp-environment)
 * [`icp environment list`↴](#icp-environment-list)
 * [`icp identity`↴](#icp-identity)
+* [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
 * [`icp identity import`↴](#icp-identity-import)
 * [`icp identity list`↴](#icp-identity-list)
@@ -508,11 +509,25 @@ Manage your identities
 
 ###### **Subcommands:**
 
+* `account-id` — Display the ICP ledger account identifier for the current identity
 * `default` — Display the currently selected identity
 * `import` — Import a new identity
 * `list` — List the identities
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
+
+
+
+## `icp identity account-id`
+
+Display the ICP ledger account identifier for the current identity
+
+**Usage:** `icp identity account-id [OPTIONS]`
+
+###### **Options:**
+
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--of-principal <OF_PRINCIPAL>` — Convert this Principal instead of the current identity's Principal
 
 
 

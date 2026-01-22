@@ -13,6 +13,8 @@
   * The `--mainnet` and `--ic` flags are removed. Use `-n/--network ic`, `-e/--environment ic` instead.
 * feat: Allow overriding the implicit `local` network and environment.
 * feat: Allow installing WASMs that are larger than 2MB
+* feat: Add `icp identity account-id` command to display the ICP ledger account identifier
+  * Supports `--of-principal` flag to convert a specific principal instead of the current identity
 
 # v0.1.0-beta.3
 

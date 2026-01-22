@@ -1,5 +1,6 @@
 use clap::{Subcommand, ValueEnum};
 
+pub(crate) mod account_id;
 pub(crate) mod default;
 pub(crate) mod import;
 pub(crate) mod list;
@@ -8,6 +9,9 @@ pub(crate) mod principal;
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Display the ICP ledger account identifier for the current identity
+    AccountId(account_id::AccountIdArgs),
+
     /// Display the currently selected identity
     Default(default::DefaultArgs),
 

@@ -126,10 +126,7 @@ async fn main() -> Result<(), Error> {
                 filter::filter_fn(|_| true)
                     //
                     // Only log if `debug` is set
-                    .and(filter::filter_fn(move |_| cli.debug))
-                    //
-                    // Only log if event level is debug
-                    .and(filter::filter_fn(|md| md.level() == &Level::DEBUG)),
+                    .and(filter::filter_fn(move |_| cli.debug)),
             ),
         )
         .with(

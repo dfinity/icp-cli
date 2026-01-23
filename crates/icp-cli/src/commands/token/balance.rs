@@ -5,6 +5,7 @@ use crate::commands::args::TokenCommandArgs;
 use crate::operations::token::balance::get_balance;
 
 #[derive(Args, Clone, Debug)]
+#[command(override_usage = "icp token [TOKEN|LEDGER_ID] balance [OPTIONS]")]
 pub(crate) struct BalanceArgs {
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,

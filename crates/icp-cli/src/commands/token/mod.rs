@@ -5,9 +5,9 @@ pub(crate) mod transfer;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Command {
-    /// The token to execute the operation on, defaults to `icp`
+    /// The token or ledger canister id to execute the operation on, defaults to `icp`
     #[arg(default_value = "icp")]
-    pub(crate) token: String,
+    pub(crate) token_name_or_ledger_id: String,
 
     #[command(subcommand)]
     pub(crate) command: Commands,

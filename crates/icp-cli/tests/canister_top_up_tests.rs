@@ -83,7 +83,7 @@ async fn canister_top_up() {
         ])
         .assert()
         .stderr(contains(
-            "failed to top up: Insufficient cycles. Requested: 10.000000000000T cycles",
+            "failed to top up: Insufficient cycles. Requested: 10_000_000_000_000 cycles",
         ))
         .failure();
 
@@ -100,7 +100,7 @@ async fn canister_top_up() {
             &format!("{}", 10 * TRILLION),
         ])
         .assert()
-        .stdout(eq("Topped up canister my-canister with 10.000000000000T cycles").trim())
+        .stdout(eq("Topped up canister my-canister with 10_000_000_000_000 cycles").trim())
         .success();
 
     let new_canister_balance = mgmt.canister_status(&canister_id).await.unwrap().0.cycles;

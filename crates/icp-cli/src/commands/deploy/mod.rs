@@ -199,6 +199,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         &env.name,
         target_canisters.clone(),
         canister_list,
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await

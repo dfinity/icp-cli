@@ -1,11 +1,14 @@
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+};
 
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_utils::interfaces::{
     ManagementCanister, management_canister::builders::EnvironmentVariable,
 };
-use icp::Canister;
+use icp::{Canister, context::TermWriter};
 use snafu::Snafu;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
@@ -20,6 +23,19 @@ pub enum BindingEnvVarsOperationError {
 
     #[snafu(display("agent error: {source}"))]
     Agent { source: AgentError },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Canister(s) {names:?} failed to update environment variables."))]
+pub struct SetBindingEnvVarsManyError {
+    names: Vec<String>,
+}
+
+/// Holds error information from a failed environment variable update operation
+struct BindingEnvVarsFailure {
+    canister_name: String,
+    canister_id: Principal,
+    error: BindingEnvVarsOperationError,
 }
 
 pub(crate) async fn set_env_vars_for_canister(
@@ -57,8 +73,9 @@ pub(crate) async fn set_binding_env_vars_many(
     environment_name: &str,
     target_canisters: Vec<(Principal, Canister)>,
     canister_list: BTreeMap<String, Principal>,
+    term: Arc<TermWriter>,
     debug: bool,
-) -> Result<(), BindingEnvVarsOperationError> {
+) -> Result<(), SetBindingEnvVarsManyError> {
     let mgmt = ManagementCanister::create(&agent);
 
     // Check that all the canisters in this environment have an id
@@ -78,9 +95,18 @@ pub(crate) async fn set_binding_env_vars_many(
         .collect();
 
     if !missing_canisters.is_empty() {
-        return CanisterNotCreatedSnafu {
-            environment: environment_name.to_owned(),
-            canister_names: missing_canisters,
+        let _ = term.write_line("");
+        let _ = term.write_line("");
+        let _ = term.write_line(&format!(
+            " ----- Error: Could not find canister id(s) for {} in environment '{}' -----",
+            missing_canisters.join(", "),
+            environment_name
+        ));
+        let _ = term.write_line("Make sure they are created first");
+        let _ = term.write_line("");
+
+        return SetBindingEnvVarsManySnafu {
+            names: missing_canisters,
         }
         .fail();
     }
@@ -95,6 +121,7 @@ pub(crate) async fn set_binding_env_vars_many(
 
     for (cid, info) in target_canisters {
         let pb = progress_manager.create_progress_bar(&info.name);
+        let canister_name = info.name.clone();
 
         let settings_fn = {
             let mgmt = mgmt.clone();
@@ -108,18 +135,51 @@ pub(crate) async fn set_binding_env_vars_many(
         };
 
         futs.push_back(async move {
-            ProgressManager::execute_with_progress(
+            let result = ProgressManager::execute_with_progress(
                 &pb,
                 settings_fn,
                 || "Environment variables updated successfully".to_string(),
                 |err| format!("Failed to update environment variables: {err}"),
             )
-            .await
+            .await;
+
+            // Map error to include canister context for deferred printing
+            result.map_err(|error| BindingEnvVarsFailure {
+                canister_name,
+                canister_id: cid,
+                error,
+            })
         });
     }
 
+    // Consume the set of futures and collect errors
+    let mut errors: Vec<BindingEnvVarsFailure> = Vec::new();
     while let Some(res) = futs.next().await {
-        res?;
+        if let Err(failure) = res {
+            errors.push(failure);
+        }
+    }
+
+    if !errors.is_empty() {
+        // Print all errors in batch
+        for failure in &errors {
+            let _ = term.write_line("");
+            let _ = term.write_line("");
+            let _ = term.write_line(&format!(
+                " ----- Failed to update environment variables for canister '{}': {} -----",
+                failure.canister_name, failure.canister_id,
+            ));
+            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            let _ = term.write_line("");
+        }
+
+        return SetBindingEnvVarsManySnafu {
+            names: errors
+                .iter()
+                .map(|e| e.canister_name.clone())
+                .collect::<Vec<String>>(),
+        }
+        .fail();
     }
 
     Ok(())

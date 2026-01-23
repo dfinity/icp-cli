@@ -954,7 +954,7 @@ Perform token transactions
 ###### **Arguments:**
 
 * `<AMOUNT>` — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `<RECEIVER>` — The receiver of the token transfer
+* `<RECEIVER>` — The receiver of the token transfer. Can be a Principal or an AccountIdentifier hex string (only for ICP ledger)
 
 ###### **Options:**
 

@@ -205,9 +205,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    sync_settings_many(
+        agent.clone(),
+        target_canisters,
+        Arc::new(ctx.term.clone()),
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");

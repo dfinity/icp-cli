@@ -920,7 +920,7 @@ Synchronize canisters
 
 Perform token transactions
 
-**Usage:** `icp token [TOKEN_NAME_OR_PRINCIPAL] <COMMAND>`
+**Usage:** `icp token [TOKEN_NAME_OR_LEDGER_ID] <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -929,7 +929,7 @@ Perform token transactions
 
 ###### **Arguments:**
 
-* `<TOKEN_NAME_OR_PRINCIPAL>` — The token or principal to execute the operation on, defaults to `icp`
+* `<TOKEN_NAME_OR_LEDGER_ID>` — The token or ledger canister id to execute the operation on, defaults to `icp`
 
   Default value: `icp`
 

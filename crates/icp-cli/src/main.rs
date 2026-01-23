@@ -406,13 +406,13 @@ async fn main() -> Result<(), Error> {
         // Token
         Command::Token(cmd) => match cmd.command {
             commands::token::Commands::Balance(args) => {
-                commands::token::balance::exec(&ctx, &cmd.token_name_or_principal, &args)
+                commands::token::balance::exec(&ctx, &cmd.token_name_or_ledger_id, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::token::Commands::Transfer(args) => {
-                commands::token::transfer::exec(&ctx, &cmd.token_name_or_principal, &args)
+                commands::token::transfer::exec(&ctx, &cmd.token_name_or_ledger_id, &args)
                     .instrument(trace_span)
                     .await?
             }

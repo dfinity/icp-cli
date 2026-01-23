@@ -4,7 +4,7 @@ use ic_agent::{Agent, AgentError};
 use icrc_ledger_types::icrc1::account::Account;
 use snafu::{ResultExt, Snafu};
 
-use super::{TOKEN_LEDGER_INFO, TokenAmount};
+use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum GetBalanceError {
@@ -56,15 +56,13 @@ pub enum GetBalanceError {
 ///
 pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetBalanceError> {
     // Obtain token info
-    let (canister_id, token_metadata_override) = match TOKEN_LEDGER_INFO.get(token) {
+    let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
-        Some((cid, token_metadata_override)) => {
-            (cid.to_string(), token_metadata_override.to_owned())
-        }
+        Some(cid) => cid.to_string(),
 
         // Given token is not known, indicating it's either already a canister id
         // or is simply a name of a token we do not know of
-        None => (token.to_string(), None),
+        None => token.to_string(),
     };
 
     // Parse the canister id
@@ -98,36 +96,28 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetB
         //
         // Obtain the number of decimals the token uses
         async {
-            if let Some(metadata) = &token_metadata_override {
-                Ok(metadata.decimals)
-            } else {
-                // Perform query
-                let resp = agent
-                    .query(&cid, "icrc1_decimals")
-                    .with_arg(Encode!(&()).expect("failed to encode arg"))
-                    .await
-                    .context(QueryDecimalsSnafu)?;
+            // Perform query
+            let resp = agent
+                .query(&cid, "icrc1_decimals")
+                .with_arg(Encode!(&()).expect("failed to encode arg"))
+                .await
+                .context(QueryDecimalsSnafu)?;
 
-                // Decode response
-                Decode!(&resp, u8).context(DecodeDecimalsSnafu)
-            }
+            // Decode response
+            Decode!(&resp, u8).context(DecodeDecimalsSnafu)
         },
         //
         // Obtain the symbol of the token
         async {
-            if let Some(metadata) = &token_metadata_override {
-                Ok(metadata.symbol.to_owned())
-            } else {
-                // Perform query
-                let resp = agent
-                    .query(&cid, "icrc1_symbol")
-                    .with_arg(Encode!(&()).expect("failed to encode arg"))
-                    .await
-                    .context(QuerySymbolSnafu)?;
+            // Perform query
+            let resp = agent
+                .query(&cid, "icrc1_symbol")
+                .with_arg(Encode!(&()).expect("failed to encode arg"))
+                .await
+                .context(QuerySymbolSnafu)?;
 
-                // Decode response
-                Decode!(&resp, String).context(DecodeSymbolSnafu)
-            }
+            // Decode response
+            Decode!(&resp, String).context(DecodeSymbolSnafu)
         },
     );
 

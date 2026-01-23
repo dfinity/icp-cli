@@ -12,9 +12,10 @@
   * The `--mainnet` and `--ic` flags are removed. Use `-n/--network ic`, `-e/--environment ic` instead.
 * feat: Allow overriding the implicit `local` network and environment.
 * chore: get rid of `TCYCLES` mentions and replace them with `cycles`
+* feat: Add `icp cycles transfer` as replacement for `icp token cycles transfer`
+* chore!: remove support for `cycles` in `icp token`. Use `icp cycles` instead
 * chore!: Change display format of token and cycles amounts
 * feat: Token and cycles amounts now support new formats. Valid examples: `1_000`, `1k`, `1.5m`, `1_234.5b`, `4T`
-* feat: `icp cycles transfer`
 * feat: Allow installing WASMs that are larger than 2MB
 
 # v0.1.0-beta.3

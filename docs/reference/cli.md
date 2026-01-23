@@ -905,7 +905,7 @@ Synchronize canisters
 
 Perform token transactions
 
-**Usage:** `icp token [TOKEN] <COMMAND>`
+**Usage:** `icp token [TOKEN_NAME_OR_PRINCIPAL] <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -914,7 +914,7 @@ Perform token transactions
 
 ###### **Arguments:**
 
-* `<TOKEN>` — The token to execute the operation on, defaults to `icp`
+* `<TOKEN_NAME_OR_PRINCIPAL>` — The token or principal to execute the operation on, defaults to `icp`
 
   Default value: `icp`
 

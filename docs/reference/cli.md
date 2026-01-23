@@ -24,6 +24,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp cycles`↴](#icp-cycles)
 * [`icp cycles balance`↴](#icp-cycles-balance)
 * [`icp cycles mint`↴](#icp-cycles-mint)
+* [`icp cycles transfer`↴](#icp-cycles-transfer)
 * [`icp deploy`↴](#icp-deploy)
 * [`icp environment`↴](#icp-environment)
 * [`icp environment list`↴](#icp-environment-list)
@@ -419,6 +420,7 @@ Mint and manage cycles
 
 * `balance` — Display the cycles balance
 * `mint` — Convert icp to cycles
+* `transfer` — Transfer cycles to another principal
 
 
 
@@ -446,6 +448,25 @@ Convert icp to cycles
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp cycles transfer`
+
+Transfer cycles to another principal
+
+**Usage:** `icp cycles transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — Cycles amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `<RECEIVER>` — The receiver of the cycles transfer
+
+###### **Options:**
+
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as

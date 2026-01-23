@@ -278,6 +278,12 @@ async fn main() -> Result<(), Error> {
                     .instrument(trace_span)
                     .await?
             }
+
+            commands::cycles::Command::Transfer(args) => {
+                commands::cycles::transfer::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
         },
 
         // Deploy

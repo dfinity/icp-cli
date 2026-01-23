@@ -7,6 +7,7 @@ use crate::commands::parsers::parse_token_amount;
 use crate::operations::token::transfer::transfer;
 
 #[derive(Debug, Args)]
+#[command(override_usage = "icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] <AMOUNT> <RECEIVER>")]
 pub(crate) struct TransferArgs {
     /// Token amount to transfer.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).

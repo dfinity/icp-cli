@@ -20,6 +20,9 @@
 * feat: Allow installing WASMs that are larger than 2MB
 * feat: Add `icp identity account-id` command to display the ICP ledger account identifier
   * Supports `--of-principal` flag to convert a specific principal instead of the current identity
+* feat: `icp token transfer` now accepts AccountIdentifier hex strings for ICP ledger transfers
+  * Legacy ICP ledger transfers using AccountIdentifier are automatically used when a 64-character hex string is provided
+  * AccountIdentifier format is only supported for the ICP ledger; other tokens require Principal format
 
 # v0.1.0-beta.3
 

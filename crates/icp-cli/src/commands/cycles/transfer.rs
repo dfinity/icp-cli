@@ -48,7 +48,7 @@ pub(crate) async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), anyho
     // Output information
     let _ = ctx.term.write_line(&format!(
         "Transferred {} to {} in block {}",
-        transfer_info.transferred, transfer_info.receiver, transfer_info.block_index
+        transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
     ));
 
     Ok(())

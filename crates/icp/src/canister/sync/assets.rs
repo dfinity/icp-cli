@@ -1,6 +1,7 @@
 use ic_agent::Agent;
 use ic_utils::canister::CanisterBuilderError;
 use snafu::prelude::*;
+use tracing::debug;
 
 use crate::manifest::adapter::assets::Adapter;
 
@@ -11,8 +12,13 @@ pub enum AssetsError {
     #[snafu(display("failed to build canister client"))]
     Client { source: CanisterBuilderError },
 
-    #[snafu(display("failed to synchronize assets canister"))]
+    #[snafu(display("failed to synchronize asset canister: {source}"))]
     Sync { source: ic_asset::error::SyncError },
+
+    #[snafu(display(
+        "The referenced path: '{name}' does not exist. Check your canister sync configuration."
+    ))]
+    AssetNotFound { name: String },
 }
 
 pub(super) async fn sync(
@@ -38,6 +44,18 @@ pub(super) async fn sync(
         // Convert to PathBuf
         .map(std::path::PathBuf::from)
         .collect::<Vec<std::path::PathBuf>>();
+
+    // Since we don't get a very good error from ic_asset, we verify the input here
+    // to give a nicer error message if the directories to sync don't exist
+    for path in dirs.iter() {
+        debug!("Verifying that {path:?} exists");
+        if !path.exists() {
+            return AssetNotFoundSnafu {
+                name: format!("{}", path.display()),
+            }
+            .fail();
+        }
+    }
 
     #[allow(clippy::disallowed_types)]
     let dirs: Vec<&std::path::Path> = dirs.iter().map(|p| p.as_path()).collect();

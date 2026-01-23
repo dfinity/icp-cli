@@ -1,7 +1,10 @@
+use bigdecimal::BigDecimal;
 use icp::context::Context;
+use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 
 use crate::commands::token;
-use crate::operations::token::balance::get_balance;
+use crate::operations::token::TokenAmount;
+use crate::operations::token::balance::get_raw_balance;
 
 pub(crate) async fn exec(
     ctx: &Context,
@@ -19,13 +22,14 @@ pub(crate) async fn exec(
         .await?;
 
     // Get the balance from the ledger
-    let balance_info = get_balance(&agent, "cycles").await?;
+    let cycles = get_raw_balance(&agent, CYCLES_LEDGER_PRINCIPAL).await?;
+    let cycles_amount = TokenAmount {
+        amount: BigDecimal::from_biguint(cycles.0, 0),
+        symbol: "cycles".to_string(),
+    };
 
     // Output information
-    let _ = ctx.term.write_line(&format!(
-        "Balance: {} {}",
-        balance_info.amount, balance_info.symbol
-    ));
+    let _ = ctx.term.write_line(&format!("Balance: {cycles_amount}"));
 
     Ok(())
 }

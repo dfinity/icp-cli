@@ -7,6 +7,7 @@ use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
     commands::args,
+    commands::parsers::parse_cycles_amount,
     operations::create::CreateOperation,
     progress::{ProgressManager, ProgressManagerSettings},
 };
@@ -49,8 +50,9 @@ pub(crate) struct CreateArgs {
     #[arg(long, short = 'q')]
     pub(crate) quiet: bool,
 
-    /// Cycles to fund canister creation (in raw cycles).
-    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES)]
+    /// Cycles to fund canister creation.
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
     pub(crate) cycles: u128,
 
     /// The subnet to create canisters on.

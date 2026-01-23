@@ -32,13 +32,10 @@ pub(crate) async fn exec(
         .await?;
 
     // Get the balance from the ledger
-    let balance_info = get_balance(&agent, token).await?;
+    let balance = get_balance(&agent, token).await?;
 
     // Output information
-    let _ = ctx.term.write_line(&format!(
-        "Balance: {} {}",
-        balance_info.amount, balance_info.symbol
-    ));
+    let _ = ctx.term.write_line(&format!("Balance: {balance}"));
 
     Ok(())
 }

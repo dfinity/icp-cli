@@ -4,7 +4,7 @@ use ic_agent::{Agent, AgentError};
 use icrc_ledger_types::icrc1::account::Account;
 use snafu::{ResultExt, Snafu};
 
-use super::TOKEN_LEDGER_CIDS;
+use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum GetBalanceError {
@@ -36,11 +36,6 @@ pub enum GetBalanceError {
     DecodeSymbol { source: candid::Error },
 }
 
-pub struct BalanceInfo {
-    pub amount: BigDecimal,
-    pub symbol: String,
-}
-
 /// Get the token balance for a given identity
 ///
 /// This function queries an ICRC-1 compatible ledger canister to retrieve:
@@ -59,9 +54,8 @@ pub struct BalanceInfo {
 ///
 /// # Returns
 ///
-/// A `BalanceInfo` struct containing the formatted amount and token symbol
-pub async fn get_balance(agent: &Agent, token: &str) -> Result<BalanceInfo, GetBalanceError> {
-    // Obtain ledger address
+pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetBalanceError> {
+    // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
         Some(cid) => cid.to_string(),
@@ -80,25 +74,7 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<BalanceInfo, GetB
     let (balance, decimals, symbol) = tokio::join!(
         //
         // Obtain token balance
-        async {
-            // Convert identity to sender principal
-            let owner = agent
-                .get_principal()
-                .map_err(|err| GetBalanceError::GetPrincipal { err })?;
-
-            // Specify sub-account
-            let subaccount = None;
-
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_balance_of")
-                .with_arg(Encode!(&Account { owner, subaccount }).expect("failed to encode arg"))
-                .await
-                .context(QueryBalanceSnafu)?;
-
-            // Decode response
-            Decode!(&resp, Nat).context(DecodeBalanceSnafu)
-        },
+        get_raw_balance(agent, cid),
         //
         // Obtain the number of decimals the token uses
         async {
@@ -133,5 +109,26 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<BalanceInfo, GetB
     // Calculate amount
     let amount = BigDecimal::from_biguint(balance, decimals);
 
-    Ok(BalanceInfo { amount, symbol })
+    Ok(TokenAmount { amount, symbol })
+}
+
+pub async fn get_raw_balance(agent: &Agent, ledger: Principal) -> Result<Nat, GetBalanceError> {
+    let owner = agent
+        .get_principal()
+        .map_err(|err| GetBalanceError::GetPrincipal { err })?;
+    // Perform query
+    let resp = agent
+        .query(&ledger, "icrc1_balance_of")
+        .with_arg(
+            Encode!(&Account {
+                owner,
+                subaccount: None
+            })
+            .expect("failed to encode arg"),
+        )
+        .await
+        .context(QueryBalanceSnafu)?;
+
+    // Decode response
+    Decode!(&resp, Nat).context(DecodeBalanceSnafu)
 }

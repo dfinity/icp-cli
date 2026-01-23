@@ -278,6 +278,12 @@ async fn main() -> Result<(), Error> {
                     .instrument(trace_span)
                     .await?
             }
+
+            commands::cycles::Command::Transfer(args) => {
+                commands::cycles::transfer::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
         },
 
         // Deploy
@@ -400,13 +406,13 @@ async fn main() -> Result<(), Error> {
         // Token
         Command::Token(cmd) => match cmd.command {
             commands::token::Commands::Balance(args) => {
-                commands::token::balance::exec(&ctx, &cmd.token, &args)
+                commands::token::balance::exec(&ctx, &cmd.token_name_or_ledger_id, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::token::Commands::Transfer(args) => {
-                commands::token::transfer::exec(&ctx, &cmd.token, &args)
+                commands::token::transfer::exec(&ctx, &cmd.token_name_or_ledger_id, &args)
                     .instrument(trace_span)
                     .await?
             }

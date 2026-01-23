@@ -48,8 +48,8 @@ pub enum HandlebarsError {
     #[snafu(display("failed to execute http request"))]
     HttpRequest { source: reqwest::Error },
 
-    #[snafu(display("request returned non-ok status-code"))]
-    HttpStatus { status: u16 },
+    #[snafu(display("request to '{url}' returned '{status}' status-code"))]
+    HttpStatus { url: String, status: u16 },
 
     #[snafu(display("the recipe template for recipe type '{recipe}' failed to be rendered"))]
     Render {
@@ -121,12 +121,13 @@ impl Handlebars {
 
                 let resp = self
                     .http_client
-                    .execute(Request::new(Method::GET, u))
+                    .execute(Request::new(Method::GET, u.clone()))
                     .await
                     .context(HttpRequestSnafu)?;
 
                 if !resp.status().is_success() {
                     return HttpStatusSnafu {
+                        url: u.to_string(),
                         status: resp.status().as_u16(),
                     }
                     .fail();

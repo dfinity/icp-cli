@@ -7,7 +7,7 @@ use icrc_ledger_types::icrc1::{
 };
 use snafu::{ResultExt, Snafu};
 
-use super::TOKEN_LEDGER_CIDS;
+use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum TokenTransferError {
@@ -47,13 +47,10 @@ pub enum TokenTransferError {
     #[snafu(display("failed to decode transfer response"))]
     DecodeTransferResponse { source: candid::Error },
 
-    #[snafu(display(
-        "insufficient funds. balance: {balance} {symbol}, required: {required} {symbol}"
-    ))]
+    #[snafu(display("insufficient funds. balance: {balance}, required: {required}"))]
     InsufficientFunds {
-        symbol: String,
-        balance: BigDecimal,
-        required: BigDecimal,
+        balance: TokenAmount,
+        required: TokenAmount,
     },
 
     #[snafu(display("transfer failed: {message}"))]
@@ -62,9 +59,96 @@ pub enum TokenTransferError {
 
 pub struct TransferInfo {
     pub block_index: Nat,
-    pub amount: BigDecimal,
-    pub symbol: String,
+    pub transferred: TokenAmount,
     pub receiver: Principal,
+}
+
+/// Execute an ICRC-1 transfer with known parameters
+///
+/// This is a low-level function that performs the actual transfer operation.
+/// Use `transfer()` for a higher-level interface that handles token resolution.
+///
+/// # Arguments
+///
+/// * `agent` - The IC agent to use for the update call
+/// * `ledger_canister_id` - The principal of the ICRC-1 ledger canister
+/// * `ledger_amount` - The amount to transfer in ledger units (smallest divisible unit)
+/// * `receiver` - The principal to receive the tokens
+/// * `fee` - The transfer fee in ledger units
+/// * `decimals` - The number of decimals the token uses
+/// * `symbol` - The token symbol for display purposes
+///
+/// # Returns
+///
+/// A `TransferInfo` struct containing transfer details including block index
+pub async fn icrc1_transfer(
+    agent: &Agent,
+    ledger_canister_id: Principal,
+    ledger_amount: Nat,
+    receiver: Principal,
+    fee: Nat,
+    decimals: u32,
+    symbol: String,
+) -> Result<TransferInfo, TokenTransferError> {
+    // Prepare transfer
+    let receiver_account = Account {
+        owner: receiver,
+        subaccount: None,
+    };
+
+    let arg = TransferArg {
+        amount: ledger_amount.clone(),
+        to: receiver_account,
+        from_subaccount: None,
+        fee: None,
+        created_at_time: None,
+        memo: None,
+    };
+
+    // Perform transfer
+    let resp = agent
+        .update(&ledger_canister_id, "icrc1_transfer")
+        .with_arg(Encode!(&arg).context(EncodeTransferArgSnafu)?)
+        .call_and_wait()
+        .await
+        .context(ExecuteTransferSnafu)?;
+
+    // Parse response
+    let resp =
+        Decode!(&resp, Result<Nat, Icrc1TransferError>).context(DecodeTransferResponseSnafu)?;
+
+    // Process response
+    let block_index = resp.map_err(|err| match err {
+        Icrc1TransferError::InsufficientFunds { balance } => {
+            let balance_amount = BigDecimal::from_biguint(balance.0, decimals as i64);
+            let required_amount =
+                BigDecimal::from_biguint(&ledger_amount.0 + fee.0, decimals as i64);
+
+            TokenTransferError::InsufficientFunds {
+                balance: TokenAmount {
+                    amount: balance_amount,
+                    symbol: symbol.clone(),
+                },
+                required: TokenAmount {
+                    amount: required_amount,
+                    symbol: symbol.clone(),
+                },
+            }
+        }
+
+        _ => TokenTransferError::TransferFailed {
+            message: err.to_string(),
+        },
+    })?;
+
+    Ok(TransferInfo {
+        block_index,
+        transferred: TokenAmount {
+            amount: BigDecimal::from_biguint(ledger_amount.0, decimals as i64),
+            symbol,
+        },
+        receiver,
+    })
 }
 
 /// Transfer tokens to a receiver
@@ -95,7 +179,7 @@ pub async fn transfer(
     amount: &BigDecimal,
     receiver: Principal,
 ) -> Result<TransferInfo, TokenTransferError> {
-    // Obtain ledger address
+    // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
         Some(cid) => cid.to_string(),
@@ -154,84 +238,17 @@ pub async fn transfer(
     );
 
     // Check for errors
-    let (Nat(fee), decimals, symbol) = (fee?, decimals? as u32, symbol?);
+    let (fee, decimals, symbol) = (fee?, decimals? as u32, symbol?);
 
     // Calculate units of token to transfer
     // Ledgers do not work in decimals and instead use the smallest non-divisible unit of the token
-    let ledger_amount = amount.clone() * 10u128.pow(decimals);
-
-    // Convert amount to big decimal
-    let ledger_amount = ledger_amount
+    let ledger_amount_decimal = amount.clone() * 10u128.pow(decimals);
+    let ledger_amount = ledger_amount_decimal
         .to_bigint()
         .ok_or(TokenTransferError::InvalidAmount)?
         .to_biguint()
-        .ok_or(TokenTransferError::InvalidAmount)?;
+        .ok_or(TokenTransferError::InvalidAmount)
+        .map(Nat::from)?;
 
-    let ledger_amount = Nat::from(ledger_amount);
-    let display_amount = BigDecimal::from_biguint(ledger_amount.0.clone(), decimals as i64);
-
-    // Prepare transfer
-    let receiver_account = Account {
-        owner: receiver,
-        subaccount: None,
-    };
-
-    let arg = TransferArg {
-        // Transfer amount
-        amount: ledger_amount.clone(),
-
-        // Transfer destination
-        to: receiver_account,
-
-        // Other
-        from_subaccount: None,
-        fee: None,
-        created_at_time: None,
-        memo: None,
-    };
-
-    // Perform transfer
-    let resp = agent
-        .update(&cid, "icrc1_transfer")
-        .with_arg(Encode!(&arg).context(EncodeTransferArgSnafu)?)
-        .call_and_wait()
-        .await
-        .context(ExecuteTransferSnafu)?;
-
-    // Parse response
-    let resp =
-        Decode!(&resp, Result<Nat, Icrc1TransferError>).context(DecodeTransferResponseSnafu)?;
-
-    // Process response
-    let block_index = resp.map_err(|err| match err {
-        // Special case for insufficient funds
-        Icrc1TransferError::InsufficientFunds { balance } => {
-            let balance = BigDecimal::from_biguint(
-                balance.0,       // balance
-                decimals as i64, // decimals
-            );
-
-            let fee_decimal = BigDecimal::from_biguint(
-                fee,             // fee
-                decimals as i64, // decimals
-            );
-
-            TokenTransferError::InsufficientFunds {
-                symbol: symbol.clone(),
-                balance,
-                required: amount.clone() + fee_decimal,
-            }
-        }
-
-        _ => TokenTransferError::TransferFailed {
-            message: err.to_string(),
-        },
-    })?;
-
-    Ok(TransferInfo {
-        block_index,
-        amount: display_amount,
-        symbol,
-        receiver,
-    })
+    icrc1_transfer(agent, cid, ledger_amount, receiver, fee, decimals, symbol).await
 }

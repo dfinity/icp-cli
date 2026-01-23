@@ -24,6 +24,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp cycles`↴](#icp-cycles)
 * [`icp cycles balance`↴](#icp-cycles-balance)
 * [`icp cycles mint`↴](#icp-cycles-mint)
+* [`icp cycles transfer`↴](#icp-cycles-transfer)
 * [`icp deploy`↴](#icp-deploy)
 * [`icp environment`↴](#icp-environment)
 * [`icp environment list`↴](#icp-environment-list)
@@ -158,7 +159,7 @@ Create a canister on a network
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
-* `--cycles <CYCLES>` — Cycles to fund canister creation (in raw cycles)
+* `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
@@ -302,7 +303,7 @@ Change a canister's settings to specified values
 * `--compute-allocation <COMPUTE_ALLOCATION>`
 * `--memory-allocation <MEMORY_ALLOCATION>`
 * `--freezing-threshold <FREEZING_THRESHOLD>`
-* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>`
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Reserved cycles limit for the canister. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--wasm-memory-limit <WASM_MEMORY_LIMIT>`
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>`
 * `--log-visibility <LOG_VISIBILITY>`
@@ -403,7 +404,7 @@ Top up a canister with cycles
 
 ###### **Options:**
 
-* `--amount <AMOUNT>` — Amount of cycles to top up
+* `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -420,6 +421,7 @@ Mint and manage cycles
 
 * `balance` — Display the cycles balance
 * `mint` — Convert icp to cycles
+* `transfer` — Transfer cycles to another principal
 
 
 
@@ -445,8 +447,27 @@ Convert icp to cycles
 
 ###### **Options:**
 
-* `--icp <ICP>` — Amount of ICP to mint to cycles
-* `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed
+* `--icp <ICP>` — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp cycles transfer`
+
+Transfer cycles to another principal
+
+**Usage:** `icp cycles transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — Cycles amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `<RECEIVER>` — The receiver of the cycles transfer
+
+###### **Options:**
+
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -899,7 +920,7 @@ Synchronize canisters
 
 Perform token transactions
 
-**Usage:** `icp token [TOKEN] <COMMAND>`
+**Usage:** `icp token [TOKEN_NAME_OR_LEDGER_ID] <COMMAND>`
 
 ###### **Subcommands:**
 
@@ -908,7 +929,7 @@ Perform token transactions
 
 ###### **Arguments:**
 
-* `<TOKEN>` — The token to execute the operation on, defaults to `icp`
+* `<TOKEN_NAME_OR_LEDGER_ID>` — The token or ledger canister id to execute the operation on, defaults to `icp`
 
   Default value: `icp`
 
@@ -932,7 +953,7 @@ Perform token transactions
 
 ###### **Arguments:**
 
-* `<AMOUNT>` — Token amount to transfer
+* `<AMOUNT>` — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `<RECEIVER>` — The receiver of the token transfer
 
 ###### **Options:**

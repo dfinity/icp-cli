@@ -35,12 +35,12 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Gateway, Managed, ManagedImageConfig, ManagedMode, NetworkDirectory, Port,
+        Managed, ManagedImageConfig, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
             docker::{DockerDropGuard, spawn_docker_launcher},
-            launcher::{ChildSignalOnDrop, spawn_network_launcher},
+            launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
     },
     prelude::*,
@@ -120,12 +120,8 @@ async fn run_network_launcher(
     verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
-    let port = if let ManagedMode::Launcher {
-        gateway: Gateway {
-            port: Port::Fixed(port),
-            ..
-        },
-    } = &config.mode
+    let port = if let ManagedMode::Launcher(launcher_config) = &config.mode
+        && let Port::Fixed(port) = &launcher_config.gateway.port
     {
         Some(*port)
     } else {
@@ -160,8 +156,8 @@ async fn run_network_launcher(
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator, port_claim))
                 }
-                ManagedMode::Launcher { gateway } if cfg!(windows) /* todo machine setting for unix */ => {
-                    let image_config = transform_native_launcher_to_container(gateway.clone());
+                ManagedMode::Launcher(launcher_config) if cfg!(windows) /* todo machine setting for unix */ => {
+                    let image_config = transform_native_launcher_to_container(launcher_config);
                     let (guard, instance, locator) =
                         spawn_docker_launcher(&image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
@@ -170,7 +166,7 @@ async fn run_network_launcher(
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator, port_claim))
                 }
-                ManagedMode::Launcher { gateway } => {
+                ManagedMode::Launcher(launcher_config) => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
                     }
@@ -184,13 +180,13 @@ async fn run_network_launcher(
                         &root.network_stderr_file(),
                         background,
                         verbose,
-                        &gateway.port,
+                        launcher_config,
                         &root.state_dir(),
                     )
                     .await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
-                        fixed: matches!(gateway.port, Port::Fixed(_)),
+                        fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator, port_claim))
                 }
@@ -251,16 +247,17 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn transform_native_launcher_to_container(gateway: Gateway) -> ManagedImageConfig {
-    let port = match gateway.port {
+fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageConfig {
+    let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
+    let args = launcher_settings_flags(config);
     ManagedImageConfig {
         image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
         port_mapping: vec![format!("{port}:4943")],
         rm_on_exit: true,
-        args: vec!["--ii".to_string()],
+        args,
         entrypoint: None,
         environment: vec![],
         volumes: vec![],
@@ -429,7 +426,7 @@ pub async fn initialize_network(
     seed_accounts: impl IntoIterator<Item = Principal> + Clone,
     candid_ui_wasm: Option<&[u8]>,
 ) -> Result<Option<Principal>, InitializeNetworkError> {
-    eprintln!("Seeding ICP and TCYCLES account balances");
+    eprintln!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
         .with_identity(AnonymousIdentity)
@@ -451,12 +448,12 @@ pub async fn initialize_network(
                 acquire_icp_to_account(&agent, account, icp_amount)
             }),
     );
-    let cycles_amount = 1_000_000_000_000_000u128; // 1k TCYCLES
+    let cycles_amount = 1_000_000_000_000_000u128; // 1_000T cycles
     let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
 
     let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
         debug!(
-            "Seeding {} TCYCLES to account {}",
+            "Seeding {}T cycles to account {}",
             display_cycles_amount, account
         );
         mint_cycles_to_account(&agent, account, cycles_amount, icp_xdr_conversion_rate)
@@ -654,7 +651,7 @@ async fn install_candid_ui(
     candid_ui_wasm: &[u8],
 ) -> Result<Principal, InitializeNetworkError> {
     debug!("Creating canister for Candid UI");
-    let amount = 10_000_000_000_000u64; // 10 TCYCLES
+    let amount = 10 * TRILLION;
     let response = agent
         .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
         .with_arg(
@@ -681,7 +678,7 @@ async fn install_candid_ui(
             return Err(InitializeNetworkError::CandidUI {
                 error: format!(
                     "Failed to create canister for Candid UI: {}",
-                    err.format_error(amount as u128)
+                    err.format_error(amount)
                 ),
             });
         }

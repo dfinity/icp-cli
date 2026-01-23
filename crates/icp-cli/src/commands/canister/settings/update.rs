@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use crate::commands::args;
+use crate::commands::parsers::parse_cycles_amount;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -101,7 +102,9 @@ pub(crate) struct UpdateArgs {
     #[arg(long, value_parser = freezing_threshold_parser)]
     freezing_threshold: Option<u64>,
 
-    #[arg(long, value_parser = reserved_cycles_limit_parser)]
+    /// Reserved cycles limit for the canister.
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(long, value_parser = parse_cycles_amount)]
     reserved_cycles_limit: Option<u128>,
 
     #[arg(long, value_parser = memory_parser)]
@@ -291,13 +294,6 @@ fn freezing_threshold_parser(freezing_threshold: &str) -> Result<u64, String> {
         return Ok(num);
     }
     Err("Must be a value between 0..2^64-1 inclusive".to_string())
-}
-
-fn reserved_cycles_limit_parser(reserved_cycles_limit: &str) -> Result<u128, String> {
-    if let Ok(num) = reserved_cycles_limit.parse::<u128>() {
-        return Ok(num);
-    }
-    Err("Must be a value between 0..2^128-1 inclusive".to_string())
 }
 
 fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> {

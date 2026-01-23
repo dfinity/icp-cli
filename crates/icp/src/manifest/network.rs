@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+use crate::network::SubnetKind;
+
 /// A network definition for the project
 #[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
 pub struct NetworkManifest {
@@ -55,13 +57,28 @@ pub enum ManagedMode {
         mounts: Option<Vec<String>>,
     },
     Launcher {
+        /// HTTP gateway configuration
         gateway: Option<Gateway>,
+        /// Artificial delay to add to every update call
+        artificial_delay_ms: Option<u64>,
+        /// Set up the Internet Identity canister
+        ii: Option<bool>,
+        /// Set up the NNS
+        nns: Option<bool>,
+        /// Configure the list of subnets (one application subnet by default)
+        subnets: Option<Vec<SubnetKind>>,
     },
 }
 
 impl Default for ManagedMode {
     fn default() -> Self {
-        ManagedMode::Launcher { gateway: None }
+        ManagedMode::Launcher {
+            gateway: None,
+            artificial_delay_ms: None,
+            ii: None,
+            nns: None,
+            subnets: None,
+        }
     }
 }
 
@@ -209,7 +226,13 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
-                    mode: Box::new(ManagedMode::Launcher { gateway: None })
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: None,
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None
+                    })
                 })
             },
         );
@@ -231,7 +254,11 @@ mod tests {
                         gateway: Some(Gateway {
                             host: Some("localhost".to_string()),
                             port: None,
-                        })
+                        }),
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None,
                     })
                 })
             },
@@ -255,7 +282,11 @@ mod tests {
                         gateway: Some(Gateway {
                             host: Some("localhost".to_string()),
                             port: Some(8000)
-                        })
+                        }),
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None,
                     })
                 })
             },

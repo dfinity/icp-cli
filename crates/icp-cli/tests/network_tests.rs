@@ -293,7 +293,7 @@ async fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .current_dir(&project_dir)
         .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
-        .stdout(contains("Balance: 1000.000000000000 TCYCLES"))
+        .stdout(contains("Balance: 1_000_000_000_000_000 cycles"))
         .success();
 
     // Identities created after starting should have 0 cycles balance
@@ -302,7 +302,7 @@ async fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .current_dir(&project_dir)
         .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
-        .stdout(contains("Balance: 0 TCYCLES"))
+        .stdout(contains("Balance: 0 cycles"))
         .success();
 }
 
@@ -328,7 +328,7 @@ async fn network_run_and_stop_background() {
         ])
         .assert()
         .success()
-        .stderr(contains("Seeding ICP and TCYCLES"))
+        .stderr(contains("Seeding ICP and cycles"))
         .stdout(contains("Installed Candid UI canister with ID"));
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
@@ -451,7 +451,12 @@ async fn network_starts_with_canisters_preset() {
     write_string(
         &project_dir.join("icp.yaml"), // path
         &formatdoc! {r#"
-            {NETWORK_RANDOM_PORT}
+            networks:
+              - name: random-network
+                mode: managed
+                gateway:
+                    port: 0
+                ii: true
             {ENVIRONMENT_RANDOM_PORT}
         "#}, // contents
     )

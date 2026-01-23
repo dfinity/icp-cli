@@ -9,6 +9,7 @@ pub(crate) mod environment;
 pub(crate) mod identity;
 pub(crate) mod network;
 pub(crate) mod new;
+pub(crate) mod parsers;
 pub(crate) mod project;
 pub(crate) mod sync;
 pub(crate) mod token;

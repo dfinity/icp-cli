@@ -16,11 +16,20 @@ icp-cli controls the lifecycle — starting, stopping, and resetting:
 networks:
   - name: local
     mode: managed
+    ii: true
     gateway:
       host: 127.0.0.1
       port: 8000
 ```
-Managed networks can run natively on your machine or inside a docker container.
+
+Managed networks can run natively on your machine or inside a [docker container](../guides/containerized-networks.md).
+
+Unless a custom Docker image is used, the following settings can be specified:
+
+* `ii` (bool): Enable the Internet Identity canister
+* `nns` (bool): Enable the NNS and SNS system
+* `artificial-delay-ms` (int): Add artificial latency to update calls to simulate mainnet conditions
+* `subnets` ([]string): Configure the subnet layout (by default, one application subnet is created)
 
 Use managed networks for local development and testing.
 
@@ -41,10 +50,10 @@ Use connected networks for shared testnets and production.
 
 Two networks are always available:
 
-| Network | Type | Description |
-|---------|------|-------------|
-| `local` | Managed | Local development network on `localhost:8000` |
-| `ic` | Connected | The Internet Computer mainnet at `https://icp-api.io` |
+| Network | Type      | Description                                           |
+|---------|-----------|-------------------------------------------------------|
+| `local` | Managed   | Local development network on `localhost:8000`         |
+| `ic`    | Connected | The Internet Computer mainnet at `https://icp-api.io` |
 
 The `local` network can be overridden in your `icp.yaml`. The `ic` network is **protected** and cannot be overridden to prevent accidental production deployment with incorrect settings.
 
@@ -58,6 +67,8 @@ networks:
     mode: managed
     gateway:
       port: 9999  # Different port
+    ii: true # Use the Internet Identity canister
+    artificial-delay-ms: 1000 # Slow down the network to simulate mainnet latency
 ```
 
 Or connect to an existing network instead of managing one:
@@ -91,10 +102,10 @@ Environments encapsulate all of this.
 
 Two environments are always available:
 
-| Environment | Network | Canisters |
-|-------------|---------|-----------|
-| `local` | `local` | All canisters |
-| `ic` | `ic` | All canisters |
+| Environment | Network | Canisters     |
+|-------------|---------|---------------|
+| `local`     | `local` | All canisters |
+| `ic`        | `ic`    | All canisters |
 
 ### Defining Environments
 
@@ -154,10 +165,10 @@ icp deploy --e staging
 
 ## Networks vs Environments
 
-| Aspect | Network | Environment |
-|--------|---------|-------------|
-| **Purpose** | Where to connect | What to deploy and how |
-| **Contains** | URL, connection details | Network reference, canisters, settings |
+| Aspect       | Network                  | Environment                            |
+|--------------|--------------------------|----------------------------------------|
+| **Purpose**  | Where to connect         | What to deploy and how                 |
+| **Contains** | URL, connection details  | Network reference, canisters, settings |
 | **Examples** | `local`, `ic`, `testnet` | `local`, `ic`, `staging`, `production` |
 
 A common pattern:

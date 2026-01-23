@@ -196,6 +196,9 @@ fn identity_create() {
 
     let seed = str::from_utf8(&new_out.get_output().stdout)
         .unwrap()
+        .lines()
+        .next_back()
+        .unwrap()
         .strip_prefix("Your seed phrase: ")
         .unwrap();
 

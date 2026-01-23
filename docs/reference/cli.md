@@ -920,16 +920,16 @@ Synchronize canisters
 
 Perform token transactions
 
-**Usage:** `icp token [TOKEN_NAME_OR_LEDGER_ID] <COMMAND>`
+**Usage:** `icp token [TOKEN|LEDGER_ID] <COMMAND>`
 
 ###### **Subcommands:**
 
-* `balance` — 
-* `transfer` — 
+* `balance` — Display the token balance on the ledger (default token: icp)
+* `transfer` — Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 
 ###### **Arguments:**
 
-* `<TOKEN_NAME_OR_LEDGER_ID>` — The token or ledger canister id to execute the operation on, defaults to `icp`
+* `<TOKEN|LEDGER_ID>` — The token or ledger canister id to execute the operation on, defaults to `icp`
 
   Default value: `icp`
 
@@ -937,7 +937,9 @@ Perform token transactions
 
 ## `icp token balance`
 
-**Usage:** `icp token balance [OPTIONS]`
+Display the token balance on the ledger (default token: icp)
+
+**Usage:** `icp token icp token [TOKEN|LEDGER_ID] balance [OPTIONS]`
 
 ###### **Options:**
 
@@ -949,12 +951,14 @@ Perform token transactions
 
 ## `icp token transfer`
 
-**Usage:** `icp token transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
+
+**Usage:** `icp token icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] <AMOUNT> <RECEIVER>`
 
 ###### **Arguments:**
 
 * `<AMOUNT>` — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `<RECEIVER>` — The receiver of the token transfer
+* `<RECEIVER>` — The receiver of the token transfer. Can be a Principal or an AccountIdentifier hex string (only for ICP ledger)
 
 ###### **Options:**
 

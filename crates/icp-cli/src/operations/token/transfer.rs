@@ -1,10 +1,16 @@
 use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{Agent, AgentError};
+use ic_ledger_types::{
+    AccountIdentifier, Memo, Tokens, TransferArgs as IcpTransferArgs,
+    TransferError as IcpTransferError,
+};
+use icp_canister_interfaces::icp_ledger::ICP_LEDGER_CID;
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError as Icrc1TransferError},
 };
+use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 
 use super::{TOKEN_LEDGER_CIDS, TokenAmount};
@@ -16,6 +22,17 @@ pub enum TokenTransferError {
         canister_id: String,
         source: candid::types::principal::PrincipalError,
     },
+
+    #[snafu(display("failed to parse receiver principal: {source}"))]
+    ParseReceiverPrincipal {
+        source: candid::types::principal::PrincipalError,
+    },
+
+    #[snafu(display("failed to parse account identifier: {message}"))]
+    ParseAccountIdentifier { message: String },
+
+    #[snafu(display("account identifier is only supported for ICP ledger transfers"))]
+    AccountIdentifierNotSupported,
 
     #[snafu(display("failed to query fee"))]
     QueryFee { source: AgentError },
@@ -55,12 +72,21 @@ pub enum TokenTransferError {
 
     #[snafu(display("transfer failed: {message}"))]
     TransferFailed { message: String },
+
+    #[snafu(display("failed to encode legacy ICP transfer argument"))]
+    EncodeLegacyTransferArg { source: candid::Error },
+
+    #[snafu(display("failed to execute legacy ICP transfer"))]
+    ExecuteLegacyTransfer { source: AgentError },
+
+    #[snafu(display("failed to decode legacy ICP transfer response"))]
+    DecodeLegacyTransferResponse { source: candid::Error },
 }
 
 pub struct TransferInfo {
     pub block_index: Nat,
     pub transferred: TokenAmount,
-    pub receiver: Principal,
+    pub receiver_display: String,
 }
 
 /// Execute an ICRC-1 transfer with known parameters
@@ -147,28 +173,121 @@ pub async fn icrc1_transfer(
             amount: BigDecimal::from_biguint(ledger_amount.0, decimals as i64),
             symbol,
         },
-        receiver,
+        receiver_display: receiver.to_string(),
+    })
+}
+
+/// Execute a legacy ICP ledger transfer to an AccountIdentifier
+///
+/// This function performs transfers using the legacy ICP ledger API which accepts
+/// AccountIdentifier destinations instead of ICRC-1 Account types.
+///
+/// # Arguments
+///
+/// * `agent` - The IC agent to use for the update call
+/// * `ledger_canister_id` - The principal of the ICP ledger canister
+/// * `ledger_amount` - The amount to transfer in e8s (smallest unit)
+/// * `to` - The AccountIdentifier to receive the tokens
+/// * `fee` - The transfer fee in e8s
+/// * `decimals` - The number of decimals the token uses (8 for ICP)
+/// * `symbol` - The token symbol for display purposes
+///
+/// # Returns
+///
+/// A `TransferInfo` struct containing transfer details including block index
+pub async fn icp_legacy_transfer(
+    agent: &Agent,
+    ledger_canister_id: Principal,
+    ledger_amount: Nat,
+    to: AccountIdentifier,
+    fee: Nat,
+    decimals: u32,
+    symbol: String,
+) -> Result<TransferInfo, TokenTransferError> {
+    // Convert Nat to Tokens (e8s)
+    let amount_e8s = ledger_amount
+        .0
+        .to_u64()
+        .ok_or(TokenTransferError::InvalidAmount)?;
+    let fee_e8s = fee.0.to_u64().ok_or(TokenTransferError::InvalidAmount)?;
+
+    let arg = IcpTransferArgs {
+        memo: Memo(0),
+        amount: Tokens::from_e8s(amount_e8s),
+        fee: Tokens::from_e8s(fee_e8s),
+        from_subaccount: None,
+        to,
+        created_at_time: None,
+    };
+
+    // Perform transfer
+    let resp = agent
+        .update(&ledger_canister_id, "transfer")
+        .with_arg(Encode!(&arg).context(EncodeLegacyTransferArgSnafu)?)
+        .call_and_wait()
+        .await
+        .context(ExecuteLegacyTransferSnafu)?;
+
+    // Parse response
+    let resp =
+        Decode!(&resp, Result<u64, IcpTransferError>).context(DecodeLegacyTransferResponseSnafu)?;
+
+    // Process response
+    let block_index = resp.map_err(|err| match err {
+        IcpTransferError::InsufficientFunds { balance } => {
+            let balance_amount = BigDecimal::from_biguint(balance.e8s().into(), decimals as i64);
+            let required_amount =
+                BigDecimal::from_biguint(&ledger_amount.0 + fee.0, decimals as i64);
+
+            TokenTransferError::InsufficientFunds {
+                balance: TokenAmount {
+                    amount: balance_amount,
+                    symbol: symbol.clone(),
+                },
+                required: TokenAmount {
+                    amount: required_amount,
+                    symbol: symbol.clone(),
+                },
+            }
+        }
+        _ => TokenTransferError::TransferFailed {
+            message: format!("{:?}", err),
+        },
+    })?;
+
+    Ok(TransferInfo {
+        block_index: Nat::from(block_index),
+        transferred: TokenAmount {
+            amount: BigDecimal::from_biguint(ledger_amount.0, decimals as i64),
+            symbol,
+        },
+        receiver_display: to.to_hex(),
     })
 }
 
 /// Transfer tokens to a receiver
 ///
-/// This function executes an ICRC-1 token transfer:
+/// This function executes a token transfer with support for both ICRC-1 and classic ICP ledger:
 /// - Queries the ledger for fee, decimals, and symbol
 /// - Converts the decimal amount to ledger units
-/// - Executes the transfer
+/// - Detects if receiver is an AccountIdentifier (for ICP ledger only) or a Principal
+/// - Executes the appropriate transfer method
 /// - Returns transfer information including the block index
 ///
 /// The token parameter supports two flows:
 /// 1. Specifying a known token name (e.g., "icp", "cycles") which will be looked up
 /// 2. Specifying a canister ID directly for any ICRC-1 compatible ledger
 ///
+/// For ICP ledger transfers, the receiver can be:
+/// - A Principal (uses ICRC-1 transfer)
+/// - An AccountIdentifier hex string (uses legacy transfer method)
+///
 /// # Arguments
 ///
 /// * `agent` - The IC agent to use for queries and updates
 /// * `token` - The token name or ledger canister id
 /// * `amount` - The decimal amount to transfer
-/// * `receiver` - The principal to receive the tokens
+/// * `receiver` - The receiver as a string (Principal or AccountIdentifier hex)
 ///
 /// # Returns
 ///
@@ -177,7 +296,7 @@ pub async fn transfer(
     agent: &Agent,
     token: &str,
     amount: &BigDecimal,
-    receiver: Principal,
+    receiver: &str,
 ) -> Result<TransferInfo, TokenTransferError> {
     // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
@@ -250,5 +369,37 @@ pub async fn transfer(
         .ok_or(TokenTransferError::InvalidAmount)
         .map(Nat::from)?;
 
-    icrc1_transfer(agent, cid, ledger_amount, receiver, fee, decimals, symbol).await
+    // Determine if receiver is an AccountIdentifier or Principal
+    // Try parsing as AccountIdentifier first (64 hex chars)
+    if let Ok(account_id) = AccountIdentifier::from_hex(receiver) {
+        // AccountIdentifier is only supported for ICP ledger
+        if cid.to_text() == ICP_LEDGER_CID {
+            return icp_legacy_transfer(
+                agent,
+                cid,
+                ledger_amount,
+                account_id,
+                fee,
+                decimals,
+                symbol,
+            )
+            .await;
+        } else {
+            return Err(TokenTransferError::AccountIdentifierNotSupported);
+        }
+    }
+
+    // Try parsing as Principal for ICRC-1 transfer
+    let receiver_principal = Principal::from_text(receiver).context(ParseReceiverPrincipalSnafu)?;
+
+    icrc1_transfer(
+        agent,
+        cid,
+        ledger_amount,
+        receiver_principal,
+        fee,
+        decimals,
+        symbol,
+    )
+    .await
 }

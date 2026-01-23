@@ -1,15 +1,19 @@
 use bigdecimal::BigDecimal;
+use clap::Args;
 use icp::context::Context;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 
-use crate::commands::token;
+use crate::commands::args::TokenCommandArgs;
 use crate::operations::token::TokenAmount;
 use crate::operations::token::balance::get_raw_balance;
 
-pub(crate) async fn exec(
-    ctx: &Context,
-    args: &token::balance::BalanceArgs,
-) -> Result<(), anyhow::Error> {
+#[derive(Args, Clone, Debug)]
+pub(crate) struct BalanceArgs {
+    #[command(flatten)]
+    pub(crate) token_command_args: TokenCommandArgs,
+}
+
+pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow::Error> {
     let selections = args.token_command_args.selections();
 
     // Agent

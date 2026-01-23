@@ -76,10 +76,16 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
     match &args.output_seed {
         Some(path) => {
             write_string(path, mnemonic.as_ref()).context("failed to write seed file")?;
-            println!("Seed phrase written to file {path}")
+            println!(
+                "WARNING: Store the seed phrase file in a secure location. If you lose it, you will lose access to your identity."
+            );
+            println!("Seed phrase written to file {path}");
         }
 
         None => {
+            println!(
+                "WARNING: Write the seed phrase down and store it in a secure location. If you lose it, you will lose access to your identity."
+            );
             println!("Your seed phrase: {mnemonic}");
         }
     }

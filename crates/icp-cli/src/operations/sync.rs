@@ -12,8 +12,18 @@ use std::sync::Arc;
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
 #[derive(Debug, Snafu)]
-#[snafu(display("one or more canisters failed to sync"))]
-pub struct SyncOperationError;
+#[snafu(display("Canister(s) {names:?} failed to sync."))]
+pub struct SyncOperationError {
+    names: Vec<String>,
+}
+
+/// Holds error information from a failed canister sync operation
+struct SyncFailure {
+    canister_name: String,
+    canister_id: Principal,
+    error: SynchronizeError,
+    progress_output: Vec<String>,
+}
 
 /// Synchronizes a single canister using its configured sync steps
 async fn sync_canister(
@@ -97,16 +107,13 @@ pub(crate) async fn sync_many(
                 )
                 .await;
 
-                // After progress bar is finished, dump the output if sync failed
-                if let Err(e) = &result {
-                    for line in pb.dump_output() {
-                        let _ = term.write_line(&line);
-                    }
-                    let _ = term.write_line(&format!("Failed to sync canister: {e}"));
-                    let _ = term.write_line("");
-                }
-
-                result
+                // Map error to include canister context for deferred printing
+                result.map_err(|error| SyncFailure {
+                    canister_name: canister_info.name.clone(),
+                    canister_id: cid,
+                    error,
+                    progress_output: pb.dump_output(),
+                })
             }
         };
 
@@ -114,15 +121,38 @@ pub(crate) async fn sync_many(
     }
 
     // Consume the set of futures and collect errors
-    let mut found_error = false;
+    let mut errors: Vec<SyncFailure> = Vec::new();
     while let Some(res) = futs.next().await {
-        if res.is_err() {
-            found_error = true;
+        if let Err(failure) = res {
+            errors.push(failure);
         }
     }
 
-    if found_error {
-        return SyncOperationSnafu.fail();
+    if !errors.is_empty() {
+        // Print all errors in batch
+        for failure in &errors {
+            // Print progress output
+            let _ = term.write_line("");
+            let _ = term.write_line("");
+            let _ = term.write_line(&format!(
+                " ----- Failed to sync canister '{}': {} -----",
+                failure.canister_name, failure.canister_id,
+            ));
+            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            for line in &failure.progress_output {
+                let _ = term.write_line(line);
+            }
+
+            let _ = term.write_line("");
+        }
+
+        return SyncOperationSnafu {
+            names: errors
+                .iter()
+                .map(|e| e.canister_name.clone())
+                .collect::<Vec<String>>(),
+        }
+        .fail();
     }
 
     Ok(())

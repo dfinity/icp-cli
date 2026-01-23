@@ -13,10 +13,7 @@ pub(crate) struct BalanceArgs {
     pub(crate) token_command_args: TokenCommandArgs,
 }
 
-pub(crate) async fn exec(
-    ctx: &Context,
-    args: &BalanceArgs,
-) -> Result<(), anyhow::Error> {
+pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow::Error> {
     let selections = args.token_command_args.selections();
 
     // Agent

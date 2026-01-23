@@ -5,7 +5,7 @@ import rehypeExternalLinks from 'rehype-external-links';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://dfinity.github.io',
-  base: '/icp-cli/',
+  base: process.env.NODE_ENV === 'production' ? '/icp-cli/' : '/',
   markdown: {
     rehypePlugins: [
       // Open external links in new tab
@@ -59,8 +59,8 @@ export default defineConfig({
             { label: 'Installation', slug: 'guides/installation' },
             { label: 'Local Development', slug: 'guides/local-development' },
             { label: 'Managing Identities', slug: 'guides/managing-identities' },
-            { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
+            { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
             { label: 'Containerized Networks', slug: 'guides/containerized-networks' },
             { label: 'Using Recipes', slug: 'guides/using-recipes' },

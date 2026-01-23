@@ -3,8 +3,8 @@ use crate::{
     Environment, MockProjectLoader, Network, Project,
     identity::MockIdentityLoader,
     network::{
-        Configuration, Gateway, Managed, ManagedMode, MockNetworkAccessor, Port,
-        access::NetworkAccess,
+        Configuration, Gateway, Managed, ManagedLauncherConfig, ManagedMode, MockNetworkAccessor,
+        Port, access::NetworkAccess,
     },
     project::DEFAULT_LOCAL_NETWORK_URL,
     store_id::{Access as IdAccess, mock::MockInMemoryIdStore},
@@ -595,12 +595,16 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
         name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
-                mode: ManagedMode::Launcher {
+                mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(8000),
                     },
-                },
+                    artificial_delay_ms: None,
+                    ii: false,
+                    nns: false,
+                    subnets: None,
+                })),
             },
         },
     };
@@ -656,12 +660,16 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
         name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
-                mode: ManagedMode::Launcher {
+                mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(9000),
                     },
-                },
+                    artificial_delay_ms: None,
+                    ii: false,
+                    nns: false,
+                    subnets: None,
+                })),
             },
         },
     };
@@ -719,12 +727,16 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
         name: LOCAL.to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
-                mode: ManagedMode::Launcher {
+                mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(8000),
                     },
-                },
+                    artificial_delay_ms: None,
+                    ii: false,
+                    nns: false,
+                    subnets: None,
+                })),
             },
         },
     };
@@ -733,12 +745,16 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
         name: "custom".to_string(),
         configuration: Configuration::Managed {
             managed: Managed {
-                mode: ManagedMode::Launcher {
+                mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(7000),
                     },
-                },
+                    artificial_delay_ms: None,
+                    ii: false,
+                    nns: false,
+                    subnets: None,
+                })),
             },
         },
     };

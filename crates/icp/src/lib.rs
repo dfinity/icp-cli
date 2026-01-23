@@ -295,9 +295,14 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
-            manifest::canister::{BuildStep, BuildSteps, SyncSteps},
-            network::{Configuration, Connected, Gateway, Managed, ManagedMode, Port},
+            manifest::{
+                adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
+                canister::{BuildStep, BuildSteps, SyncSteps},
+            },
+            network::{
+                Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode,
+                Port,
+            },
         };
 
         // Create canisters
@@ -351,12 +356,16 @@ impl MockProjectLoader {
             name: "local".to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
-                    mode: ManagedMode::Launcher {
+                    mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                         gateway: Gateway {
                             host: "localhost".to_string(),
                             port: Port::Fixed(8000),
                         },
-                    },
+                        artificial_delay_ms: None,
+                        ii: false,
+                        nns: false,
+                        subnets: None,
+                    })),
                 },
             },
         };
@@ -365,12 +374,16 @@ impl MockProjectLoader {
             name: "staging".to_string(),
             configuration: Configuration::Managed {
                 managed: Managed {
-                    mode: ManagedMode::Launcher {
+                    mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                         gateway: Gateway {
                             host: "localhost".to_string(),
                             port: Port::Fixed(8001),
                         },
-                    },
+                        artificial_delay_ms: None,
+                        ii: false,
+                        nns: false,
+                        subnets: None,
+                    })),
                 },
             },
         };

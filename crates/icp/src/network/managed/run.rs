@@ -35,12 +35,12 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Gateway, Managed, ManagedImageConfig, ManagedMode, NetworkDirectory, Port,
+        Managed, ManagedImageConfig, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{ClaimPortError, SaveNetworkDescriptorError, save_network_descriptors},
         managed::{
             docker::{DockerDropGuard, spawn_docker_launcher},
-            launcher::{ChildSignalOnDrop, spawn_network_launcher},
+            launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
     },
     prelude::*,
@@ -120,12 +120,8 @@ async fn run_network_launcher(
     verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
-    let port = if let ManagedMode::Launcher {
-        gateway: Gateway {
-            port: Port::Fixed(port),
-            ..
-        },
-    } = &config.mode
+    let port = if let ManagedMode::Launcher(launcher_config) = &config.mode
+        && let Port::Fixed(port) = &launcher_config.gateway.port
     {
         Some(*port)
     } else {
@@ -160,8 +156,8 @@ async fn run_network_launcher(
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator, port_claim))
                 }
-                ManagedMode::Launcher { gateway } if cfg!(windows) /* todo machine setting for unix */ => {
-                    let image_config = transform_native_launcher_to_container(gateway.clone());
+                ManagedMode::Launcher(launcher_config) if cfg!(windows) /* todo machine setting for unix */ => {
+                    let image_config = transform_native_launcher_to_container(launcher_config);
                     let (guard, instance, locator) =
                         spawn_docker_launcher(&image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
@@ -170,7 +166,7 @@ async fn run_network_launcher(
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator, port_claim))
                 }
-                ManagedMode::Launcher { gateway } => {
+                ManagedMode::Launcher(launcher_config) => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
                     }
@@ -184,13 +180,13 @@ async fn run_network_launcher(
                         &root.network_stderr_file(),
                         background,
                         verbose,
-                        &gateway.port,
+                        launcher_config,
                         &root.state_dir(),
                     )
                     .await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
-                        fixed: matches!(gateway.port, Port::Fixed(_)),
+                        fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator, port_claim))
                 }
@@ -251,16 +247,17 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn transform_native_launcher_to_container(gateway: Gateway) -> ManagedImageConfig {
-    let port = match gateway.port {
+fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageConfig {
+    let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
+    let args = launcher_settings_flags(config);
     ManagedImageConfig {
         image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
         port_mapping: vec![format!("{port}:4943")],
         rm_on_exit: true,
-        args: vec!["--ii".to_string()],
+        args,
         entrypoint: None,
         environment: vec![],
         volumes: vec![],

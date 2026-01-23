@@ -10,7 +10,7 @@ use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
 
 use crate::{
-    network::{Port, config::ChildLocator},
+    network::{ManagedLauncherConfig, Port, config::ChildLocator},
     prelude::*,
 };
 
@@ -64,7 +64,7 @@ pub async fn spawn_network_launcher(
     stderr_file: &Path,
     background: bool,
     verbose: bool,
-    port: &Port,
+    launcher_config: &ManagedLauncherConfig,
     state_dir: &Path,
 ) -> Result<
     (
@@ -80,13 +80,13 @@ pub async fn spawn_network_launcher(
         "1.0.0",
         "--state-dir",
         state_dir.as_str(),
-        "--ii",
     ]);
-    if let Port::Fixed(port) = port {
+    if let Port::Fixed(port) = launcher_config.gateway.port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     cmd.args(["--status-dir", status_dir.path().as_str()]);
+    cmd.args(launcher_settings_flags(launcher_config));
     if background {
         eprintln!("For background mode, network output will be redirected:");
         eprintln!("  stdout: {}", stdout_file);
@@ -155,6 +155,32 @@ pub async fn stop_launcher(pid: Pid) {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+}
+
+pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
+    let ManagedLauncherConfig {
+        gateway: _,
+        artificial_delay_ms,
+        ii,
+        nns,
+        subnets,
+    } = config;
+    let mut flags = vec![];
+    if *ii {
+        flags.push("--ii".to_string());
+    }
+    if *nns {
+        flags.push("--nns".to_string());
+    }
+    if let Some(delay) = artificial_delay_ms {
+        flags.push(format!("--artificial-delay-ms={delay}"));
+    }
+    if let Some(subnets) = &subnets {
+        for subnet in subnets {
+            flags.push(format!("--subnet={subnet}"));
+        }
+    }
+    flags
 }
 
 pub fn send_sigint(pid: Pid) {

@@ -304,6 +304,12 @@ async fn main() -> Result<(), Error> {
 
         // Identity
         Command::Identity(cmd) => match cmd {
+            commands::identity::Command::AccountId(args) => {
+                commands::identity::account_id::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
             commands::identity::Command::Default(args) => {
                 commands::identity::default::exec(&ctx, &args)
                     .instrument(trace_span)

@@ -214,7 +214,7 @@ async fn canister_create_colocates_canisters() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
-    let pm = indoc! {r#"
+    let pm = formatdoc! {r#"
         canisters:
           - name: canister-a
             build:
@@ -250,35 +250,38 @@ async fn canister_create_colocates_canisters() {
               steps:
                 - type: script
                   command: touch "$ICP_WASM_OUTPUT_PATH"
-
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+                port: 0
+            subnets: [application, application, application]
+        {ENVIRONMENT_RANDOM_PORT}
     "#};
 
     write_string(
         &project_dir.join("icp.yaml"), // path
-        pm,                            // contents
+        &pm,                           // contents
     )
     .expect("failed to write project manifest");
 
     // Start network
-    let _g = ctx
-        .start_network_with_flags(
-            &project_dir,
-            &[
-                "--subnet=application",
-                "--subnet=application",
-                "--subnet=application",
-            ],
-        )
-        .await;
-
-    ctx.ping_until_healthy(&project_dir, "local");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
 
     // Deploy first three canisters
-    let icp_client = clients::icp(&ctx, &project_dir, None);
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
     icp_client.mint_cycles(20 * TRILLION);
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "canister-a", "canister-b", "canister-c"])
+        .args([
+            "deploy",
+            "canister-a",
+            "canister-b",
+            "canister-c",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .failure(); // no valid wasm - should fail but still creates canisters
 
@@ -308,7 +311,14 @@ async fn canister_create_colocates_canisters() {
     // Deploy remaining canisters
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "canister-d", "canister-e", "canister-f"])
+        .args([
+            "deploy",
+            "canister-d",
+            "canister-e",
+            "canister-f",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .failure(); // no valid wasm - should fail but still creates canisters
 

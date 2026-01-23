@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Add IC options to network manifest (`ii`, `nns`, `subnets`, `artificial-delay-ms`)
 * feat: Release for Windows
 * feat: Add safety controls for `--set-controller` and `--remove-controller`
   * Warn and prompt for confirmation when removing yourself from controllers
@@ -17,6 +18,8 @@
 * chore!: Change display format of token and cycles amounts
 * feat: Token and cycles amounts now support new formats. Valid examples: `1_000`, `1k`, `1.5m`, `1_234.5b`, `4T`
 * feat: Allow installing WASMs that are larger than 2MB
+* feat: Add `icp identity account-id` command to display the ICP ledger account identifier
+  * Supports `--of-principal` flag to convert a specific principal instead of the current identity
 
 # v0.1.0-beta.3
 

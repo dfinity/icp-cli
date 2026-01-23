@@ -7,6 +7,7 @@ use snafu::prelude::*;
 
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
+use strum::EnumString;
 
 use crate::{
     CACHE_DIR, ICP_BASE, Network,
@@ -79,7 +80,31 @@ pub struct Managed {
 #[serde(untagged)]
 pub enum ManagedMode {
     Image(Box<ManagedImageConfig>),
-    Launcher { gateway: Gateway },
+    Launcher(Box<ManagedLauncherConfig>),
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct ManagedLauncherConfig {
+    pub gateway: Gateway,
+    pub artificial_delay_ms: Option<u64>,
+    pub ii: bool,
+    pub nns: bool,
+    pub subnets: Option<Vec<SubnetKind>>,
+}
+
+#[derive(
+    Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize, EnumString, strum::Display,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum SubnetKind {
+    Application,
+    System,
+    VerifiedApplication,
+    Bitcoin,
+    Fiduciary,
+    Nns,
+    Sns,
 }
 
 impl Default for ManagedMode {
@@ -90,7 +115,7 @@ impl Default for ManagedMode {
 
 impl ManagedMode {
     pub fn default_for_port(port: u16) -> Self {
-        ManagedMode::Launcher {
+        ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
             gateway: Gateway {
                 host: default_host(),
                 port: if port == 0 {
@@ -99,7 +124,11 @@ impl ManagedMode {
                     Port::Fixed(port)
                 },
             },
-        }
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+        }))
     }
 }
 
@@ -180,14 +209,26 @@ impl From<Mode> for Configuration {
     fn from(value: Mode) -> Self {
         match value {
             Mode::Managed(managed) => match *managed.mode {
-                crate::manifest::network::ManagedMode::Launcher { gateway } => {
+                crate::manifest::network::ManagedMode::Launcher {
+                    gateway,
+                    artificial_delay_ms,
+                    ii,
+                    nns,
+                    subnets,
+                } => {
                     let gateway: Gateway = match gateway {
                         Some(g) => g.into(),
                         None => Gateway::default(),
                     };
                     Configuration::Managed {
                         managed: Managed {
-                            mode: ManagedMode::Launcher { gateway },
+                            mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
+                                gateway,
+                                artificial_delay_ms,
+                                ii: ii.unwrap_or(false),
+                                nns: nns.unwrap_or(false),
+                                subnets,
+                            })),
                         },
                     }
                 }

@@ -97,13 +97,8 @@ pub async fn icrc1_transfer(
     };
 
     let arg = TransferArg {
-        // Transfer amount
         amount: ledger_amount.clone(),
-
-        // Transfer destination
         to: receiver_account,
-
-        // Other
         from_subaccount: None,
         fee: None,
         created_at_time: None,

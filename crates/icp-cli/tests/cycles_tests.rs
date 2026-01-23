@@ -183,3 +183,75 @@ async fn cycles_mint_on_ic() {
         ))
         .failure();
 }
+
+#[tokio::test]
+async fn cycles_transfer() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
+
+    // Mint ICP to alice and convert to cycles
+    icp_client.use_identity("alice");
+    clients::ledger(&ctx)
+        .acquire_icp(alice_principal, None, 1_000_000_000_u128)
+        .await;
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "5",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Transfer cycles from alice to bob
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "transfer",
+            "2t",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains(format!(
+            "Transferred 2_000_000_000_000 cycles to {bob_principal}"
+        )))
+        .success();
+
+    // Check bob's balance
+    icp_client.use_identity("bob");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["cycles", "balance", "--environment", "random-environment"])
+        .assert()
+        .stdout(contains("Balance: 2_000_000_000_000 cycles"))
+        .success();
+}

@@ -74,25 +74,7 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetB
     let (balance, decimals, symbol) = tokio::join!(
         //
         // Obtain token balance
-        async {
-            // Convert identity to sender principal
-            let owner = agent
-                .get_principal()
-                .map_err(|err| GetBalanceError::GetPrincipal { err })?;
-
-            // Specify sub-account
-            let subaccount = None;
-
-            // Perform query
-            let resp = agent
-                .query(&cid, "icrc1_balance_of")
-                .with_arg(Encode!(&Account { owner, subaccount }).expect("failed to encode arg"))
-                .await
-                .context(QueryBalanceSnafu)?;
-
-            // Decode response
-            Decode!(&resp, Nat).context(DecodeBalanceSnafu)
-        },
+        get_raw_balance(agent, cid),
         //
         // Obtain the number of decimals the token uses
         async {
@@ -128,4 +110,25 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetB
     let amount = BigDecimal::from_biguint(balance, decimals);
 
     Ok(TokenAmount { amount, symbol })
+}
+
+pub async fn get_raw_balance(agent: &Agent, ledger: Principal) -> Result<Nat, GetBalanceError> {
+    let owner = agent
+        .get_principal()
+        .map_err(|err| GetBalanceError::GetPrincipal { err })?;
+    // Perform query
+    let resp = agent
+        .query(&ledger, "icrc1_balance_of")
+        .with_arg(
+            Encode!(&Account {
+                owner,
+                subaccount: None
+            })
+            .expect("failed to encode arg"),
+        )
+        .await
+        .context(QueryBalanceSnafu)?;
+
+    // Decode response
+    Decode!(&resp, Nat).context(DecodeBalanceSnafu)
 }

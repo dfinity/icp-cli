@@ -39,19 +39,6 @@ async fn token_balance() {
         .stdout(contains("Balance: 0 ICP"))
         .success();
 
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "token",
-            "cycles",
-            "balance",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .stdout(contains("Balance: 0 cycles"))
-        .success();
-
     // mint icp to identity
     clients::ledger(&ctx)
         .acquire_icp(identity, None, 123456780_u128)
@@ -133,41 +120,4 @@ async fn token_transfer() {
         icp_ledger.balance_of(bob_principal, None).await,
         110_000_000_u128
     );
-
-    // Simple cycles transfer
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "cycles",
-            "mint",
-            "--icp",
-            "5",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .success();
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "token",
-            "cycles",
-            "transfer",
-            "2t",
-            &bob_principal.to_string(),
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .stdout(contains(format!(
-            "Transferred 2_000_000_000_000 cycles to {bob_principal}"
-        )))
-        .success();
-    icp_client.use_identity("bob");
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["cycles", "balance", "--environment", "random-environment"])
-        .assert()
-        .stdout(contains("Balance: 2_000_000_000_000 cycles"))
-        .success();
 }

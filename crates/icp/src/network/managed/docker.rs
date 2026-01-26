@@ -46,6 +46,24 @@ pub struct ManagedImageOptions {
     pub mounts: Vec<Mount>,
 }
 
+impl ManagedImageOptions {
+    /// Returns all fixed (nonzero) host ports from the port bindings.
+    pub fn fixed_host_ports(&self) -> Vec<u16> {
+        self.port_bindings
+            .values()
+            .flatten()
+            .flatten()
+            .filter_map(|binding| {
+                binding
+                    .host_port
+                    .as_ref()
+                    .and_then(|p| p.parse::<u16>().ok())
+                    .filter(|&p| p != 0)
+            })
+            .collect()
+    }
+}
+
 impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
     type Error = ManagedImageConversionError;
 

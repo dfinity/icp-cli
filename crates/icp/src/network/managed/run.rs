@@ -123,31 +123,49 @@ async fn run_network_launcher(
     verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
-    let port = if let ManagedMode::Launcher(launcher_config) = &config.mode
-        && let Port::Fixed(port) = &launcher_config.gateway.port
-    {
-        Some(*port)
-    } else {
-        None
+
+    // Determine the image options and fixed ports to check before spawning
+    #[allow(clippy::large_enum_variant)] // Only used inline, not moved
+    enum LaunchMode<'a> {
+        Image(ManagedImageOptions),
+        NativeLauncher(&'a ManagedLauncherConfig),
+    }
+    let (launch_mode, fixed_ports) = match &config.mode {
+        ManagedMode::Image(image_config) => {
+            let options = ManagedImageOptions::try_from(image_config.as_ref())?;
+            let fixed_ports = options.fixed_host_ports();
+            (LaunchMode::Image(options), fixed_ports)
+        }
+        ManagedMode::Launcher(launcher_config) if cfg!(windows) => {
+            let options = transform_native_launcher_to_container(launcher_config);
+            let fixed_ports = options.fixed_host_ports();
+            (LaunchMode::Image(options), fixed_ports)
+        }
+        ManagedMode::Launcher(launcher_config) => {
+            let fixed_ports = match launcher_config.gateway.port {
+                Port::Fixed(port) => vec![port],
+                Port::Random => vec![],
+            };
+            (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
+        }
     };
+
     let (mut guard, instance, gateway, locator) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let Some(port) = port {
-                Some(nd.port(port)?.into_write().await?)
-            } else {
-                None
-            };
-            // Check if the port is already in use by a live process
-            if let Some(lock) = &port_lock
-                && let Some(descriptor) = lock.check_port_in_use().await?
-            {
-                return Err(RunNetworkLauncherError::PortInUse {
-                    source: PortInUseError {
-                        port: port.unwrap(),
-                        network: descriptor.network,
-                        owner: descriptor.project_dir,
-                    },
-                });
+            // Acquire locks for all fixed ports and check they're not in use
+            let mut port_locks = Vec::new();
+            for port in &fixed_ports {
+                let lock = nd.port(*port)?.into_write().await?;
+                if let Some(descriptor) = lock.check_port_in_use().await? {
+                    return Err(RunNetworkLauncherError::PortInUse {
+                        source: PortInUseError {
+                            port: *port,
+                            network: descriptor.network,
+                            owner: descriptor.project_dir,
+                        },
+                    });
+                }
+                port_locks.push(lock);
             }
 
             create_dir_all(&root.launcher_dir()).context(CreateDirAllSnafu)?;
@@ -157,9 +175,8 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            match &config.mode {
-                ManagedMode::Image(image_config) => {
-                    let options = ManagedImageOptions::try_from(image_config.as_ref())?;
+            match launch_mode {
+                LaunchMode::Image(options) => {
                     let (guard, instance, locator, fixed) = spawn_docker_launcher(&options).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
@@ -167,17 +184,7 @@ async fn run_network_launcher(
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
-                ManagedMode::Launcher(launcher_config) if cfg!(windows) /* todo machine setting for unix */ => {
-                    let options = transform_native_launcher_to_container(launcher_config);
-                    let (guard, instance, locator, fixed) =
-                        spawn_docker_launcher(&options).await?;
-                    let gateway = NetworkDescriptorGatewayPort {
-                        port: instance.gateway_port,
-                        fixed,
-                    };
-                    Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
-                }
-                ManagedMode::Launcher(launcher_config) => {
+                LaunchMode::NativeLauncher(launcher_config) => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
                     }
@@ -202,7 +209,8 @@ async fn run_network_launcher(
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
                 }
             }
-        }).await??;
+        })
+        .await??;
 
     if background {
         // background means we're using stdio files - otherwise the launcher already prints this
@@ -218,10 +226,12 @@ async fn run_network_launcher(
     )
     .await?;
 
+    let gateway_port = gateway.port;
+    let gateway_fixed = gateway.fixed;
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let Some(port) = port {
-                Some(nd.port(port)?.into_write().await?)
+            let port_lock = if gateway_fixed {
+                Some(nd.port(gateway_port)?.into_write().await?)
             } else {
                 None
             };
@@ -253,7 +263,9 @@ async fn run_network_launcher(
         guard.async_drop().await;
 
         let _ = nd.cleanup_project_network_descriptor().await;
-        let _ = nd.cleanup_port_descriptor(port).await;
+        if gateway_fixed {
+            let _ = nd.cleanup_port_descriptor(Some(gateway_port)).await;
+        }
     }
     Ok(())
 }

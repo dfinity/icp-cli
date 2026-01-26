@@ -109,6 +109,9 @@ find "$TARGET_DIR" -name "*.md" -type f | while read -r file; do
   {
     echo "---"
     echo "title: $title"
+    # Add banner to all pages (will be removed once versioning is introduced)
+    echo "banner:"
+    echo "  content: 'This documentation reflects the latest main branch and may include features not yet in the <a href=\"https://github.com/dfinity/icp-cli/releases\">current beta release</a>. Feedback welcome on the <a href=\"https://forum.dfinity.org/t/first-beta-release-of-icp-cli/60410\">Forum</a> or <a href=\"https://discord.internetcomputer.org\">Discord</a>!'"
     echo "---"
     echo ""
     # Remove the first H1 heading line from content to avoid duplicates

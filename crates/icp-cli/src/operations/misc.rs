@@ -3,7 +3,7 @@
 use anyhow::{Result, bail};
 use candid::IDLArgs;
 use candid_parser::parse_idl_args;
-use icp::prelude::*;
+use icp::{fs, prelude::*};
 
 pub async fn fetch_canister_metadata(
     agent: &ic_agent::Agent,
@@ -46,23 +46,17 @@ pub(crate) fn parse_args<P: AsRef<Path>>(args_str: &str, base_path: &P) -> Resul
     }
 
     // If neither hex nor Candid, try to read as a file path
-    let file_path = if args_str.starts_with('/') {
-        // Absolute path
-        PathBuf::from(args_str)
-    } else {
-        // Relative path - resolve relative to base_path
-        base_path.as_ref().join(args_str)
-    };
-
-    // Try to read the file
-    if let Ok(contents) = std::fs::read_to_string(file_path.as_std_path()) {
+    let file_path = base_path.as_ref().join(args_str);
+    if file_path.is_file()
+        && let Ok(contents) = fs::read_to_string(&file_path)
+    {
         // Recursively parse the file contents
         return parse_args(contents.trim(), base_path);
     }
 
     // If all attempts failed, return an error
     bail!(
-        "Failed to parse arguments as hex, Candid literal, or file path: '{}'",
+        "Failed to parse arguments as hex, Candid literal, or as path to existing file: '{}'",
         args_str
     )
 }

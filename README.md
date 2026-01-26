@@ -4,10 +4,9 @@ A command-line tool for building and deploying applications on the Internet Comp
 
 ## Quick Start
 
-```bash
-# Install via Homebrew (macOS)
-brew install dfinity/tap/icp-cli
+**Install:** See the [Installation Guide](docs/guides/installation.md) for your platform (macOS, Linux, Windows)
 
+```bash
 # Create and deploy a project
 icp new my-project && cd my-project
 icp network start -d
@@ -16,14 +15,12 @@ icp deploy
 # Show the status of your canisters
 icp canister status
 
+# List your canisters to see their names
+icp canister list
+
 # Call a function on your canister
-# icp canister call <canister-name> greet '("World")'
-# The ones generated from the templates are typically called `backend`
-
-icp canister call backend greet '("World")'
+icp canister call <canister-name> greet '("World")'
 ```
-
-See the [Installation Guide](docs/guides/installation.md) for all installation methods.
 
 ## For dfx Users
 
@@ -56,6 +53,9 @@ The [`examples/`](examples/) directory contains example projects to help you get
 **Language-specific toolchains** (install for the languages you'll use):
 - **Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
 - **Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
+
+**Required for templates and recipes:**
+- **ic-wasm** — Required when using official templates or recipes. See [Installation Guide](docs/guides/installation.md) for details.
 
 **Other dependencies:**
 - Docker — always required on Windows (with WSL2), and some projects may require it on other platforms.

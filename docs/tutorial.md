@@ -4,34 +4,12 @@ Deploy your first canister on the Internet Computer in under 10 minutes.
 
 ## Prerequisites
 
-Install icp-cli and the toolchain for your canister language.
+Follow the **[Installation Guide](guides/installation.md)** to install:
+- icp-cli
+- Language toolchains (Rust or Motoko)
+- ic-wasm (required when using templates or recipes)
 
-### Install icp-cli
-
-**Via Homebrew (macOS):**
-
-```bash
-brew install dfinity/tap/icp-cli
-```
-
-**From source:**
-
-```bash
-git clone https://github.com/dfinity/icp-cli.git
-cd icp-cli && cargo build --release
-export PATH=$(pwd)/target/release:$PATH
-```
-
-For detailed installation options, see the [Installation Guide](guides/installation.md).
-
-### Language Toolchains
-
-Install the toolchain for the language you'll use:
-
-- **Rust canisters**: [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
-- **Motoko canisters**: [mops](https://cli.mops.one/) and `mops toolchain init`
-
-### Verify Installation
+Verify installation:
 
 ```bash
 icp --version

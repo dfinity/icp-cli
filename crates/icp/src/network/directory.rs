@@ -184,16 +184,16 @@ impl NetworkDirectory {
     }
 }
 
-/// Saves the network descriptor to both the project-local directory and the global port
-/// descriptor directory (if a fixed port is used).
+/// Saves the network descriptor to both the project-local directory and all global port
+/// descriptor directories (for fixed ports).
 ///
-/// This must be called with write locks already acquired on both directories.
+/// This must be called with write locks already acquired on all directories.
 pub async fn save_network_descriptors(
     root: LWrite<&NetworkRootPaths>,
-    port: Option<LWrite<&PortPaths>>,
+    ports: &[LWrite<&PortPaths>],
     descriptor: &NetworkDescriptorModel,
 ) -> Result<(), SaveNetworkDescriptorError> {
-    if let Some(port) = port {
+    for port in ports {
         json::save(&port.descriptor_path(), descriptor).context(PortDescriptorSnafu)?;
     }
     json::save(&root.network_descriptor_path(), descriptor).context(NetworkRootDescriptorSnafu)?;

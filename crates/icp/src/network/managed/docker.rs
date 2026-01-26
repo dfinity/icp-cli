@@ -26,6 +26,14 @@ use crate::prelude::*;
 
 use super::launcher::wait_for_launcher_status;
 
+/// Error converting a path for WSL2.
+#[derive(Debug, Snafu)]
+#[snafu(display("failed to convert path {path} to WSL2: {msg}"))]
+pub struct WslPathConversionError {
+    pub msg: String,
+    pub path: PathBuf,
+}
+
 /// Parsed and validated options for spawning a Docker container.
 /// Created from `ManagedImageConfig` via `TryFrom`.
 pub struct ManagedImageOptions {
@@ -175,8 +183,8 @@ pub enum ManagedImageConversionError {
     BadPath { source: camino::FromPathBufError },
     #[snafu(display("unknown mount flags {flags}, expected 'ro' or 'rw'"))]
     UnknownFlags { flags: String },
-    #[snafu(display("failed to convert path {path} to WSL2: {msg}"))]
-    WslPathConvert { msg: String, path: PathBuf },
+    #[snafu(transparent)]
+    WslPathConvert { source: WslPathConversionError },
 }
 
 pub async fn spawn_docker_launcher(
@@ -211,14 +219,7 @@ pub async fn spawn_docker_launcher(
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
     let host_status_tmpdir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let host_status_dir = host_status_tmpdir.path();
-    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())
-        .map_err(|e| match e {
-            ManagedImageConversionError::WslPathConvert { msg, path } => {
-                WslStatusDirPathConvertSnafu { msg, path }.build()
-            }
-            // Other variants can't occur from convert_path
-            _ => unreachable!(),
-        })?;
+    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
 
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
@@ -530,14 +531,13 @@ fn convert_path(
     convert: bool,
     distro: Option<&str>,
     path: &Path,
-) -> Result<String, ManagedImageConversionError> {
+) -> Result<String, WslPathConversionError> {
     if convert {
         wslpath2::convert(path.as_str(), distro, Conversion::WindowsToWsl, true).map_err(|e| {
-            WslPathConvertSnafu {
+            WslPathConversionError {
                 msg: e.to_string(),
                 path: path.to_path_buf(),
             }
-            .build()
         })
     } else {
         Ok(path.to_string())
@@ -580,6 +580,8 @@ pub enum DockerLauncherError {
     ConnectDocker { source: ConnectDockerError },
     #[snafu(transparent)]
     ImageConversion { source: ManagedImageConversionError },
+    #[snafu(transparent)]
+    WslPathConversion { source: WslPathConversionError },
     #[snafu(display("failed to create docker container"))]
     CreateContainer {
         source: bollard::errors::Error,
@@ -667,8 +669,6 @@ pub enum DockerLauncherError {
         source: std::str::Utf8Error,
         display: String,
     },
-    #[snafu(display("failed to convert status dir path {path} to WSL2: {msg}"))]
-    WslStatusDirPathConvert { msg: String, path: PathBuf },
     #[snafu(display("failed to create temporary directory in WSL2"))]
     WslCreateTmpDirError { source: std::io::Error },
 }

@@ -249,13 +249,8 @@ async fn run_network_launcher(
             };
 
             // Save descriptor to project root and all fixed port directories
-            save_network_descriptors(root, port_locks.first().map(|p| p.as_ref()), &descriptor)
-                .await?;
-            // Save to remaining port directories
-            for port_lock in port_locks.iter().skip(1) {
-                crate::fs::json::save(&port_lock.descriptor_path(), &descriptor)
-                    .context(SavePortDescriptorSnafu)?;
-            }
+            let port_refs: Vec<_> = port_locks.iter().map(|p| p.as_ref()).collect();
+            save_network_descriptors(root, &port_refs, &descriptor).await?;
             Ok(())
         })
         .await??;
@@ -353,9 +348,6 @@ pub enum RunNetworkLauncherError {
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },
-
-    #[snafu(display("failed to save port descriptor"))]
-    SavePortDescriptor { source: crate::fs::json::Error },
 
     #[snafu(transparent)]
     InitNetwork { source: InitializeNetworkError },

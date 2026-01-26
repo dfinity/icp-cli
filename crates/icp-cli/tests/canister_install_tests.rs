@@ -625,6 +625,7 @@ async fn canister_install_large_wasm_chunked() {
         .stdout(contains("Status: Running"));
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_install_with_args_from_file() {
     let ctx = TestContext::new();
@@ -715,6 +716,7 @@ async fn canister_install_with_args_from_file() {
         .stdout(eq("(\"42\")").trim());
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn deploy_with_init_args_from_file_in_manifest() {
     let ctx = TestContext::new();

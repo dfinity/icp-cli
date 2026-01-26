@@ -90,13 +90,7 @@ pub async fn spawn_docker_launcher(
         #[cfg(windows)]
         None => r"\\.\pipe\docker_engine".to_string(),
     };
-    let docker = if socket.starts_with("tcp://") || socket.starts_with("http://") {
-        let http_addr = socket.replace("tcp://", "http://");
-        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
-    } else {
-        Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
-    }
-    .context(ConnectDockerSnafu { socket: &socket })?;
+    let docker = connect_docker(&socket)?;
     let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {
@@ -325,18 +319,44 @@ pub async fn spawn_docker_launcher(
     ))
 }
 
-pub async fn stop_docker_launcher(
-    socket: &str,
-    container_id: &str,
-    rm_on_exit: bool,
-) -> Result<(), StopContainerError> {
-    let docker = if socket.starts_with("tcp://") {
+/// Connect to the Docker daemon at the given socket.
+pub fn connect_docker(socket: &str) -> Result<Docker, ConnectDockerError> {
+    if socket.starts_with("tcp://") || socket.starts_with("http://") {
         let http_addr = socket.replace("tcp://", "http://");
         Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
     } else {
         Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
     }
-    .context(ConnectSnafu { socket })?;
+    .context(ConnectDockerSnafu { socket })
+}
+
+#[derive(Snafu, Debug)]
+#[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
+pub struct ConnectDockerError {
+    source: bollard::errors::Error,
+    socket: String,
+}
+
+/// Check if a container is running.
+pub async fn is_container_running(socket: &str, container_id: &str) -> bool {
+    let Ok(docker) = connect_docker(socket) else {
+        return false;
+    };
+    match docker
+        .inspect_container(container_id, None::<InspectContainerOptions>)
+        .await
+    {
+        Ok(info) => info.state.and_then(|s| s.running).unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+pub async fn stop_docker_launcher(
+    socket: &str,
+    container_id: &str,
+    rm_on_exit: bool,
+) -> Result<(), StopContainerError> {
+    let docker = connect_docker(socket)?;
     stop(&docker, container_id, rm_on_exit).await
 }
 
@@ -360,11 +380,8 @@ async fn stop(
 
 #[derive(Snafu, Debug)]
 pub enum StopContainerError {
-    #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
-    Connect {
-        source: bollard::errors::Error,
-        socket: String,
-    },
+    #[snafu(transparent)]
+    StopConnect { source: ConnectDockerError },
     #[snafu(display("failed to stop docker container {container_id}"))]
     Stop {
         source: bollard::errors::Error,
@@ -427,11 +444,8 @@ fn convert_volume(
 
 #[derive(Debug, Snafu)]
 pub enum DockerLauncherError {
-    #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
-    ConnectDocker {
-        source: bollard::errors::Error,
-        socket: PathBuf,
-    },
+    #[snafu(transparent)]
+    ConnectDocker { source: ConnectDockerError },
     #[snafu(display("failed to create docker container"))]
     CreateContainer {
         source: bollard::errors::Error,

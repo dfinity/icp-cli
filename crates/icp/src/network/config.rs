@@ -49,7 +49,7 @@ pub enum ChildLocator {
 
 impl ChildLocator {
     /// Checks if the process or container referenced by this locator is still alive.
-    pub fn is_alive(&self) -> bool {
+    pub async fn is_alive(&self) -> bool {
         match self {
             ChildLocator::Pid { pid, start_time } => {
                 use sysinfo::{Pid, ProcessesToUpdate, System};
@@ -61,22 +61,7 @@ impl ChildLocator {
                     .is_some_and(|p| p.start_time() == *start_time)
             }
             ChildLocator::Container { id, socket, .. } => {
-                // Check if the container exists and is running
-                use std::process::Command;
-                let socket_arg = format!("--host={socket}");
-                Command::new("docker")
-                    .args([&socket_arg, "inspect", "--format={{.State.Running}}", id])
-                    .output()
-                    .ok()
-                    .and_then(|output| {
-                        if output.status.success() {
-                            let stdout = String::from_utf8_lossy(&output.stdout);
-                            Some(stdout.trim() == "true")
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(false)
+                crate::network::managed::docker::is_container_running(socket, id).await
             }
         }
     }

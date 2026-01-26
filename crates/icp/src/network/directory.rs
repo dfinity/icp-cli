@@ -203,10 +203,12 @@ impl PortPaths {
 
     /// Checks if the port is in use by a live process/container.
     /// Returns the descriptor if the port is in use, None if available.
-    pub fn check_port_in_use(&self) -> Result<Option<NetworkDescriptorModel>, CheckPortInUseError> {
+    pub async fn check_port_in_use(
+        &self,
+    ) -> Result<Option<NetworkDescriptorModel>, CheckPortInUseError> {
         match json::load::<NetworkDescriptorModel>(&self.descriptor_path()) {
             Ok(descriptor) => {
-                if descriptor.child_locator.is_alive() {
+                if descriptor.child_locator.is_alive().await {
                     Ok(Some(descriptor))
                 } else {
                     // Process/container is dead, port is available

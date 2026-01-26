@@ -139,7 +139,7 @@ async fn run_network_launcher(
             };
             // Check if the port is already in use by a live process
             if let Some(lock) = &port_lock
-                && let Some(descriptor) = lock.check_port_in_use()?
+                && let Some(descriptor) = lock.check_port_in_use().await?
             {
                 return Err(RunNetworkLauncherError::PortInUse {
                     source: PortInUseError {

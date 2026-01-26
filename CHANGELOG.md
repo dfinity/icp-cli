@@ -24,6 +24,11 @@
 * feat: `icp token transfer` now accepts AccountIdentifier hex strings for ICP ledger transfers
   * Legacy ICP ledger transfers using AccountIdentifier are automatically used when a 64-character hex string is provided
   * AccountIdentifier format is only supported for the ICP ledger; other tokens require Principal format
+* feat: `icp canister call` can now take arguments in hex
+* feat: allow specifying paths to files that contain canister arguments:
+  * in `icp canister call <canister> <function> <argument>` the argument can now point to a file that contains hex or Candid
+  * in `icp canister install <canister> <argument>` the argument can now point to a file that contains hex or Candid
+  * in `icp.yaml`, a canister's `install_args` field can now point to a file that contains hex or Candid
 
 # v0.1.0-beta.3
 

@@ -159,20 +159,20 @@ async fn run_network_launcher(
 
             match &config.mode {
                 ManagedMode::Image(image_config) => {
-                    let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
+                    let (guard, instance, locator, fixed) = spawn_docker_launcher(image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
-                        fixed: false,
+                        fixed,
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
                 ManagedMode::Launcher(launcher_config) if cfg!(windows) /* todo machine setting for unix */ => {
                     let image_config = transform_native_launcher_to_container(launcher_config);
-                    let (guard, instance, locator) =
+                    let (guard, instance, locator, fixed) =
                         spawn_docker_launcher(&image_config).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
-                        fixed: false,
+                        fixed,
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }

@@ -28,7 +28,15 @@ use crate::prelude::*;
 
 pub async fn spawn_docker_launcher(
     image_config: &ManagedImageConfig,
-) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance, ChildLocator), DockerLauncherError> {
+) -> Result<
+    (
+        AsyncDropper<DockerDropGuard>,
+        NetworkInstance,
+        ChildLocator,
+        bool,
+    ),
+    DockerLauncherError,
+> {
     let ManagedImageConfig {
         image,
         port_mapping,
@@ -191,7 +199,7 @@ pub async fn spawn_docker_launcher(
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
                 host_config: Some(HostConfig {
-                    port_bindings: Some(portmap),
+                    port_bindings: Some(portmap.clone()),
                     mounts: Some(mounts),
                     binds: Some(
                         volumes
@@ -245,6 +253,14 @@ pub async fn spawn_docker_launcher(
         .context(InspectContainerSnafu { container_id })?;
     let container_config_port = launcher_status.config_port;
     let container_gateway_port = launcher_status.gateway_port;
+    let gateway_port_was_fixed = portmap
+        .get(&format!("{container_gateway_port}/tcp"))
+        .is_some_and(|p| {
+            p.as_ref()
+                .unwrap()
+                .iter()
+                .any(|m| m.host_port.as_ref().unwrap() == "0")
+        });
     let port_bindings = container_info
         .network_settings
         .context(RequiredFieldMissingSnafu {
@@ -320,6 +336,7 @@ pub async fn spawn_docker_launcher(
             })?,
         },
         locator,
+        gateway_port_was_fixed,
     ))
 }
 

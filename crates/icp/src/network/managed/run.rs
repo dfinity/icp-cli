@@ -35,14 +35,14 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Managed, ManagedImageConfig, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
+        Managed, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{
             CheckPortInUseError, PortInUseError, SaveNetworkDescriptorError,
             save_network_descriptors,
         },
         managed::{
-            docker::{DockerDropGuard, spawn_docker_launcher},
+            docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
             launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
     },
@@ -123,31 +123,49 @@ async fn run_network_launcher(
     verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
-    let port = if let ManagedMode::Launcher(launcher_config) = &config.mode
-        && let Port::Fixed(port) = &launcher_config.gateway.port
-    {
-        Some(*port)
-    } else {
-        None
+
+    // Determine the image options and fixed ports to check before spawning
+    #[allow(clippy::large_enum_variant)] // Only used inline, not moved
+    enum LaunchMode<'a> {
+        Image(ManagedImageOptions),
+        NativeLauncher(&'a ManagedLauncherConfig),
+    }
+    let (launch_mode, fixed_ports) = match &config.mode {
+        ManagedMode::Image(image_config) => {
+            let options = ManagedImageOptions::try_from(image_config.as_ref())?;
+            let fixed_ports = options.fixed_host_ports();
+            (LaunchMode::Image(options), fixed_ports)
+        }
+        ManagedMode::Launcher(launcher_config) if cfg!(windows) => {
+            let options = transform_native_launcher_to_container(launcher_config);
+            let fixed_ports = options.fixed_host_ports();
+            (LaunchMode::Image(options), fixed_ports)
+        }
+        ManagedMode::Launcher(launcher_config) => {
+            let fixed_ports = match launcher_config.gateway.port {
+                Port::Fixed(port) => vec![port],
+                Port::Random => vec![],
+            };
+            (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
+        }
     };
+
     let (mut guard, instance, gateway, locator) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let Some(port) = port {
-                Some(nd.port(port)?.into_write().await?)
-            } else {
-                None
-            };
-            // Check if the port is already in use by a live process
-            if let Some(lock) = &port_lock
-                && let Some(descriptor) = lock.check_port_in_use().await?
-            {
-                return Err(RunNetworkLauncherError::PortInUse {
-                    source: PortInUseError {
-                        port: port.unwrap(),
-                        network: descriptor.network,
-                        owner: descriptor.project_dir,
-                    },
-                });
+            // Acquire locks for all fixed ports and check they're not in use
+            let mut port_locks = Vec::new();
+            for port in &fixed_ports {
+                let lock = nd.port(*port)?.into_write().await?;
+                if let Some(descriptor) = lock.check_port_in_use().await? {
+                    return Err(RunNetworkLauncherError::PortInUse {
+                        source: PortInUseError {
+                            port: *port,
+                            network: descriptor.network,
+                            owner: descriptor.project_dir,
+                        },
+                    });
+                }
+                port_locks.push(lock);
             }
 
             create_dir_all(&root.launcher_dir()).context(CreateDirAllSnafu)?;
@@ -157,26 +175,16 @@ async fn run_network_launcher(
             }
             create_dir_all(&root.state_dir()).context(CreateDirAllSnafu)?;
 
-            match &config.mode {
-                ManagedMode::Image(image_config) => {
-                    let (guard, instance, locator) = spawn_docker_launcher(image_config).await?;
+            match launch_mode {
+                LaunchMode::Image(options) => {
+                    let (guard, instance, locator, fixed) = spawn_docker_launcher(&options).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
-                        fixed: false,
+                        fixed,
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
-                ManagedMode::Launcher(launcher_config) if cfg!(windows) /* todo machine setting for unix */ => {
-                    let image_config = transform_native_launcher_to_container(launcher_config);
-                    let (guard, instance, locator) =
-                        spawn_docker_launcher(&image_config).await?;
-                    let gateway = NetworkDescriptorGatewayPort {
-                        port: instance.gateway_port,
-                        fixed: false,
-                    };
-                    Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
-                }
-                ManagedMode::Launcher(launcher_config) => {
+                LaunchMode::NativeLauncher(launcher_config) => {
                     if root.state_dir().exists() {
                         remove_dir_all(&root.state_dir()).context(RemoveDirAllSnafu)?;
                     }
@@ -201,7 +209,8 @@ async fn run_network_launcher(
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
                 }
             }
-        }).await??;
+        })
+        .await??;
 
     if background {
         // background means we're using stdio files - otherwise the launcher already prints this
@@ -219,11 +228,12 @@ async fn run_network_launcher(
 
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if let Some(port) = port {
-                Some(nd.port(port)?.into_write().await?)
-            } else {
-                None
-            };
+            // Acquire locks for all fixed ports
+            let mut port_locks = Vec::new();
+            for port in &fixed_ports {
+                port_locks.push(nd.port(*port)?.into_write().await?);
+            }
+
             let descriptor = NetworkDescriptorModel {
                 v: "1".to_string(),
                 id: Uuid::new_v4(),
@@ -237,8 +247,10 @@ async fn run_network_launcher(
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
             };
-            save_network_descriptors(root, port_lock.as_ref().map(|p| p.as_ref()), &descriptor)
-                .await?;
+
+            // Save descriptor to project root and all fixed port directories
+            let port_refs: Vec<_> = port_locks.iter().map(|p| p.as_ref()).collect();
+            save_network_descriptors(root, &port_refs, &descriptor).await?;
             Ok(())
         })
         .await??;
@@ -252,26 +264,47 @@ async fn run_network_launcher(
         guard.async_drop().await;
 
         let _ = nd.cleanup_project_network_descriptor().await;
-        let _ = nd.cleanup_port_descriptor(port).await;
+        for port in &fixed_ports {
+            let _ = nd.cleanup_port_descriptor(Some(*port)).await;
+        }
     }
     Ok(())
 }
 
-fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageConfig {
+fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
+    use bollard::secret::PortBinding;
+    use std::collections::HashMap;
+
     let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
     let args = launcher_settings_flags(config);
-    ManagedImageConfig {
+
+    let platform = if cfg!(target_arch = "aarch64") {
+        "linux/arm64".to_string()
+    } else {
+        "linux/amd64".to_string()
+    };
+
+    let port_bindings: HashMap<String, Option<Vec<PortBinding>>> = [(
+        "4943/tcp".to_string(),
+        Some(vec![PortBinding {
+            host_ip: Some("127.0.0.1".to_string()),
+            host_port: Some(port.to_string()),
+        }]),
+    )]
+    .into();
+
+    ManagedImageOptions {
         image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
-        port_mapping: vec![format!("{port}:4943")],
+        port_bindings,
         rm_on_exit: true,
         args,
         entrypoint: None,
         environment: vec![],
         volumes: vec![],
-        platform: None,
+        platform,
         user: None,
         shm_size: None,
         status_dir: "/app/status".to_string(),
@@ -339,6 +372,11 @@ pub enum RunNetworkLauncherError {
     #[snafu(transparent)]
     SpawnLauncher {
         source: crate::network::managed::launcher::SpawnNetworkLauncherError,
+    },
+
+    #[snafu(transparent)]
+    ImageConversion {
+        source: crate::network::managed::docker::ManagedImageConversionError,
     },
 
     #[snafu(transparent)]

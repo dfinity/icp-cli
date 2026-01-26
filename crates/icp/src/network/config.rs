@@ -37,12 +37,49 @@ pub struct NetworkDescriptorModel {
 pub enum ChildLocator {
     Pid {
         pid: u32,
+        /// Process start time in seconds since UNIX epoch, used to detect PID reuse.
+        start_time: u64,
     },
     Container {
         id: String,
         socket: String,
         rm_on_exit: bool,
     },
+}
+
+impl ChildLocator {
+    /// Checks if the process or container referenced by this locator is still alive.
+    pub fn is_alive(&self) -> bool {
+        match self {
+            ChildLocator::Pid { pid, start_time } => {
+                use sysinfo::{Pid, ProcessesToUpdate, System};
+                let mut system = System::new();
+                let sysinfo_pid = Pid::from_u32(*pid);
+                system.refresh_processes(ProcessesToUpdate::Some(&[sysinfo_pid]), true);
+                system
+                    .process(sysinfo_pid)
+                    .is_some_and(|p| p.start_time() == *start_time)
+            }
+            ChildLocator::Container { id, socket, .. } => {
+                // Check if the container exists and is running
+                use std::process::Command;
+                let socket_arg = format!("--host={socket}");
+                Command::new("docker")
+                    .args([&socket_arg, "inspect", "--format={{.State.Running}}", id])
+                    .output()
+                    .ok()
+                    .and_then(|output| {
+                        if output.status.success() {
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            Some(stdout.trim() == "true")
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(false)
+            }
+        }
+    }
 }
 
 impl NetworkDescriptorModel {

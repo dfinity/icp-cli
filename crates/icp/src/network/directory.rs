@@ -1,7 +1,4 @@
-use std::{
-    fs::{File, TryLockError},
-    io::ErrorKind,
-};
+use std::io::ErrorKind;
 
 use snafu::{ResultExt, prelude::*};
 
@@ -204,39 +201,20 @@ impl PortPaths {
         self.port_descriptor_dir.join(format!("{}.json", self.port))
     }
 
-    /// Claims ownership of a port for this process while the returned file handle is active. Does not impact
-    /// file locking.
-    ///
-    /// Returns `PortAlreadyClaimed` if another process has already claimed the port.
-    pub fn claim_port(&self) -> Result<File, ClaimPortError> {
-        let claim_path = self.descriptor_path().with_extension("claim");
-        let f = File::create(&claim_path).context(OpenClaimFileSnafu { path: claim_path })?;
-        if let Err(e) = f.try_lock() {
-            match e {
-                TryLockError::WouldBlock => {
-                    if let Ok(descriptor) =
-                        json::load::<NetworkDescriptorModel>(&self.descriptor_path())
-                    {
-                        Err(ClaimPortError::PortAlreadyClaimed {
-                            port: self.port,
-                            network: Some(descriptor.network),
-                            owner: Some(descriptor.project_dir),
-                        })
-                    } else {
-                        Err(ClaimPortError::PortAlreadyClaimed {
-                            port: self.port,
-                            network: None,
-                            owner: None,
-                        })
-                    }
+    /// Checks if the port is in use by a live process/container.
+    /// Returns the descriptor if the port is in use, None if available.
+    pub fn check_port_in_use(&self) -> Result<Option<NetworkDescriptorModel>, CheckPortInUseError> {
+        match json::load::<NetworkDescriptorModel>(&self.descriptor_path()) {
+            Ok(descriptor) => {
+                if descriptor.child_locator.is_alive() {
+                    Ok(Some(descriptor))
+                } else {
+                    // Process/container is dead, port is available
+                    Ok(None)
                 }
-                TryLockError::Error(err) => Err(ClaimPortError::LockErrorOther {
-                    port: self.port,
-                    source: err,
-                }),
             }
-        } else {
-            Ok(f)
+            Err(json::Error::Io { source }) if source.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(CheckPortInUseError::LoadDescriptor { source: e }),
         }
     }
 }
@@ -278,26 +256,15 @@ pub enum LoadPidError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum ClaimPortError {
-    #[snafu(transparent)]
-    OpenPortLockError { source: LockError },
+pub enum CheckPortInUseError {
+    #[snafu(display("failed to load port descriptor"))]
+    LoadDescriptor { source: json::Error },
+}
 
-    #[snafu(display("failed to open port claim file {path}"))]
-    OpenClaimFileError {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-
-    #[snafu(display("port {port} is in use by the {} network of the project at '{}'",
-        network.as_ref().map_or_else(|| "<unknown>", |n| n.as_str()),
-        owner.as_ref().map_or_else(|| "<unknown>", |p| p.as_str()),
-    ))]
-    PortAlreadyClaimed {
-        port: u16,
-        network: Option<String>,
-        owner: Option<PathBuf>,
-    },
-
-    #[snafu(display("failed to claim port {port}"))]
-    LockErrorOther { port: u16, source: std::io::Error },
+#[derive(Debug, Snafu)]
+#[snafu(display("port {port} is in use by the {network} network of the project at '{owner}'"))]
+pub struct PortInUseError {
+    pub port: u16,
+    pub network: String,
+    pub owner: PathBuf,
 }

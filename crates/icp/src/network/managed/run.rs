@@ -35,14 +35,14 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Managed, ManagedImageConfig, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
+        Managed, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{
             CheckPortInUseError, PortInUseError, SaveNetworkDescriptorError,
             save_network_descriptors,
         },
         managed::{
-            docker::{DockerDropGuard, spawn_docker_launcher},
+            docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
             launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
     },
@@ -159,7 +159,8 @@ async fn run_network_launcher(
 
             match &config.mode {
                 ManagedMode::Image(image_config) => {
-                    let (guard, instance, locator, fixed) = spawn_docker_launcher(image_config).await?;
+                    let options = ManagedImageOptions::try_from(image_config.as_ref())?;
+                    let (guard, instance, locator, fixed) = spawn_docker_launcher(&options).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
@@ -167,9 +168,9 @@ async fn run_network_launcher(
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
                 ManagedMode::Launcher(launcher_config) if cfg!(windows) /* todo machine setting for unix */ => {
-                    let image_config = transform_native_launcher_to_container(launcher_config);
+                    let options = transform_native_launcher_to_container(launcher_config);
                     let (guard, instance, locator, fixed) =
-                        spawn_docker_launcher(&image_config).await?;
+                        spawn_docker_launcher(&options).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
@@ -257,21 +258,40 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageConfig {
+fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
+    use bollard::secret::PortBinding;
+    use std::collections::HashMap;
+
     let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
     let args = launcher_settings_flags(config);
-    ManagedImageConfig {
+
+    let platform = if cfg!(target_arch = "aarch64") {
+        "linux/arm64".to_string()
+    } else {
+        "linux/amd64".to_string()
+    };
+
+    let port_bindings: HashMap<String, Option<Vec<PortBinding>>> = [(
+        "4943/tcp".to_string(),
+        Some(vec![PortBinding {
+            host_ip: Some("127.0.0.1".to_string()),
+            host_port: Some(port.to_string()),
+        }]),
+    )]
+    .into();
+
+    ManagedImageOptions {
         image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
-        port_mapping: vec![format!("{port}:4943")],
+        port_bindings,
         rm_on_exit: true,
         args,
         entrypoint: None,
         environment: vec![],
         volumes: vec![],
-        platform: None,
+        platform,
         user: None,
         shm_size: None,
         status_dir: "/app/status".to_string(),
@@ -339,6 +359,11 @@ pub enum RunNetworkLauncherError {
     #[snafu(transparent)]
     SpawnLauncher {
         source: crate::network::managed::launcher::SpawnNetworkLauncherError,
+    },
+
+    #[snafu(transparent)]
+    ImageConversion {
+        source: crate::network::managed::docker::ManagedImageConversionError,
     },
 
     #[snafu(transparent)]

@@ -259,7 +259,7 @@ pub async fn spawn_docker_launcher(
             p.as_ref()
                 .unwrap()
                 .iter()
-                .any(|m| m.host_port.as_ref().unwrap() == "0")
+                .any(|m| m.host_port.as_ref().unwrap() != "0")
         });
     let port_bindings = container_info
         .network_settings

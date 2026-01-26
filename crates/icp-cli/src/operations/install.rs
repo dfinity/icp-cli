@@ -6,6 +6,7 @@ use ic_management_canister_types::{
 use ic_utils::interfaces::{
     ManagementCanister, management_canister::builders::CanisterInstallMode,
 };
+use icp::context::TermWriter;
 use sha2::{Digest, Sha256};
 use snafu::Snafu;
 use std::sync::Arc;
@@ -22,6 +23,19 @@ pub enum InstallOperationError {
 
     #[snafu(display("agent error: {source}"))]
     Agent { source: AgentError },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Canister(s) {names:?} failed to install."))]
+pub struct InstallManyError {
+    names: Vec<String>,
+}
+
+/// Holds error information from a failed canister install operation
+struct InstallFailure {
+    canister_name: String,
+    canister_id: Principal,
+    error: InstallOperationError,
 }
 
 pub(crate) async fn install_canister(
@@ -197,8 +211,9 @@ pub(crate) async fn install_many(
     canisters: Vec<(String, Principal, Option<Vec<u8>>)>,
     mode: &str,
     artifacts: Arc<dyn icp::store_artifact::Access>,
+    term: Arc<TermWriter>,
     debug: bool,
-) -> Result<(), InstallOperationError> {
+) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -226,18 +241,51 @@ pub(crate) async fn install_many(
         };
 
         futs.push_back(async move {
-            ProgressManager::execute_with_progress(
+            let result = ProgressManager::execute_with_progress(
                 &pb,
                 install_fn,
                 || "Installed successfully".to_string(),
                 |err| format!("Failed to install canister: {err}"),
             )
-            .await
+            .await;
+
+            // Map error to include canister context for deferred printing
+            result.map_err(|error| InstallFailure {
+                canister_name: name.clone(),
+                canister_id: cid,
+                error,
+            })
         });
     }
 
+    // Consume the set of futures and collect errors
+    let mut errors: Vec<InstallFailure> = Vec::new();
     while let Some(res) = futs.next().await {
-        res?;
+        if let Err(failure) = res {
+            errors.push(failure);
+        }
+    }
+
+    if !errors.is_empty() {
+        // Print all errors in batch
+        for failure in &errors {
+            let _ = term.write_line("");
+            let _ = term.write_line("");
+            let _ = term.write_line(&format!(
+                " ----- Failed to install canister '{}': {} -----",
+                failure.canister_name, failure.canister_id,
+            ));
+            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            let _ = term.write_line("");
+        }
+
+        return InstallManySnafu {
+            names: errors
+                .iter()
+                .map(|e| e.canister_name.clone())
+                .collect::<Vec<String>>(),
+        }
+        .fail();
     }
 
     Ok(())

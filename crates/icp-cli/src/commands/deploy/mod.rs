@@ -88,7 +88,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         canisters_to_build,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
-        &ctx.term,
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;
@@ -203,14 +203,20 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         &env.name,
         target_canisters.clone(),
         canister_list,
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    sync_settings_many(
+        agent.clone(),
+        target_canisters,
+        Arc::new(ctx.term.clone()),
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
@@ -252,6 +258,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         canisters,
         &args.mode,
         ctx.artifacts.clone(),
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;

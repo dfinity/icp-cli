@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{Context, EnvironmentSelection};
@@ -47,7 +49,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
         canisters_to_build,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
-        &ctx.term,
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;

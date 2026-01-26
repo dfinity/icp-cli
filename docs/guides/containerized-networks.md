@@ -235,22 +235,22 @@ If the file is missing or incomplete, the container may still be initializing. W
 
 All available configuration options for containerized networks:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Unique network identifier |
-| `mode` | string | Yes | Must be `managed` |
-| `image` | string | Yes | Docker image to use |
-| `port-mapping` | string[] | Yes | Port mappings in `host:container` format |
-| `rm-on-exit` | bool | No | Delete container when stopped (default: `false`) |
-| `volumes` | string[] | No | Docker volumes in `name:container_path[:options]` format |
-| `mounts` | string[] | No | Bind mounts in `host_path:container_path[:flags]` format (flags: `ro` or `rw`) |
-| `environment` | string[] | No | Environment variables in `VAR=VALUE` format |
-| `args` | string[] | No | Additional arguments to container entrypoint (aliases: `cmd`, `command`) |
-| `entrypoint` | string[] | No | Override container entrypoint |
-| `platform` | string | No | Platform selection (e.g., `linux/amd64`) |
-| `user` | string | No | User to run as in `user[:group]` format (group is optional) |
-| `shm-size` | number | No | Size of `/dev/shm` in bytes |
-| `status-dir` | string | No | Status directory path (default: `/app/status`) |
+| Field          | Type     | Required | Description                                                                    |
+|----------------|----------|----------|--------------------------------------------------------------------------------|
+| `name`         | string   | Yes      | Unique network identifier                                                      |
+| `mode`         | string   | Yes      | Must be `managed`                                                              |
+| `image`        | string   | Yes      | Docker image to use                                                            |
+| `port-mapping` | string[] | Yes      | Port mappings in `[host-ip:]host-port:container-port` format                   |
+| `rm-on-exit`   | bool     | No       | Delete container when stopped (default: `false`)                               |
+| `volumes`      | string[] | No       | Docker volumes in `name:container_path[:options]` format                       |
+| `mounts`       | string[] | No       | Bind mounts in `host_path:container_path[:flags]` format (flags: `ro` or `rw`) |
+| `environment`  | string[] | No       | Environment variables in `VAR=VALUE` format                                    |
+| `args`         | string[] | No       | Additional arguments to container entrypoint (aliases: `cmd`, `command`)       |
+| `entrypoint`   | string[] | No       | Override container entrypoint                                                  |
+| `platform`     | string   | No       | Platform selection (e.g., `linux/amd64`)                                       |
+| `user`         | string   | No       | User to run as in `user[:group]` format (group is optional)                    |
+| `shm-size`     | number   | No       | Size of `/dev/shm` in bytes                                                    |
+| `status-dir`   | string   | No       | Status directory path (default: `/app/status`)                                 |
 
 Example with multiple options:
 

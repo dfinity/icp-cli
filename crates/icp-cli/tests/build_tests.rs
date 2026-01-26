@@ -119,6 +119,8 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
+         ----- Failed to build canister 'my-canister' -----
+        Error: 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
         [my-canister] Build output:
         [my-canister] Building: step 1 of 3 (script):
         [my-canister] echo "success 1":
@@ -133,7 +135,6 @@ fn build_adapter_display_failing_build_output() {
         [my-canister] > failing build step 3
         [my-canister] > failing build step 4
         [my-canister] > failing build step 5
-        Failed to build canister: command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1
     "#};
 
     ctx.icp()
@@ -173,6 +174,8 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
+         ----- Failed to build canister 'my-canister' -----
+        Error: 'failed to read prebuilt canister file'
         [my-canister] Build output:
         [my-canister] Building: step 1 of 2 (script):
         [my-canister] echo "initial step succeeded":
@@ -180,7 +183,6 @@ fn build_adapter_display_failing_prebuilt_output() {
         [my-canister] Building: step 2 of 2 (pre-built):
         [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
         [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
-        Failed to build canister: failed to read prebuilt canister file
     "#};
 
     ctx.icp()
@@ -218,6 +220,8 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
+         ----- Failed to build canister 'my-canister' -----
+        Error: 'command 'exit 1' failed with status code 1'
         [my-canister] Build output:
         [my-canister] Building: step 1 of 2 (script):
         [my-canister] echo "step 1 succeeded":
@@ -225,7 +229,6 @@ fn build_adapter_display_failing_build_output_no_output() {
         [my-canister] Building: step 2 of 2 (script):
         [my-canister] exit 1:
         [my-canister] <no output>
-        Failed to build canister: command 'exit 1' failed with status code 1
     "#};
 
     ctx.icp()
@@ -305,6 +308,8 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
+         ----- Failed to build canister 'my-canister' -----
+        Error: 'build did not produce a wasm output file'
         [my-canister] Build output:
         [my-canister] Building: step 1 of 1 (script):
         [my-canister] echo "command 1":
@@ -313,7 +318,6 @@ fn build_adapter_display_script_multiple_commands_output() {
         [my-canister] > command 1
         [my-canister] > command 2
         [my-canister] > command 3
-        Failed to build canister: build did not produce a wasm output file
     "#};
 
     ctx.icp()

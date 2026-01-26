@@ -32,6 +32,19 @@ pub enum BuildOperationError {
     },
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(display("Canister(s) {names:?} failed to build."))]
+pub struct BuildManyError {
+    names: Vec<String>,
+}
+
+/// Holds error information from a failed canister build operation
+struct BuildFailure {
+    canister_name: String,
+    error: BuildOperationError,
+    progress_output: Vec<String>,
+}
+
 pub(crate) async fn build(
     canister_path: &Path,
     canister: &Canister,
@@ -82,9 +95,9 @@ pub(crate) async fn build_many_with_progress_bar(
     canisters: Vec<(PathBuf, Canister)>,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    term: &TermWriter,
+    term: Arc<TermWriter>,
     debug: bool,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -104,37 +117,49 @@ pub(crate) async fn build_many_with_progress_bar(
             )
             .await;
 
-            let output = if result.is_err() {
-                Some(pb.dump_output())
-            } else {
-                None
-            };
-
-            (result, output)
+            // Map error to include canister context for deferred printing
+            result.map_err(|error| BuildFailure {
+                canister_name: canister.name.clone(),
+                error,
+                progress_output: pb.dump_output(),
+            })
         };
         futs.push_back(fut);
     }
 
-    // Consume the set of futures and collect results
-    let mut failed_outputs = Vec::new();
-    while let Some((res, output)) = futs.next().await {
-        if let Err(e) = res
-            && let Some(output) = output
-        {
-            failed_outputs.push((e, output));
+    // Consume the set of futures and collect errors
+    let mut errors: Vec<BuildFailure> = Vec::new();
+    while let Some(res) = futs.next().await {
+        if let Err(failure) = res {
+            errors.push(failure);
         }
     }
 
-    if !failed_outputs.is_empty() {
-        for (e, output) in failed_outputs {
-            for line in output {
-                let _ = term.write_line(&line);
+    if !errors.is_empty() {
+        // Print all errors in batch
+        for failure in &errors {
+            // Print progress output
+            let _ = term.write_line("");
+            let _ = term.write_line("");
+            let _ = term.write_line(&format!(
+                " ----- Failed to build canister '{}' -----",
+                failure.canister_name,
+            ));
+            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            for line in &failure.progress_output {
+                let _ = term.write_line(line);
             }
-            let _ = term.write_line(&format!("Failed to build canister: {e}"));
+
             let _ = term.write_line("");
         }
 
-        return Err(anyhow::anyhow!("One or more canisters failed to build"));
+        return BuildManySnafu {
+            names: errors
+                .iter()
+                .map(|e| e.canister_name.clone())
+                .collect::<Vec<String>>(),
+        }
+        .fail();
     }
 
     Ok(())

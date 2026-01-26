@@ -4,10 +4,9 @@ A command-line tool for building and deploying applications on the Internet Comp
 
 ## Quick Start
 
-```bash
-# Install via Homebrew (macOS)
-brew install dfinity/tap/icp-cli
+**Install:** See the [Installation Guide](docs/guides/installation.md) for your platform (macOS, Linux, Windows)
 
+```bash
 # Create and deploy a project
 icp new my-project && cd my-project
 icp network start -d
@@ -16,14 +15,12 @@ icp deploy
 # Show the status of your canisters
 icp canister status
 
+# List your canisters to see their names
+icp canister list
+
 # Call a function on your canister
-# icp canister call <canister-name> greet '("World")'
-# The ones generated from the templates are typically called `backend`
-
-icp canister call backend greet '("World")'
+icp canister call <canister-name> greet '("World")'
 ```
-
-See the [Installation Guide](docs/guides/installation.md) for all installation methods.
 
 ## For dfx Users
 

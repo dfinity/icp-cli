@@ -1,10 +1,29 @@
 # Installation
 
-Install icp-cli on macOS, Linux, or Windows.
+Set up everything you need to build and deploy canisters on the Internet Computer.
 
-## macOS / Linux / WSL
+This guide covers:
+- Installing icp-cli (the core tool)
+- Installing language toolchains (Rust or Motoko compilers)
+- Installing ic-wasm for optimization
 
-**Homebrew (macOS):**
+## Install icp-cli
+
+**macOS / Linux / WSL:**
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
+```
+
+**Windows:**
+
+```ps1
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.ps1 | iex"
+```
+
+The installer adds icp-cli to your PATH automatically. Restart your shell or run the `source` command shown by the installer (or restart your terminal on Windows).
+
+**Alternative: Homebrew (macOS only)**
 
 ```bash
 brew install dfinity/tap/icp-cli
@@ -12,39 +31,17 @@ brew install dfinity/tap/icp-cli
 
 To update later: `brew upgrade dfinity/tap/icp-cli`
 
-**Curl installer:**
+### Platform-Specific Notes
 
-```bash
-# install icp-cli
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
+**Windows:** If you want to run a local test network, you'll need [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/). Docker is only required for local networks—you can build canisters and deploy to mainnet without it.
 
-# install ic-wasm which is a dependency for many recipes
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
-```
-
-The installer adds icp-cli to your PATH automatically. Restart your shell or run the `source` command shown by the installer.
-
-## Windows
-
-```ps1
-# install icp-cli
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.ps1 | iex"
-
-# install ic-wasm which is a dependency for many recipes
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/ic-wasm/releases/download/v0.9.11/ic-wasm-installer.ps1 | iex"
-```
-
-The installer adds icp-cli to your PATH automatically. Restart your shell (and if it's inside another program, e.g. the VS Code embedded shell, restart that program too).
-
-**Docker requirement:** If you want to run a local test network, you'll need [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/). Docker is only required for local networks—you can build canisters and deploy to mainnet without it.
-
-## Verify Installation
+### Verify Installation
 
 ```bash
 icp --version
 ```
 
-## Language Toolchains
+## Install Language Toolchains
 
 icp-cli uses your language's compiler to build canisters. Install what you need:
 
@@ -60,6 +57,34 @@ rustup target add wasm32-unknown-unknown
 npm install -g ic-mops
 mops toolchain init
 ```
+
+## Install ic-wasm (Recommended)
+
+`ic-wasm` is a WebAssembly post-processing tool that optimizes canisters for the Internet Computer. It provides:
+- **Optimization**: ~10% cycle reduction for Motoko, ~4% for Rust
+- **Size reduction**: ~16% smaller binaries for both languages
+- **Metadata**: Embed Candid interfaces and version information
+- **Shrinking**: Remove unused code and debug symbols
+
+**When is it needed?**
+- **Rust projects**: Required for default templates (they use ic-wasm for shrinking)
+- **Motoko projects**: Optional, but recommended for production (significant performance and size benefits)
+
+**Installation:**
+
+**Note:** If you installed icp-cli via Homebrew, ic-wasm is already installed as a dependency. Skip this section.
+
+**macOS/Linux:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/latest/download/ic-wasm-installer.sh | sh
+```
+
+**Windows:**
+```ps1
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/ic-wasm/releases/latest/download/ic-wasm-installer.ps1 | iex"
+```
+
+Learn more: [ic-wasm repository](https://github.com/dfinity/ic-wasm)
 
 
 ## Troubleshooting

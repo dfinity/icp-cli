@@ -24,7 +24,7 @@ pub async fn fetch_canister_metadata(
 /// Result of parsing arguments that can be either hex or Candid format
 #[derive(Debug)]
 pub(crate) enum ParsedArguments {
-    /// Hex-encoded bytes (already in Candid binary format)
+    /// Hex-encoded bytes
     Hex(Vec<u8>),
     /// Parsed Candid text format
     Candid(IDLArgs),

@@ -25,8 +25,11 @@ pub(crate) struct CallArgs {
 
     /// Canister call arguments.
     /// Can be:
+    ///
     /// - Hex-encoded bytes (e.g., `4449444c00`)
+    ///
     /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+    ///
     /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
     ///   The file should contain either hex or Candid format arguments.
     ///

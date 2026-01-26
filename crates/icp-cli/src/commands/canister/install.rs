@@ -24,8 +24,11 @@ pub(crate) struct InstallArgs {
 
     /// Initialization arguments for the canister.
     /// Can be:
+    ///
     /// - Hex-encoded bytes (e.g., `4449444c00`)
+    ///
     /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+    ///
     /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
     ///   The file should contain either hex or Candid format arguments.
     #[arg(long)]
@@ -72,7 +75,6 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         )
         .await?;
 
-    // Parse init_args if provided, resolving file paths relative to current working directory (CLI input)
     let init_args_bytes = args
         .args
         .as_ref()

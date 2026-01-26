@@ -4,7 +4,13 @@ use icp::context::{CanisterSelection, Context};
 use icp::fs;
 use icp::prelude::*;
 
-use crate::{commands::args, operations::install::install_canister};
+use crate::{
+    commands::args,
+    operations::{
+        install::install_canister,
+        misc::{ParsedArguments, parse_args},
+    },
+};
 
 #[derive(Debug, Args)]
 pub(crate) struct InstallArgs {
@@ -15,6 +21,15 @@ pub(crate) struct InstallArgs {
     /// Path to the WASM file to install. Uses the build output if not explicitly provided.
     #[arg(long)]
     pub(crate) wasm: Option<PathBuf>,
+
+    /// Initialization arguments for the canister.
+    /// Can be:
+    /// - Hex-encoded bytes (e.g., `4449444c00`)
+    /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+    /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
+    ///   The file should contain either hex or Candid format arguments.
+    #[arg(long)]
+    pub(crate) args: Option<String>,
 
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
@@ -57,6 +72,24 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         )
         .await?;
 
+    // Parse init_args if provided, resolving file paths relative to current working directory (CLI input)
+    let init_args_bytes = args
+        .args
+        .as_ref()
+        .map(|s| {
+            let cwd =
+                dunce::canonicalize(".").context("Failed to get current working directory")?;
+            let cwd =
+                PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
+            match parse_args(s, &cwd)? {
+                ParsedArguments::Hex(bytes) => Ok(bytes),
+                ParsedArguments::Candid(args) => args
+                    .to_bytes()
+                    .context("Failed to encode Candid args to bytes"),
+            }
+        })
+        .transpose()?;
+
     let canister_display = args.cmd_args.canister.to_string();
     install_canister(
         &agent,
@@ -64,7 +97,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         &canister_display,
         &wasm,
         &args.mode,
-        None,
+        init_args_bytes.as_deref(),
     )
     .await?;
 

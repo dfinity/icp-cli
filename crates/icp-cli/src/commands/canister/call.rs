@@ -6,6 +6,7 @@ use clap::Args;
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
+use icp::prelude::*;
 use std::io::{self, Write};
 use tracing::warn;
 
@@ -22,8 +23,12 @@ pub(crate) struct CallArgs {
     /// Name of canister method to call into
     pub(crate) method: String,
 
-    /// String representation of canister call arguments
-    /// Can be either hex-encoded bytes or Candid text format.
+    /// Canister call arguments.
+    /// Can be:
+    /// - Hex-encoded bytes (e.g., `4449444c00`)
+    /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+    /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
+    ///   The file should contain either hex or Candid format arguments.
     ///
     /// If not provided, an interactive prompt will be launched to help build the arguments.
     pub(crate) args: Option<String>,
@@ -48,7 +53,18 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         .await?;
 
     let candid_types = get_candid_type(&agent, cid, &args.method).await;
-    let parsed_args = args.args.as_ref().map(|s| parse_args(s)).transpose()?;
+
+    let parsed_args = args
+        .args
+        .as_ref()
+        .map(|s| {
+            let cwd =
+                dunce::canonicalize(".").context("Failed to get current working directory")?;
+            let cwd =
+                PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
+            parse_args(s, &cwd)
+        })
+        .transpose()?;
 
     let arg_bytes = match (candid_types, parsed_args) {
         (None, None) => bail!(

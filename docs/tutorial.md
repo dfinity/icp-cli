@@ -7,7 +7,7 @@ Deploy your first canister on the Internet Computer in under 10 minutes.
 Follow the **[Installation Guide](guides/installation.md)** to install:
 - icp-cli
 - Language toolchains (Rust or Motoko)
-- ic-wasm (required for Rust templates, recommended for Motoko)
+- ic-wasm (required when using templates or recipes)
 
 Verify installation:
 

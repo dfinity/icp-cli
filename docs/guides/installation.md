@@ -58,7 +58,7 @@ npm install -g ic-mops
 mops toolchain init
 ```
 
-## Install ic-wasm (Recommended)
+## Install ic-wasm (Required for templates and recipes)
 
 `ic-wasm` is a WebAssembly post-processing tool that optimizes canisters for the Internet Computer. It provides:
 - **Optimization**: ~10% cycle reduction for Motoko, ~4% for Rust
@@ -67,8 +67,9 @@ mops toolchain init
 - **Shrinking**: Remove unused code and debug symbols
 
 **When is it needed?**
-- **Rust projects**: Required for default templates (they use ic-wasm for shrinking)
-- **Motoko projects**: Optional, but recommended for production (significant performance and size benefits)
+- **Required** if using official templates (motoko, rust, hello-world) - all backend templates use recipes that depend on ic-wasm
+- **Required** if using official recipes (`@dfinity/motoko`, `@dfinity/rust`) - these recipes inject required metadata using ic-wasm
+- **Not required** if building canisters with custom script steps that don't invoke ic-wasm
 
 **Installation:**
 

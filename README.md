@@ -54,6 +54,9 @@ The [`examples/`](examples/) directory contains example projects to help you get
 - **Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
 - **Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
 
+**Required for templates and recipes:**
+- **ic-wasm** — Required when using official templates or recipes. See [Installation Guide](docs/guides/installation.md) for details.
+
 **Other dependencies:**
 - Docker — always required on Windows (with WSL2), and some projects may require it on other platforms.
 

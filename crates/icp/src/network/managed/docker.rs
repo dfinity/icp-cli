@@ -100,15 +100,19 @@ pub async fn spawn_docker_launcher(
     let portmap: HashMap<_, _> = port_mapping
         .iter()
         .map(|mapping| {
-            let (host_port, container_port) =
-                mapping.split_once(':').context(ParsePortmapSnafu {
-                    port_mapping: mapping,
-                })?;
+            let (host, container_port) = mapping.rsplit_once(':').context(ParsePortmapSnafu {
+                port_mapping: mapping,
+            })?;
+            let (host_ip, host_port) = if let Some((ip, port)) = host.split_once(':') {
+                (ip.to_string(), port.to_string())
+            } else {
+                ("127.0.0.1".to_string(), host.to_string())
+            };
             Ok::<_, DockerLauncherError>((
                 format!("{}/tcp", container_port),
                 Some(vec![PortBinding {
-                    host_ip: None,
-                    host_port: Some(host_port.to_string()),
+                    host_ip: Some(host_ip),
+                    host_port: Some(host_port),
                 }]),
             ))
         })

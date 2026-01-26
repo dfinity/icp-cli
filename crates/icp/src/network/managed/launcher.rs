@@ -124,6 +124,16 @@ pub async fn spawn_network_launcher(
         },
     };
     let pid = child.id().unwrap();
+    // Get the process start time for uniqueness detection (handles PID reuse)
+    let start_time = {
+        let sysinfo_pid = Pid::from_u32(pid);
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::Some(&[sysinfo_pid]), true);
+        system
+            .process(sysinfo_pid)
+            .map(|p| p.start_time())
+            .unwrap_or(0)
+    };
     Ok((
         guard,
         NetworkInstance {
@@ -134,7 +144,7 @@ pub async fn spawn_network_launcher(
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
         },
-        ChildLocator::Pid { pid },
+        ChildLocator::Pid { pid, start_time },
     ))
 }
 

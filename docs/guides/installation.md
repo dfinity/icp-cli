@@ -12,13 +12,13 @@ This guide covers:
 **macOS / Linux / WSL:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.4/icp-cli-installer.sh | sh
 ```
 
 **Windows:**
 
 ```ps1
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.4/icp-cli-installer.ps1 | iex"
 ```
 
 The installer adds icp-cli to your PATH automatically. Restart your shell or run the `source` command shown by the installer (or restart your terminal on Windows).

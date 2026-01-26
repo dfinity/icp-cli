@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.1.0-beta.4
+
 * fix: More reliably detect occupied ports' project locations across containers and backgrounded networks
 * feat: Bind Docker networks to 127.0.0.1
 * feat: Add IC options to network manifest (`ii`, `nns`, `subnets`, `artificial-delay-ms`)

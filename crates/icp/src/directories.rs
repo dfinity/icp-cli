@@ -13,12 +13,12 @@ use crate::{
 use directories::ProjectDirs;
 use snafu::prelude::*;
 
-/// Trait for accessing ICP CLI directories.
+/// Trait for accessing global ICP CLI directories.
 pub trait Access: Sync + Send {
     /// Returns the path to the identity directory.
     fn identity(&self) -> Result<IdentityDirectories, LockError>;
 
-    /// Returns the path to the port descriptors cache directory.
+    /// Returns the path to the global port descriptors directory.
     fn port_descriptor(&self) -> PathBuf;
 
     /// Returns the path to the package cache for managed packages.
@@ -157,9 +157,10 @@ impl Access for Directories {
         IdentityPaths::new(self.data().join("identity"))
     }
 
-    /// Returns the path to the port descriptors cache directory.
+    /// Returns the path to the global port descriptors directory.
     ///
-    /// This directory caches information about network ports used by canisters.
+    /// See [`crate::network::directory`] for how this directory is used to prevent
+    /// port conflicts between projects using fixed-port managed networks.
     fn port_descriptor(&self) -> PathBuf {
         self.cache().join("port-descriptors")
     }

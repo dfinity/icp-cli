@@ -126,7 +126,7 @@ Make a canister call
 
 * `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 * `<METHOD>` — Name of canister method to call into
-* `<ARGS>` — String representation of canister call arguments
+* `<ARGS>` — String representation of canister call arguments Can be either hex-encoded bytes or Candid text format.
 
    If not provided, an interactive prompt will be launched to help build the arguments.
 

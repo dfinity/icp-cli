@@ -16,7 +16,7 @@ use crate::{
     commands::canister::create,
     operations::{
         binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
-        create::CreateOperation, init_args::parse_init_args, install::install_many,
+        create::CreateOperation, install::install_many, misc::parse_init_args,
         settings::sync_settings_many, sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},

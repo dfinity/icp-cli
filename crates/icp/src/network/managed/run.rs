@@ -226,15 +226,14 @@ async fn run_network_launcher(
     )
     .await?;
 
-    let gateway_port = gateway.port;
-    let gateway_fixed = gateway.fixed;
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
-            let port_lock = if gateway_fixed {
-                Some(nd.port(gateway_port)?.into_write().await?)
-            } else {
-                None
-            };
+            // Acquire locks for all fixed ports
+            let mut port_locks = Vec::new();
+            for port in &fixed_ports {
+                port_locks.push(nd.port(*port)?.into_write().await?);
+            }
+
             let descriptor = NetworkDescriptorModel {
                 v: "1".to_string(),
                 id: Uuid::new_v4(),
@@ -248,8 +247,15 @@ async fn run_network_launcher(
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
             };
-            save_network_descriptors(root, port_lock.as_ref().map(|p| p.as_ref()), &descriptor)
+
+            // Save descriptor to project root and all fixed port directories
+            save_network_descriptors(root, port_locks.first().map(|p| p.as_ref()), &descriptor)
                 .await?;
+            // Save to remaining port directories
+            for port_lock in port_locks.iter().skip(1) {
+                crate::fs::json::save(&port_lock.descriptor_path(), &descriptor)
+                    .context(SavePortDescriptorSnafu)?;
+            }
             Ok(())
         })
         .await??;
@@ -263,8 +269,8 @@ async fn run_network_launcher(
         guard.async_drop().await;
 
         let _ = nd.cleanup_project_network_descriptor().await;
-        if gateway_fixed {
-            let _ = nd.cleanup_port_descriptor(Some(gateway_port)).await;
+        for port in &fixed_ports {
+            let _ = nd.cleanup_port_descriptor(Some(*port)).await;
         }
     }
     Ok(())
@@ -347,6 +353,9 @@ pub enum RunNetworkLauncherError {
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },
+
+    #[snafu(display("failed to save port descriptor"))]
+    SavePortDescriptor { source: crate::fs::json::Error },
 
     #[snafu(transparent)]
     InitNetwork { source: InitializeNetworkError },

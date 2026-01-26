@@ -103,7 +103,7 @@ pub async fn spawn_docker_launcher(
             let (host, container_port) = mapping.rsplit_once(':').context(ParsePortmapSnafu {
                 port_mapping: mapping,
             })?;
-            let (host_ip, host_port) = if let Some((ip, port)) = host.split_once(':') {
+            let (host_ip, host_port) = if let Some((ip, port)) = host.rsplit_once(':') {
                 (ip.to_string(), port.to_string())
             } else {
                 ("127.0.0.1".to_string(), host.to_string())

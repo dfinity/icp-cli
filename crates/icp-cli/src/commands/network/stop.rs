@@ -54,7 +54,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
         .ok_or_else(|| anyhow::anyhow!("network '{}' is not running", network.name))?;
 
     match &descriptor.child_locator {
-        ChildLocator::Pid { pid } => {
+        ChildLocator::Pid { pid, .. } => {
             let _ = ctx
                 .term
                 .write_line(&format!("Stopping background network (PID: {})...", pid));

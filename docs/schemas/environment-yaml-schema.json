@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "LogVisibility": {
+      "description": "Controls who can read canister logs.",
+      "oneOf": [
+        {
+          "const": "controllers",
+          "description": "Only controllers can view logs.",
+          "type": "string"
+        },
+        {
+          "const": "public",
+          "description": "Anyone can view logs.",
+          "type": "string"
+        }
+      ]
+    },
     "Settings": {
       "description": "Canister settings, such as compute and memory allocation.",
       "properties": {
@@ -30,6 +45,17 @@
             "integer",
             "null"
           ]
+        },
+        "log_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LogVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read canister logs."
         },
         "memory_allocation": {
           "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",

@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
-use ic_management_canister_types::EnvironmentVariable;
+use ic_management_canister_types::{EnvironmentVariable, LogVisibility as IcLogVisibility};
 use ic_utils::interfaces::ManagementCanister;
 use icp::{Canister, canister::Settings, context::TermWriter};
 use itertools::Itertools;
@@ -51,6 +51,7 @@ pub(crate) async fn sync_settings(
         .await
         .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
+        ref log_visibility,
         compute_allocation,
         memory_allocation,
         freezing_threshold,
@@ -60,6 +61,10 @@ pub(crate) async fn sync_settings(
         ref environment_variables,
     } = &canister.settings;
     let current_settings = status.settings;
+
+    // Convert our log_visibility to IC type for comparison and update
+    let log_visibility_setting: Option<IcLogVisibility> =
+        log_visibility.clone().map(IcLogVisibility::from);
 
     let environment_variable_setting =
         if let Some(configured_environment_variables) = &environment_variables {
@@ -79,7 +84,10 @@ pub(crate) async fn sync_settings(
         } else {
             None
         };
-    if compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
+    if log_visibility_setting
+        .as_ref()
+        .is_none_or(|s| *s == current_settings.log_visibility)
+        && compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
         && memory_allocation.is_none_or(|s| s == current_settings.memory_allocation)
         && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
         && reserved_cycles_limit.is_none_or(|s| s == current_settings.reserved_cycles_limit)
@@ -93,6 +101,7 @@ pub(crate) async fn sync_settings(
         return Ok(());
     }
     mgmt.update_settings(cid)
+        .with_optional_log_visibility(log_visibility_setting)
         .with_optional_compute_allocation(compute_allocation)
         .with_optional_memory_allocation(memory_allocation)
         .with_optional_freezing_threshold(freezing_threshold)

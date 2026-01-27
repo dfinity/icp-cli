@@ -3133,6 +3133,7 @@ dependencies = [
  "ic-asset",
  "ic-ed25519 0.5.0",
  "ic-ledger-types",
+ "ic-management-canister-types 0.4.1",
  "ic-utils",
  "icp-canister-interfaces",
  "icrc-ledger-types",

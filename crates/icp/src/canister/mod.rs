@@ -11,9 +11,32 @@ pub mod sync;
 
 mod script;
 
+/// Controls who can read canister logs.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogVisibility {
+    /// Only controllers can view logs.
+    #[default]
+    Controllers,
+    /// Anyone can view logs.
+    Public,
+}
+
+impl From<LogVisibility> for ic_management_canister_types::LogVisibility {
+    fn from(value: LogVisibility) -> Self {
+        match value {
+            LogVisibility::Controllers => ic_management_canister_types::LogVisibility::Controllers,
+            LogVisibility::Public => ic_management_canister_types::LogVisibility::Public,
+        }
+    }
+}
+
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
+    /// Controls who can read canister logs.
+    pub log_visibility: Option<LogVisibility>,
+
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
     pub compute_allocation: Option<u64>,
 

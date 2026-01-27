@@ -149,6 +149,21 @@
       ],
       "type": "object"
     },
+    "LogVisibility": {
+      "description": "Controls who can read canister logs.",
+      "oneOf": [
+        {
+          "const": "controllers",
+          "description": "Only controllers can view logs.",
+          "type": "string"
+        },
+        {
+          "const": "public",
+          "description": "Anyone can view logs.",
+          "type": "string"
+        }
+      ]
+    },
     "Recipe": {
       "properties": {
         "configuration": {
@@ -218,6 +233,17 @@
             "integer",
             "null"
           ]
+        },
+        "log_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LogVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read canister logs."
         },
         "memory_allocation": {
           "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
@@ -371,6 +397,7 @@
         "compute_allocation": null,
         "environment_variables": null,
         "freezing_threshold": null,
+        "log_visibility": null,
         "memory_allocation": null,
         "reserved_cycles_limit": null,
         "wasm_memory_limit": null,

@@ -89,6 +89,7 @@ async fn canister_create_with_settings() {
                     - type: script
                       command: cp {path} "$ICP_WASM_OUTPUT_PATH"
                 settings:
+                  log_visibility: public
                   compute_allocation: 1
                   memory_allocation: 4294967296
                   freezing_threshold: 2592000
@@ -143,6 +144,7 @@ async fn canister_create_with_settings() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Running"))
+                .and(contains("Log visibility: Public"))
                 .and(contains("Compute allocation: 1"))
                 .and(contains("Memory allocation: 4_294_967_296"))
                 .and(contains("Freezing threshold: 2_592_000"))

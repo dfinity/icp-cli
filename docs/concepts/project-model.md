@@ -192,12 +192,12 @@ icp-cli consolidates configuration from multiple sources into a single effective
 View the effective configuration:
 
 ```bash
-# outputs the effect project configuration in yaml
+# outputs the effective project configuration in yaml
 icp project show
 
 # You can use yq to view the effective settings of a canister
 # in a particular environment. Here we're looking at the settings
-# in the 'local' enviroment
+# in the 'local' environment
 icp project show | yq -r ".environments.local"
  
 ```

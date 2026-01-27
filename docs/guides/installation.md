@@ -14,6 +14,8 @@ This guide covers:
 - Installing the Motoko toolchain
 - Building frontend canisters
 
+> **Rust-only projects:** If you're only building Rust backend canisters without a frontend, you can skip Node.js.
+
 ## Install icp-cli
 
 **macOS / Linux / WSL:**

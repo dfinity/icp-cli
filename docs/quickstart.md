@@ -6,7 +6,7 @@ Deploy a full-stack app to a local network in under 5 minutes.
 
 Complete the [Installation Guide](guides/installation.md) first.
 
-> **Coming soon:** npm package for simplified installation.
+> **Tip:** An npm package for even simpler installation is coming soon.
 
 ## Steps
 

@@ -100,6 +100,16 @@ Canisters are built using adapter pipelines defined in `crates/icp/src/manifest/
 
 Build steps are executed sequentially in `crates/icp/src/canister/build/`.
 
+#### Recipe System
+
+Recipes are Handlebars templates that generate build/sync configuration. Implementation in `crates/icp/src/canister/recipe/`:
+
+- **Registry recipes**: `@dfinity/rust` resolves to GitHub releases URL
+- **Local recipes**: `file://path/to/recipe.hbs`
+- **Remote recipes**: Direct URLs with SHA256 verification
+
+The `@dfinity` prefix is hardcoded to `https://github.com/dfinity/icp-cli-recipes/releases/download/{recipe}-{version}/recipe.hbs`
+
 #### Network Management
 
 Two network types in `crates/icp/src/network/`:
@@ -124,7 +134,11 @@ These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` a
 
 #### Identity & Canister IDs
 
-- **Identities**: Stored in `~/.config/icp/identity/` as PEM files (Secp256k1 or Ed25519)
+- **Identities**: Stored in platform-specific directories as PEM files (Secp256k1 or Ed25519):
+  - macOS: `~/Library/Application Support/org.dfinity.icp-cli/identity/`
+  - Linux: `~/.local/share/icp-cli/identity/`
+  - Windows: `%APPDATA%\icp-cli\data\identity\`
+  - Override with `ICP_HOME` environment variable: `$ICP_HOME/identity/`
 - **Canister IDs**: Persisted in `.icp/{cache,data}/mappings/<environment>.ids.json` within project directories
   - Managed networks (local) use `.icp/cache/mappings/`
   - Connected networks (mainnet) use `.icp/data/mappings/`
@@ -228,7 +242,7 @@ The `examples/` directory contains working project templates demonstrating:
 
 - `icp-motoko/`: Motoko canister with script adapter
 - `icp-rust/`: Rust canister compilation
-- `icp-multi-canister/`: Multi-canister projects with environments
+- `icp-project-multi-canister/`: Multi-canister projects with environments
 - `icp-network-connected/`: Remote network configuration
 - `icp-pre-built/`: Using prebuilt WASM files
 

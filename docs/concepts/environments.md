@@ -160,7 +160,7 @@ icp deploy
 icp deploy --environment local
 
 # Custom environment
-icp deploy --e staging
+icp deploy -e staging
 ```
 
 ## Networks vs Environments

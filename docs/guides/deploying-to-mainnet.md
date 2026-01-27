@@ -62,7 +62,7 @@ View your principal (your unique identifier for receiving tokens):
 
 ```bash
 icp identity principal
-# Output: xxxxx-xxxxx-xxxxx-xxxxx-cai
+# Output: 2vxsx-fae (anonymous) or xxxxx-xxxxx-xxxxx-xxxxx-xxx (your principal)
 ```
 
 Save this principal — you'll need it to receive ICP tokens.
@@ -248,7 +248,7 @@ icp identity default mainnet-deployer
 
 # 2. Get your principal (your unique identifier) to receive ICP tokens
 icp identity principal
-# Output example: xxxxx-xxxxx-xxxxx-xxxxx-cai
+# Output example: xxxxx-xxxxx-xxxxx-xxxxx-xxx
 # Share this principal with the sender (exchange or another user)
 # Note: If your exchange requires an account identifier instead, use: icp identity account-id
 

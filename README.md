@@ -46,8 +46,6 @@ The [`examples/`](examples/) directory contains example projects to help you get
 
 Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines.
 
-### Development Quick Start
-
 ### Prerequisites
 
 - Rust 1.88.0+ ([rustup.rs](https://rustup.rs/))

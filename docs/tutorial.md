@@ -72,6 +72,8 @@ Verify the network is running:
 icp network status
 ```
 
+> **Note:** For local development, icp-cli uses an **anonymous identity** by default. This identity is automatically funded with ICP and cycles on local networks, so you can deploy immediately without setting up a wallet. For mainnet deployment, you'll create a dedicated identity — see [Deploying to Mainnet](guides/deploying-to-mainnet.md).
+
 ## Deploy
 
 ```bash

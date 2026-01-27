@@ -26,6 +26,34 @@ The script also runs with the **canister directory as the current working direct
 
 ## CLI Configuration Variables
 
+### `ICP_ENVIRONMENT`
+
+Sets the default environment when no `-e/--environment` flag is provided.
+
+| Default | `local` |
+|---------|---------|
+
+```bash
+export ICP_ENVIRONMENT=staging
+icp deploy  # Deploys to staging environment
+```
+
+This is equivalent to passing `-e staging` to commands that accept an environment flag. The explicit `-e` flag takes precedence over this variable.
+
+### `ICP_NETWORK`
+
+Sets the default network when no `-n/--network` flag is provided.
+
+| Default | `local` |
+|---------|---------|
+
+```bash
+export ICP_NETWORK=ic
+icp token balance  # Checks balance on IC mainnet
+```
+
+This is equivalent to passing `-n ic` to commands that accept a network flag. The explicit `-n` flag takes precedence over this variable.
+
 ### `ICP_HOME`
 
 Overrides the default location for global icp-cli data (identities, package cache).
@@ -68,6 +96,22 @@ export ICP_CLI_NETWORK_LAUNCHER_PATH=/path/to/icp-cli-network-launcher
 - CI environments where you pre-download dependencies
 
 Download the launcher manually from [icp-cli-network-launcher releases](https://github.com/dfinity/icp-cli-network-launcher/releases).
+
+## Windows-Specific Variables
+
+### `ICP_CLI_BASH_PATH`
+
+Path to the bash executable on Windows.
+
+icp-cli uses bash to run build scripts. On Windows, it searches for bash in common locations (Git Bash, MSYS2). If bash is not found automatically, set this variable:
+
+```powershell
+$env:ICP_CLI_BASH_PATH = "C:\Program Files\Git\bin\bash.exe"
+```
+
+**Common bash locations on Windows:**
+- Git Bash: `C:\Program Files\Git\bin\bash.exe`
+- MSYS2: `C:\msys64\usr\bin\bash.exe`
 
 ## See Also
 

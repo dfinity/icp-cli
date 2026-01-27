@@ -1,6 +1,6 @@
 # Managing Environments
 
-Environments let allow to deploy multiple instances of a set of canisters to the same network with each set having independent settings. This guide covers setting up development, staging, and production environments.
+Environments allow you to deploy multiple instances of a set of canisters to the same network, with each set having independent settings. This guide covers setting up development, staging, and production environments.
 
 ## Understanding Environments
 

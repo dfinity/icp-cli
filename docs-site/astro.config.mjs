@@ -49,7 +49,7 @@ export default defineConfig({
         {
           label: 'Start Here',
           items: [
-            { label: 'Introduction', slug: 'index' },
+            { label: 'Quickstart', slug: 'quickstart' },
             { label: 'Tutorial', slug: 'tutorial' },
           ],
         },
@@ -83,6 +83,7 @@ export default defineConfig({
             { label: 'CLI Reference', slug: 'reference/cli' },
             { label: 'Configuration Reference', slug: 'reference/configuration' },
             { label: 'Canister Settings', slug: 'reference/canister-settings' },
+            { label: 'Environment Variables', slug: 'reference/environment-variables' },
           ],
         },
         {

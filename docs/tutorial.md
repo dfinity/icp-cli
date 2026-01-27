@@ -1,17 +1,22 @@
 # Tutorial
 
-Deploy your first canister on the Internet Computer.
+This tutorial walks through deploying a full-stack app on the Internet Computer, explaining each step along the way.
 
-> **What is a canister?** A canister is your application running on the Internet Computer — it combines code and persistent state, with no servers to manage.
+> **Already did the Quickstart?** This tutorial covers the same steps with detailed explanations. The Quickstart used `--define` flags to skip the interactive prompts — here you'll see what those prompts are and what they mean.
+
+## What is a Canister?
+
+A **canister** is your application running on the Internet Computer. It combines code and persistent state into a single unit — no servers to manage, no databases to configure. Your code runs on a decentralized network and persists automatically.
+
+In this tutorial, you'll deploy two canisters:
+- A **backend** canister (Motoko) — your application logic
+- A **frontend** canister (React) — your web UI, also served from the blockchain
 
 ## Prerequisites
 
-Follow the **[Installation Guide](guides/installation.md)** to install:
-- icp-cli
-- Language toolchains (Rust or Motoko)
-- ic-wasm (required when using templates or recipes)
+Complete the **[Installation Guide](guides/installation.md)** first.
 
-Verify installation:
+Verify icp-cli is installed:
 
 ```bash
 icp --version
@@ -23,13 +28,23 @@ icp --version
 icp new my-project
 ```
 
-Select a template when prompted:
-- **motoko** — Single Motoko canister (recommended for this tutorial)
-- **rust** — Single Rust canister
+You'll see three prompts:
 
-*Choose the template matching the language you installed. Both work identically for this tutorial.*
+**1. Template selection** — Choose `hello-world` for a full-stack app with backend and frontend.
 
-> **Note:** The `hello-world` template creates a full-stack app with frontend and backend. It's great for building web apps, but adds complexity for a first deployment.
+**2. Backend language** — Choose `motoko` (or `rust` if you prefer).
+
+**3. Network type** — Choose `Default` for native local networks. On Windows, Docker is always used regardless of this setting.
+
+> **Tip:** The Quickstart skipped these prompts using `--define` flags:
+> ```bash
+> icp new my-project --subfolder hello-world \
+>   --define backend_type=motoko \
+>   --define frontend_type=react \
+>   --define network_type=Default
+> ```
+
+Templates are fetched from the [icp-cli-templates](https://github.com/dfinity/icp-cli-templates) repository by default. You can also [create your own templates](guides/creating-templates.md).
 
 Enter the project directory:
 
@@ -38,8 +53,9 @@ cd my-project
 ```
 
 Your project contains:
-- `icp.yaml` — Project configuration
-- `src/` — Source code
+- `icp.yaml` — Project configuration (canisters, networks, environments)
+- `backend/` — Motoko source code
+- `frontend/` — React application
 - `README.md` — Project-specific instructions
 
 ## Start the Local Network
@@ -48,7 +64,7 @@ Your project contains:
 icp network start -d
 ```
 
-The `-d` flag runs the network in the background (detached) so you can continue using your terminal.
+This starts a local Internet Computer replica on your machine. The `-d` flag runs it in the background (detached) so you can continue using your terminal.
 
 Verify the network is running:
 
@@ -63,31 +79,51 @@ icp deploy
 ```
 
 This single command:
-1. **Builds** your source code into WebAssembly (WASM)
-2. **Creates** a canister on the local network
-3. **Installs** your WASM code into the canister
+1. **Builds** your Motoko code into WebAssembly (WASM)
+2. **Builds** your React frontend
+3. **Creates** canisters on the local network
+4. **Installs** your code into the canisters
 
-**Tip:** You can also run `icp build` separately if you want to verify compilation before deploying.
+After deployment, you'll see output like:
 
-## Interact with Your Canister
-
-List your deployed canister:
-
-```bash
-icp canister list
+```
+Deployed canisters:
+  backend (Candid UI): http://...localhost:8000/?id=...
+  frontend: http://...localhost:8000
 ```
 
-You should see one canister listed. Call its `greet` method using that name:
+## Explore Your App
+
+### Frontend
+
+Open the **frontend URL** in your browser. You'll see a React app that calls your backend canister.
+
+### Candid UI
+
+Open the **Candid UI URL** (shown next to "backend"). Candid UI is a web interface that lets you interact with any canister that has a known [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) interface — no frontend code required.
+
+Try it:
+1. Find the `greet` method
+2. Enter a name (e.g., "World")
+3. Click "Call"
+4. See the response: `"Hello, World!"`
+
+Candid UI works with any backend canister, not just this example. It's useful for:
+- Testing methods during development
+- Exploring what methods a canister exposes
+- Debugging without writing frontend code
+
+### Command Line
+
+You can also call your backend from the terminal:
 
 ```bash
-icp canister call <canister-name> greet
+icp canister call backend greet '("World")'
 ```
-
-When you omit the argument, icp-cli prompts you to enter it interactively — just type `World` when asked.
 
 You should see: `("Hello, World!")`
 
-> **Tip:** You can also pass arguments directly using [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) format: `icp canister call <canister-name> greet '("World")'`
+The argument format `'("World")'` is [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) — the interface description language for the Internet Computer.
 
 ## Stop the Network
 
@@ -97,16 +133,12 @@ When you're done:
 icp network stop
 ```
 
-## Troubleshooting
-
-**Something not working?** Check the [Installation Guide](guides/installation.md) troubleshooting section or run `icp network status` to verify your network is running.
-
 ## Next Steps
 
-You've deployed your first canister! Continue your journey:
+You've deployed a full-stack app on the Internet Computer! Continue your journey:
 
 - [Local Development](guides/local-development.md) — Learn the day-to-day development workflow
 - [Deploying to Mainnet](guides/deploying-to-mainnet.md) — Go live on the Internet Computer
-- [Core Concepts](concepts/project-model.md) — Understand how icp-cli works (optional deep dive)
+- [Project Model](concepts/project-model.md) — Understand how icp-cli organizes projects
 
 [Browse all documentation →](index.md)

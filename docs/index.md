@@ -1,8 +1,9 @@
-Build and deploy applications on the Internet Computer.
+Build and deploy applications on the [Internet Computer](https://internetcomputer.org).
 
 ## Start Here
 
-**New to icp-cli?** Follow the [Tutorial](tutorial.md) to deploy your first canister in under 10 minutes.
+- **[Quickstart](quickstart.md)** — Deploy a canister in under 5 minutes
+- **[Tutorial](tutorial.md)** — Learn icp-cli step by step
 
 ## Guides
 
@@ -35,6 +36,7 @@ Complete technical specifications:
 - [CLI Reference](reference/cli.md) — All commands and flags
 - [Configuration Reference](reference/configuration.md) — icp.yaml schema
 - [Canister Settings](reference/canister-settings.md) — All settings options
+- [Environment Variables](reference/environment-variables.md) — CLI and build variables
 
 ## Additional Resources
 

@@ -1,26 +1,12 @@
 # icp-cli
 
-A command-line tool for building and deploying applications on the Internet Computer.
+A command-line tool for building and deploying applications on the [Internet Computer](https://internetcomputer.org).
 
 ## Quick Start
 
 **Install:** See the [Installation Guide](docs/guides/installation.md) for your platform (macOS, Linux, Windows)
 
-```bash
-# Create and deploy a project
-icp new my-project && cd my-project
-icp network start -d
-icp deploy
-
-# Show the status of your canisters
-icp canister status
-
-# List your canisters to see their names
-icp canister list
-
-# Call a function on your canister
-icp canister call <canister-name> greet '("World")'
-```
+Then follow the **[Quickstart](docs/quickstart.md)** to deploy your first canister in under 5 minutes.
 
 ## For dfx Users
 
@@ -32,7 +18,8 @@ If you're coming from dfx (the previous Internet Computer SDK), see the **[Migra
 
 Or browse the markdown docs directly:
 
-- **[Tutorial](docs/tutorial.md)** — Deploy your first canister
+- **[Quickstart](docs/quickstart.md)** — Deploy a canister in under 5 minutes
+- **[Tutorial](docs/tutorial.md)** — Learn icp-cli step by step
 - **[Guides](docs/guides/index.md)** — How to accomplish common tasks
 - **[Concepts](docs/concepts/index.md)** — Understand how icp-cli works
 - **[Reference](docs/reference/index.md)** — Complete CLI and configuration reference
@@ -47,18 +34,6 @@ The [`examples/`](examples/) directory contains example projects to help you get
 - `icp-environments/` — Multi-environment setup
 
 [View all examples →](examples/)
-
-## Prerequisites
-
-**Language-specific toolchains** (install for the languages you'll use):
-- **Rust canisters** — [Rust](https://rustup.rs/) and `rustup target add wasm32-unknown-unknown`
-- **Motoko canisters** — [mops](https://cli.mops.one/) and `mops toolchain init`
-
-**Required for templates and recipes:**
-- **ic-wasm** — Required when using official templates or recipes. See [Installation Guide](docs/guides/installation.md) for details.
-
-**Other dependencies:**
-- Docker — always required on Windows (with WSL2), and some projects may require it on other platforms.
 
 ## Getting Help
 
@@ -127,6 +102,8 @@ cd docs-site && npm install && npm run dev
 ```
 
 Documentation structure follows the [Diátaxis framework](https://diataxis.fr/):
+- [`docs/quickstart.md`](docs/quickstart.md) - Deploy in under 5 minutes
+- [`docs/tutorial.md`](docs/tutorial.md) - Learn step by step
 - [`docs/guides/`](docs/guides/index.md) - Task-oriented how-to guides
 - [`docs/concepts/`](docs/concepts/index.md) - Understanding-oriented explanations
 - [`docs/reference/`](docs/reference/index.md) - Information-oriented specifications

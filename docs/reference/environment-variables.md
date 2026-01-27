@@ -34,9 +34,9 @@ By default, icp-cli stores global data in platform-standard directories:
 
 | Platform | Default Location |
 |----------|------------------|
-| macOS | `~/Library/Application Support/icp-cli/` |
+| macOS | `~/Library/Application Support/org.dfinity.icp-cli/` |
 | Linux | `~/.local/share/icp-cli/` |
-| Windows | `%APPDATA%\icp-cli\` |
+| Windows | `%APPDATA%\icp-cli\data\` |
 
 When `ICP_HOME` is set, all global data is stored in that directory instead:
 
@@ -71,4 +71,5 @@ Download the launcher manually from [icp-cli-network-launcher releases](https://
 
 ## See Also
 
-- [Project Model](../concepts/project-model.md#generated-files) — Project directory structure (`.icp/`) and what's safe to delete
+- [Managing Identities](../guides/managing-identities.md) — Identity storage paths and directory contents
+- [Project Model](../concepts/project-model.md) — Project directory structure (`.icp/`) and what's safe to delete

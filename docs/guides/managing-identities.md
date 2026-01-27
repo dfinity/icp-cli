@@ -169,7 +169,7 @@ By default, identity data is stored in platform-specific directories:
 - **Linux:** `~/.local/share/icp-cli/identity/`
 - **Windows:** `%APPDATA%\icp-cli\data\identity\`
 
-You can override the base directory by setting the `ICP_HOME` environment variable. When set, identities will be stored in `$ICP_HOME/identity/` instead.
+You can override the base directory by setting the [`ICP_HOME`](../reference/environment-variables.md) environment variable. When set, identities will be stored in `$ICP_HOME/identity/` instead.
 
 The identity directory contains:
 - `identity_list.json` — List of all identities and their metadata

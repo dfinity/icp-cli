@@ -1,6 +1,7 @@
 use clap::Args;
 use icp::context::Context;
 
+/// List all networks configured in the project
 #[derive(Args, Debug)]
 pub(crate) struct ListArgs;
 

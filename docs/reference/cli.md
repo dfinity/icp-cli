@@ -655,7 +655,7 @@ Launch and manage local test networks
 
 ###### **Subcommands:**
 
-* `list` — 
+* `list` — List all networks configured in the project
 * `ping` — Try to connect to a network, and print out its status
 * `start` — Run a given network
 * `status` — Get status information about a running network
@@ -665,6 +665,8 @@ Launch and manage local test networks
 
 
 ## `icp network list`
+
+List all networks configured in the project
 
 **Usage:** `icp network list`
 
@@ -952,7 +954,7 @@ Perform token transactions
 
 Display the token balance on the ledger (default token: icp)
 
-**Usage:** `icp token icp token [TOKEN|LEDGER_ID] balance [OPTIONS]`
+**Usage:** `icp token [TOKEN|LEDGER_ID] balance [OPTIONS]`
 
 ###### **Options:**
 
@@ -966,7 +968,7 @@ Display the token balance on the ledger (default token: icp)
 
 Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 
-**Usage:** `icp token icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] <AMOUNT> <RECEIVER>`
+**Usage:** `icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] <AMOUNT> <RECEIVER>`
 
 ###### **Arguments:**
 

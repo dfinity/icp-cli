@@ -1,6 +1,8 @@
 # Tutorial
 
-Deploy your first canister on the Internet Computer in under 10 minutes.
+Deploy your first canister on the Internet Computer.
+
+> **What is a canister?** A canister is your application running on the Internet Computer — it combines code and persistent state, with no servers to manage.
 
 ## Prerequisites
 
@@ -21,7 +23,15 @@ icp --version
 icp new my-project
 ```
 
-Select a template when prompted, then enter the project directory:
+Select a template when prompted:
+- **motoko** — Single Motoko canister (recommended for this tutorial)
+- **rust** — Single Rust canister
+
+*Choose the template matching the language you installed. Both work identically for this tutorial.*
+
+> **Note:** The `hello-world` template creates a full-stack app with frontend and backend. It's great for building web apps, but adds complexity for a first deployment.
+
+Enter the project directory:
 
 ```bash
 cd my-project
@@ -38,13 +48,15 @@ Your project contains:
 icp network start -d
 ```
 
-This starts a local Internet Computer network in the background.
+The `-d` flag runs the network in the background (detached) so you can continue using your terminal.
+
+Verify the network is running:
+
+```bash
+icp network status
+```
 
 ## Deploy
-
-Now you'll deploy your code to the Internet Computer.
-
-**What is a canister?** A canister is a smart contract on the Internet Computer. It combines code (WebAssembly) and state (memory), similar to a container in Docker. Canisters can store data, serve web content, and respond to user requests.
 
 ```bash
 icp deploy
@@ -59,19 +71,23 @@ This single command:
 
 ## Interact with Your Canister
 
-First, find your canister name:
+List your deployed canister:
 
 ```bash
 icp canister list
 ```
 
-Then call a method on it (replace `<canister-name>` with your actual canister name):
+You should see one canister listed. Call its `greet` method using that name:
 
 ```bash
-icp canister call <canister-name> greet '("World")'
+icp canister call <canister-name> greet
 ```
 
+When you omit the argument, icp-cli prompts you to enter it interactively — just type `World` when asked.
+
 You should see: `("Hello, World!")`
+
+> **Tip:** You can also pass arguments directly using [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) format: `icp canister call <canister-name> greet '("World")'`
 
 ## Stop the Network
 
@@ -80,6 +96,10 @@ When you're done:
 ```bash
 icp network stop
 ```
+
+## Troubleshooting
+
+**Something not working?** Check the [Installation Guide](guides/installation.md) troubleshooting section or run `icp network status` to verify your network is running.
 
 ## Next Steps
 

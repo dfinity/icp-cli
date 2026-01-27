@@ -2,8 +2,6 @@
 
 This is a command reference for managing ICP tokens and cycles. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
 
-## Overview
-
 The Internet Computer uses two primary currencies:
 
 | Currency | Purpose | Used For |

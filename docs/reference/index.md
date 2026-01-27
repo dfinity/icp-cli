@@ -10,6 +10,7 @@ Complete technical specifications for icp-cli.
 
 - [Configuration Reference](configuration.md) — Complete icp.yaml schema
 - [Canister Settings](canister-settings.md) — All canister settings options
+- [Environment Variables](environment-variables.md) — CLI and script environment variables
 
 ## Schemas
 

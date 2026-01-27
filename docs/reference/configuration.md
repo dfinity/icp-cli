@@ -76,37 +76,79 @@ build:
 
 **Environment variables:**
 - `ICP_WASM_OUTPUT_PATH` — Target path for WASM output
-- `ICP_PROJECT_ROOT` — Project root directory
+
+See [Environment Variables Reference](environment-variables.md) for all available variables.
 
 ### Pre-built Step
 
-Use existing WASM:
+Use existing WASM from a local file or remote URL:
 
 ```yaml
+# Local file
 build:
   steps:
     - type: pre-built
       path: dist/canister.wasm
       sha256: abc123...  # Optional integrity check
+
+# Remote URL
+build:
+  steps:
+    - type: pre-built
+      url: https://github.com/example/releases/download/v1.0/canister.wasm
+      sha256: abc123...  # Recommended for remote files
 ```
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `path` | string | Yes | Path to WASM file |
-| `sha256` | string | No | SHA256 hash for verification |
+| `path` | string | One of `path` or `url` | Local path to WASM file |
+| `url` | string | One of `path` or `url` | URL to download WASM file from |
+| `sha256` | string | No | SHA256 hash for verification (recommended for URLs) |
 
 ## Sync Steps
+
+Sync steps run after canister deployment to configure the running canister.
 
 ### Assets Sync
 
 Upload files to asset canister:
 
 ```yaml
+# Single directory
 sync:
   steps:
     - type: assets
       dir: dist
+
+# Multiple directories
+sync:
+  steps:
+    - type: assets
+      dirs:
+        - dist
+        - static
+        - public/images
 ```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `dir` | string | One of `dir` or `dirs` | Single directory to upload |
+| `dirs` | array | One of `dir` or `dirs` | Multiple directories to upload |
+
+### Script Sync
+
+Run shell commands after deployment:
+
+```yaml
+sync:
+  steps:
+    - type: script
+      commands:
+        - echo "Post-deployment setup"
+        - ./scripts/configure-canister.sh
+```
+
+Script sync steps support the same `command` and `commands` fields as build script steps.
 
 ## Recipes
 
@@ -159,8 +201,30 @@ networks:
 |----------|------|----------|-------------|
 | `name` | string | Yes | Network identifier |
 | `mode` | string | Yes | `managed` |
-| `gateway.host` | string | No | Host address (default: 127.0.0.1) |
-| `gateway.port` | integer | No | Port number (default: 8000) |
+| `gateway.host` | string | No | Host address (default: localhost) |
+| `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
+| `artificial_delay_ms` | integer | No | Artificial delay to add to every update call (ms) |
+| `ii` | boolean | No | Set up Internet Identity canister (default: false) |
+| `nns` | boolean | No | Set up NNS canisters (default: false) |
+| `subnets` | array | No | Configure subnet types (default: one application subnet) |
+
+#### Subnet Configuration
+
+Configure the local network's subnet layout. By default, a single application subnet is created. Use multiple subnets to test cross-subnet (Xnet) calls:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    subnets:
+      - application
+      - application
+      - application
+```
+
+Available subnet types: `application`, `system`, `verified-application`, `bitcoin`, `fiduciary`, `nns`, `sns`
+
+**Note:** Subnet type support depends on the network launcher version. The `application` type is commonly used for testing.
 
 ### Connected Network
 

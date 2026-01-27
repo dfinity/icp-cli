@@ -71,7 +71,10 @@ build:
 Scripts have access to:
 
 - `ICP_WASM_OUTPUT_PATH` — Where to place the final WASM
-- `ICP_PROJECT_ROOT` — The project root directory
+
+Scripts run with the canister directory as the current working directory.
+
+See [Environment Variables Reference](../reference/environment-variables.md) for all available variables.
 
 ## Deploy Phase
 

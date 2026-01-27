@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Context as _, anyhow};
 use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
@@ -15,9 +15,13 @@ use std::sync::Arc;
 use crate::{
     commands::canister::create,
     operations::{
-        binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
-        create::CreateOperation, init_args::parse_init_args, install::install_many,
-        settings::sync_settings_many, sync::sync_many,
+        binding_env_vars::set_binding_env_vars_many,
+        build::build_many_with_progress_bar,
+        create::CreateOperation,
+        install::install_many,
+        misc::{ParsedArguments, parse_args},
+        settings::sync_settings_many,
+        sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
@@ -84,7 +88,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         canisters_to_build,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
-        &ctx.term,
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;
@@ -199,14 +203,20 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         &env.name,
         target_canisters.clone(),
         canister_list,
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    sync_settings_many(
+        agent.clone(),
+        target_canisters,
+        Arc::new(ctx.term.clone()),
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
@@ -223,11 +233,17 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map_err(|e| anyhow!(e))?;
 
             let env = ctx.get_environment(&environment_selection).await?;
-            let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
+            let (canister_path, canister_info) =
+                env.get_canister_info(name).map_err(|e| anyhow!(e))?;
 
-            // Parse init_args if present
+            // Parse init_args if present, using canister path as base for relative file paths
             let init_args_bytes = if let Some(ref init_args_str) = canister_info.init_args {
-                Some(parse_init_args(init_args_str)?)
+                Some(match parse_args(init_args_str, &canister_path)? {
+                    ParsedArguments::Hex(bytes) => bytes,
+                    ParsedArguments::Candid(args) => args
+                        .to_bytes()
+                        .context("Failed to encode Candid args to bytes")?,
+                })
             } else {
                 None
             };
@@ -242,6 +258,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         canisters,
         &args.mode,
         ctx.artifacts.clone(),
+        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;

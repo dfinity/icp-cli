@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::EnvironmentVariable;
 use ic_utils::interfaces::ManagementCanister;
-use icp::{Canister, canister::Settings};
+use icp::{Canister, canister::Settings, context::TermWriter};
 use itertools::Itertools;
 use snafu::{ResultExt, Snafu};
 
@@ -26,6 +26,19 @@ pub(crate) enum SyncSettingsOperationError {
         source: AgentError,
         canister: Principal,
     },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Canister(s) {names:?} failed to update settings."))]
+pub struct SyncSettingsManyError {
+    names: Vec<String>,
+}
+
+/// Holds error information from a failed canister settings update operation
+struct SettingsFailure {
+    canister_name: String,
+    canister_id: Principal,
+    error: SyncSettingsOperationError,
 }
 
 pub(crate) async fn sync_settings(
@@ -100,8 +113,9 @@ pub(crate) async fn sync_settings(
 pub(crate) async fn sync_settings_many(
     agent: Agent,
     target_canisters: Vec<(Principal, Canister)>,
+    term: Arc<TermWriter>,
     debug: bool,
-) -> Result<(), SyncSettingsOperationError> {
+) -> Result<(), SyncSettingsManyError> {
     let mgmt = ManagementCanister::create(&agent);
 
     let mut futs = FuturesOrdered::new();
@@ -109,6 +123,7 @@ pub(crate) async fn sync_settings_many(
 
     for (cid, info) in target_canisters {
         let pb = progress_manager.create_progress_bar(&info.name);
+        let canister_name = info.name.clone();
 
         let settings_fn = {
             let mgmt = mgmt.clone();
@@ -121,18 +136,51 @@ pub(crate) async fn sync_settings_many(
         };
 
         futs.push_back(async move {
-            ProgressManager::execute_with_progress(
+            let result = ProgressManager::execute_with_progress(
                 &pb,
                 settings_fn,
                 || "Canister settings updated successfully".to_string(),
                 |err| format!("Failed to update canister settings: {err}"),
             )
-            .await
+            .await;
+
+            // Map error to include canister context for deferred printing
+            result.map_err(|error| SettingsFailure {
+                canister_name,
+                canister_id: cid,
+                error,
+            })
         });
     }
 
+    // Consume the set of futures and collect errors
+    let mut errors: Vec<SettingsFailure> = Vec::new();
     while let Some(res) = futs.next().await {
-        res?;
+        if let Err(failure) = res {
+            errors.push(failure);
+        }
+    }
+
+    if !errors.is_empty() {
+        // Print all errors in batch
+        for failure in &errors {
+            let _ = term.write_line("");
+            let _ = term.write_line("");
+            let _ = term.write_line(&format!(
+                " ----- Failed to update settings for canister '{}': {} -----",
+                failure.canister_name, failure.canister_id,
+            ));
+            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            let _ = term.write_line("");
+        }
+
+        return SyncSettingsManySnafu {
+            names: errors
+                .iter()
+                .map(|e| e.canister_name.clone())
+                .collect::<Vec<String>>(),
+        }
+        .fail();
     }
 
     Ok(())

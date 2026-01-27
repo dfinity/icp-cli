@@ -1,7 +1,55 @@
-use std::{
-    fs::{File, TryLockError},
-    io::ErrorKind,
-};
+//! Network directory management for managed networks.
+//!
+//! This module handles the file hierarchy for storing network runtime state. There are two
+//! directory hierarchies involved:
+//!
+//! # Project-Local Network Directory
+//!
+//! Each project stores its managed network state under `.icp/cache/networks/<network-name>/`:
+//!
+//! ```text
+//! .icp/
+//! └── cache/
+//!     └── networks/
+//!         └── <network-name>/
+//!             ├── descriptor.json      # Network descriptor (runtime state)
+//!             ├── lock                 # File lock for concurrent access
+//!             ├── state/               # PocketIC state directory
+//!             └── network-launcher/
+//!                 ├── stdout.log
+//!                 └── stderr.log
+//! ```
+//!
+//! The `descriptor.json` file is a [`NetworkDescriptorModel`] that captures the running network's
+//! state: process ID, gateway port, root key, etc.
+//!
+//! # Global Port Descriptor Directory
+//!
+//! When a managed network uses a **fixed port** (e.g., the default `local` network on port 8000),
+//! a port descriptor is also written to a global directory to prevent port conflicts across
+//! projects. The global directory location depends on the platform:
+//!
+//! - **Windows**: `~\AppData\Local\icp-cli\cache\port-descriptors\`
+//! - **macOS**: `~/Library/Caches/org.dfinity.icp-cli/port-descriptors/`
+//! - **Linux**: `~/.cache/icp-cli/port-descriptors/`
+//! - **With `ICP_HOME`**: `$ICP_HOME/port-descriptors/`
+//!
+//! ```text
+//! <global-cache>/
+//! └── port-descriptors/
+//!     ├── 8000.json    # Descriptor for port 8000
+//!     ├── 8000.lock    # Lock file for port 8000
+//!     └── ...
+//! ```
+//!
+//! When starting a network on a fixed port, icp-cli:
+//! 1. Checks if `<port>.json` exists and references a live process
+//! 2. If so, returns an error indicating the port is in use by another project
+//! 3. If not (or the process is dead), claims the port by writing a new descriptor
+//!
+//! Networks using random ports (non-fixed) do not write to the global directory.
+
+use std::io::ErrorKind;
 
 use snafu::{ResultExt, prelude::*};
 
@@ -14,14 +62,21 @@ use crate::{
     prelude::*,
 };
 
-/// General interface to network data directories for a single network, covering both the local network root
-/// and the port descriptor in the global directory.
+/// Interface to network data directories for a single managed network.
+///
+/// This struct provides access to both:
+/// - The **project-local** network directory (`.icp/cache/networks/<name>/`)
+/// - The **global** port descriptor directory (for fixed-port networks)
+///
+/// All file operations are protected by file locks to handle concurrent access
+/// from multiple CLI invocations.
 #[derive(Clone)]
 pub struct NetworkDirectory {
+    /// The name of the network (e.g., "local").
     pub network_name: String,
-    /// Project-local network data directory
+    /// Root directory for this network's project-local state (descriptor, logs, PocketIC state).
     pub network_root: PathBuf,
-    /// Global fixed-port descriptor directory
+    /// Global directory for port descriptors, shared across all projects.
     pub port_descriptor_dir: PathBuf,
 }
 
@@ -129,20 +184,30 @@ impl NetworkDirectory {
     }
 }
 
-/// Saves the network descriptor to the both local network root and port descriptor (if provided).
+/// Saves the network descriptor to both the project-local directory and all global port
+/// descriptor directories (for fixed ports).
+///
+/// This must be called with write locks already acquired on all directories.
 pub async fn save_network_descriptors(
     root: LWrite<&NetworkRootPaths>,
-    port: Option<LWrite<&PortPaths>>,
+    ports: &[LWrite<&PortPaths>],
     descriptor: &NetworkDescriptorModel,
 ) -> Result<(), SaveNetworkDescriptorError> {
-    if let Some(port) = port {
+    for port in ports {
         json::save(&port.descriptor_path(), descriptor).context(PortDescriptorSnafu)?;
     }
     json::save(&root.network_descriptor_path(), descriptor).context(NetworkRootDescriptorSnafu)?;
     Ok(())
 }
 
-/// Directory structure for the local network root.
+/// Path accessors for the project-local network directory.
+///
+/// Provides paths to:
+/// - `descriptor.json` - The [`NetworkDescriptorModel`] capturing runtime state
+/// - `state/` - PocketIC's state directory (canister data, checkpoints)
+/// - `network-launcher/` - Launcher process logs
+///
+/// All access should go through [`DirectoryStructureLock`] to ensure proper locking.
 pub struct NetworkRootPaths {
     network_root: PathBuf,
 }
@@ -186,7 +251,13 @@ impl PathsAccess for NetworkRootPaths {
     }
 }
 
-/// Represents the lock
+/// Path accessors for a port descriptor in the global directory.
+///
+/// Each fixed port has two files:
+/// - `<port>.json` - The [`NetworkDescriptorModel`] of the network using this port
+/// - `<port>.lock` - File lock for concurrent access
+///
+/// These files are used to detect when multiple projects try to use the same port.
 pub struct PortPaths {
     port_descriptor_dir: PathBuf,
     port: u16,
@@ -204,39 +275,22 @@ impl PortPaths {
         self.port_descriptor_dir.join(format!("{}.json", self.port))
     }
 
-    /// Claims ownership of a port for this process while the returned file handle is active. Does not impact
-    /// file locking.
-    ///
-    /// Returns `PortAlreadyClaimed` if another process has already claimed the port.
-    pub fn claim_port(&self) -> Result<File, ClaimPortError> {
-        let claim_path = self.descriptor_path().with_extension("claim");
-        let f = File::create(&claim_path).context(OpenClaimFileSnafu { path: claim_path })?;
-        if let Err(e) = f.try_lock() {
-            match e {
-                TryLockError::WouldBlock => {
-                    if let Ok(descriptor) =
-                        json::load::<NetworkDescriptorModel>(&self.descriptor_path())
-                    {
-                        Err(ClaimPortError::PortAlreadyClaimed {
-                            port: self.port,
-                            network: Some(descriptor.network),
-                            owner: Some(descriptor.project_dir),
-                        })
-                    } else {
-                        Err(ClaimPortError::PortAlreadyClaimed {
-                            port: self.port,
-                            network: None,
-                            owner: None,
-                        })
-                    }
+    /// Checks if the port is in use by a live process/container.
+    /// Returns the descriptor if the port is in use, None if available.
+    pub async fn check_port_in_use(
+        &self,
+    ) -> Result<Option<NetworkDescriptorModel>, CheckPortInUseError> {
+        match json::load::<NetworkDescriptorModel>(&self.descriptor_path()) {
+            Ok(descriptor) => {
+                if descriptor.child_locator.is_alive().await {
+                    Ok(Some(descriptor))
+                } else {
+                    // Process/container is dead, port is available
+                    Ok(None)
                 }
-                TryLockError::Error(err) => Err(ClaimPortError::LockErrorOther {
-                    port: self.port,
-                    source: err,
-                }),
             }
-        } else {
-            Ok(f)
+            Err(json::Error::Io { source }) if source.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(CheckPortInUseError::LoadDescriptor { source: e }),
         }
     }
 }
@@ -278,26 +332,15 @@ pub enum LoadPidError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum ClaimPortError {
-    #[snafu(transparent)]
-    OpenPortLockError { source: LockError },
+pub enum CheckPortInUseError {
+    #[snafu(display("failed to load port descriptor"))]
+    LoadDescriptor { source: json::Error },
+}
 
-    #[snafu(display("failed to open port claim file {path}"))]
-    OpenClaimFileError {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-
-    #[snafu(display("port {port} is in use by the {} network of the project at '{}'",
-        network.as_ref().map_or_else(|| "<unknown>", |n| n.as_str()),
-        owner.as_ref().map_or_else(|| "<unknown>", |p| p.as_str()),
-    ))]
-    PortAlreadyClaimed {
-        port: u16,
-        network: Option<String>,
-        owner: Option<PathBuf>,
-    },
-
-    #[snafu(display("failed to claim port {port}"))]
-    LockErrorOther { port: u16, source: std::io::Error },
+#[derive(Debug, Snafu)]
+#[snafu(display("port {port} is in use by the {network} network of the project at '{owner}'"))]
+pub struct PortInUseError {
+    pub port: u16,
+    pub network: String,
+    pub owner: PathBuf,
 }

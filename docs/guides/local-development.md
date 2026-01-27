@@ -132,9 +132,10 @@ icp network stop
 
 **Build fails with "command not found"**
 
-Ensure your language toolchain is installed and in PATH:
-- Rust: `rustup target add wasm32-unknown-unknown`
-- Motoko: `mops toolchain init`
+A required tool is missing. See the [Installation Guide](installation.md) for:
+- **Rust toolchain** — If error mentions `cargo` or `rustc`
+- **Motoko toolchain** — If error mentions `moc` or `mops`
+- **ic-wasm** — If error mentions `ic-wasm`
 
 **Network connection fails**
 

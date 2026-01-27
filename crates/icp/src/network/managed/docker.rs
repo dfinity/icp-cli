@@ -20,18 +20,187 @@ use tokio::select;
 use wslpath2::Conversion;
 
 use crate::network::{
-    ManagedImageConfig,
-    config::ChildLocator,
-    managed::launcher::{NetworkInstance, wait_for_launcher_status},
+    ManagedImageConfig, config::ChildLocator, managed::launcher::NetworkInstance,
 };
 use crate::prelude::*;
 
+use super::launcher::wait_for_launcher_status;
+
+/// Error converting a path for WSL2.
+#[derive(Debug, Snafu)]
+#[snafu(display("failed to convert path {path} to WSL2: {msg}"))]
+pub struct WslPathConversionError {
+    pub msg: String,
+    pub path: PathBuf,
+}
+
+/// Parsed and validated options for spawning a Docker container.
+/// Created from `ManagedImageConfig` via `TryFrom`.
+pub struct ManagedImageOptions {
+    pub image: String,
+    pub port_bindings: HashMap<String, Option<Vec<PortBinding>>>,
+    pub rm_on_exit: bool,
+    pub args: Vec<String>,
+    pub entrypoint: Option<Vec<String>>,
+    pub environment: Vec<String>,
+    /// Volumes with paths already converted for WSL2 if needed.
+    pub volumes: Vec<String>,
+    pub platform: String,
+    pub user: Option<String>,
+    pub shm_size: Option<i64>,
+    /// Container path where the status directory will be mounted.
+    pub status_dir: String,
+    /// Parsed mounts (excluding the status directory mount, which is added at runtime).
+    pub mounts: Vec<Mount>,
+}
+
+impl ManagedImageOptions {
+    /// Returns all fixed (nonzero) host ports from the port bindings.
+    pub fn fixed_host_ports(&self) -> Vec<u16> {
+        self.port_bindings
+            .values()
+            .flatten()
+            .flatten()
+            .filter_map(|binding| {
+                binding
+                    .host_port
+                    .as_ref()
+                    .and_then(|p| p.parse::<u16>().ok())
+                    .filter(|&p| p != 0)
+            })
+            .collect()
+    }
+}
+
+impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
+    type Error = ManagedImageConversionError;
+
+    fn try_from(config: &ManagedImageConfig) -> Result<Self, Self::Error> {
+        let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO").ok();
+        let wsl2_distro = wsl2_distro.as_deref();
+        let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
+
+        let platform = config.platform.clone().unwrap_or_else(|| {
+            if cfg!(target_arch = "aarch64") {
+                "linux/arm64".to_string()
+            } else {
+                "linux/amd64".to_string()
+            }
+        });
+
+        let port_bindings = config
+            .port_mapping
+            .iter()
+            .map(|mapping| {
+                let (host, container_port) =
+                    mapping.rsplit_once(':').context(ParsePortmapSnafu {
+                        port_mapping: mapping,
+                    })?;
+                let (host_ip, host_port) = if let Some((ip, port)) = host.rsplit_once(':') {
+                    (ip.to_string(), port.to_string())
+                } else {
+                    ("127.0.0.1".to_string(), host.to_string())
+                };
+                Ok::<_, ManagedImageConversionError>((
+                    format!("{container_port}/tcp"),
+                    Some(vec![PortBinding {
+                        host_ip: Some(host_ip),
+                        host_port: Some(host_port),
+                    }]),
+                ))
+            })
+            .try_collect()?;
+
+        let mounts = config
+            .mounts
+            .iter()
+            .map(|m| {
+                let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
+                let host =
+                    dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
+                let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
+                let host_param = convert_path(wsl2_convert, wsl2_distro, &host)?;
+                let (target, flags) = match rest.split_once(':') {
+                    Some((t, f)) => (t, Some(f)),
+                    None => (rest, None),
+                };
+                let read_only = flags
+                    .map(|f| match f {
+                        "ro" => Ok(true),
+                        "rw" => Ok(false),
+                        _ => Err(UnknownFlagsSnafu { flags: f }.build()),
+                    })
+                    .transpose()?;
+                Ok::<_, ManagedImageConversionError>(Mount {
+                    target: Some(target.to_string()),
+                    source: Some(host_param),
+                    typ: Some(MountTypeEnum::BIND),
+                    read_only,
+                    ..<_>::default()
+                })
+            })
+            .try_collect()?;
+
+        let volumes = config
+            .volumes
+            .iter()
+            .map(|v| convert_volume(wsl2_convert, wsl2_distro, v))
+            .try_collect()?;
+
+        Ok(ManagedImageOptions {
+            image: config.image.clone(),
+            port_bindings,
+            rm_on_exit: config.rm_on_exit,
+            args: config.args.clone(),
+            entrypoint: config.entrypoint.clone(),
+            environment: config.environment.clone(),
+            volumes,
+            platform,
+            user: config.user.clone(),
+            shm_size: config.shm_size,
+            status_dir: config.status_dir.clone(),
+            mounts,
+        })
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ManagedImageConversionError {
+    #[snafu(display(
+        "failed to parse port mapping {port_mapping}, must be in format <host_port>:<container_port>"
+    ))]
+    ParsePortmap { port_mapping: String },
+    #[snafu(display(
+        "failed to parse mount {mount}, must be in format <host_path>:<container_path>[:<options>]"
+    ))]
+    ParseMount { mount: String },
+    #[snafu(display("failed to convert path {path} to absolute path"))]
+    ProcessMountSource {
+        source: std::io::Error,
+        path: String,
+    },
+    #[snafu(display("failed to process path as UTF-8"))]
+    BadPath { source: camino::FromPathBufError },
+    #[snafu(display("unknown mount flags {flags}, expected 'ro' or 'rw'"))]
+    UnknownFlags { flags: String },
+    #[snafu(transparent)]
+    WslPathConvert { source: WslPathConversionError },
+}
+
 pub async fn spawn_docker_launcher(
-    image_config: &ManagedImageConfig,
-) -> Result<(AsyncDropper<DockerDropGuard>, NetworkInstance, ChildLocator), DockerLauncherError> {
-    let ManagedImageConfig {
+    options: &ManagedImageOptions,
+) -> Result<
+    (
+        AsyncDropper<DockerDropGuard>,
+        NetworkInstance,
+        ChildLocator,
+        bool,
+    ),
+    DockerLauncherError,
+> {
+    let ManagedImageOptions {
         image,
-        port_mapping,
+        port_bindings,
         rm_on_exit,
         args,
         entrypoint,
@@ -42,20 +211,16 @@ pub async fn spawn_docker_launcher(
         shm_size,
         status_dir,
         mounts,
-    } = image_config;
-    let platform = if let Some(p) = platform {
-        p.clone()
-    } else if cfg!(target_arch = "aarch64") {
-        "linux/arm64".to_string()
-    } else {
-        "linux/amd64".to_string()
-    };
+    } = options;
+
+    // Create status tmpdir and convert path for WSL2 if needed
     let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO").ok();
     let wsl2_distro = wsl2_distro.as_deref();
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
     let host_status_tmpdir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let host_status_dir = host_status_tmpdir.path();
     let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
+
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
         #[cfg(unix)]
@@ -90,63 +255,21 @@ pub async fn spawn_docker_launcher(
         #[cfg(windows)]
         None => r"\\.\pipe\docker_engine".to_string(),
     };
-    let docker = if socket.starts_with("tcp://") || socket.starts_with("http://") {
-        let http_addr = socket.replace("tcp://", "http://");
-        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
-    } else {
-        Docker::connect_with_local(&socket, 120, bollard::API_DEFAULT_VERSION)
-    }
-    .context(ConnectDockerSnafu { socket: &socket })?;
-    let portmap: HashMap<_, _> = port_mapping
+
+    let docker = connect_docker(&socket)?;
+
+    // Add status dir mount to the mounts
+    let all_mounts: Vec<Mount> = mounts
         .iter()
-        .map(|mapping| {
-            let (host_port, container_port) =
-                mapping.split_once(':').context(ParsePortmapSnafu {
-                    port_mapping: mapping,
-                })?;
-            Ok::<_, DockerLauncherError>((
-                format!("{}/tcp", container_port),
-                Some(vec![PortBinding {
-                    host_ip: None,
-                    host_port: Some(host_port.to_string()),
-                }]),
-            ))
-        })
-        .try_collect()?;
-    let mounts = mounts
-        .iter()
-        .map(|m| {
-            let (host, rest) = m.split_once(':').context(ParseMountSnafu { mount: m })?;
-            let host = dunce::canonicalize(host).context(ProcessMountSourceSnafu { path: host })?;
-            let host = PathBuf::try_from(host.clone()).context(BadPathSnafu)?;
-            let host_param = convert_path(wsl2_convert, wsl2_distro, &host)?;
-            let (target, flags) = match rest.split_once(':') {
-                Some((t, f)) => (t, Some(f)),
-                None => (rest, None),
-            };
-            let read_only = flags
-                .map(|f| match f {
-                    "ro" => Ok(true),
-                    "rw" => Ok(false),
-                    _ => Err(UnknownFlagsSnafu { flags: f }.build()),
-                })
-                .transpose()?;
-            Ok::<_, DockerLauncherError>(Mount {
-                target: Some(target.to_string()),
-                source: Some(host_param),
-                typ: Some(MountTypeEnum::BIND),
-                read_only,
-                ..<_>::default()
-            })
-        })
-        .chain([Ok(Mount {
+        .cloned()
+        .chain([Mount {
             target: Some(status_dir.to_string()),
             source: Some(host_status_dir_param),
             typ: Some(MountTypeEnum::BIND),
             read_only: Some(false),
             ..<_>::default()
-        })])
-        .try_collect()?;
+        }])
+        .collect();
     let image_query = docker.inspect_image(image).await;
     match image_query {
         Ok(_) => {}
@@ -193,14 +316,9 @@ pub async fn spawn_docker_launcher(
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
                 host_config: Some(HostConfig {
-                    port_bindings: Some(portmap),
-                    mounts: Some(mounts),
-                    binds: Some(
-                        volumes
-                            .iter()
-                            .map(|v| convert_volume(wsl2_convert, wsl2_distro, v))
-                            .try_collect()?,
-                    ),
+                    port_bindings: Some(port_bindings.clone()),
+                    mounts: Some(all_mounts),
+                    binds: Some(volumes.clone()),
                     shm_size: *shm_size,
                     ..<_>::default()
                 }),
@@ -247,6 +365,14 @@ pub async fn spawn_docker_launcher(
         .context(InspectContainerSnafu { container_id })?;
     let container_config_port = launcher_status.config_port;
     let container_gateway_port = launcher_status.gateway_port;
+    let gateway_port_was_fixed = port_bindings
+        .get(&format!("{container_gateway_port}/tcp"))
+        .is_some_and(|p| {
+            p.as_ref()
+                .unwrap()
+                .iter()
+                .any(|m| m.host_port.as_ref().unwrap() != "0")
+        });
     let port_bindings = container_info
         .network_settings
         .context(RequiredFieldMissingSnafu {
@@ -322,7 +448,40 @@ pub async fn spawn_docker_launcher(
             })?,
         },
         locator,
+        gateway_port_was_fixed,
     ))
+}
+
+/// Connect to the Docker daemon at the given socket.
+pub fn connect_docker(socket: &str) -> Result<Docker, ConnectDockerError> {
+    if socket.starts_with("tcp://") || socket.starts_with("http://") {
+        let http_addr = socket.replace("tcp://", "http://");
+        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
+    } else {
+        Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
+    }
+    .context(ConnectDockerSnafu { socket })
+}
+
+#[derive(Snafu, Debug)]
+#[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
+pub struct ConnectDockerError {
+    source: bollard::errors::Error,
+    socket: String,
+}
+
+/// Check if a container is running.
+pub async fn is_container_running(socket: &str, container_id: &str) -> bool {
+    let Ok(docker) = connect_docker(socket) else {
+        return false;
+    };
+    match docker
+        .inspect_container(container_id, None::<InspectContainerOptions>)
+        .await
+    {
+        Ok(info) => info.state.and_then(|s| s.running).unwrap_or(false),
+        Err(_) => false,
+    }
 }
 
 pub async fn stop_docker_launcher(
@@ -330,13 +489,7 @@ pub async fn stop_docker_launcher(
     container_id: &str,
     rm_on_exit: bool,
 ) -> Result<(), StopContainerError> {
-    let docker = if socket.starts_with("tcp://") {
-        let http_addr = socket.replace("tcp://", "http://");
-        Docker::connect_with_http(&http_addr, 120, bollard::API_DEFAULT_VERSION)
-    } else {
-        Docker::connect_with_local(socket, 120, bollard::API_DEFAULT_VERSION)
-    }
-    .context(ConnectSnafu { socket })?;
+    let docker = connect_docker(socket)?;
     stop(&docker, container_id, rm_on_exit).await
 }
 
@@ -360,11 +513,8 @@ async fn stop(
 
 #[derive(Snafu, Debug)]
 pub enum StopContainerError {
-    #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
-    Connect {
-        source: bollard::errors::Error,
-        socket: String,
-    },
+    #[snafu(transparent)]
+    StopConnect { source: ConnectDockerError },
     #[snafu(display("failed to stop docker container {container_id}"))]
     Stop {
         source: bollard::errors::Error,
@@ -381,14 +531,13 @@ fn convert_path(
     convert: bool,
     distro: Option<&str>,
     path: &Path,
-) -> Result<String, DockerLauncherError> {
+) -> Result<String, WslPathConversionError> {
     if convert {
         wslpath2::convert(path.as_str(), distro, Conversion::WindowsToWsl, true).map_err(|e| {
-            WslPathConvertSnafu {
+            WslPathConversionError {
                 msg: e.to_string(),
                 path: path.to_path_buf(),
             }
-            .build()
         })
     } else {
         Ok(path.to_string())
@@ -399,7 +548,7 @@ fn convert_volume(
     convert: bool,
     distro: Option<&str>,
     volume: &str,
-) -> Result<String, DockerLauncherError> {
+) -> Result<String, ManagedImageConversionError> {
     // docker's actual parsing logic, clunky as it is
     let (host, rest) = if volume.chars().next().unwrap().is_ascii_alphabetic()
         && volume.chars().nth(1).unwrap() == ':'
@@ -427,11 +576,12 @@ fn convert_volume(
 
 #[derive(Debug, Snafu)]
 pub enum DockerLauncherError {
-    #[snafu(display("failed to connect to docker daemon at {socket} (is it running?)"))]
-    ConnectDocker {
-        source: bollard::errors::Error,
-        socket: PathBuf,
-    },
+    #[snafu(transparent)]
+    ConnectDocker { source: ConnectDockerError },
+    #[snafu(transparent)]
+    ImageConversion { source: ManagedImageConversionError },
+    #[snafu(transparent)]
+    WslPathConversion { source: WslPathConversionError },
     #[snafu(display("failed to create docker container"))]
     CreateContainer {
         source: bollard::errors::Error,
@@ -475,23 +625,6 @@ pub enum DockerLauncherError {
         container_port: u16,
         container_id: String,
     },
-    #[snafu(display(
-        "failed to parse port mapping {port_mapping}, must be in format <host_port>:<container_port>"
-    ))]
-    ParsePortmap { port_mapping: String },
-    #[snafu(display(
-        "failed to parse mount {mount}, must be in format <host_path>:<container_path>[:<options>]"
-    ))]
-    ParseMount { mount: String },
-    #[snafu(display("failed to convert path {path} to absolute path"))]
-    ProcessMountSource {
-        source: std::io::Error,
-        path: String,
-    },
-    #[snafu(display("failed to process path as UTF-8"))]
-    BadPath { source: camino::FromPathBufError },
-    #[snafu(display("unknown mount flags {flags}, expected 'ro' or 'rw'"))]
-    UnknownFlags { flags: String },
     #[snafu(transparent)]
     WaitForLauncherStatus {
         source: crate::network::managed::launcher::WaitForLauncherStatusError,
@@ -536,8 +669,6 @@ pub enum DockerLauncherError {
         source: std::str::Utf8Error,
         display: String,
     },
-    #[snafu(display("failed to convert path {path} to WSL2: {msg}"))]
-    WslPathConvertError { msg: String, path: PathBuf },
     #[snafu(display("failed to create temporary directory in WSL2"))]
     WslCreateTmpDirError { source: std::io::Error },
 }

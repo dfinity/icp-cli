@@ -6,10 +6,14 @@ use clap::Args;
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
+use icp::prelude::*;
 use std::io::{self, Write};
 use tracing::warn;
 
-use crate::{commands::args, operations::misc::fetch_canister_metadata};
+use crate::{
+    commands::args,
+    operations::misc::{ParsedArguments, fetch_canister_metadata, parse_args},
+};
 
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
@@ -19,7 +23,15 @@ pub(crate) struct CallArgs {
     /// Name of canister method to call into
     pub(crate) method: String,
 
-    /// String representation of canister call arguments
+    /// Canister call arguments.
+    /// Can be:
+    ///
+    /// - Hex-encoded bytes (e.g., `4449444c00`)
+    ///
+    /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+    ///
+    /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
+    ///   The file should contain either hex or Candid format arguments.
     ///
     /// If not provided, an interactive prompt will be launched to help build the arguments.
     pub(crate) args: Option<String>,
@@ -44,11 +56,16 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         .await?;
 
     let candid_types = get_candid_type(&agent, cid, &args.method).await;
+
     let parsed_args = args
         .args
         .as_ref()
         .map(|s| {
-            candid_parser::parse_idl_args(s).context("failed to parse arguments as candid literal")
+            let cwd =
+                dunce::canonicalize(".").context("Failed to get current working directory")?;
+            let cwd =
+                PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
+            parse_args(s, &cwd)
         })
         .transpose()?;
 
@@ -56,7 +73,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         (None, None) => bail!(
             "arguments was not provided and could not fetch candid type to assist building arguments"
         ),
-        (None, Some(arguments)) => {
+        (None, Some(ParsedArguments::Hex(bytes))) => bytes,
+        (None, Some(ParsedArguments::Candid(arguments))) => {
             warn!("could not fetch candid type, serializing arguments with inferred types.");
             arguments
                 .to_bytes()
@@ -79,7 +97,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                 .to_bytes()
                 .context("failed to serialize candid arguments")?
         }
-        (Some((type_env, func)), Some(arguments)) => arguments
+        (Some(_), Some(ParsedArguments::Hex(bytes))) => {
+            // Hex bytes are already encoded, use as-is
+            bytes
+        }
+        (Some((type_env, func)), Some(ParsedArguments::Candid(arguments))) => arguments
             .to_bytes_with_types(&type_env, &func.args)
             .context("failed to serialize candid arguments with specific types")?,
     };

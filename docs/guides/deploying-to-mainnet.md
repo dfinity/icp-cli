@@ -2,21 +2,55 @@
 
 This guide walks through deploying your canisters to the Internet Computer mainnet.
 
+## Understanding Mainnet Deployment
+
+Unlike local development (which has unlimited resources), deploying to mainnet requires paying for computation and storage.
+
+**Key concepts:**
+
+- **Identity** — Your cryptographic identity on the Internet Computer
+  - Represented by a **principal** (a unique identifier like `aaaaa-aa`)
+  - Think of it like your public address for receiving tokens
+  - Your identity will be the controller (owner) of your canisters, allowing you to deploy, update, and manage them
+
+- **ICP tokens** — The Internet Computer's governance token
+  - Purchase from cryptocurrency exchanges or receive from others
+  - You'll convert ICP to cycles to power your canisters
+
+- **Cycles** — Computational fuel that powers canisters
+  - Canisters consume cycles for compute and storage (similar to cloud hosting costs)
+  - Convert ICP to cycles before deploying
+
+**Network flags you'll see:**
+- `-n ic` = network flag for token and cycles operations (e.g., `icp token balance -n ic`, `icp cycles mint -n ic`)
+- `-e ic` = environment flag for deployment and canister operations (e.g., `icp deploy -e ic`, `icp canister status -e ic`)
+
+**Important:** When working with your project's canisters by name (like `my-canister`), you must use `-e`. The `-n` flag only works with canister IDs (like `ryjl3-tyaaa-aaaaa-aaaba-cai`).
+
+**Amount format:** Amounts use human-readable suffixes throughout:
+- `T` = trillion (1,000,000,000,000)
+- `m` = million, `b` = billion, `k` = thousand
+- Examples: `5T` = 5 trillion cycles, `0.5` = half an ICP token
+
 ## Prerequisites
 
 Before deploying to mainnet, ensure you have:
 
 1. **A working project** — Test locally first with `icp deploy` on your local network
-2. **An identity** — See [Managing Identities](managing-identities.md)
-3. **Cycles** — Canisters require cycles to run. See [Tokens and Cycles](tokens-and-cycles.md)
+2. **An identity** — You'll create one in this guide
+3. **ICP tokens** — You'll acquire these in this guide
+
+The following sections walk through each step. For experienced users, see the [Complete Mainnet Workflow](#complete-mainnet-workflow) at the end.
 
 ## Setting Up an Identity
 
-If you haven't already, create an identity:
+Create an identity for mainnet deployments. This generates a cryptographic key pair that represents you on the Internet Computer.
 
 ```bash
 icp identity new mainnet-deployer
 ```
+
+**⚠️ IMPORTANT:** Save the seed phrase displayed — it's shown only once and is required to restore your identity. Store it securely offline. Without it, you'll permanently lose access to your identity and any ICP/cycles associated with it.
 
 Set it as default:
 
@@ -24,32 +58,60 @@ Set it as default:
 icp identity default mainnet-deployer
 ```
 
-View your principal:
+View your principal (your unique identifier for receiving tokens):
 
 ```bash
 icp identity principal
+# Output: xxxxx-xxxxx-xxxxx-xxxxx-cai
 ```
+
+Save this principal — you'll need it to receive ICP tokens.
 
 ## Acquiring Cycles
 
-Canisters need cycles to operate on mainnet. You'll need cycles before deploying.
+Now you need to get ICP tokens and convert them to cycles.
 
-**Quick start:**
+### Getting ICP
+
+**To get ICP tokens (choose one method):**
+
+- **Purchase ICP** — Buy ICP through cryptocurrency exchanges or wallets that support direct purchases (like OISY)
+  - Use your principal when withdrawing or receiving ICP
+
+  **Note:** Some cryptocurrency exchanges may not support principals yet. If your exchange requires an account identifier instead, use: `icp identity account-id`
+
+- **Receive from another user** — Share your principal with the sender: `icp identity principal`
+
+**Verify ICP arrived:**
 
 ```bash
-# Check your cycles balance
-icp cycles balance -e ic
-
-# Convert ICP to cycles (if you have ICP)
-icp cycles mint --icp 1 -e ic
+icp token balance -n ic
 ```
 
-**How many cycles do you need?**
-- Creating a canister: ~100B cycles (0.1T)
-- Simple backend: 1-5T cycles lasts weeks to months
-- Start with 1-2T cycles and top up as needed
+**Recommended starting amount:** 5-10 ICP for your first deployment (converts to ~5-10T cycles).
 
-For detailed information on acquiring ICP, converting to cycles, and managing balances, see [Tokens and Cycles](tokens-and-cycles.md).
+### Converting ICP to Cycles
+
+Convert your ICP tokens to cycles (remember: "T" = trillion):
+
+```bash
+# Convert 5 ICP to cycles
+icp cycles mint --icp 5 -n ic
+
+# Or request a specific amount of cycles (ICP calculated automatically)
+icp cycles mint --cycles 5T -n ic
+```
+
+**Verify your cycles balance:**
+
+```bash
+icp cycles balance -n ic
+# Output: ~5T cycles (5 trillion cycles)
+```
+
+**Budget guidance:** Budget 1-2T cycles per canister minimum for initial deployment.
+
+For detailed command reference and advanced options, see [Tokens and Cycles](tokens-and-cycles.md).
 
 ## Deploying
 
@@ -70,44 +132,22 @@ This will:
 Deploy only certain canisters:
 
 ```bash
-icp deploy frontend --environment ic
+icp deploy my-canister --environment ic
 ```
-
-### Using Environments
-
-You can configure multiple environments pointing to the IC mainnet in `icp.yaml`:
-
-```yaml
-
-environments:
-  - name: prod
-    network: ic  # ic is an implicit network
-  - name: staging
-    network: ic
-```
-This allows you to deploy independent sets of canisters for each environment:
-
-```bash
-icp deploy -e staging
-icp deploy --environment prod
-```
-
-See [Managing Environments](managing-environments.md) for setup details.
 
 ## Verifying Deployment
 
-List canisters configured in this environment:
+Check your deployment:
 
 ```bash
+# List deployed canisters
+icp canister list -e ic
 
-# List the canisters in an environment
-icp canister list -e myenv
+# Check canister status
+icp canister status my-canister -e ic
 
-# Check canister status:
-icp canister status my-canister -e myenv
-
-# Call a method to verify it's working:
-icp canister call my-canister greet '("World")' -e myenv
+# Call a method to verify it's working
+icp canister call my-canister greet '("World")' -e ic
 ```
 
 ## Updating Deployed Canisters
@@ -115,52 +155,125 @@ icp canister call my-canister greet '("World")' -e myenv
 After making changes, redeploy:
 
 ```bash
-icp deploy --environment prod
+icp deploy -e ic
 ```
 
 This rebuilds and upgrades your existing canisters, preserving their state.
 
-## Managing Canister Settings
+## Managing Canisters
+
+This section covers advanced canister management tasks.
+
+### Updating Settings
+
+Canister settings control operational parameters like freezing threshold (how long a canister can run without cycles before freezing) and memory allocation.
 
 View current settings:
 
 ```bash
-icp canister settings show my-canister -e prod
+icp canister settings show my-canister -e ic
 ```
 
-Update settings:
+Update settings (example shows setting freezing threshold to 30 days):
 
 ```bash
-icp canister settings update my-canister --freezing-threshold 2592000 -e prod
+icp canister settings update my-canister --freezing-threshold 2592000 -e ic
 ```
+
+See [Canister Settings](../reference/canister-settings.md) for all available settings.
 
 ### Managing Controllers
 
-Add a controller:
+Controllers are principals authorized to manage a canister (deploy code, update settings, delete the canister). By default, your identity is the only controller.
+
+Add another controller (useful for team access or backup):
 
 ```bash
-icp canister settings update my-canister --add-controller <principal> -e prod
+icp canister settings update my-canister --add-controller <principal> -e ic
 ```
 
 Remove a controller:
 
 ```bash
-icp canister settings update my-canister --remove-controller <principal> -e prod
+icp canister settings update my-canister --remove-controller <principal> -e ic
 ```
 
-## Topping Up Cycles
+### Topping Up Cycles
 
-Monitor canister cycles and top up when needed:
+Canisters consume cycles continuously for compute and storage. Monitor cycles regularly to prevent your canister from freezing.
+
+Check canister cycles balance:
 
 ```bash
-# Check canister cycles balance
-icp canister status my-canister -e prod
+icp canister status my-canister -e ic
+```
 
-# Top up with 1 trillion cycles
-icp canister top-up my-canister --amount 1000000000000 -e prod
+Top up with cycles when running low:
+
+```bash
+icp canister top-up my-canister --amount 1T -e ic
 ```
 
 See [Tokens and Cycles](tokens-and-cycles.md) for more on managing cycles.
+
+## Using Multiple Environments
+
+For more complex workflows with staging and production environments, you can configure multiple environments in `icp.yaml`:
+
+```yaml
+environments:
+  - name: staging
+    network: ic
+  - name: prod
+    network: ic
+```
+
+Then deploy to each environment:
+
+```bash
+icp deploy -e staging
+icp deploy -e prod
+```
+
+See [Managing Environments](managing-environments.md) for complete setup and best practices.
+
+## Complete Mainnet Workflow
+
+Here's the complete workflow for quick reference:
+
+```bash
+# 1. Create a dedicated mainnet identity
+icp identity new mainnet-deployer
+icp identity default mainnet-deployer
+
+# 2. Get your principal (your unique identifier) to receive ICP tokens
+icp identity principal
+# Output example: xxxxx-xxxxx-xxxxx-xxxxx-cai
+# Share this principal with the sender (exchange or another user)
+# Note: If your exchange requires an account identifier instead, use: icp identity account-id
+
+# 3. Verify ICP arrived
+icp token balance -n ic
+# Output: 10 ICP
+
+# 4. Convert ICP to cycles
+icp cycles mint --icp 5 -n ic
+
+# 5. Verify your cycles balance
+icp cycles balance -n ic
+# Output: ~5T cycles
+
+# 6. Deploy your project to mainnet
+icp deploy -e ic
+
+# 7. Monitor your canister's cycles
+icp canister status my-canister -e ic
+
+# 8. Top up if needed
+icp canister top-up my-canister --amount 2T -e ic
+```
+
+The sections above explain each step in detail.
 
 ## Troubleshooting
 
@@ -169,7 +282,7 @@ See [Tokens and Cycles](tokens-and-cycles.md) for more on managing cycles.
 Your canister needs more cycles. Top up using:
 
 ```bash
-icp canister top-up my-canister --amount 1000000000000 -e prod
+icp canister top-up my-canister --amount 1T -e ic
 ```
 
 **"Not a controller"**

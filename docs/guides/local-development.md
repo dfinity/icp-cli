@@ -56,7 +56,7 @@ icp canister call backend get_user '("alice")'
 
 ### Viewing Project State
 
-List canisters configured in this environment:
+List canisters configured in this environment (the `local` environment is the default, targeting your local network):
 
 ```bash
 icp canister list

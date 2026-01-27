@@ -64,6 +64,10 @@ This starts a local Internet Computer network in the background.
 
 ## Deploy
 
+Now you'll deploy your code to the Internet Computer.
+
+**What is a canister?** A canister is a smart contract on the Internet Computer. It combines code (WebAssembly) and state (memory), similar to a container in Docker. Canisters can store data, serve web content, and respond to user requests.
+
 ```bash
 icp deploy
 ```
@@ -71,7 +75,7 @@ icp deploy
 This single command:
 1. **Builds** your source code into WebAssembly (WASM)
 2. **Creates** a canister on the local network
-3. **Installs** your WASM code
+3. **Installs** your WASM code into the canister
 
 **Tip:** You can also run `icp build` separately if you want to verify compilation before deploying.
 
@@ -101,9 +105,10 @@ icp network stop
 
 ## Next Steps
 
-You've deployed your first canister. Now:
+You've deployed your first canister! Continue your journey:
 
-- [Core Concepts](concepts/project-model.md) — Understand how icp-cli works
-- [Local Development](guides/local-development.md) — Learn the day-to-day workflow
+- [Local Development](guides/local-development.md) — Learn the day-to-day development workflow
+- [Deploying to Mainnet](guides/deploying-to-mainnet.md) — Go live on the Internet Computer
+- [Core Concepts](concepts/project-model.md) — Understand how icp-cli works (optional deep dive)
 
 [Browse all documentation →](index.md)

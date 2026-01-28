@@ -62,7 +62,7 @@ View your principal (your unique identifier for receiving tokens):
 
 ```bash
 icp identity principal
-# Output: 2vxsx-fae (anonymous) or xxxxx-xxxxx-xxxxx-xxxxx-xxx (your principal)
+# Output: xxxxx-xxxxx-xxxxx-xxxxx-xxx (your principal)
 ```
 
 Save this principal — you'll need it to receive ICP tokens.

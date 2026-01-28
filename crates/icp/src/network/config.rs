@@ -76,6 +76,7 @@ pub enum ChildLocator {
         pid: u32,
         /// Process start time in seconds since UNIX epoch. Used to detect PID reuse:
         /// if the PID exists but has a different start time, the original process died.
+        #[serde(default)] // compat with existing descriptors
         start_time: u64,
     },
     /// A Docker container (used on Windows or when explicitly configured).

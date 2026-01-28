@@ -127,6 +127,16 @@ You should see: `("Hello, World!")`
 
 The argument format `'("World")'` is [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) — the interface description language for the Internet Computer.
 
+### Interactive Arguments
+
+Don't want to type Candid manually? Omit the argument and icp-cli will prompt you interactively:
+
+```bash
+icp canister call backend greet
+```
+
+You'll see a prompt asking for the `name` parameter — just type `World` and press Enter. This works for any method with any argument types, making it easy to explore canister APIs without memorizing Candid syntax.
+
 ## Stop the Network
 
 When you're done:

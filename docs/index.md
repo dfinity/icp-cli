@@ -2,8 +2,8 @@ Build and deploy applications on the [Internet Computer](https://internetcompute
 
 ## Start Here
 
-- **[Quickstart](quickstart.md)** — Deploy a canister in under 5 minutes
-- **[Tutorial](tutorial.md)** — Learn icp-cli step by step
+- **[Quickstart](quickstart.md)** — Deploy a full-stack app in under 5 minutes
+- **[Tutorial](tutorial.md)** — Deploy your first app step by step
 
 ## Guides
 

@@ -539,12 +539,12 @@ fn identity_rename_anonymous() {
         .assert()
         .success();
 
-    // Cannot rename to anonymous (already exists)
+    // Cannot rename to anonymous
     ctx.icp()
         .args(["identity", "rename", "alice", "anonymous"])
         .assert()
         .failure()
-        .stderr(contains("identity `anonymous` already exists"));
+        .stderr(contains("cannot rename to the anonymous identity"));
 }
 
 #[test]

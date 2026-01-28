@@ -6,10 +6,7 @@ use common::TestContext;
 use ic_agent::export::Principal;
 use icp::{fs::write_string, prelude::*};
 use indoc::formatdoc;
-use predicates::{
-    ord::eq,
-    str::{PredicateStrExt, contains},
-};
+use predicates::{ord::eq, prelude::*, str::contains};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, clients};
 
@@ -438,4 +435,246 @@ fn identity_account_id() {
         .assert()
         .success()
         .stdout(eq("4f3d4b40cdb852732601fccf8bd24dffe44957a647cb867913e982d98cf85676").trim());
+}
+
+#[test]
+fn identity_rename() {
+    let ctx = TestContext::new();
+
+    // Import an identity to rename
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Get the principal before rename
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+
+    // Rename the identity
+    ctx.icp()
+        .args(["identity", "rename", "alice", "bob"])
+        .assert()
+        .success()
+        .stdout(contains("Renamed identity `alice` to `bob`"));
+
+    // Verify old name no longer exists
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice"])
+        .assert()
+        .failure()
+        .stderr(contains("no identity found with name `alice`"));
+
+    // Verify new name works and has the same principal
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "bob"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+
+    // Verify list shows the new name
+    ctx.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(contains("bob"))
+        .stdout(predicates::str::contains("alice").not());
+}
+
+#[test]
+fn identity_rename_updates_default() {
+    let ctx = TestContext::new();
+
+    // Import and set as default
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "default", "alice"])
+        .assert()
+        .success();
+
+    // Verify alice is the default
+    ctx.icp()
+        .args(["identity", "default"])
+        .assert()
+        .success()
+        .stdout(eq("alice").trim());
+
+    // Rename alice to bob
+    ctx.icp()
+        .args(["identity", "rename", "alice", "bob"])
+        .assert()
+        .success();
+
+    // Verify default was updated to bob
+    ctx.icp()
+        .args(["identity", "default"])
+        .assert()
+        .success()
+        .stdout(eq("bob").trim());
+}
+
+#[test]
+fn identity_rename_anonymous() {
+    let ctx = TestContext::new();
+
+    // Cannot rename from anonymous
+    ctx.icp()
+        .args(["identity", "rename", "anonymous", "not-anonymous"])
+        .assert()
+        .failure()
+        .stderr(contains("cannot rename the anonymous identity"));
+
+    // Import an identity to try renaming to anonymous
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Cannot rename to anonymous
+    ctx.icp()
+        .args(["identity", "rename", "alice", "anonymous"])
+        .assert()
+        .failure()
+        .stderr(contains("cannot rename to the anonymous identity"));
+}
+
+#[test]
+fn identity_rename_target_already_exists() {
+    let ctx = TestContext::new();
+
+    // Import two identities
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "import", "bob", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_p256.pem"))
+        .assert()
+        .success();
+
+    // Try to rename alice to bob (which already exists)
+    ctx.icp()
+        .args(["identity", "rename", "alice", "bob"])
+        .assert()
+        .failure()
+        .stderr(contains("identity `bob` already exists"));
+}
+
+#[test]
+fn identity_rename_source_not_found() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "rename", "nonexistent", "newname"])
+        .assert()
+        .failure()
+        .stderr(contains("no identity found with name `nonexistent`"));
+}
+
+#[test]
+fn identity_delete() {
+    let ctx = TestContext::new();
+
+    // Import an identity to delete
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Verify it exists
+    ctx.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(contains("alice"));
+
+    // Delete it
+    ctx.icp()
+        .args(["identity", "delete", "alice"])
+        .assert()
+        .success()
+        .stdout(contains("Deleted identity `alice`"));
+
+    // Verify it's gone
+    ctx.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(contains("alice").not());
+
+    // Verify we can't use it
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice"])
+        .assert()
+        .failure()
+        .stderr(contains("no identity found with name `alice`"));
+}
+
+#[test]
+fn identity_delete_cannot_delete_anonymous() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "delete", "anonymous"])
+        .assert()
+        .failure()
+        .stderr(contains("cannot delete the anonymous identity"));
+}
+
+#[test]
+fn identity_delete_cannot_delete_default() {
+    let ctx = TestContext::new();
+
+    // Import and set as default
+    ctx.icp()
+        .args(["identity", "import", "alice", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "default", "alice"])
+        .assert()
+        .success();
+
+    // Try to delete it
+    ctx.icp()
+        .args(["identity", "delete", "alice"])
+        .assert()
+        .failure()
+        .stderr(contains("cannot delete the default identity"));
+
+    // Change the default to anonymous
+    ctx.icp()
+        .args(["identity", "default", "anonymous"])
+        .assert()
+        .success();
+
+    // Now deletion should work
+    ctx.icp()
+        .args(["identity", "delete", "alice"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn identity_delete_not_found() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "delete", "nonexistent"])
+        .assert()
+        .failure()
+        .stderr(contains("no identity found with name `nonexistent`"));
 }

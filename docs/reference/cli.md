@@ -549,7 +549,7 @@ Manage your identities
 * `account-id` — Display the ICP ledger account identifier for the current identity
 * `default` — Display the currently selected identity
 * `delete` — Delete an identity
-* `export` — Export an identity as a plaintext PEM file
+* `export` — Print the PEM file for the identity
 * `import` — Import a new identity
 * `list` — List the identities
 * `new` — Create a new identity
@@ -597,7 +597,7 @@ Delete an identity
 
 ## `icp identity export`
 
-Export an identity as a plaintext PEM file
+Print the PEM file for the identity
 
 **Usage:** `icp identity export [OPTIONS] <NAME>`
 

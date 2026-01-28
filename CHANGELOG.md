@@ -1,5 +1,8 @@
 # Unreleased
 
+# v0.1.0-beta.5
+
+* fix: Fix error when loading network descriptors from v0.1.0-beta.3
 * feat: `icp identity delete` and `icp identity rename`
 
 # v0.1.0-beta.4

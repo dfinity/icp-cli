@@ -316,6 +316,12 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
+            commands::identity::Command::Delete(args) => {
+                commands::identity::delete::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
             commands::identity::Command::Import(args) => {
                 commands::identity::import::exec(&ctx, &args)
                     .instrument(trace_span)
@@ -336,6 +342,12 @@ async fn main() -> Result<(), Error> {
 
             commands::identity::Command::Principal(args) => {
                 commands::identity::principal::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
+            commands::identity::Command::Rename(args) => {
+                commands::identity::rename::exec(&ctx, &args)
                     .instrument(trace_span)
                     .await?
             }

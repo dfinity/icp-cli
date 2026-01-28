@@ -31,10 +31,12 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity`↴](#icp-identity)
 * [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
+* [`icp identity delete`↴](#icp-identity-delete)
 * [`icp identity import`↴](#icp-identity-import)
 * [`icp identity list`↴](#icp-identity-list)
 * [`icp identity new`↴](#icp-identity-new)
 * [`icp identity principal`↴](#icp-identity-principal)
+* [`icp identity rename`↴](#icp-identity-rename)
 * [`icp network`↴](#icp-network)
 * [`icp network list`↴](#icp-network-list)
 * [`icp network ping`↴](#icp-network-ping)
@@ -545,10 +547,12 @@ Manage your identities
 
 * `account-id` — Display the ICP ledger account identifier for the current identity
 * `default` — Display the currently selected identity
+* `delete` — Delete an identity
 * `import` — Import a new identity
 * `list` — List the identities
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
+* `rename` — Rename an identity
 
 
 
@@ -574,6 +578,18 @@ Display the currently selected identity
 ###### **Arguments:**
 
 * `<NAME>` — Identity to set as default. If omitted, prints the current default
+
+
+
+## `icp identity delete`
+
+Delete an identity
+
+**Usage:** `icp identity delete <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the identity to delete
 
 
 
@@ -644,6 +660,19 @@ Display the principal for the current identity
 ###### **Options:**
 
 * `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp identity rename`
+
+Rename an identity
+
+**Usage:** `icp identity rename <OLD_NAME> <NEW_NAME>`
+
+###### **Arguments:**
+
+* `<OLD_NAME>` — Current name of the identity
+* `<NEW_NAME>` — New name for the identity
 
 
 

@@ -192,15 +192,45 @@ icp-cli consolidates configuration from multiple sources into a single effective
 View the effective configuration:
 
 ```bash
-# outputs the effect project configuration in yaml
+# outputs the effective project configuration in yaml
 icp project show
 
 # You can use yq to view the effective settings of a canister
 # in a particular environment. Here we're looking at the settings
-# in the 'local' enviroment
+# in the 'local' environment
 icp project show | yq -r ".environments.local"
  
 ```
+
+## Generated Files
+
+icp-cli creates a `.icp/` directory in your project root to store build artifacts, canister IDs, and network state.
+
+```
+<project-root>/.icp/
+├── cache/                    # Temporary/recreatable data
+│   ├── artifacts/            # Built WASM files
+│   ├── mappings/             # Canister IDs for managed networks
+│   └── networks/             # Local network state
+└── data/
+    └── mappings/             # Canister IDs for connected networks
+```
+
+### What's safe to delete
+
+| Directory | Safe to delete? | Consequence |
+|-----------|-----------------|-------------|
+| `.icp/cache/` | **Yes** | Local network state and local canister IDs are recreated on next deploy. Built WASMs are rebuilt. |
+| `.icp/data/` | **No** | Contains mainnet canister ID mappings. Deleting means icp-cli won't know which canisters you've deployed (though the canisters still exist on-chain). |
+
+### Version control
+
+Add to `.gitignore`:
+```gitignore
+.icp/cache/
+```
+
+Consider tracking `.icp/data/` in version control to preserve mainnet canister ID mappings. Losing these mappings means you'll need to manually look up your canister IDs on the IC dashboard.
 
 ## Canister IDs
 

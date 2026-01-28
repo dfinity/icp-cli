@@ -3,9 +3,18 @@
 Set up everything you need to build and deploy canisters on the Internet Computer.
 
 This guide covers:
+- Prerequisites (Node.js)
 - Installing icp-cli (the core tool)
 - Installing language toolchains (Rust or Motoko compilers)
 - Installing ic-wasm for optimization
+
+## Prerequisites
+
+[Node.js](https://nodejs.org/) (LTS recommended) is required for:
+- Installing the Motoko toolchain
+- Building frontend canisters
+
+> **Rust-only projects:** If you're only building Rust backend canisters without a frontend, you can skip Node.js.
 
 ## Install icp-cli
 
@@ -15,13 +24,20 @@ This guide covers:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.4/icp-cli-installer.sh | sh
 ```
 
+Restart your shell or follow the instructions shown by the installer.
+
 **Windows:**
 
 ```ps1
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.4/icp-cli-installer.ps1 | iex"
 ```
 
-The installer adds icp-cli to your PATH automatically. Restart your shell or run the `source` command shown by the installer (or restart your terminal on Windows).
+Restart your terminal after installation.
+
+> **Windows notes:**
+> - **Local networks** require [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)
+> - **Motoko canisters** require [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — the Motoko compiler doesn't run natively on Windows. Install icp-cli inside WSL and follow the macOS/Linux instructions instead.
+> - **Rust canisters** work natively on Windows without WSL
 
 **Alternative: Homebrew (macOS only)**
 
@@ -30,10 +46,6 @@ brew install dfinity/tap/icp-cli
 ```
 
 To update later: `brew upgrade dfinity/tap/icp-cli`
-
-### Platform-Specific Notes
-
-**Windows:** If you want to run a local test network, you'll need [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/). Docker is only required for local networks—you can build canisters and deploy to mainnet without it.
 
 ### Verify Installation
 
@@ -115,7 +127,8 @@ The network launcher downloads automatically on first use. If it fails:
 
 ## Next Steps
 
-- [Tutorial](../tutorial.md) — Deploy your first canister
+- [Quickstart](../quickstart.md) — Deploy a full-stack app in under 5 minutes
+- [Tutorial](../tutorial.md) — Understand each step in detail
 - [Local Development](local-development.md) — Day-to-day workflow
 
 [Browse all documentation →](../index.md)

@@ -49,7 +49,7 @@ export default defineConfig({
         {
           label: 'Start Here',
           items: [
-            { label: 'Introduction', slug: 'index' },
+            { label: 'Quickstart', slug: 'quickstart' },
             { label: 'Tutorial', slug: 'tutorial' },
           ],
         },
@@ -58,10 +58,10 @@ export default defineConfig({
           items: [
             { label: 'Installation', slug: 'guides/installation' },
             { label: 'Local Development', slug: 'guides/local-development' },
-            { label: 'Managing Identities', slug: 'guides/managing-identities' },
-            { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
             { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
+            { label: 'Managing Identities', slug: 'guides/managing-identities' },
+            { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
             { label: 'Containerized Networks', slug: 'guides/containerized-networks' },
             { label: 'Using Recipes', slug: 'guides/using-recipes' },
             { label: 'Creating Recipes', slug: 'guides/creating-recipes' },
@@ -83,6 +83,7 @@ export default defineConfig({
             { label: 'CLI Reference', slug: 'reference/cli' },
             { label: 'Configuration Reference', slug: 'reference/configuration' },
             { label: 'Canister Settings', slug: 'reference/canister-settings' },
+            { label: 'Environment Variables', slug: 'reference/environment-variables' },
           ],
         },
         {

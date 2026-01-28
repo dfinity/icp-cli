@@ -1,6 +1,13 @@
 # Managing Identities
 
-Identities represent who you are when interacting with the Internet Computer. This guide covers creating, importing, and using identities with icp-cli.
+This is a detailed reference for identity management. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
+
+This guide covers:
+- Understanding identity storage and security
+- Creating and importing identities
+- Using multiple identities
+- Account identifiers for exchange compatibility
+- Advanced identity management
 
 ## Understanding Identities
 
@@ -8,12 +15,14 @@ An identity consists of:
 - A **private key** — Used to sign messages
 - A **principal** — Your public identifier derived from the key
 
-Identity data is stored in OS-specific locations:
-- **macOS**: `~/Library/Application Support/org.dfinity.icp-cli/identity/`
-- **Linux**: `~/.local/share/icp-cli/identity/`
-- **Windows**: `%APPDATA%\icp-cli\data\identity\`
+## Default Identity
 
-Set `ICP_HOME` to use a custom base directory instead (e.g., `ICP_HOME=/custom/path` stores identities in `/custom/path/identity/`).
+When you first install icp-cli, an **anonymous** identity is used by default. This identity:
+- Has the principal `2vxsx-fae` (anonymous principal)
+- Is suitable for local development and testing (automatically funded on local networks)
+- **Cannot be used for mainnet deployments** (no ICP or cycles, shared by all users)
+
+For mainnet deployments, you must create a dedicated identity that you control and can fund with ICP and cycles.
 
 ## Creating an Identity
 
@@ -60,6 +69,45 @@ For a specific identity:
 ```bash
 icp identity principal --identity other-identity
 ```
+
+## Account Identifiers
+
+An **account identifier** is an address format used by the ICP ledger. The ICP ledger supports both principals and account identifiers for transfers.
+
+Principals can be deterministically converted to account identifiers, but account identifiers cannot be converted back to principals (the conversion is one-way).
+
+### Getting Your Account ID
+
+Display your account identifier:
+
+```bash
+icp identity account-id
+```
+
+For a specific identity:
+
+```bash
+icp identity account-id --identity other-identity
+```
+
+### Converting Any Principal to Account ID
+
+Convert any principal to its corresponding account identifier:
+
+```bash
+icp identity account-id --of-principal aaaaa-aa
+```
+
+**Note:** The `--of-principal` flag cannot be used with `--identity` since you're converting a specific principal, not using an identity's principal.
+
+### When to Use Account Identifiers
+
+You may need account identifiers when:
+- **Receiving ICP from exchanges** — Many exchanges use account identifier format for ICP withdrawals
+- **Interacting with certain wallets** — Some ICP wallets prefer account identifiers
+- **Backwards compatibility** — Older integrations may expect account identifiers
+
+For most modern use cases, you can use principals directly since the ICP ledger supports both formats.
 
 ## Importing Identities
 
@@ -112,6 +160,23 @@ icp identity new my-identity --storage plaintext
 ```
 
 Only use for testing or non-sensitive deployments.
+
+### Storage Locations
+
+By default, identity data is stored in platform-specific directories:
+
+- **macOS:** `~/Library/Application Support/org.dfinity.icp-cli/identity/`
+- **Linux:** `~/.local/share/icp-cli/identity/`
+- **Windows:** `%APPDATA%\icp-cli\data\identity\`
+
+You can override the base directory by setting the [`ICP_HOME`](../reference/environment-variables.md) environment variable. When set, identities will be stored in `$ICP_HOME/identity/` instead.
+
+The identity directory contains:
+- `identity_list.json` — List of all identities and their metadata
+- `identity_defaults.json` — Current default identity selection
+- `keys/<name>.pem` — Private keys (only for password-protected or plaintext storage)
+
+When using keyring storage (default), private keys are stored securely in your system's keyring instead of as PEM files.
 
 ## Using Identities per Command
 

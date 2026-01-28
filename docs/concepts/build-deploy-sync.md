@@ -31,7 +31,7 @@ The build phase transforms your source code into WebAssembly (WASM) bytecode.
 - icp-cli **delegates** compilation to your language toolchain (Cargo for rust, mops for Motoko, etc.)
 - Build output should be **reproducible** — no environment specific values should be baked in.
 - The toolchain decides whether rebuilding is necessary.
-- As part of the build phase you might build assets to be synchronized to the canister after the was is installed. For example, bundled web assets to serve a frontend.
+- As part of the build phase you might build assets to be synchronized to the canister after the WASM is installed. For example, bundled web assets to serve a frontend.
 
 ### Build Step Types
 
@@ -71,7 +71,10 @@ build:
 Scripts have access to:
 
 - `ICP_WASM_OUTPUT_PATH` — Where to place the final WASM
-- `ICP_PROJECT_ROOT` — The project root directory
+
+Scripts run with the canister directory as the current working directory.
+
+See [Environment Variables Reference](../reference/environment-variables.md) for all available variables.
 
 ## Deploy Phase
 

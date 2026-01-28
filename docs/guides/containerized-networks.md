@@ -49,6 +49,8 @@ The `ghcr.io/dfinity/icp-cli-network-launcher` image is the official ICP test ne
 - Cycles minting canister
 - Pre-funded anonymous principal for development
 
+See [Image Contract](#image-contract) for details on what the image provides and why these components are required.
+
 **Note:** Network state is ephemeral—deployed canisters and their data are lost when the network stops. Persistence is not yet supported.
 
 ### 2. Start the Network
@@ -171,6 +173,48 @@ networks:
 ```
 
 Useful for CI/CD or temporary testing.
+
+## Image Contract
+
+When using a containerized network, the Docker image must fulfill a specific contract with icp-cli. The official `ghcr.io/dfinity/icp-cli-network-launcher` image implements this contract. If you're building a custom image, see [Advanced: Custom Images](#advanced-custom-images) for full details.
+
+### Status File
+
+The container must write a status file to `/app/status/status.json` (configurable via `status-dir`) when the network is ready. This file tells icp-cli how to connect to the network.
+
+**Required fields:**
+| Field          | Type   | Description                                      |
+|----------------|--------|--------------------------------------------------|
+| `v`            | string | Must be `"1"` (status file format version)       |
+| `gateway_port` | number | Container port where the HTTP gateway listens    |
+| `root_key`     | string | Hex-encoded root key of the network              |
+
+**Example:**
+```json
+{"v":"1","gateway_port":4943,"root_key":"308182..."}
+```
+
+### Pre-funded Anonymous Principal
+
+The network must pre-fund the anonymous principal (`2vxsx-fae`) with ICP tokens. This is required because icp-cli uses the anonymous identity to seed ICP and cycles to user identities when the network starts.
+
+**Seeding flow:**
+1. icp-cli connects to the network using the anonymous identity
+2. For each user identity (excluding anonymous), icp-cli transfers ICP from anonymous to that identity
+3. For each identity (including anonymous), icp-cli mints cycles by acquiring ICP from anonymous and converting it through the cycles minting canister
+
+**Seeding amounts per identity:**
+- **ICP:** 1,000,000 ICP (100,000,000,000,000 e8s)
+- **Cycles:** 1,000 T cycles (1,000,000,000,000,000 cycles)
+
+The anonymous principal must have sufficient ICP balance to fund all identities that will be seeded.
+
+### Required System Canisters
+
+The network must include these system canisters:
+- **ICP ledger** - For ICP token transfers during seeding
+- **Cycles ledger** - For cycles management
+- **Cycles minting canister (CMC)** - For converting ICP to cycles
 
 ## Troubleshooting
 
@@ -349,12 +393,23 @@ ENTRYPOINT ["/app/start-network.sh"]
 
 ### Network Requirements
 
-Your custom network must include:
+Your custom network must include the system canisters and pre-funded accounts described in [Image Contract](#image-contract). In summary:
 
-- **ICP ledger canister** - For ICP token management
-- **Cycles ledger canister** - For cycles management
-- **Cycles minting canister** - For creating cycles
-- **Pre-funded anonymous principal** - Principal `2vxsx-fae` must have initial ICP balance for identity seeding
+**Required system canisters:**
+- **ICP ledger canister** (`ryjl3-tyaaa-aaaaa-aaaba-cai`) - For ICP token transfers
+- **Cycles ledger canister** (`um5iw-rqaaa-aaaaq-qaaba-cai`) - For cycles management
+- **Cycles minting canister** (`rkp4c-7iaaa-aaaaa-aaaca-cai`) - For converting ICP to cycles
+
+**Pre-funded anonymous principal:**
+
+The anonymous principal (`2vxsx-fae`) must be pre-funded with ICP by the network itself. When icp-cli starts a containerized network, it seeds user identities by:
+
+1. Using the anonymous identity to transfer ICP to each user identity (excluding anonymous itself)
+2. Acquiring ICP from anonymous and converting it to cycles through the CMC for each identity (including anonymous)
+
+The CLI does **not** seed the anonymous principal—your network must do this. The official image pre-funds anonymous with sufficient ICP for typical development use.
+
+**Recommended minimum balance:** The anonymous principal should have at least 10,000,000 ICP (1,000,000,000,000,000 e8s) to support seeding multiple identities with 1,000,000 ICP each plus transaction fees.
 
 ### Port Binding
 

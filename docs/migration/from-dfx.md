@@ -99,6 +99,7 @@ icp-cli assumes users will use canister environment variables to connect caniste
 | Create identity | `dfx identity new my_id` | `icp identity new my_id` |
 | Use identity | `dfx identity use my_id` | `icp identity default my_id` |
 | Show principal | `dfx identity get-principal` | `icp identity principal` |
+| Get account ID | `dfx ledger account-id` | `icp identity account-id` |
 
 ## Converting dfx.json to icp.yaml
 
@@ -328,8 +329,8 @@ Some dfx features work differently or aren't directly available:
 | `dfx.json` defaults | Use recipes or explicit configuration |
 | Canister dependencies | Use bindings compatible with Canister Environment Variables |
 | `dfx generate` | Use language-specific tooling |
-| `dfx ledger` | `icp token` commands |
-| `dfx wallet` | Cycles managed differently |
+| `dfx ledger` | `icp token` and `icp cycles` commands |
+| `dfx wallet` | Use `icp cycles balance` and `icp cycles transfer` |
 | `dfx upgrade` | Reinstall icp-cli |
 
 ## Migrating Identities

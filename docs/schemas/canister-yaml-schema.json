@@ -153,14 +153,30 @@
       "description": "Controls who can read canister logs.",
       "oneOf": [
         {
-          "const": "controllers",
-          "description": "Only controllers can view logs.",
+          "description": "Simple log visibility: 'controllers' (only controllers can view) or 'public' (anyone can view)",
+          "enum": [
+            "controllers",
+            "public"
+          ],
           "type": "string"
         },
         {
-          "const": "public",
-          "description": "Anyone can view logs.",
-          "type": "string"
+          "additionalProperties": false,
+          "description": "Specific principals that can view logs",
+          "properties": {
+            "allowed_viewers": {
+              "description": "List of principal IDs that can view canister logs",
+              "items": {
+                "description": "A principal ID that can view logs",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "allowed_viewers"
+          ],
+          "type": "object"
         }
       ]
     },

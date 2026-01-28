@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
@@ -39,6 +42,29 @@ struct SettingsFailure {
     canister_name: String,
     canister_id: Principal,
     error: SyncSettingsOperationError,
+}
+
+/// Compare two LogVisibility values in an order-insensitive manner.
+/// For AllowedViewers, the principal lists are compared as sets.
+fn log_visibility_eq(a: &IcLogVisibility, b: &IcLogVisibility) -> bool {
+    match (a, b) {
+        (IcLogVisibility::Controllers, IcLogVisibility::Controllers) => true,
+        (IcLogVisibility::Public, IcLogVisibility::Public) => true,
+        (IcLogVisibility::AllowedViewers(va), IcLogVisibility::AllowedViewers(vb)) => {
+            let set_a: HashSet<_> = va.iter().collect();
+            let set_b: HashSet<_> = vb.iter().collect();
+            set_a == set_b
+        }
+        _ => false,
+    }
+}
+
+/// Compare two environment variable lists in an order-insensitive manner.
+/// Uses HashMap comparison (by name -> value).
+fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]) -> bool {
+    let map_a: HashMap<_, _> = a.iter().map(|ev| (&ev.name, &ev.value)).collect();
+    let map_b: HashMap<_, _> = b.iter().map(|ev| (&ev.name, &ev.value)).collect();
+    map_a == map_b
 }
 
 pub(crate) async fn sync_settings(
@@ -86,7 +112,7 @@ pub(crate) async fn sync_settings(
         };
     if log_visibility_setting
         .as_ref()
-        .is_none_or(|s| *s == current_settings.log_visibility)
+        .is_none_or(|s| log_visibility_eq(s, &current_settings.log_visibility))
         && compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
         && memory_allocation.is_none_or(|s| s == current_settings.memory_allocation)
         && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
@@ -95,7 +121,7 @@ pub(crate) async fn sync_settings(
         && wasm_memory_threshold.is_none_or(|s| s == current_settings.wasm_memory_threshold)
         && environment_variable_setting
             .as_ref()
-            .is_none_or(|s| *s == current_settings.environment_variables)
+            .is_none_or(|s| environment_variables_eq(s, &current_settings.environment_variables))
     {
         // No changes needed
         return Ok(());
@@ -193,4 +219,206 @@ pub(crate) async fn sync_settings_many(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn log_visibility_eq_controllers() {
+        assert!(log_visibility_eq(
+            &IcLogVisibility::Controllers,
+            &IcLogVisibility::Controllers
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_public() {
+        assert!(log_visibility_eq(
+            &IcLogVisibility::Public,
+            &IcLogVisibility::Public
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_different_variants() {
+        assert!(!log_visibility_eq(
+            &IcLogVisibility::Controllers,
+            &IcLogVisibility::Public
+        ));
+        assert!(!log_visibility_eq(
+            &IcLogVisibility::Public,
+            &IcLogVisibility::Controllers
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_allowed_viewers_same_order() {
+        let p1 = Principal::from_text("aaaaa-aa").unwrap();
+        let p2 = Principal::from_text("2vxsx-fae").unwrap();
+
+        assert!(log_visibility_eq(
+            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
+            &IcLogVisibility::AllowedViewers(vec![p1, p2])
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_allowed_viewers_different_order() {
+        let p1 = Principal::from_text("aaaaa-aa").unwrap();
+        let p2 = Principal::from_text("2vxsx-fae").unwrap();
+
+        // Order should not matter
+        assert!(log_visibility_eq(
+            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
+            &IcLogVisibility::AllowedViewers(vec![p2, p1])
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_allowed_viewers_different_principals() {
+        let p1 = Principal::from_text("aaaaa-aa").unwrap();
+        let p2 = Principal::from_text("2vxsx-fae").unwrap();
+        let p3 = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+
+        assert!(!log_visibility_eq(
+            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
+            &IcLogVisibility::AllowedViewers(vec![p1, p3])
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_allowed_viewers_different_length() {
+        let p1 = Principal::from_text("aaaaa-aa").unwrap();
+        let p2 = Principal::from_text("2vxsx-fae").unwrap();
+
+        assert!(!log_visibility_eq(
+            &IcLogVisibility::AllowedViewers(vec![p1]),
+            &IcLogVisibility::AllowedViewers(vec![p1, p2])
+        ));
+    }
+
+    #[test]
+    fn log_visibility_eq_allowed_viewers_vs_other() {
+        let p1 = Principal::from_text("aaaaa-aa").unwrap();
+
+        assert!(!log_visibility_eq(
+            &IcLogVisibility::AllowedViewers(vec![p1]),
+            &IcLogVisibility::Controllers
+        ));
+        assert!(!log_visibility_eq(
+            &IcLogVisibility::AllowedViewers(vec![p1]),
+            &IcLogVisibility::Public
+        ));
+    }
+
+    #[test]
+    fn environment_variables_eq_same_order() {
+        let vars1 = vec![
+            EnvironmentVariable {
+                name: "A".to_string(),
+                value: "1".to_string(),
+            },
+            EnvironmentVariable {
+                name: "B".to_string(),
+                value: "2".to_string(),
+            },
+        ];
+        let vars2 = vec![
+            EnvironmentVariable {
+                name: "A".to_string(),
+                value: "1".to_string(),
+            },
+            EnvironmentVariable {
+                name: "B".to_string(),
+                value: "2".to_string(),
+            },
+        ];
+
+        assert!(environment_variables_eq(&vars1, &vars2));
+    }
+
+    #[test]
+    fn environment_variables_eq_different_order() {
+        let vars1 = vec![
+            EnvironmentVariable {
+                name: "A".to_string(),
+                value: "1".to_string(),
+            },
+            EnvironmentVariable {
+                name: "B".to_string(),
+                value: "2".to_string(),
+            },
+        ];
+        let vars2 = vec![
+            EnvironmentVariable {
+                name: "B".to_string(),
+                value: "2".to_string(),
+            },
+            EnvironmentVariable {
+                name: "A".to_string(),
+                value: "1".to_string(),
+            },
+        ];
+
+        // Order should not matter
+        assert!(environment_variables_eq(&vars1, &vars2));
+    }
+
+    #[test]
+    fn environment_variables_eq_different_values() {
+        let vars1 = vec![EnvironmentVariable {
+            name: "A".to_string(),
+            value: "1".to_string(),
+        }];
+        let vars2 = vec![EnvironmentVariable {
+            name: "A".to_string(),
+            value: "2".to_string(),
+        }];
+
+        assert!(!environment_variables_eq(&vars1, &vars2));
+    }
+
+    #[test]
+    fn environment_variables_eq_different_keys() {
+        let vars1 = vec![EnvironmentVariable {
+            name: "A".to_string(),
+            value: "1".to_string(),
+        }];
+        let vars2 = vec![EnvironmentVariable {
+            name: "B".to_string(),
+            value: "1".to_string(),
+        }];
+
+        assert!(!environment_variables_eq(&vars1, &vars2));
+    }
+
+    #[test]
+    fn environment_variables_eq_different_length() {
+        let vars1 = vec![EnvironmentVariable {
+            name: "A".to_string(),
+            value: "1".to_string(),
+        }];
+        let vars2 = vec![
+            EnvironmentVariable {
+                name: "A".to_string(),
+                value: "1".to_string(),
+            },
+            EnvironmentVariable {
+                name: "B".to_string(),
+                value: "2".to_string(),
+            },
+        ];
+
+        assert!(!environment_variables_eq(&vars1, &vars2));
+    }
+
+    #[test]
+    fn environment_variables_eq_empty() {
+        let vars1: Vec<EnvironmentVariable> = vec![];
+        let vars2: Vec<EnvironmentVariable> = vec![];
+
+        assert!(environment_variables_eq(&vars1, &vars2));
+    }
 }

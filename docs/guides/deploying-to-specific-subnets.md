@@ -1,6 +1,6 @@
 # Deploying to Specific Subnets
 
-The Internet Computer is composed of independent [subnets](https://internetcomputer.org/docs/concepts/subnets) — each a blockchain that hosts canisters. By default, icp-cli selects a subnet automatically, but you can target specific subnets when needed.
+The Internet Computer is composed of independent [subnets](https://learn.internetcomputer.org/hc/en-us/articles/34209955782420-Subnet-Creation) — each a blockchain that hosts canisters. By default, icp-cli selects a subnet automatically, but you can target specific subnets when needed.
 
 ## When to Use Specific Subnets
 
@@ -58,7 +58,7 @@ Verify the subnet ID is correct and the subnet accepts new canisters. Some subne
 
 **Canister on wrong subnet**
 
-The IC supports [canister migration](https://internetcomputer.org/docs/building-apps/advanced-features/canister-migration) between subnets, but icp-cli does not yet support this feature. For now, you can delete and redeploy:
+The IC supports [canister migration](https://forum.dfinity.org/t/canister-migrations-available-now/63181) between subnets, but icp-cli does not yet support this feature. For now, you can delete and redeploy:
 
 ```bash
 icp canister delete my-canister -e ic

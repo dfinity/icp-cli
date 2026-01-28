@@ -59,6 +59,14 @@ icp-cli uses your language's compiler to build canisters. Install what you need:
 
 **Rust canisters:**
 
+If you don't have Rust installed, install it from [rustup.rs](https://rustup.rs/):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Then add the WebAssembly target:
+
 ```bash
 rustup target add wasm32-unknown-unknown
 ```

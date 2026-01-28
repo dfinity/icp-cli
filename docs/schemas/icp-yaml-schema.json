@@ -200,6 +200,7 @@
             "compute_allocation": null,
             "environment_variables": null,
             "freezing_threshold": null,
+            "log_visibility": null,
             "memory_allocation": null,
             "reserved_cycles_limit": null,
             "wasm_memory_limit": null,
@@ -348,6 +349,37 @@
         "path"
       ],
       "type": "object"
+    },
+    "LogVisibility": {
+      "description": "Controls who can read canister logs.",
+      "oneOf": [
+        {
+          "description": "Simple log visibility: 'controllers' (only controllers can view) or 'public' (anyone can view)",
+          "enum": [
+            "controllers",
+            "public"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Specific principals that can view logs",
+          "properties": {
+            "allowed_viewers": {
+              "description": "List of principal IDs that can view canister logs",
+              "items": {
+                "description": "A principal ID that can view logs",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "allowed_viewers"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Managed": {
       "anyOf": [
@@ -618,6 +650,17 @@
             "integer",
             "null"
           ]
+        },
+        "log_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LogVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read canister logs."
         },
         "memory_allocation": {
           "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",

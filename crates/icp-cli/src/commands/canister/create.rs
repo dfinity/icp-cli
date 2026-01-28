@@ -78,6 +78,7 @@ impl CreateArgs {
                 .reserved_cycles_limit
                 .or(default.settings.reserved_cycles_limit)
                 .map(Nat::from),
+            log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self
                 .settings
                 .memory_allocation

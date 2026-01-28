@@ -49,6 +49,7 @@ Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for de
 ### Prerequisites
 
 - Rust 1.88.0+ ([rustup.rs](https://rustup.rs/))
+- `wasm-tools` — Install via `cargo install wasm-tools` (required for test suite)
 - Platform dependencies:
 
 | Platform      | Install                                                                                                  |

@@ -1,15 +1,14 @@
 # Deploying to Specific Subnets
 
-The Internet Computer is composed of independent [subnets](https://internetcomputer.org/docs/concepts/subnets) — each a blockchain that hosts canisters. By default, icp-cli selects a subnet automatically, but you can target specific subnets for geographic, security, or capability requirements.
+The Internet Computer is composed of independent [subnets](https://internetcomputer.org/docs/concepts/subnets) — each a blockchain that hosts canisters. By default, icp-cli selects a subnet automatically, but you can target specific subnets when needed.
 
 ## When to Use Specific Subnets
 
-By default, `icp deploy` automatically selects a subnet for your canisters. You might want to target a specific subnet when:
+By default, `icp deploy` automatically selects a subnet for your canisters. You might want to target a specific subnet for:
 
-- **Verified Application Subnets** — Deploy to subnets with additional security guarantees
-- **Geographic Requirements** — Target subnets in specific regions (e.g., European subnets for data residency)
-- **Specialized Subnets** — Use subnets with specific capabilities (Bitcoin, Fiduciary, etc.)
-- **Colocation** — Ensure related canisters are on the same subnet for efficient inter-canister calls
+- **Geographic requirements** — Data residency compliance (e.g., European subnets)
+- **Replication** — Larger subnets offer higher security and fault tolerance
+- **Colocation** — Keep related canisters on the same subnet for efficient inter-canister calls
 
 ## Default Subnet Selection
 
@@ -47,32 +46,9 @@ icp canister create my-canister -e ic --subnet pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt4
 
 The `--subnet` flag only affects canister creation. If the canister already exists, it remains on its current subnet.
 
-## Common Subnet Types
-
-| Type | Description |
-|------|-------------|
-| Application | General-purpose subnets for most canisters |
-| Verified Application | Subnets with additional security measures for high-value applications |
-| Fiduciary | Handles sensitive operations like threshold ECDSA signatures |
-| Bitcoin | Provides Bitcoin integration capabilities |
-| System/NNS | Reserved for system canisters (not available for user deployment) |
-
-The ICP Dashboard also allows filtering by node location (e.g., European subnets) for data residency requirements.
-
 ## Local Network Subnets
 
-For local development, you can configure multiple subnets in `icp.yaml` to test cross-subnet (Xnet) calls:
-
-```yaml
-networks:
-  - name: local
-    mode: managed
-    subnets:
-      - application
-      - application
-```
-
-Available local subnet types: `application`, `system`, `verified-application`, `bitcoin`, `fiduciary`, `nns`, `sns`
+For local development, you can configure multiple subnets to test cross-subnet (Xnet) calls. See the [Configuration Reference](../reference/configuration.md) for available subnet types and setup.
 
 ## Troubleshooting
 

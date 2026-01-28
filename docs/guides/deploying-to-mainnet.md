@@ -303,7 +303,7 @@ icp identity default <identity-name>
 ## Next Steps
 
 - [Tokens and Cycles](tokens-and-cycles.md) — Managing ICP and cycles in detail
-- [Deploying to Specific Subnets](deploying-to-specific-subnets.md) — Target verified, European, or specialized subnets
+- [Deploying to Specific Subnets](deploying-to-specific-subnets.md) — Target European or specialized subnets
 - [Managing Environments](managing-environments.md) — Set up staging and production
 
 [Browse all documentation →](../index.md)

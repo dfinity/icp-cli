@@ -59,6 +59,7 @@ export default defineConfig({
             { label: 'Installation', slug: 'guides/installation' },
             { label: 'Local Development', slug: 'guides/local-development' },
             { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
+            { label: 'Deploying to Specific Subnets', slug: 'guides/deploying-to-specific-subnets' },
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
             { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },

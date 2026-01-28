@@ -738,11 +738,6 @@ pub fn export_identity(
         .get(name)
         .context(NoSuchIdentityToExportSnafu { name })?;
 
-    // Cannot export anonymous
-    if matches!(spec, IdentitySpec::Anonymous) {
-        return CannotExportAnonymousSnafu.fail();
-    }
-
     match spec {
         IdentitySpec::Pem { format, .. } => {
             // Read the PEM file
@@ -788,6 +783,6 @@ pub fn export_identity(
 
             Ok(pem)
         }
-        IdentitySpec::Anonymous => unreachable!("checked above"),
+        IdentitySpec::Anonymous => CannotExportAnonymousSnafu.fail(),
     }
 }

@@ -322,6 +322,12 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
+            commands::identity::Command::Export(args) => {
+                commands::identity::export::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
             commands::identity::Command::Import(args) => {
                 commands::identity::import::exec(&ctx, &args)
                     .instrument(trace_span)

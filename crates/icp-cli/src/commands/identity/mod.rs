@@ -3,6 +3,7 @@ use clap::{Subcommand, ValueEnum};
 pub(crate) mod account_id;
 pub(crate) mod default;
 pub(crate) mod delete;
+pub(crate) mod export;
 pub(crate) mod import;
 pub(crate) mod list;
 pub(crate) mod new;
@@ -19,6 +20,9 @@ pub(crate) enum Command {
 
     /// Delete an identity
     Delete(delete::DeleteArgs),
+
+    /// Print the PEM file for the identity
+    Export(export::ExportArgs),
 
     /// Import a new identity
     Import(import::ImportArgs),

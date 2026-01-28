@@ -678,3 +678,213 @@ fn identity_delete_not_found() {
         .failure()
         .stderr(contains("no identity found with name `nonexistent`"));
 }
+
+#[test]
+fn identity_export_plaintext() {
+    let ctx = TestContext::new();
+
+    // Import a plaintext identity
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice",
+            "--storage",
+            "plaintext",
+            "--from-pem",
+        ])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Export it and verify the output is valid PEM
+    let output = ctx
+        .icp()
+        .args(["identity", "export", "alice"])
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&output.get_output().stdout).unwrap();
+
+    // Verify it's a valid PEM file
+    assert!(stdout.contains("-----BEGIN PRIVATE KEY-----"));
+    assert!(stdout.contains("-----END PRIVATE KEY-----"));
+
+    // Verify we can parse it
+    let pem = pem::parse(stdout.trim()).expect("should be valid PEM");
+    assert_eq!(pem.tag(), "PRIVATE KEY");
+}
+
+#[test]
+fn identity_export_encrypted_with_password_file() {
+    let ctx = TestContext::new();
+
+    // Create a password file
+    let password_file = ctx.home_path().join("password.txt");
+    std::fs::write(&password_file, "test-password").unwrap();
+
+    // Import an encrypted identity
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice",
+            "--storage",
+            "password",
+            "--storage-password-file",
+        ])
+        .arg(&password_file)
+        .args(["--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Export it with password file
+    let output = ctx
+        .icp()
+        .args(["identity", "export", "alice", "--password-file"])
+        .arg(&password_file)
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&output.get_output().stdout).unwrap();
+
+    // Verify it's a valid plaintext PEM file (not encrypted)
+    assert!(stdout.contains("-----BEGIN PRIVATE KEY-----"));
+    assert!(stdout.contains("-----END PRIVATE KEY-----"));
+    assert!(!stdout.contains("-----BEGIN ENCRYPTED PRIVATE KEY-----"));
+
+    // Verify we can parse it
+    let pem = pem::parse(stdout.trim()).expect("should be valid PEM");
+    assert_eq!(pem.tag(), "PRIVATE KEY");
+}
+
+#[test]
+fn identity_export_keyring() {
+    let ctx = TestContext::new();
+
+    // Import a keyring identity
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice",
+            "--storage",
+            "keyring",
+            "--from-pem",
+        ])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Export it
+    let output = ctx
+        .icp()
+        .args(["identity", "export", "alice"])
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&output.get_output().stdout).unwrap();
+
+    // Verify it's a valid PEM file
+    assert!(stdout.contains("-----BEGIN PRIVATE KEY-----"));
+    assert!(stdout.contains("-----END PRIVATE KEY-----"));
+
+    // Verify we can parse it
+    let pem = pem::parse(stdout.trim()).expect("should be valid PEM");
+    assert_eq!(pem.tag(), "PRIVATE KEY");
+
+    // Clean up keyring entry
+    let _ = ctx.icp().args(["identity", "delete", "alice"]).assert();
+}
+
+#[test]
+fn identity_export_cannot_export_anonymous() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "export", "anonymous"])
+        .assert()
+        .failure()
+        .stderr(contains("cannot export the anonymous identity"));
+}
+
+#[test]
+fn identity_export_not_found() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "export", "nonexistent"])
+        .assert()
+        .failure()
+        .stderr(contains("no identity found with name `nonexistent`"));
+}
+
+#[test]
+fn identity_export_verifies_principal_unchanged() {
+    let ctx = TestContext::new();
+
+    // Import an identity
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice",
+            "--storage",
+            "plaintext",
+            "--from-pem",
+        ])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Get the principal before export
+    let principal_before = ctx
+        .icp()
+        .args(["identity", "principal", "--identity", "alice"])
+        .assert()
+        .success();
+    let principal_before_str = std::str::from_utf8(&principal_before.get_output().stdout)
+        .unwrap()
+        .trim();
+
+    // Export the identity
+    let output = ctx
+        .icp()
+        .args(["identity", "export", "alice"])
+        .assert()
+        .success();
+
+    let exported_pem = std::str::from_utf8(&output.get_output().stdout).unwrap();
+
+    // Save exported PEM to a temp file
+    let export_file = ctx.home_path().join("exported.pem");
+    std::fs::write(&export_file, exported_pem).unwrap();
+
+    // Import the exported PEM as a new identity
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice-reimported",
+            "--storage",
+            "plaintext",
+            "--from-pem",
+        ])
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    // Get the principal of the reimported identity
+    let principal_after = ctx
+        .icp()
+        .args(["identity", "principal", "--identity", "alice-reimported"])
+        .assert()
+        .success();
+    let principal_after_str = std::str::from_utf8(&principal_after.get_output().stdout)
+        .unwrap()
+        .trim();
+
+    // Verify principals match
+    assert_eq!(principal_before_str, principal_after_str);
+}

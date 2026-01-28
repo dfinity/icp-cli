@@ -32,6 +32,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
 * [`icp identity delete`↴](#icp-identity-delete)
+* [`icp identity export`↴](#icp-identity-export)
 * [`icp identity import`↴](#icp-identity-import)
 * [`icp identity list`↴](#icp-identity-list)
 * [`icp identity new`↴](#icp-identity-new)
@@ -548,6 +549,7 @@ Manage your identities
 * `account-id` — Display the ICP ledger account identifier for the current identity
 * `default` — Display the currently selected identity
 * `delete` — Delete an identity
+* `export` — Print the PEM file for the identity
 * `import` — Import a new identity
 * `list` — List the identities
 * `new` — Create a new identity
@@ -590,6 +592,22 @@ Delete an identity
 ###### **Arguments:**
 
 * `<NAME>` — Name of the identity to delete
+
+
+
+## `icp identity export`
+
+Print the PEM file for the identity
+
+**Usage:** `icp identity export [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the identity to export
+
+###### **Options:**
+
+* `--password-file <FILE>` — Read the password from a file instead of prompting (only required for identities created or imported with --storage password)
 
 
 

@@ -31,6 +31,16 @@ impl From<LogVisibility> for ic_management_canister_types::LogVisibility {
     }
 }
 
+impl From<LogVisibility> for icp_canister_interfaces::cycles_ledger::LogVisibility {
+    fn from(value: LogVisibility) -> Self {
+        use icp_canister_interfaces::cycles_ledger::LogVisibility as CyclesLedgerLogVisibility;
+        match value {
+            LogVisibility::Controllers => CyclesLedgerLogVisibility::Controllers,
+            LogVisibility::Public => CyclesLedgerLogVisibility::Public,
+        }
+    }
+}
+
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
@@ -67,6 +77,7 @@ impl From<Settings> for CanisterSettingsArg {
             freezing_threshold: settings.freezing_threshold.map(Nat::from),
             controllers: None,
             reserved_cycles_limit: settings.reserved_cycles_limit.map(Nat::from),
+            log_visibility: settings.log_visibility.map(Into::into),
             memory_allocation: settings.memory_allocation.map(Nat::from),
             compute_allocation: settings.compute_allocation.map(Nat::from),
         }

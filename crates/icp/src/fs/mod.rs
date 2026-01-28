@@ -14,6 +14,14 @@ pub struct IoError {
     path: PathBuf,
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(display("Failed to rename `{from}` to `{to}`"))]
+pub struct RenameError {
+    source: io::Error,
+    from: PathBuf,
+    to: PathBuf,
+}
+
 impl IoError {
     pub fn kind(&self) -> ErrorKind {
         self.source.kind()
@@ -38,6 +46,10 @@ pub fn remove_dir_all(path: &Path) -> Result<(), IoError> {
 
 pub fn remove_file(path: &Path) -> Result<(), IoError> {
     std::fs::remove_file(path).context(IoSnafu { path })
+}
+
+pub fn rename(from: &Path, to: &Path) -> Result<(), RenameError> {
+    std::fs::rename(from, to).context(RenameSnafu { from, to })
 }
 
 pub fn write(path: &Path, contents: &[u8]) -> Result<(), IoError> {

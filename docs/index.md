@@ -12,6 +12,7 @@ Step-by-step instructions for common tasks:
 - [Installation](guides/installation.md) — Install icp-cli on your system
 - [Local Development](guides/local-development.md) — The edit-build-deploy cycle
 - [Deploying to Mainnet](guides/deploying-to-mainnet.md) — Go live on the Internet Computer
+- [Deploying to Specific Subnets](guides/deploying-to-specific-subnets.md) — Target specific subnets
 - [Managing Environments](guides/managing-environments.md) — Dev, staging, production workflows
 - [Managing Identities](guides/managing-identities.md) — Keys and authentication reference
 - [Tokens and Cycles](guides/tokens-and-cycles.md) — ICP tokens and cycles command reference

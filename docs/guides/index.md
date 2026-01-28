@@ -10,6 +10,7 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 ## Deployment
 
 - [Deploying to Mainnet](deploying-to-mainnet.md) — Go live on the Internet Computer
+- [Deploying to Specific Subnets](deploying-to-specific-subnets.md) — Target specific subnets for geographic or capability requirements
 - [Managing Environments](managing-environments.md) — Configure dev, staging, and production
 
 ## Reference

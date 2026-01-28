@@ -676,3 +676,118 @@ fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<S
         .to_pem(EncryptedPrivateKeyInfo::PEM_LABEL, Default::default())
         .expect("infallible EPKI encoding")
 }
+
+#[derive(Debug, Snafu)]
+pub enum ExportIdentityError {
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(display("no identity found with name `{name}`"))]
+    NoSuchIdentityToExport { name: String },
+
+    #[snafu(display("cannot export the anonymous identity"))]
+    CannotExportAnonymous,
+
+    #[snafu(display("failed to read PEM file"))]
+    ReadPemFileForExport { source: fs::IoError },
+
+    #[snafu(display("failed to parse PEM file"))]
+    ParsePemForExport {
+        #[snafu(source(from(pem::PemError, Box::new)))]
+        source: Box<pem::PemError>,
+    },
+
+    #[snafu(display("failed to decrypt PEM file"))]
+    DecryptPemForExport { source: pkcs8::Error },
+
+    #[snafu(display("failed to parse decrypted PEM content"))]
+    ParseDecryptedForExport { source: pkcs8::der::Error },
+
+    #[snafu(display("failed to read password: {message}"))]
+    GetPasswordForExport { message: String },
+
+    #[snafu(display("failed to load keyring entry for identity `{name}`"))]
+    LoadKeyringEntryForExport {
+        name: String,
+        source: keyring::Error,
+    },
+
+    #[snafu(display("failed to read keyring entry for identity `{name}`"))]
+    ReadKeyringEntryForExport {
+        name: String,
+        source: keyring::Error,
+    },
+}
+
+/// Exports an identity as a plaintext PEM string.
+///
+/// This function loads the identity from either a PEM file or keyring,
+/// decrypts it if necessary (prompting for a password), and returns the
+/// decrypted PEM string. The anonymous identity cannot be exported.
+pub fn export_identity(
+    dirs: LRead<&IdentityPaths>,
+    name: &str,
+    password_func: impl FnOnce() -> Result<String, String>,
+) -> Result<String, ExportIdentityError> {
+    // Load the identity list
+    let identity_list = IdentityList::load_from(dirs)?;
+
+    // Check the identity exists
+    let spec = identity_list
+        .identities
+        .get(name)
+        .context(NoSuchIdentityToExportSnafu { name })?;
+
+    // Cannot export anonymous
+    if matches!(spec, IdentitySpec::Anonymous) {
+        return CannotExportAnonymousSnafu.fail();
+    }
+
+    match spec {
+        IdentitySpec::Pem { format, .. } => {
+            // Read the PEM file
+            let pem_path = dirs.key_pem_path(name);
+            let pem_contents = fs::read_to_string(&pem_path).context(ReadPemFileForExportSnafu)?;
+            let pem = pem_contents
+                .parse::<Pem>()
+                .context(ParsePemForExportSnafu)?;
+
+            match format {
+                PemFormat::Plaintext => {
+                    // Already plaintext, return as-is
+                    Ok(pem_contents)
+                }
+                PemFormat::Pbes2 => {
+                    // Decrypt the PEM
+                    let password = password_func()
+                        .map_err(|message| ExportIdentityError::GetPasswordForExport { message })?;
+
+                    // Decrypt to get the plaintext private key info
+                    let encrypted = EncryptedPrivateKeyInfo::from_der(pem.contents())
+                        .context(ParseDecryptedForExportSnafu)?;
+                    let decrypted: SecretDocument = encrypted
+                        .decrypt(&password)
+                        .context(DecryptPemForExportSnafu)?;
+
+                    // Convert to plaintext PEM string
+                    let plaintext_pem = decrypted
+                        .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                        .expect("infallible PEM encoding");
+
+                    Ok(plaintext_pem.to_string())
+                }
+            }
+        }
+        IdentitySpec::Keyring { .. } => {
+            // Read from keyring (already stored as plaintext PEM)
+            let entry =
+                Entry::new(SERVICE_NAME, name).context(LoadKeyringEntryForExportSnafu { name })?;
+            let pem = entry
+                .get_password()
+                .context(ReadKeyringEntryForExportSnafu { name })?;
+
+            Ok(pem)
+        }
+        IdentitySpec::Anonymous => unreachable!("checked above"),
+    }
+}

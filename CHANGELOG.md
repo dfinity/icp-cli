@@ -1,6 +1,7 @@
 # Unreleased
 
 * feat: `icp identity delete` and `icp identity rename`
+* feat: `icp identity export` to print the PEM file for the identity
 
 # v0.1.0-beta.4
 

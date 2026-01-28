@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: `icp identity delete` and `icp identity rename`
+
 # v0.1.0-beta.4
 
 * fix: More reliably detect occupied ports' project locations across containers and backgrounded networks

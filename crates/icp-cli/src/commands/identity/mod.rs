@@ -2,10 +2,12 @@ use clap::{Subcommand, ValueEnum};
 
 pub(crate) mod account_id;
 pub(crate) mod default;
+pub(crate) mod delete;
 pub(crate) mod import;
 pub(crate) mod list;
 pub(crate) mod new;
 pub(crate) mod principal;
+pub(crate) mod rename;
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
@@ -14,6 +16,9 @@ pub(crate) enum Command {
 
     /// Display the currently selected identity
     Default(default::DefaultArgs),
+
+    /// Delete an identity
+    Delete(delete::DeleteArgs),
 
     /// Import a new identity
     Import(import::ImportArgs),
@@ -26,6 +31,9 @@ pub(crate) enum Command {
 
     /// Display the principal for the current identity
     Principal(principal::PrincipalArgs),
+
+    /// Rename an identity
+    Rename(rename::RenameArgs),
 }
 
 #[derive(Debug, Clone, ValueEnum, Default)]

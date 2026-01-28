@@ -422,6 +422,235 @@ fn write_identity(
     Ok(())
 }
 
+#[derive(Debug, Snafu)]
+pub enum RenameIdentityError {
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentityManifest { source: WriteIdentityManifestError },
+
+    #[snafu(display("no identity found with name `{name}`"))]
+    IdentityNotFound { name: String },
+
+    #[snafu(display("identity `{name}` already exists"))]
+    IdentityNameTaken { name: String },
+
+    #[snafu(display("cannot rename the anonymous identity"))]
+    CannotRenameAnonymous,
+
+    #[snafu(display("cannot rename to the anonymous identity"))]
+    CannotRenameToAnonymous,
+
+    #[snafu(display("failed to copy key file to new location"))]
+    CopyKeyFile { source: fs::IoError },
+
+    #[snafu(display("failed to delete old key file"))]
+    DeleteOldKeyFile { source: fs::IoError },
+
+    #[snafu(display("failed to load keyring entry for identity `{name}`"))]
+    LoadKeyringEntry {
+        name: String,
+        source: keyring::Error,
+    },
+
+    #[snafu(display("failed to read keyring entry for identity `{name}`"))]
+    ReadKeyringEntry {
+        name: String,
+        source: keyring::Error,
+    },
+
+    #[snafu(display("failed to create keyring entry for identity `{new_name}`"))]
+    CreateKeyringEntry {
+        new_name: String,
+        source: keyring::Error,
+    },
+
+    #[snafu(display("failed to set keyring entry password for identity `{new_name}`"))]
+    SetKeyringEntryPassword {
+        new_name: String,
+        source: keyring::Error,
+    },
+
+    #[snafu(display("failed to delete old keyring entry for identity `{old_name}`"))]
+    DeleteKeyringEntry {
+        old_name: String,
+        source: keyring::Error,
+    },
+}
+
+/// Renames an identity from `old_name` to `new_name`.
+///
+/// This updates the identity list, renames any PEM files, and updates keyring
+/// entries as needed. If the renamed identity was the default, the default is
+/// updated to point to the new name.
+pub fn rename_identity(
+    dirs: LWrite<&IdentityPaths>,
+    old_name: &str,
+    new_name: &str,
+) -> Result<(), RenameIdentityError> {
+    // Cannot rename anonymous
+    ensure!(old_name != "anonymous", CannotRenameAnonymousSnafu);
+    ensure!(new_name != "anonymous", CannotRenameToAnonymousSnafu);
+
+    // Load the identity list
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
+
+    // Check the old identity exists
+    let spec = identity_list
+        .identities
+        .remove(old_name)
+        .context(IdentityNotFoundSnafu { name: old_name })?;
+
+    // Check the new name doesn't exist
+    ensure!(
+        !identity_list.identities.contains_key(new_name),
+        IdentityNameTakenSnafu { name: new_name }
+    );
+
+    // Copy key material to new location before updating the list
+    let old_path = dirs.key_pem_path(old_name);
+    let old_keyring_entry = match &spec {
+        IdentitySpec::Pem { .. } => {
+            // Copy the PEM file to the new path
+            let new_path = dirs.key_pem_path(new_name);
+            let contents = fs::read(&old_path).context(CopyKeyFileSnafu)?;
+            fs::write(&new_path, &contents).context(CopyKeyFileSnafu)?;
+            None
+        }
+        IdentitySpec::Keyring { .. } => {
+            // Copy the keyring entry to the new name
+            let old_entry = Entry::new(SERVICE_NAME, old_name)
+                .context(LoadKeyringEntrySnafu { name: old_name })?;
+            let password = old_entry
+                .get_password()
+                .context(ReadKeyringEntrySnafu { name: old_name })?;
+
+            let new_entry =
+                Entry::new(SERVICE_NAME, new_name).context(CreateKeyringEntrySnafu { new_name })?;
+            new_entry
+                .set_password(&password)
+                .context(SetKeyringEntryPasswordSnafu { new_name })?;
+
+            Some(old_entry)
+        }
+        IdentitySpec::Anonymous => {
+            unreachable!("anonymous identity should have been rejected above")
+        }
+    };
+
+    // Update the identity list with the new name
+    identity_list.identities.insert(new_name.to_string(), spec);
+    identity_list.write_to(dirs)?;
+
+    // Update the default if it was the renamed identity
+    let mut defaults = IdentityDefaults::load_from(dirs.read())?;
+    if defaults.default == old_name {
+        defaults.default = new_name.to_string();
+        defaults.write_to(dirs)?;
+    }
+
+    // Delete old key material after the list has been updated
+    match old_keyring_entry {
+        None => {
+            // PEM file - delete the old file
+            fs::remove_file(&old_path).context(DeleteOldKeyFileSnafu)?;
+        }
+        Some(entry) => {
+            // Keyring - delete the old entry
+            entry
+                .delete_credential()
+                .context(DeleteKeyringEntrySnafu { old_name })?;
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum DeleteIdentityError {
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentityManifest { source: WriteIdentityManifestError },
+
+    #[snafu(display("no identity found with name `{name}`"))]
+    NoSuchIdentityToDelete { name: String },
+
+    #[snafu(display("cannot delete the anonymous identity"))]
+    CannotDeleteAnonymous,
+
+    #[snafu(display("cannot delete the default identity `{name}`; change the default first"))]
+    CannotDeleteDefault { name: String },
+
+    #[snafu(transparent)]
+    DeleteKeyFile { source: fs::IoError },
+
+    #[snafu(display("failed to load keyring entry for identity `{name}`"))]
+    LoadKeyringEntryForDelete {
+        name: String,
+        source: keyring::Error,
+    },
+
+    #[snafu(display("failed to delete keyring entry for identity `{name}`"))]
+    DeleteKeyringEntryForDelete {
+        name: String,
+        source: keyring::Error,
+    },
+}
+
+/// Deletes an identity.
+///
+/// This removes the identity from the identity list and deletes any associated
+/// key files or keyring entries. The anonymous identity and the current default
+/// identity cannot be deleted.
+pub fn delete_identity(
+    dirs: LWrite<&IdentityPaths>,
+    name: &str,
+) -> Result<(), DeleteIdentityError> {
+    // Cannot delete anonymous
+    ensure!(name != "anonymous", CannotDeleteAnonymousSnafu);
+
+    // Check if this is the default identity
+    let defaults = IdentityDefaults::load_from(dirs.read())?;
+    ensure!(defaults.default != name, CannotDeleteDefaultSnafu { name });
+
+    // Load the identity list
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
+
+    // Check the identity exists and remove it
+    let spec = identity_list
+        .identities
+        .remove(name)
+        .context(NoSuchIdentityToDeleteSnafu { name })?;
+
+    // Save the updated identity list before deleting key material
+    identity_list.write_to(dirs)?;
+
+    // Delete key material after the list has been updated
+    match &spec {
+        IdentitySpec::Pem { .. } => {
+            // Delete the PEM file
+            let pem_path = dirs.key_pem_path(name);
+            fs::remove_file(&pem_path)?;
+        }
+        IdentitySpec::Keyring { .. } => {
+            // Delete the keyring entry
+            let entry =
+                Entry::new(SERVICE_NAME, name).context(LoadKeyringEntryForDeleteSnafu { name })?;
+            entry
+                .delete_credential()
+                .context(DeleteKeyringEntryForDeleteSnafu { name })?;
+        }
+        IdentitySpec::Anonymous => {
+            unreachable!("anonymous identity should have been rejected above")
+        }
+    }
+
+    Ok(())
+}
+
 fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
     let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
     let mut salt = [0; 16];

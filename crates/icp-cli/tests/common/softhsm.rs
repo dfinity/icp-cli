@@ -68,6 +68,7 @@ fn find_softhsm_library() -> PathBuf {
 struct GlobalSoftHsmState {
     library_path: PathBuf,
     config_path: PathBuf,
+    pkcs11: Pkcs11,
     // Keep the temp dir alive for the duration of the process
     _token_dir: camino_tempfile::Utf8TempDir,
 }
@@ -130,6 +131,7 @@ fn ensure_global_softhsm_initialized() -> &'static GlobalSoftHsmState {
         GlobalSoftHsmState {
             library_path,
             config_path,
+            pkcs11,
             _token_dir: token_dir,
         }
     })
@@ -166,16 +168,12 @@ impl SoftHsmContext {
         let key_id_bytes = key_num.to_be_bytes();
         let key_id_hex = hex::encode(key_id_bytes);
 
-        // Connect to the already-initialized PKCS#11 library and generate a key
-        let pkcs11 =
-            Pkcs11::new(&global.library_path).expect("failed to load SoftHSM2 PKCS#11 library");
-        // Note: we don't call initialize() here because the global init already did it,
-        // and PKCS#11 only allows one initialize per process.
-
-        let all_slots = pkcs11.get_all_slots().expect("failed to get slots");
+        // Use the shared PKCS#11 instance from global state
+        let all_slots = global.pkcs11.get_all_slots().expect("failed to get slots");
         let slot = all_slots.first().copied().expect("no slots available");
 
-        let session = pkcs11
+        let session = global
+            .pkcs11
             .open_rw_session(slot)
             .expect("failed to open session");
         session

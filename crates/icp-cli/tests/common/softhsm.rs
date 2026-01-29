@@ -166,12 +166,11 @@ impl SoftHsmContext {
         let key_id_bytes = key_num.to_be_bytes();
         let key_id_hex = hex::encode(key_id_bytes);
 
-        // Connect to the token and generate a key
+        // Connect to the already-initialized PKCS#11 library and generate a key
         let pkcs11 =
             Pkcs11::new(&global.library_path).expect("failed to load SoftHSM2 PKCS#11 library");
-        pkcs11
-            .initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK))
-            .expect("failed to initialize PKCS#11");
+        // Note: we don't call initialize() here because the global init already did it,
+        // and PKCS#11 only allows one initialize per process.
 
         let all_slots = pkcs11.get_all_slots().expect("failed to get slots");
         let slot = all_slots.first().copied().expect("no slots available");

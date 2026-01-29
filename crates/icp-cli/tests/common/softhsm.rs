@@ -164,7 +164,7 @@ impl SoftHsmContext {
         // Generate a unique key ID for this test instance
         let key_num = KEY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let key_id_bytes = key_num.to_be_bytes();
-        let key_id_hex = hex::encode(&key_id_bytes);
+        let key_id_hex = hex::encode(key_id_bytes);
 
         // Connect to the token and generate a key
         let pkcs11 =

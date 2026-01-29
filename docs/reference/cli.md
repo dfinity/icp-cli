@@ -657,6 +657,7 @@ Link an HSM key to a new identity
 
   Default value: `0`
 * `--hsm-key-id <HSM_KEY_ID>` — Key ID on the HSM (e.g., "01" for PIV authentication key)
+* `--hsm-pin-file <HSM_PIN_FILE>` — Read HSM PIN from a file instead of prompting
 
 
 

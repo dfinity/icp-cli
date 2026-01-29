@@ -25,11 +25,11 @@ const DEFAULT_SOFTHSM_PATHS: &[&str] = &[
     "/usr/lib64/pkcs11/libsofthsm2.so",
 ];
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 const DEFAULT_SOFTHSM_PATHS: &[&str] = &[
-    "C:\\SoftHSM2\\lib\\softhsm2.dll",
-    "C:\\Program Files\\SoftHSM2\\lib\\softhsm2.dll",
-    "C:\\Program Files (x86)\\SoftHSM2\\lib\\softhsm2.dll",
+    r"C:\SoftHSM2\lib\softhsm2-x64.dll",
+    r"C:\Program Files\SoftHSM2\lib\softhsm2-x64.dll",
+    r"C:\Program Files (x86)\SoftHSM2\lib\softhsm2-x64.dll",
 ];
 
 const TEST_SO_PIN: &str = "12345678";

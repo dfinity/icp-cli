@@ -2,6 +2,7 @@ use std::{env, fs, sync::OnceLock};
 
 use cryptoki::{
     context::{CInitializeArgs, CInitializeFlags, Pkcs11},
+    error::RvError,
     mechanism::Mechanism,
     object::Attribute,
     session::UserType,
@@ -176,9 +177,11 @@ impl SoftHsmContext {
             .pkcs11
             .open_rw_session(slot)
             .expect("failed to open session");
-        session
-            .login(UserType::User, Some(&AuthPin::new(TEST_USER_PIN.into())))
-            .expect("failed to login as user");
+        // Login as user - ignore "already logged in" since tests share the PKCS#11 instance
+        match session.login(UserType::User, Some(&AuthPin::new(TEST_USER_PIN.into()))) {
+            Ok(()) | Err(cryptoki::error::Error::Pkcs11(RvError::UserAlreadyLoggedIn, _)) => {}
+            Err(e) => panic!("failed to login as user: {e}"),
+        }
 
         let pub_template = vec![
             Attribute::Token(true),
@@ -204,8 +207,6 @@ impl SoftHsmContext {
         session
             .generate_key_pair(&Mechanism::EccKeyPairGen, &pub_template, &priv_template)
             .expect("failed to generate key pair");
-
-        session.logout().expect("failed to logout");
 
         let slot_index = all_slots
             .iter()

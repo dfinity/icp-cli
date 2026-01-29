@@ -22,7 +22,7 @@ install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
 # Allow manual edits to the generated workflow file (for npm publishing)
-allow-dirty = true
+allow-dirty = ["ci"]
 
 [dist.dependencies.apt]
 libdbus-1-dev = '*' # required by libdbus-sys introduced by keyring

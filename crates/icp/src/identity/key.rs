@@ -8,6 +8,7 @@ use ic_agent::{
     identity::{AnonymousIdentity, BasicIdentity, Prime256v1Identity, Secp256k1Identity},
 };
 use ic_ed25519::PrivateKeyFormat;
+use ic_identity_hsm::HardwareIdentity;
 use keyring::Entry;
 use pem::Pem;
 use pkcs8::{
@@ -92,6 +93,11 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to load password from keyring entry"))]
     LoadPasswordFromEntryError { source: keyring::Error },
+
+    #[snafu(display("failed to load HSM identity"))]
+    LoadHsmError {
+        source: ic_identity_hsm::HardwareIdentityError,
+    },
 }
 
 pub fn load_identity(
@@ -110,7 +116,12 @@ pub fn load_identity(
             format, algorithm, ..
         } => load_pem_identity(dirs, name, format, algorithm, password_func),
         IdentitySpec::Keyring { algorithm, .. } => load_keyring_identity(name, algorithm),
-
+        IdentitySpec::Hsm {
+            module,
+            slot,
+            key_id,
+            ..
+        } => load_hsm_identity(module, *slot, key_id, password_func),
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
 }
@@ -256,6 +267,17 @@ impl From<&PemOrigin> for PemOrigin {
     fn from(value: &PemOrigin) -> Self {
         value.clone()
     }
+}
+
+fn load_hsm_identity(
+    module: &PathBuf,
+    slot: usize,
+    key_id: &str,
+    pin_fn: impl FnOnce() -> Result<String, String>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let identity = HardwareIdentity::new(module, slot, key_id, pin_fn).context(LoadHsmSnafu)?;
+
+    Ok(Arc::new(identity))
 }
 
 #[derive(Debug, Snafu)]
@@ -534,6 +556,10 @@ pub fn rename_identity(
 
             Some(old_entry)
         }
+        IdentitySpec::Hsm { .. } => {
+            // no migration required
+            None
+        }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
         }
@@ -643,6 +669,9 @@ pub fn delete_identity(
                 .delete_credential()
                 .context(DeleteKeyringEntryForDeleteSnafu { name })?;
         }
+        IdentitySpec::Hsm { .. } => {
+            // no deletion required
+        }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
         }
@@ -687,6 +716,9 @@ pub enum ExportIdentityError {
 
     #[snafu(display("cannot export the anonymous identity"))]
     CannotExportAnonymous,
+
+    #[snafu(display("cannot export an HSM-backed identity"))]
+    CannotExportHsm,
 
     #[snafu(display("failed to read PEM file"))]
     ReadPemFileForExport { source: fs::IoError },
@@ -784,5 +816,6 @@ pub fn export_identity(
             Ok(pem)
         }
         IdentitySpec::Anonymous => CannotExportAnonymousSnafu.fail(),
+        IdentitySpec::Hsm { .. } => CannotExportHsmSnafu.fail(),
     }
 }

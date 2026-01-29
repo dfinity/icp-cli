@@ -19,9 +19,30 @@ pub(crate) struct LinkArgs {
     /// Key ID on the HSM (e.g., "01" for PIV authentication key)
     #[arg(long)]
     hsm_key_id: String,
+
+    /// Read HSM PIN from a file instead of prompting
+    #[arg(long)]
+    hsm_pin_file: Option<PathBuf>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), LinkError> {
+    let pin_func: Box<dyn FnOnce() -> Result<String, String>> = match &args.hsm_pin_file {
+        Some(path) => {
+            let path = path.clone();
+            Box::new(move || {
+                icp::fs::read_to_string(&path)
+                    .map(|s| s.trim().to_string())
+                    .map_err(|e| e.to_string())
+            })
+        }
+        None => Box::new(|| {
+            Password::new()
+                .with_prompt("Enter HSM PIN")
+                .interact()
+                .map_err(|e| e.to_string())
+        }),
+    };
+
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
@@ -31,12 +52,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), LinkError
                 args.hsm_pkcs11_module.clone(),
                 args.hsm_slot,
                 args.hsm_key_id.clone(),
-                || {
-                    Password::new()
-                        .with_prompt("Enter HSM PIN")
-                        .interact()
-                        .map_err(|e| e.to_string())
-                },
+                pin_func,
             )
         })
         .await?

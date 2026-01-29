@@ -73,6 +73,7 @@ cargo-generate = { version = "0.23.7", features = ["vendored-openssl"] }
 [dev-dependencies]
 assert_cmd = "2"
 camino-tempfile = "1"
+cryptoki.workspace = true
 indoc.workspace = true
 icp = { workspace = true }
 predicates = "3"

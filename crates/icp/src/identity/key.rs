@@ -531,14 +531,20 @@ pub fn rename_identity(
     );
 
     // Copy key material to new location before updating the list
-    let old_path = dirs.key_pem_path(old_name);
-    let old_keyring_entry = match &spec {
+    enum OldKeyMaterial {
+        Pem(PathBuf),
+        Keyring(Entry),
+        None,
+    }
+
+    let old_key_material = match &spec {
         IdentitySpec::Pem { .. } => {
             // Copy the PEM file to the new path
+            let old_path = dirs.key_pem_path(old_name);
             let new_path = dirs.key_pem_path(new_name);
             let contents = fs::read(&old_path).context(CopyKeyFileSnafu)?;
             fs::write(&new_path, &contents).context(CopyKeyFileSnafu)?;
-            None
+            OldKeyMaterial::Pem(old_path)
         }
         IdentitySpec::Keyring { .. } => {
             // Copy the keyring entry to the new name
@@ -554,11 +560,11 @@ pub fn rename_identity(
                 .set_password(&password)
                 .context(SetKeyringEntryPasswordSnafu { new_name })?;
 
-            Some(old_entry)
+            OldKeyMaterial::Keyring(old_entry)
         }
         IdentitySpec::Hsm { .. } => {
-            // no migration required
-            None
+            // No migration required - HSM key stays on device
+            OldKeyMaterial::None
         }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
@@ -577,16 +583,17 @@ pub fn rename_identity(
     }
 
     // Delete old key material after the list has been updated
-    match old_keyring_entry {
-        None => {
-            // PEM file - delete the old file
+    match old_key_material {
+        OldKeyMaterial::Pem(old_path) => {
             fs::remove_file(&old_path).context(DeleteOldKeyFileSnafu)?;
         }
-        Some(entry) => {
-            // Keyring - delete the old entry
+        OldKeyMaterial::Keyring(entry) => {
             entry
                 .delete_credential()
                 .context(DeleteKeyringEntrySnafu { old_name })?;
+        }
+        OldKeyMaterial::None => {
+            // Nothing to clean up (HSM identities)
         }
     }
 

@@ -1,0 +1,28 @@
+{
+  "name": "icp-cli-linux-arm64",
+  "version": "0.1.0-beta.5",
+  "description": "icp-cli binary for Linux ARM64",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dfinity/icp-cli.git",
+    "directory": "npm/icp-cli-linux-arm64"
+  },
+  "license": "Apache-2.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.js",
+  "files": [
+    "bin/icp"
+  ],
+  "keywords": [
+    "icp",
+    "internet-computer",
+    "dfinity",
+    "cli",
+    "binary"
+  ]
+}

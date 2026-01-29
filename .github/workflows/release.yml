@@ -278,14 +278,66 @@ jobs:
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
+  publish-npm:
+    needs:
+      - plan
+      - host
+    if: ${{ needs.plan.outputs.publishing == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing npm packages for version: $VERSION"
+      
+      - name: Download binaries
+        working-directory: npm
+        run: ./scripts/download-binaries.sh "v${{ steps.version.outputs.version }}"
+      
+      - name: Verify binaries
+        working-directory: npm
+        run: ./scripts/verify-binaries.sh
+      
+      - name: Update package versions
+        working-directory: npm
+        run: ./scripts/update-package-json.sh "${{ steps.version.outputs.version }}"
+      
+      - name: Test packages
+        working-directory: npm
+        run: ./scripts/test-docker.sh quick
+      
+      - name: Publish to npm
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: ./scripts/publish-all.sh "${{ steps.version.outputs.version }}"
+
   announce:
     needs:
       - plan
       - host
+      - publish-npm
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') }}
     runs-on: "ubuntu-22.04"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -680,6 +680,58 @@ pub fn delete_identity(
     Ok(())
 }
 
+#[derive(Debug, Snafu)]
+pub enum LinkHsmIdentityError {
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentityManifest { source: WriteIdentityManifestError },
+
+    #[snafu(display("identity `{name}` already exists"))]
+    NameTaken { name: String },
+
+    #[snafu(display("failed to connect to HSM"))]
+    HsmConnection {
+        source: ic_identity_hsm::HardwareIdentityError,
+    },
+}
+
+/// Links an HSM key slot to a named identity.
+///
+/// This creates an identity that references a key stored on a hardware security
+/// module (HSM) like a YubiKey. The private key never leaves the device.
+pub fn link_hsm_identity(
+    dirs: LWrite<&IdentityPaths>,
+    name: &str,
+    module: PathBuf,
+    slot: usize,
+    key_id: String,
+    pin_func: impl FnOnce() -> Result<String, String>,
+) -> Result<(), LinkHsmIdentityError> {
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
+    ensure!(
+        !identity_list.identities.contains_key(name),
+        NameTakenSnafu { name }
+    );
+
+    // Connect to the HSM to verify the parameters and get the principal
+    let identity =
+        HardwareIdentity::new(&module, slot, &key_id, pin_func).context(HsmConnectionSnafu)?;
+    let principal = identity.sender().expect("infallible method");
+
+    let spec = IdentitySpec::Hsm {
+        principal,
+        module,
+        slot,
+        key_id,
+    };
+    identity_list.identities.insert(name.to_string(), spec);
+    identity_list.write_to(dirs)?;
+
+    Ok(())
+}
+
 fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
     let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
     let mut salt = [0; 16];

@@ -5,6 +5,8 @@ This is a detailed reference for identity management. If you're deploying to mai
 This guide covers:
 - Understanding identity storage and security
 - Creating and importing identities
+- Exporting identities for backup or migration
+- Renaming and deleting identities
 - Using multiple identities
 - Account identifiers for exchange compatibility
 - Advanced identity management
@@ -128,6 +130,50 @@ Or enter interactively:
 ```bash
 icp identity import my-identity --read-seed-phrase
 ```
+
+## Exporting Identities
+
+Export an identity as a plaintext PEM file for backup or migration purposes:
+
+```bash
+icp identity export my-identity > backup.pem
+```
+
+This works with all storage types (plaintext, password-protected, keyring). The exported PEM file can be imported on another machine or used as a backup.
+
+### Exporting Password-Protected Identities
+
+For password-protected identities, you can provide the password via file to avoid interactive prompts:
+
+```bash
+icp identity export my-identity --password-file ./password.txt > backup.pem
+```
+
+If you don't provide a password file, you'll be prompted to enter the password interactively.
+
+**Security Note:** The exported PEM file contains your private key in plaintext. Store it securely and delete it after importing if no longer needed.
+
+## Renaming and Deleting Identities
+
+### Renaming an Identity
+
+Change the name of an existing identity:
+
+```bash
+icp identity rename old-name new-name
+```
+
+This updates the identity's name while preserving all its keys and configuration.
+
+### Deleting an Identity
+
+Remove an identity you no longer need:
+
+```bash
+icp identity delete my-old-identity
+```
+
+**Warning:** This permanently deletes the identity. Make sure you have a backup (using `icp identity export`) if you might need to restore it later.
 
 ## Storage Options
 

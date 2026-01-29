@@ -99,6 +99,9 @@ icp-cli assumes users will use canister environment variables to connect caniste
 | Create identity | `dfx identity new my_id` | `icp identity new my_id` |
 | Use identity | `dfx identity use my_id` | `icp identity default my_id` |
 | Show principal | `dfx identity get-principal` | `icp identity principal` |
+| Export identity | `dfx identity export my_id` | `icp identity export my_id` |
+| Rename identity | `dfx identity rename old_id new_id` | `icp identity rename old_id new_id` |
+| Delete identity | `dfx identity remove my_id` | `icp identity delete my_id` |
 | Get account ID | `dfx ledger account-id` | `icp identity account-id` |
 
 ## Converting dfx.json to icp.yaml

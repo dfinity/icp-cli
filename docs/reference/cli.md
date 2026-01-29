@@ -35,6 +35,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity export`↴](#icp-identity-export)
 * [`icp identity import`↴](#icp-identity-import)
 * [`icp identity link`↴](#icp-identity-link)
+* [`icp identity link hsm`↴](#icp-identity-link-hsm)
 * [`icp identity list`↴](#icp-identity-list)
 * [`icp identity new`↴](#icp-identity-new)
 * [`icp identity principal`↴](#icp-identity-principal)
@@ -552,7 +553,7 @@ Manage your identities
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
 * `import` — Import a new identity
-* `link` — Link an HSM key to a new identity
+* `link` — Link an external key to a new identity
 * `list` — List the identities
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
@@ -642,9 +643,21 @@ Import a new identity
 
 ## `icp identity link`
 
+Link an external key to a new identity
+
+**Usage:** `icp identity link <COMMAND>`
+
+###### **Subcommands:**
+
+* `hsm` — Link an HSM key to a new identity
+
+
+
+## `icp identity link hsm`
+
 Link an HSM key to a new identity
 
-**Usage:** `icp identity link [OPTIONS] --hsm-pkcs11-module <HSM_PKCS11_MODULE> --hsm-key-id <HSM_KEY_ID> <NAME>`
+**Usage:** `icp identity link hsm [OPTIONS] --pkcs11-module <PKCS11_MODULE> --key-id <KEY_ID> <NAME>`
 
 ###### **Arguments:**
 
@@ -652,12 +665,12 @@ Link an HSM key to a new identity
 
 ###### **Options:**
 
-* `--hsm-pkcs11-module <HSM_PKCS11_MODULE>` — Path to the PKCS#11 module (shared library) for the HSM
-* `--hsm-slot <HSM_SLOT>` — Slot index on the HSM device
+* `--pkcs11-module <PKCS11_MODULE>` — Path to the PKCS#11 module (shared library) for the HSM
+* `--slot <SLOT>` — Slot index on the HSM device
 
   Default value: `0`
-* `--hsm-key-id <HSM_KEY_ID>` — Key ID on the HSM (e.g., "01" for PIV authentication key)
-* `--hsm-pin-file <HSM_PIN_FILE>` — Read HSM PIN from a file instead of prompting
+* `--key-id <KEY_ID>` — Key ID on the HSM (e.g., "01" for PIV authentication key)
+* `--pin-file <PIN_FILE>` — Read HSM PIN from a file instead of prompting
 
 
 

@@ -28,8 +28,9 @@ pub(crate) enum Command {
     /// Import a new identity
     Import(import::ImportArgs),
 
-    /// Link an HSM key to a new identity
-    Link(link::LinkArgs),
+    /// Link an external key to a new identity
+    #[command(subcommand)]
+    Link(link::Command),
 
     /// List the identities
     List(list::ListArgs),

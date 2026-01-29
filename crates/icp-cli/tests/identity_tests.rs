@@ -901,11 +901,11 @@ async fn identity_link_hsm() {
 
     // Link the HSM key to an identity
     ctx.icp()
-        .args(["identity", "link", "hsm-identity"])
-        .args(["--hsm-pkcs11-module", hsm.library_path_str()])
-        .args(["--hsm-slot", &hsm.slot_index.to_string()])
-        .args(["--hsm-key-id", &hsm.key_id])
-        .arg("--hsm-pin-file")
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
         .arg(&pin_file)
         .assert()
         .success()
@@ -1001,22 +1001,22 @@ fn identity_link_hsm_already_exists() {
 
     // Link once
     ctx.icp()
-        .args(["identity", "link", "hsm-identity"])
-        .args(["--hsm-pkcs11-module", hsm.library_path_str()])
-        .args(["--hsm-slot", &hsm.slot_index.to_string()])
-        .args(["--hsm-key-id", &hsm.key_id])
-        .arg("--hsm-pin-file")
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
         .arg(&pin_file)
         .assert()
         .success();
 
     // Try to link again with the same name
     ctx.icp()
-        .args(["identity", "link", "hsm-identity"])
-        .args(["--hsm-pkcs11-module", hsm.library_path_str()])
-        .args(["--hsm-slot", &hsm.slot_index.to_string()])
-        .args(["--hsm-key-id", &hsm.key_id])
-        .arg("--hsm-pin-file")
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
         .arg(&pin_file)
         .assert()
         .failure()
@@ -1033,11 +1033,11 @@ fn identity_link_hsm_cannot_export() {
 
     // Link the identity
     ctx.icp()
-        .args(["identity", "link", "hsm-identity"])
-        .args(["--hsm-pkcs11-module", hsm.library_path_str()])
-        .args(["--hsm-slot", &hsm.slot_index.to_string()])
-        .args(["--hsm-key-id", &hsm.key_id])
-        .arg("--hsm-pin-file")
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
         .arg(&pin_file)
         .assert()
         .success();
@@ -1060,11 +1060,11 @@ fn identity_link_hsm_rename() {
 
     // Link the identity
     ctx.icp()
-        .args(["identity", "link", "hsm-identity"])
-        .args(["--hsm-pkcs11-module", hsm.library_path_str()])
-        .args(["--hsm-slot", &hsm.slot_index.to_string()])
-        .args(["--hsm-key-id", &hsm.key_id])
-        .arg("--hsm-pin-file")
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
         .arg(&pin_file)
         .assert()
         .success();
@@ -1118,11 +1118,11 @@ fn identity_link_hsm_delete() {
 
     // Link the identity
     ctx.icp()
-        .args(["identity", "link", "hsm-identity"])
-        .args(["--hsm-pkcs11-module", hsm.library_path_str()])
-        .args(["--hsm-slot", &hsm.slot_index.to_string()])
-        .args(["--hsm-key-id", &hsm.key_id])
-        .arg("--hsm-pin-file")
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
         .arg(&pin_file)
         .assert()
         .success();

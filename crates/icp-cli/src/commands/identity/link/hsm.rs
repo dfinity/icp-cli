@@ -4,29 +4,29 @@ use icp::{context::Context, identity::key::link_hsm_identity, prelude::*};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Args)]
-pub(crate) struct LinkArgs {
+pub(crate) struct HsmArgs {
     /// Name for the linked identity
     name: String,
 
     /// Path to the PKCS#11 module (shared library) for the HSM
     #[arg(long)]
-    hsm_pkcs11_module: PathBuf,
+    pkcs11_module: PathBuf,
 
     /// Slot index on the HSM device
     #[arg(long, default_value_t = 0)]
-    hsm_slot: usize,
+    slot: usize,
 
     /// Key ID on the HSM (e.g., "01" for PIV authentication key)
     #[arg(long)]
-    hsm_key_id: String,
+    key_id: String,
 
     /// Read HSM PIN from a file instead of prompting
     #[arg(long)]
-    hsm_pin_file: Option<PathBuf>,
+    pin_file: Option<PathBuf>,
 }
 
-pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), LinkError> {
-    let pin_func: Box<dyn FnOnce() -> Result<String, String>> = match &args.hsm_pin_file {
+pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> {
+    let pin_func: Box<dyn FnOnce() -> Result<String, String>> = match &args.pin_file {
         Some(path) => {
             let path = path.clone();
             Box::new(move || {
@@ -49,9 +49,9 @@ pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), LinkError
             link_hsm_identity(
                 dirs,
                 &args.name,
-                args.hsm_pkcs11_module.clone(),
-                args.hsm_slot,
-                args.hsm_key_id.clone(),
+                args.pkcs11_module.clone(),
+                args.slot,
+                args.key_id.clone(),
                 pin_func,
             )
         })
@@ -64,7 +64,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), LinkError
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum LinkError {
+pub(crate) enum HsmError {
     #[snafu(transparent)]
     LockIdentityDir { source: icp::fs::lock::LockError },
 

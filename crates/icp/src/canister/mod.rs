@@ -12,8 +12,7 @@ pub mod sync;
 mod script;
 
 /// Controls who can read canister logs.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum LogVisibility {
     /// Only controllers can view logs.
     #[default]
@@ -22,6 +21,121 @@ pub enum LogVisibility {
     Public,
     /// Specific principals can view logs.
     AllowedViewers(Vec<Principal>),
+}
+
+/// Serialization/deserialization representation for LogVisibility.
+/// Supports both string format ("controllers", "public") and object format ({ allowed_viewers: [...] }).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged, rename_all = "snake_case")]
+enum LogVisibilityDef {
+    /// Simple string variants for controllers or public
+    Simple(LogVisibilitySimple),
+    /// Object format with allowed_viewers list
+    AllowedViewers { allowed_viewers: Vec<Principal> },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum LogVisibilitySimple {
+    Controllers,
+    Public,
+}
+
+impl From<LogVisibility> for LogVisibilityDef {
+    fn from(value: LogVisibility) -> Self {
+        match value {
+            LogVisibility::Controllers => {
+                LogVisibilityDef::Simple(LogVisibilitySimple::Controllers)
+            }
+            LogVisibility::Public => LogVisibilityDef::Simple(LogVisibilitySimple::Public),
+            LogVisibility::AllowedViewers(viewers) => LogVisibilityDef::AllowedViewers {
+                allowed_viewers: viewers,
+            },
+        }
+    }
+}
+
+impl From<LogVisibilityDef> for LogVisibility {
+    fn from(value: LogVisibilityDef) -> Self {
+        match value {
+            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers) => {
+                LogVisibility::Controllers
+            }
+            LogVisibilityDef::Simple(LogVisibilitySimple::Public) => LogVisibility::Public,
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                LogVisibility::AllowedViewers(allowed_viewers)
+            }
+        }
+    }
+}
+
+impl Serialize for LogVisibility {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        LogVisibilityDef::from(self.clone()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LogVisibility {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, MapAccess, Visitor};
+        use std::fmt;
+
+        struct LogVisibilityVisitor;
+
+        impl<'de> Visitor<'de> for LogVisibilityVisitor {
+            type Value = LogVisibility;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("'controllers', 'public', or object with 'allowed_viewers'")
+            }
+
+            fn visit_str<E: Error>(self, value: &str) -> Result<Self::Value, E> {
+                LogVisibilityDef::deserialize(
+                    serde::de::value::StrDeserializer::<E>::new(value),
+                )
+                .map(Into::into)
+                .map_err(|_| {
+                    E::custom(format!(
+                        "unknown log_visibility value: '{}', expected 'controllers' or 'public'",
+                        value
+                    ))
+                })
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut allowed_viewers: Option<Vec<Principal>> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "allowed_viewers" => {
+                            if allowed_viewers.is_some() {
+                                return Err(Error::duplicate_field("allowed_viewers"));
+                            }
+                            allowed_viewers = Some(map.next_value()?);
+                        }
+                        _ => {
+                            return Err(Error::unknown_field(&key, &["allowed_viewers"]));
+                        }
+                    }
+                }
+
+                allowed_viewers
+                    .map(LogVisibility::AllowedViewers)
+                    .ok_or_else(|| Error::missing_field("allowed_viewers"))
+            }
+        }
+
+        deserializer.deserialize_any(LogVisibilityVisitor)
+    }
 }
 
 impl JsonSchema for LogVisibility {
@@ -56,64 +170,6 @@ impl JsonSchema for LogVisibility {
                 }
             ]
         })
-    }
-}
-
-impl<'de> Deserialize<'de> for LogVisibility {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{Error, MapAccess, Visitor};
-        use std::fmt;
-
-        struct LogVisibilityVisitor;
-
-        impl<'de> Visitor<'de> for LogVisibilityVisitor {
-            type Value = LogVisibility;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("'controllers', 'public', or object with 'allowed_viewers'")
-            }
-
-            fn visit_str<E: Error>(self, value: &str) -> Result<Self::Value, E> {
-                match value {
-                    "controllers" => Ok(LogVisibility::Controllers),
-                    "public" => Ok(LogVisibility::Public),
-                    _ => Err(E::custom(format!(
-                        "unknown log_visibility value: '{}', expected 'controllers' or 'public'",
-                        value
-                    ))),
-                }
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let mut allowed_viewers: Option<Vec<Principal>> = None;
-
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "allowed_viewers" => {
-                            if allowed_viewers.is_some() {
-                                return Err(Error::duplicate_field("allowed_viewers"));
-                            }
-                            allowed_viewers = Some(map.next_value()?);
-                        }
-                        _ => {
-                            return Err(Error::unknown_field(&key, &["allowed_viewers"]));
-                        }
-                    }
-                }
-
-                allowed_viewers
-                    .map(LogVisibility::AllowedViewers)
-                    .ok_or_else(|| Error::missing_field("allowed_viewers"))
-            }
-        }
-
-        deserializer.deserialize_any(LogVisibilityVisitor)
     }
 }
 

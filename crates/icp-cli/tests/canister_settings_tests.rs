@@ -1259,4 +1259,28 @@ async fn canister_settings_sync_log_visibility() {
     .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
     confirm_log_visibility(&ctx, &project_dir, "Controllers");
+
+    // Project manifest with log_visibility: allowed_viewers
+    let pm_with_allowed_viewers = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              log_visibility:
+                allowed_viewers:
+                  - "aaaaa-aa"
+                  - "2vxsx-fae"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    // Setting allowed_viewers should work
+    write_string(&project_dir.join("icp.yaml"), &pm_with_allowed_viewers)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
 }

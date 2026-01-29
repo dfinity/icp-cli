@@ -1,6 +1,6 @@
 use std::{cell::OnceCell, env, ffi::OsString, fs};
 
-use assert_cmd::Command;
+use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use ic_agent::Agent;
 use icp::prelude::*;
@@ -59,7 +59,8 @@ impl TestContext {
     }
 
     pub(crate) fn icp(&self) -> Command {
-        let mut cmd = Command::cargo_bin("icp").expect("icp binary exists");
+        #[allow(clippy::disallowed_types)]
+        let mut cmd = cargo_bin_cmd!("icp");
 
         // Isolate the command
         cmd.current_dir(self.home_path());

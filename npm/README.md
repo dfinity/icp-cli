@@ -12,15 +12,17 @@ This directory contains the npm package distribution system for `icp-cli` using 
 
 ## Automated Release Process
 
-The npm packages are automatically published when a new version tag is pushed to the main repository:
+The npm packages are automatically published when a GitHub release is created:
 
 1. Developer pushes a version tag (e.g., `v0.1.0-beta.6`) to the main icp-cli repository
-2. GitHub Actions workflow builds and releases Rust binaries
-3. The `publish-npm` job automatically:
-   - Downloads the newly released binaries
-   - Updates package.json versions
-   - Runs tests
-   - Publishes all packages to npm
+2. The `release.yml` workflow (managed by cargo-dist) builds and releases Rust binaries
+3. When the GitHub release is published, the `release-npm.yml` workflow automatically:
+   - Downloads the newly released binaries from the GitHub release
+   - Updates package.json versions to match
+   - Runs Docker tests
+   - Publishes all 6 packages to npm
+
+See [`.github/workflows/release-npm.yml`](../.github/workflows/release-npm.yml) for the complete workflow.
 
 ## Manual Testing (for Development)
 
@@ -114,3 +116,24 @@ Binaries are:
 - Not stored in git (ignored via `.gitignore`)
 - Packaged per platform using npm's `os` and `cpu` restrictions
 - Automatically selected at install time via `optionalDependencies`
+
+## Maintenance
+
+### Releasing a New Version
+
+Releases are fully automated:
+
+1. Update version in `icp-cli/Cargo.toml`
+2. Commit changes and push a version tag:
+   ```bash
+   git tag v0.1.0-beta.6
+   git push origin v0.1.0-beta.6
+   ```
+3. The `release.yml` workflow (cargo-dist) will:
+   - Build Rust binaries for all platforms
+   - Create and publish a GitHub release
+4. The `release-npm.yml` workflow will then:
+   - Detect the new release
+   - Download binaries and publish npm packages
+
+No manual npm publishing is required! The two workflows run independently to avoid conflicts with cargo-dist's workflow management.

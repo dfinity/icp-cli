@@ -278,49 +278,6 @@ jobs:
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
-  # Create a docs branch for stable releases (non-prerelease, non-beta)
-  create-docs-branch:
-    needs:
-      - plan
-      - host
-    # Only run for stable releases (not prereleases, not beta versions)
-    if: ${{ needs.host.result == 'success' && !fromJson(needs.host.outputs.val).announcement_is_prerelease && !contains(needs.plan.outputs.tag, 'beta') }}
-    runs-on: "ubuntu-22.04"
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          submodules: recursive
-          fetch-depth: 0
-      - name: Create docs branch
-        env:
-          TAG_NAME: "${{ needs.plan.outputs.tag }}"
-          RELEASE_COMMIT: "${{ github.sha }}"
-        run: |
-          # Extract major.minor from tag and create branch name (e.g., "v0.1.0" -> "v0.1-docs")
-          BRANCH_NAME="v$(echo "${TAG_NAME#v}" | cut -d. -f1,2)-docs"
-
-          # Check if branch already exists
-          if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
-            echo "Branch $BRANCH_NAME already exists, skipping creation"
-            echo "This is expected for patch releases (e.g., v0.1.1, v0.1.2)"
-            exit 0
-          fi
-
-          echo "Creating docs branch: $BRANCH_NAME from commit $RELEASE_COMMIT"
-
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Create and push the branch
-          git checkout -b "$BRANCH_NAME" "$RELEASE_COMMIT"
-          git push origin "$BRANCH_NAME"
-
-          echo "Successfully created branch $BRANCH_NAME"
-
   announce:
     needs:
       - plan

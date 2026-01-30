@@ -3126,7 +3126,7 @@ dependencies = [
 
 [[package]]
 name = "icp"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "async-dropper",
  "async-trait",
@@ -3194,7 +3194,7 @@ dependencies = [
 
 [[package]]
 name = "icp-canister-interfaces"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bigdecimal",
  "candid",
@@ -3203,7 +3203,7 @@ dependencies = [
 
 [[package]]
 name = "icp-cli"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anstyle",
  "anyhow",
@@ -5505,7 +5505,7 @@ dependencies = [
 
 [[package]]
 name = "schema-gen"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "icp",
  "schemars 1.2.0",

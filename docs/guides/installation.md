@@ -21,7 +21,7 @@ This guide covers:
 **macOS / Linux / WSL:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.5/icp-cli-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.6/icp-cli-installer.sh | sh
 ```
 
 Restart your shell or follow the instructions shown by the installer.
@@ -29,7 +29,7 @@ Restart your shell or follow the instructions shown by the installer.
 **Windows:**
 
 ```ps1
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.5/icp-cli-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.6/icp-cli-installer.ps1 | iex"
 ```
 
 Restart your terminal after installation.

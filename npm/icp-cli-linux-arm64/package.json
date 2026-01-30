@@ -1,6 +1,6 @@
 {
   "name": "@icp-sdk/icp-cli-linux-arm64",
-  "version": "0.1.0-beta.5",
+  "version": "0.1.0-beta.4",
   "description": "icp-cli binary for Linux ARM64",
   "repository": {
     "type": "git",

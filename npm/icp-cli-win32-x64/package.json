@@ -1,6 +1,6 @@
 {
   "name": "@icp-sdk/icp-cli-win32-x64",
-  "version": "0.1.0-beta.5",
+  "version": "0.1.0-beta.4",
   "description": "icp-cli binary for Windows x64",
   "repository": {
     "type": "git",

@@ -58,7 +58,7 @@ pub async fn run_network(
     background: bool,
     verbose: bool,
     network_launcher_path: Option<&Path>,
-    autodockerize: bool,
+    autocontainerize: bool,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
 
@@ -71,7 +71,7 @@ pub async fn run_network(
         candid_ui_wasm,
         background,
         verbose,
-        autodockerize,
+        autocontainerize,
     )
     .await?;
     Ok(())
@@ -123,7 +123,7 @@ async fn run_network_launcher(
     candid_ui_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
-    autodockerize: bool,
+    autocontainerize: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
 
@@ -139,7 +139,7 @@ async fn run_network_launcher(
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
-        ManagedMode::Launcher(launcher_config) if cfg!(windows) || autodockerize => {
+        ManagedMode::Launcher(launcher_config) if cfg!(windows) || autocontainerize => {
             let options = transform_native_launcher_to_container(launcher_config);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)

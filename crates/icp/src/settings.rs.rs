@@ -56,14 +56,14 @@ pub struct Settings {
 
     /// Use Docker for the network launcher even when native mode is requested.
     #[serde(default)]
-    pub autodockerize: bool,
+    pub autocontainerize: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             v: 1,
-            autodockerize: false,
+            autocontainerize: false,
         }
     }
 }

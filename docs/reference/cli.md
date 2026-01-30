@@ -50,6 +50,8 @@ This document contains the help content for the `icp` command-line program.
 * [`icp new`↴](#icp-new)
 * [`icp project`↴](#icp-project)
 * [`icp project show`↴](#icp-project-show)
+* [`icp settings`↴](#icp-settings)
+* [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -70,6 +72,7 @@ This document contains the help content for the `icp` command-line program.
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
 * `project` — Display information about the current project
+* `settings` — Configure user settings
 * `sync` — Synchronize canisters
 * `token` — Perform token transactions
 
@@ -994,6 +997,33 @@ The effective yaml configuration includes:
 - processed recipes
 
 **Usage:** `icp project show`
+
+
+
+## `icp settings`
+
+Configure user settings
+
+**Usage:** `icp settings <SETTING>`
+
+###### **Subcommands:**
+
+* `autocontainerize` — Use Docker for the network launcher even when native mode is requested
+
+
+
+## `icp settings autocontainerize`
+
+Use Docker for the network launcher even when native mode is requested
+
+**Usage:** `icp settings autocontainerize [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to true or false. If omitted, prints the current value
+
+  Possible values: `true`, `false`
+
 
 
 

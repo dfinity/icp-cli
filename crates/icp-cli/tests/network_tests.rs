@@ -620,24 +620,24 @@ async fn override_local_network_as_connected() {
         .success();
 }
 
-/// Test that setting autodockerize=true causes the network launcher to run in Docker
+/// Test that setting autocontainerize=true causes the network launcher to run in Docker
 /// even when a native launcher configuration is used.
 ///
-/// This test is skipped on Windows because autodockerize has no effect there
+/// This test is skipped on Windows because autocontainerize has no effect there
 /// (Docker is always used on Windows).
 #[cfg(not(windows))]
 #[tag(docker)]
 #[tokio::test]
-async fn network_autodockerize_uses_docker() {
+async fn network_autocontainerize_uses_docker() {
     let ctx = TestContext::new();
 
-    // Set autodockerize to true
+    // Set autocontainerize to true
     ctx.icp()
-        .args(["settings", "autodockerize", "true"])
+        .args(["settings", "autocontainerize", "true"])
         .assert()
         .success();
 
-    let project_dir = ctx.create_project_dir("autodockerize-test");
+    let project_dir = ctx.create_project_dir("autocontainerize-test");
 
     // Use a native launcher configuration (not an explicit docker image)
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
@@ -672,11 +672,11 @@ async fn network_autodockerize_uses_docker() {
 
     assert!(
         child_locator.get("id").is_some(),
-        "With autodockerize=true, child-locator should have container 'id', not 'pid'. Got: {child_locator}"
+        "With autocontainerize=true, child-locator should have container 'id', not 'pid'. Got: {child_locator}"
     );
     assert!(
         child_locator.get("pid").is_none(),
-        "With autodockerize=true, child-locator should not have 'pid'. Got: {child_locator}"
+        "With autocontainerize=true, child-locator should not have 'pid'. Got: {child_locator}"
     );
 
     let container_id = child_locator

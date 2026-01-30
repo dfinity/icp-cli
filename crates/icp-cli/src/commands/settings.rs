@@ -14,31 +14,31 @@ pub(crate) struct SettingsArgs {
 )]
 enum Setting {
     /// Use Docker for the network launcher even when native mode is requested
-    Autodockerize(AutodockerizeArgs),
+    Autocontainerize(AutocontainerizeArgs),
 }
 
 #[derive(Debug, Args)]
-struct AutodockerizeArgs {
+struct AutocontainerizeArgs {
     /// Set to true or false. If omitted, prints the current value.
     value: Option<bool>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SettingsArgs) -> Result<(), anyhow::Error> {
     match &args.setting {
-        Setting::Autodockerize(sub_args) => exec_autodockerize(ctx, sub_args).await,
+        Setting::Autocontainerize(sub_args) => exec_autocontainerize(ctx, sub_args).await,
     }
 }
 
-async fn exec_autodockerize(ctx: &Context, args: &AutodockerizeArgs) -> Result<(), anyhow::Error> {
+async fn exec_autocontainerize(ctx: &Context, args: &AutocontainerizeArgs) -> Result<(), anyhow::Error> {
     let dirs = ctx.dirs.settings()?;
 
     match args.value {
         Some(value) => {
             dirs.with_write(async |dirs| {
                 let mut settings = Settings::load_from(dirs.read())?;
-                settings.autodockerize = value;
+                settings.autocontainerize = value;
                 settings.write_to(dirs)?;
-                println!("Set autodockerize to {value}");
+                println!("Set autocontainerize to {value}");
                 if cfg!(windows) {
                     eprintln!(
                         "Warning: This setting is ignored on Windows. \
@@ -54,7 +54,7 @@ async fn exec_autodockerize(ctx: &Context, args: &AutodockerizeArgs) -> Result<(
             let settings = dirs
                 .with_read(async |dirs| Settings::load_from(dirs))
                 .await??;
-            println!("{}", settings.autodockerize);
+            println!("{}", settings.autocontainerize);
             Ok(())
         }
     }

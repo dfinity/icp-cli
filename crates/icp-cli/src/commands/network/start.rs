@@ -140,7 +140,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         args.background,
         ctx.debug,
         network_launcher_path.as_deref(),
-        settings.autodockerize,
+        settings.autocontainerize,
     )
     .await?;
     Ok(())

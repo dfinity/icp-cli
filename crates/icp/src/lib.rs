@@ -28,6 +28,7 @@ pub mod network;
 pub mod package;
 pub mod prelude;
 pub mod project;
+pub mod settings;
 pub mod store_artifact;
 pub mod store_id;
 

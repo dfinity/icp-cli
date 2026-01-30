@@ -334,6 +334,14 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
+            commands::identity::Command::Link(cmd) => match cmd {
+                commands::identity::link::Command::Hsm(args) => {
+                    commands::identity::link::hsm::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+            },
+
             commands::identity::Command::List(args) => {
                 commands::identity::list::exec(&ctx, &args)
                     .instrument(trace_span)

@@ -888,3 +888,256 @@ fn identity_export_verifies_principal_unchanged() {
     // Verify principals match
     assert_eq!(principal_before_str, principal_after_str);
 }
+
+#[tokio::test]
+async fn identity_link_hsm() {
+    let ctx = TestContext::new();
+    let hsm = ctx.init_softhsm();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create a PIN file for non-interactive testing
+    let pin_file = ctx.home_path().join("pin.txt");
+    std::fs::write(&pin_file, &hsm.user_pin).unwrap();
+
+    // Link the HSM key to an identity
+    ctx.icp()
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
+        .arg(&pin_file)
+        .assert()
+        .success()
+        .stdout(contains("Identity \"hsm-identity\" linked to HSM"));
+
+    // Verify the identity appears in the list
+    ctx.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(contains("hsm-identity"));
+
+    // Verify we can get the principal
+    let principal_output = ctx
+        .icp()
+        .arg("--identity-password-file")
+        .arg(&pin_file)
+        .args(["identity", "principal", "--identity", "hsm-identity"])
+        .assert()
+        .success();
+
+    let principal_str = std::str::from_utf8(&principal_output.get_output().stdout)
+        .unwrap()
+        .trim();
+
+    // Verify the principal is valid (not anonymous, not empty)
+    assert!(!principal_str.is_empty());
+    assert_ne!(principal_str, "2vxsx-fae"); // Not anonymous
+    principal_str.parse::<Principal>().expect("valid principal");
+
+    // Set up project with greeter canister to verify signing works
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: greeter
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Call the canister with the HSM identity to verify signing works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .arg("--identity-password-file")
+        .arg(&pin_file)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "hsm-identity",
+            "greeter",
+            "greet",
+            "(\"hsm\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, hsm!\")").trim());
+}
+
+#[test]
+fn identity_link_hsm_already_exists() {
+    let ctx = TestContext::new();
+    let hsm = ctx.init_softhsm();
+
+    let pin_file = ctx.home_path().join("pin.txt");
+    std::fs::write(&pin_file, &hsm.user_pin).unwrap();
+
+    // Link once
+    ctx.icp()
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
+        .arg(&pin_file)
+        .assert()
+        .success();
+
+    // Try to link again with the same name
+    ctx.icp()
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
+        .arg(&pin_file)
+        .assert()
+        .failure()
+        .stderr(contains("identity `hsm-identity` already exists"));
+}
+
+#[test]
+fn identity_link_hsm_cannot_export() {
+    let ctx = TestContext::new();
+    let hsm = ctx.init_softhsm();
+
+    let pin_file = ctx.home_path().join("pin.txt");
+    std::fs::write(&pin_file, &hsm.user_pin).unwrap();
+
+    // Link the identity
+    ctx.icp()
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
+        .arg(&pin_file)
+        .assert()
+        .success();
+
+    // Try to export - should fail
+    ctx.icp()
+        .args(["identity", "export", "hsm-identity"])
+        .assert()
+        .failure()
+        .stderr(contains("cannot export an HSM-backed identity"));
+}
+
+#[test]
+fn identity_link_hsm_rename() {
+    let ctx = TestContext::new();
+    let hsm = ctx.init_softhsm();
+
+    let pin_file = ctx.home_path().join("pin.txt");
+    std::fs::write(&pin_file, &hsm.user_pin).unwrap();
+
+    // Link the identity
+    ctx.icp()
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
+        .arg(&pin_file)
+        .assert()
+        .success();
+
+    // Get principal before rename
+    let principal_before = ctx
+        .icp()
+        .arg("--identity-password-file")
+        .arg(&pin_file)
+        .args(["identity", "principal", "--identity", "hsm-identity"])
+        .assert()
+        .success();
+    let principal_before_str = std::str::from_utf8(&principal_before.get_output().stdout)
+        .unwrap()
+        .trim();
+
+    // Rename the identity
+    ctx.icp()
+        .args(["identity", "rename", "hsm-identity", "hsm-renamed"])
+        .assert()
+        .success();
+
+    // Verify old name no longer exists
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "hsm-identity"])
+        .assert()
+        .failure();
+
+    // Verify new name works with same principal
+    let principal_after = ctx
+        .icp()
+        .arg("--identity-password-file")
+        .arg(&pin_file)
+        .args(["identity", "principal", "--identity", "hsm-renamed"])
+        .assert()
+        .success();
+    let principal_after_str = std::str::from_utf8(&principal_after.get_output().stdout)
+        .unwrap()
+        .trim();
+
+    assert_eq!(principal_before_str, principal_after_str);
+}
+
+#[test]
+fn identity_link_hsm_delete() {
+    let ctx = TestContext::new();
+    let hsm = ctx.init_softhsm();
+
+    let pin_file = ctx.home_path().join("pin.txt");
+    std::fs::write(&pin_file, &hsm.user_pin).unwrap();
+
+    // Link the identity
+    ctx.icp()
+        .args(["identity", "link", "hsm", "hsm-identity"])
+        .args(["--pkcs11-module", hsm.library_path_str()])
+        .args(["--slot", &hsm.slot_index.to_string()])
+        .args(["--key-id", &hsm.key_id])
+        .arg("--pin-file")
+        .arg(&pin_file)
+        .assert()
+        .success();
+
+    // Delete the identity
+    ctx.icp()
+        .args(["identity", "delete", "hsm-identity"])
+        .assert()
+        .success()
+        .stdout(contains("Deleted identity `hsm-identity`"));
+
+    // Verify it's gone
+    ctx.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(contains("hsm-identity").not());
+}

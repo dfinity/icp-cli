@@ -6,6 +6,7 @@ use httptest::{Expectation, Server, matchers::*, responders::*};
 
 pub(crate) mod clients;
 mod context;
+pub(crate) mod softhsm;
 
 pub(crate) use context::TestContext;
 use send_ctrlc::{InterruptibleChild, InterruptibleCommand};

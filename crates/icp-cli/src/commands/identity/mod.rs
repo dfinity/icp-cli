@@ -5,6 +5,7 @@ pub(crate) mod default;
 pub(crate) mod delete;
 pub(crate) mod export;
 pub(crate) mod import;
+pub(crate) mod link;
 pub(crate) mod list;
 pub(crate) mod new;
 pub(crate) mod principal;
@@ -26,6 +27,10 @@ pub(crate) enum Command {
 
     /// Import a new identity
     Import(import::ImportArgs),
+
+    /// Link an external key to a new identity
+    #[command(subcommand)]
+    Link(link::Command),
 
     /// List the identities
     List(list::ListArgs),

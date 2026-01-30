@@ -79,7 +79,12 @@ impl TestContext {
         cmd.current_dir(self.home_path());
         // Isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
-        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        cmd.env("HOME", self.home_path())
+            .env_remove("ICP_HOME")
+            // Also set XDG directories to ensure isolation on Linux
+            .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
+            .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
+            .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
         // Run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
@@ -204,7 +209,14 @@ impl TestContext {
         cmd.current_dir(project_dir);
         // isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
-        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        {
+            cmd.env("HOME", self.home_path())
+                .env_remove("ICP_HOME")
+                // Also set XDG directories to ensure isolation on Linux
+                .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
+                .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
+                .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
+        }
         // run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));

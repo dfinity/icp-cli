@@ -3,12 +3,7 @@ name: Documentation
 on:
   push:
     branches:
-      - main
-    paths:
-      - 'docs/**'
-      - 'docs-site/**'
-      - 'scripts/prepare-docs.sh'
-      - '.github/workflows/docs.yml'
+      - 'v*-docs'
   pull_request:
     paths:
       - 'docs/**'
@@ -59,9 +54,9 @@ jobs:
         with:
           path: ./docs-site/dist
 
-  # Deployment job - only runs on main branch
+  # Deployment job - only runs on the active docs branch
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.ACTIVE_DOCS_BRANCH)
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

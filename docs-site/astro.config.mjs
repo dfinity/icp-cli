@@ -17,6 +17,9 @@ export default defineConfig({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
       favicon: '/favicon.png',
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+      },
       head: [
         {
           tag: 'script',

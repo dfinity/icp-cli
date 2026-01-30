@@ -18,7 +18,8 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-VERSION="$1"
+# Strip leading 'v' if present since npm package versions don't use 'v' prefix
+VERSION="${1#v}"
 NPM_TAG="${2:-}"
 
 echo "Publishing version $VERSION"

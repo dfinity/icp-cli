@@ -12,15 +12,13 @@ This directory contains the npm package distribution system for `icp-cli` using 
 
 ## Automated Release Process
 
-The npm packages are automatically published when a new version tag is pushed to the main repository:
 
-1. Developer pushes a version tag (e.g., `v0.1.0-beta.6`) to the main icp-cli repository
-2. GitHub Actions workflow builds and releases Rust binaries
-3. The `publish-npm` job automatically:
-   - Downloads the newly released binaries
-   - Updates package.json versions
-   - Runs tests
-   - Publishes all packages to npm
+1. Go to the repository's Actions tab
+2. Select the "Publish to npm" workflow
+3. Click "Run workflow" and provide:
+   - **version**: Release version tag to download binaries from (e.g., `v0.1.0-beta.6`)
+   - **npm_package_version** (optional): NPM package version if it should differ from the release version (e.g., `0.1.0-beta.7`)
+   - **beta**: Whether to publish as a beta release (tags packages with `beta` on npm)
 
 ## Manual Testing (for Development)
 
@@ -47,7 +45,7 @@ Or manually download from [icp-cli releases](https://github.com/dfinity/icp-cli/
 
 ```bash
 ./scripts/test-docker.sh quick  # Quick test on Node 20
-./scripts/test-docker.sh full   # Full test on Node 18, 20, 22
+./scripts/test-docker.sh full   # Full test on Node 18, 20, 22, 24
 ```
 
 ### 4. Update Version (if testing a specific version)
@@ -92,8 +90,8 @@ All scripts are located in the `scripts/` directory and should be run from the `
 - **`download-binaries.sh <version>`** - Downloads binaries from GitHub releases for all platforms
 - **`verify-binaries.sh`** - Verifies all binaries are present and have correct permissions
 - **`update-package-json.sh <version>`** - Updates version in all package.json files
-- **`publish-all.sh <version>`** - Publishes all packages to npm
-- **`test-docker.sh [quick|full|interactive|clean]`** - Docker-based testing
+- **`publish-all.sh <version> [tag]`** - Publishes all packages to npm (optionally with a custom tag like `beta`)
+- **`test-docker.sh [quick|full]`** - Docker-based testing
 
 ## Architecture
 

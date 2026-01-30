@@ -61,13 +61,13 @@ This will update the version in all packages and their dependencies.
 Users can install the package globally:
 
 ```bash
-npm install -g icp-cli
+npm install -g @icp-sdk/icp-cli
 ```
 
 Or locally in their project:
 
 ```bash
-npm install icp-cli
+npm install @icp-sdk/icp-cli
 ```
 
 Then use it:
@@ -79,7 +79,7 @@ icp --help
 Or programmatically:
 
 ```javascript
-const icp = require('icp-cli');
+const icp = require('@icp-sdk/icp-cli');
 console.log('Binary location:', icp.binaryPath);
 ```
 
@@ -97,13 +97,13 @@ All scripts are located in the `scripts/` directory and should be run from the `
 
 ### Package Structure
 
-- **Main package**: `icp-cli` - Contains the wrapper script and API, depends on platform packages
+- **Main package**: `@icp-sdk/icp-cli` - Contains the wrapper script and API, depends on platform packages
 - **Platform packages**: 5 packages for different OS/architecture combinations
-  - `icp-cli-darwin-arm64` (macOS Apple Silicon)
-  - `icp-cli-darwin-x64` (macOS Intel)
-  - `icp-cli-linux-arm64` (Linux ARM64)
-  - `icp-cli-linux-x64` (Linux x64)
-  - `icp-cli-win32-x64` (Windows x64)
+  - `@icp-sdk/icp-cli-darwin-arm64` (macOS Apple Silicon)
+  - `@icp-sdk/icp-cli-darwin-x64` (macOS Intel)
+  - `@icp-sdk/icp-cli-linux-arm64` (Linux ARM64)
+  - `@icp-sdk/icp-cli-linux-x64` (Linux x64)
+  - `@icp-sdk/icp-cli-win32-x64` (Windows x64)
 
 ### Binary Distribution
 

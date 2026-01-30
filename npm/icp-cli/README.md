@@ -1,11 +1,11 @@
-# icp-cli
+# @icp-sdk/icp-cli
 
 npm package for [icp-cli](https://github.com/dfinity/icp-cli) with pre-compiled binaries.
 
 ## Installation
 
 ```bash
-npm install -g icp-cli
+npm install -g @icp-sdk/icp-cli
 ```
 
 ### Linux Users
@@ -24,7 +24,7 @@ sudo dnf install -y dbus-libs openssl ca-certificates
 Then install icp-cli:
 
 ```bash
-npm install -g icp-cli
+npm install -g @icp-sdk/icp-cli
 ```
 
 ## Usage
@@ -49,7 +49,7 @@ This package uses platform-specific optional dependencies to install the correct
 ### Programmatic Usage
 
 ```javascript
-const icp = require('icp-cli');
+const icp = require('@icp-sdk/icp-cli');
 
 console.log('icp binary location:', icp.binaryPath);
 console.log('icp version:', icp.version);

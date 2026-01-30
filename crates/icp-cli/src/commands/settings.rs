@@ -10,7 +10,8 @@ pub(crate) struct SettingsArgs {
 #[derive(Debug, Subcommand)]
 #[command(
     subcommand_value_name = "SETTING",
-    subcommand_help_heading = "Settings"
+    subcommand_help_heading = "Settings",
+    override_usage = "icp settings [OPTIONS] <SETTING> [VALUE]"
 )]
 enum Setting {
     /// Use Docker for the network launcher even when native mode is requested
@@ -29,7 +30,10 @@ pub(crate) async fn exec(ctx: &Context, args: &SettingsArgs) -> Result<(), anyho
     }
 }
 
-async fn exec_autocontainerize(ctx: &Context, args: &AutocontainerizeArgs) -> Result<(), anyhow::Error> {
+async fn exec_autocontainerize(
+    ctx: &Context,
+    args: &AutocontainerizeArgs,
+) -> Result<(), anyhow::Error> {
     let dirs = ctx.dirs.settings()?;
 
     match args.value {

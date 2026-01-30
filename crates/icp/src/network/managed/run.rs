@@ -139,7 +139,7 @@ async fn run_network_launcher(
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
-        ManagedMode::Launcher(launcher_config) if cfg!(windows) || autocontainerize => {
+        ManagedMode::Launcher(launcher_config) if autocontainerize => {
             let options = transform_native_launcher_to_container(launcher_config);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)

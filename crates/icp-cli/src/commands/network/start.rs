@@ -131,6 +131,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         }
     };
 
+    // On Windows, always use Docker since the native launcher doesn't run there
+    let autocontainerize = cfg!(windows) || settings.autocontainerize;
+
     run_network(
         cfg,
         nd,
@@ -140,7 +143,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         args.background,
         ctx.debug,
         network_launcher_path.as_deref(),
-        settings.autocontainerize,
+        autocontainerize,
     )
     .await?;
     Ok(())

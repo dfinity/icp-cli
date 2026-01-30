@@ -1,0 +1,100 @@
+# Dockerfile for testing icp-cli npm package installation
+# Usage: docker build -f Dockerfile.test -t icp-cli-test .
+
+ARG NODE_VERSION=18
+FROM node:${NODE_VERSION}-slim
+
+WORKDIR /test
+
+# Install basic utilities and system dependencies that icp binary needs
+RUN apt-get update && apt-get install -y \
+    curl \
+    libdbus-1-3 \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy all package directories
+COPY icp-cli/ ./icp-cli/
+COPY icp-cli-darwin-arm64/ ./icp-cli-darwin-arm64/
+COPY icp-cli-darwin-x64/ ./icp-cli-darwin-x64/
+COPY icp-cli-linux-arm64/ ./icp-cli-linux-arm64/
+COPY icp-cli-linux-x64/ ./icp-cli-linux-x64/
+COPY icp-cli-win32-x64/ ./icp-cli-win32-x64/
+
+# Ensure binaries have execute permissions
+RUN chmod +x icp-cli-darwin-arm64/bin/icp || true && \
+    chmod +x icp-cli-darwin-x64/bin/icp || true && \
+    chmod +x icp-cli-linux-arm64/bin/icp || true && \
+    chmod +x icp-cli-linux-x64/bin/icp || true && \
+    chmod +x icp-cli-win32-x64/bin/icp.exe || true
+
+# Create a test script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "================================================="\n\
+echo "Testing icp-cli npm package installation"\n\
+echo "================================================="\n\
+echo ""\n\
+echo "Node version: $(node --version)"\n\
+echo "npm version: $(npm --version)"\n\
+echo "Platform: $(node -p process.platform)"\n\
+echo "Architecture: $(node -p process.arch)"\n\
+echo ""\n\
+echo "Installing platform-specific package first..."\n\
+PLATFORM=$(node -p process.platform)\n\
+ARCH=$(node -p process.arch)\n\
+PLATFORM_KEY="${PLATFORM}-${ARCH}"\n\
+case $PLATFORM_KEY in\n\
+  linux-x64)\n\
+    npm install ./icp-cli-linux-x64\n\
+    ;;\n\
+  linux-arm64)\n\
+    npm install ./icp-cli-linux-arm64\n\
+    ;;\n\
+  darwin-arm64)\n\
+    npm install ./icp-cli-darwin-arm64\n\
+    ;;\n\
+  darwin-x64)\n\
+    npm install ./icp-cli-darwin-x64\n\
+    ;;\n\
+  win32-x64)\n\
+    npm install ./icp-cli-win32-x64\n\
+    ;;\n\
+  *)\n\
+    echo "Warning: Unknown platform $PLATFORM_KEY"\n\
+    ;;\n\
+esac\n\
+echo ""\n\
+echo "Installing icp-cli wrapper..."\n\
+npm install ./icp-cli\n\
+echo ""\n\
+echo "Installation complete!"\n\
+echo ""\n\
+echo "Testing binary execution..."\n\
+if [ ! -f "./node_modules/.bin/icp" ]; then\n\
+  echo "✗ Binary wrapper not found at node_modules/.bin/icp"\n\
+  echo ""\n\
+  echo "ERROR: Binaries must be downloaded before running tests"\n\
+  echo "Run: ./scripts/download-binaries.sh <version>"\n\
+  exit 1\n\
+fi\n\
+\n\
+if ! ./node_modules/.bin/icp --version 2>&1; then\n\
+  echo ""\n\
+  echo "✗ Binary execution failed"\n\
+  echo ""\n\
+  echo "ERROR: Binary exists but cannot be executed"\n\
+  exit 1\n\
+fi\n\
+echo "✓ Binary executed successfully"\n\
+echo ""\n\
+echo "Testing programmatic API..."\n\
+node -e "try { const icp = require('\''./icp-cli'\''); console.log('\''✓ Module loaded'\''); console.log('\''  Version:'\'', icp.version); if (!icp.binaryPath) { console.error('\''✗ Binary path not found'\''); process.exit(1); } console.log('\''  Binary path:'\'', icp.binaryPath); } catch(err) { console.error('\''✗ Error:'\'', err.message); process.exit(1); }"\n\
+echo ""\n\
+echo "================================================="\n\
+echo "All tests passed!"\n\
+echo "================================================="' > /test/run-test.sh \
+    && chmod +x /test/run-test.sh
+
+CMD ["/test/run-test.sh"]

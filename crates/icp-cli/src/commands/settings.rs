@@ -11,7 +11,8 @@ pub(crate) struct SettingsArgs {
 #[command(
     subcommand_value_name = "SETTING",
     subcommand_help_heading = "Settings",
-    override_usage = "settings [OPTIONS] <SETTING> [VALUE]"
+    override_usage = "icp settings [OPTIONS] <SETTING> [VALUE]",
+    disable_help_subcommand = true
 )]
 enum Setting {
     /// Use Docker for the network launcher even when native mode is requested

@@ -6,8 +6,6 @@ on:
 
 jobs:
   publish-npm:
-    # Only run for actual releases, not prereleases
-    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -21,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
       
       - name: Extract version from release tag
@@ -51,6 +49,4 @@ jobs:
       
       - name: Publish to npm
         working-directory: npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: ./scripts/publish-all.sh "${{ steps.version.outputs.version }}"

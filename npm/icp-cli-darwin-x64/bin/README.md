@@ -4,9 +4,10 @@ This directory should contain the `icp` binary for macOS x64 (Intel).
 
 ## Download
 
-Run from the repository root:
+Run from the npm directory:
 
 ```bash
+cd npm
 ./scripts/download-binaries.sh 0.1.0-beta.4
 ```
 

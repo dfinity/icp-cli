@@ -2,10 +2,10 @@
 
 set -e
 
-# Ensure script is run from project root
+# Ensure script is run from npm directory
 if [ ! -d "icp-cli" ] || [ ! -f "icp-cli/package.json" ]; then
-  echo "Error: This script must be run from the project root directory"
-  echo "Usage: ./scripts/download-binaries.sh <version>"
+  echo "Error: This script must be run from the npm directory"
+  echo "Usage: cd npm && ./scripts/download-binaries.sh <version>"
   exit 1
 fi
 

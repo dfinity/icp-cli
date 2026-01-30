@@ -1004,7 +1004,7 @@ The effective yaml configuration includes:
 
 Configure user settings
 
-**Usage:** `icp settings <SETTING>`
+**Usage:** `icp icp settings [OPTIONS] <SETTING> [VALUE]`
 
 ###### **Subcommands:**
 

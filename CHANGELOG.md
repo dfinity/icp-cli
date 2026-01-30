@@ -1,10 +1,12 @@
 # Unreleased
 
+* feat: `icp settings autocontainerize true`, always use a docker container for all networks
+* feat: `icp identity export` to print the PEM file for the identity
+
 # v0.1.0-beta.5
 
 * fix: Fix error when loading network descriptors from v0.1.0-beta.3
 * feat: `icp identity delete` and `icp identity rename`
-* feat: `icp identity export` to print the PEM file for the identity
 
 # v0.1.0-beta.4
 

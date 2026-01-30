@@ -111,13 +111,25 @@ Controls who can read canister logs.
 
 | Property | Value |
 |----------|-------|
-| Type | String |
-| Values | `controllers`, `public` |
+| Type | String or Object |
+| Values | `controllers`, `public`, or `allowed_viewers` object |
 | Default | `controllers` |
 
 ```yaml
+# Only controllers can view logs (default)
+settings:
+  log_visibility: controllers
+
+# Anyone can view logs
 settings:
   log_visibility: public
+
+# Specific principals can view logs
+settings:
+  log_visibility:
+    allowed_viewers:
+      - "aaaaa-aa"
+      - "2vxsx-fae"
 ```
 
 ### environment_variables

@@ -89,6 +89,7 @@ async fn canister_create_with_settings() {
                     - type: script
                       command: cp {path} "$ICP_WASM_OUTPUT_PATH"
                 settings:
+                  log_visibility: public
                   compute_allocation: 1
                   memory_allocation: 4294967296
                   freezing_threshold: 2592000
@@ -128,7 +129,8 @@ async fn canister_create_with_settings() {
         .assert()
         .success();
 
-    // Verify creation settings
+    // Verify creation settings. Note: log_visibility IS supported by the real cycles ledger
+    // during creation, but PocketIC's fake-cmc doesn't implement it. Other settings work fine.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -147,6 +149,38 @@ async fn canister_create_with_settings() {
                 .and(contains("Memory allocation: 4_294_967_296"))
                 .and(contains("Freezing threshold: 2_592_000"))
                 .and(contains("Reserved cycles limit: 1_000_000_000_000")),
+        );
+
+    // Sync settings from manifest to apply log_visibility
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify log_visibility is now applied after sync
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            starts_with("Canister Id:")
+                .and(contains("Status: Running"))
+                .and(contains("Log visibility: Public")),
         );
 }
 

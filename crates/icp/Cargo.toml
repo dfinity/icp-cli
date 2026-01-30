@@ -31,6 +31,7 @@ ic-asset = { workspace = true }
 ic-ed25519 = { workspace = true }
 ic-identity-hsm = { workspace = true }
 ic-ledger-types = { workspace = true }
+ic-management-canister-types = { workspace = true }
 ic-utils = { workspace = true }
 icp-canister-interfaces = { workspace = true }
 icrc-ledger-types = { workspace = true }

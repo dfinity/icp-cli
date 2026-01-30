@@ -260,6 +260,11 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
     }
     if let Some(log_visibility) = log_visibility {
+        if configured_settings.log_visibility.is_some() {
+            ctx.term.write_line(
+                "Warning: Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
         update = update.with_log_visibility(log_visibility);
     }
     if let Some(environment_variables) = environment_variables {

@@ -122,6 +122,12 @@ pub enum IdentitySpec {
         principal: Principal,
         algorithm: IdentityKeyAlgorithm,
     },
+    Hsm {
+        principal: Principal,
+        module: PathBuf,
+        slot: usize,
+        key_id: String,
+    },
 }
 
 impl IdentitySpec {
@@ -130,6 +136,7 @@ impl IdentitySpec {
             IdentitySpec::Pem { principal, .. } => *principal,
             IdentitySpec::Anonymous => Principal::anonymous(),
             IdentitySpec::Keyring { principal, .. } => *principal,
+            IdentitySpec::Hsm { principal, .. } => *principal,
         }
     }
 }

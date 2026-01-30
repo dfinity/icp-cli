@@ -6,7 +6,8 @@ use ic_agent::Agent;
 use icp::prelude::*;
 use url::Url;
 
-use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork};
+use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, softhsm::SoftHsmContext};
+
 pub(crate) struct TestContext {
     home_dir: TempDir,
     bin_dir: PathBuf,
@@ -15,6 +16,7 @@ pub(crate) struct TestContext {
     os_path: OsString,
     gateway_url: OnceCell<Url>,
     root_key: OnceCell<Vec<u8>>,
+    softhsm: OnceCell<SoftHsmContext>,
 }
 
 impl TestContext {
@@ -51,11 +53,23 @@ impl TestContext {
             os_path,
             gateway_url: OnceCell::new(),
             root_key: OnceCell::new(),
+            softhsm: OnceCell::new(),
         }
     }
 
     pub(crate) fn home_path(&self) -> &Path {
         self.home_dir.path()
+    }
+
+    /// Initialize SoftHSM for this test context.
+    ///
+    /// This creates an isolated SoftHSM environment with a test token and key.
+    /// All subsequent `icp()` calls will include the SOFTHSM2_CONF environment
+    /// variable pointing to this context's configuration.
+    ///
+    /// Can only be called once per TestContext.
+    pub(crate) fn init_softhsm(&self) -> &SoftHsmContext {
+        self.softhsm.get_or_init(SoftHsmContext::new)
     }
 
     pub(crate) fn icp(&self) -> Command {
@@ -72,6 +86,11 @@ impl TestContext {
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.env("PATH", self.os_path.clone());
         cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
+
+        // If SoftHSM has been initialized, include its config
+        if let Some(hsm) = self.softhsm.get() {
+            cmd.env("SOFTHSM2_CONF", &hsm.config_path);
+        }
 
         cmd
     }

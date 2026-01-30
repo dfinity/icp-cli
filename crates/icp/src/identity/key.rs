@@ -8,6 +8,7 @@ use ic_agent::{
     identity::{AnonymousIdentity, BasicIdentity, Prime256v1Identity, Secp256k1Identity},
 };
 use ic_ed25519::PrivateKeyFormat;
+use ic_identity_hsm::HardwareIdentity;
 use keyring::Entry;
 use pem::Pem;
 use pkcs8::{
@@ -92,6 +93,11 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to load password from keyring entry"))]
     LoadPasswordFromEntryError { source: keyring::Error },
+
+    #[snafu(display("failed to load HSM identity"))]
+    LoadHsmError {
+        source: ic_identity_hsm::HardwareIdentityError,
+    },
 }
 
 pub fn load_identity(
@@ -110,7 +116,12 @@ pub fn load_identity(
             format, algorithm, ..
         } => load_pem_identity(dirs, name, format, algorithm, password_func),
         IdentitySpec::Keyring { algorithm, .. } => load_keyring_identity(name, algorithm),
-
+        IdentitySpec::Hsm {
+            module,
+            slot,
+            key_id,
+            ..
+        } => load_hsm_identity(module, *slot, key_id, password_func),
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
     }
 }
@@ -256,6 +267,17 @@ impl From<&PemOrigin> for PemOrigin {
     fn from(value: &PemOrigin) -> Self {
         value.clone()
     }
+}
+
+fn load_hsm_identity(
+    module: &PathBuf,
+    slot: usize,
+    key_id: &str,
+    pin_fn: impl FnOnce() -> Result<String, String>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let identity = HardwareIdentity::new(module, slot, key_id, pin_fn).context(LoadHsmSnafu)?;
+
+    Ok(Arc::new(identity))
 }
 
 #[derive(Debug, Snafu)]
@@ -509,14 +531,20 @@ pub fn rename_identity(
     );
 
     // Copy key material to new location before updating the list
-    let old_path = dirs.key_pem_path(old_name);
-    let old_keyring_entry = match &spec {
+    enum OldKeyMaterial {
+        Pem(PathBuf),
+        Keyring(Entry),
+        None,
+    }
+
+    let old_key_material = match &spec {
         IdentitySpec::Pem { .. } => {
             // Copy the PEM file to the new path
+            let old_path = dirs.key_pem_path(old_name);
             let new_path = dirs.key_pem_path(new_name);
             let contents = fs::read(&old_path).context(CopyKeyFileSnafu)?;
             fs::write(&new_path, &contents).context(CopyKeyFileSnafu)?;
-            None
+            OldKeyMaterial::Pem(old_path)
         }
         IdentitySpec::Keyring { .. } => {
             // Copy the keyring entry to the new name
@@ -532,7 +560,11 @@ pub fn rename_identity(
                 .set_password(&password)
                 .context(SetKeyringEntryPasswordSnafu { new_name })?;
 
-            Some(old_entry)
+            OldKeyMaterial::Keyring(old_entry)
+        }
+        IdentitySpec::Hsm { .. } => {
+            // No migration required - HSM key stays on device
+            OldKeyMaterial::None
         }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
@@ -551,16 +583,17 @@ pub fn rename_identity(
     }
 
     // Delete old key material after the list has been updated
-    match old_keyring_entry {
-        None => {
-            // PEM file - delete the old file
+    match old_key_material {
+        OldKeyMaterial::Pem(old_path) => {
             fs::remove_file(&old_path).context(DeleteOldKeyFileSnafu)?;
         }
-        Some(entry) => {
-            // Keyring - delete the old entry
+        OldKeyMaterial::Keyring(entry) => {
             entry
                 .delete_credential()
                 .context(DeleteKeyringEntrySnafu { old_name })?;
+        }
+        OldKeyMaterial::None => {
+            // Nothing to clean up (HSM identities)
         }
     }
 
@@ -643,10 +676,65 @@ pub fn delete_identity(
                 .delete_credential()
                 .context(DeleteKeyringEntryForDeleteSnafu { name })?;
         }
+        IdentitySpec::Hsm { .. } => {
+            // no deletion required
+        }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
         }
     }
+
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum LinkHsmIdentityError {
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentityManifest { source: WriteIdentityManifestError },
+
+    #[snafu(display("identity `{name}` already exists"))]
+    NameTaken { name: String },
+
+    #[snafu(display("failed to connect to HSM"))]
+    HsmConnection {
+        source: ic_identity_hsm::HardwareIdentityError,
+    },
+}
+
+/// Links an HSM key slot to a named identity.
+///
+/// This creates an identity that references a key stored on a hardware security
+/// module (HSM) like a YubiKey. The private key never leaves the device.
+pub fn link_hsm_identity(
+    dirs: LWrite<&IdentityPaths>,
+    name: &str,
+    module: PathBuf,
+    slot: usize,
+    key_id: String,
+    pin_func: impl FnOnce() -> Result<String, String>,
+) -> Result<(), LinkHsmIdentityError> {
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
+    ensure!(
+        !identity_list.identities.contains_key(name),
+        NameTakenSnafu { name }
+    );
+
+    // Connect to the HSM to verify the parameters and get the principal
+    let identity =
+        HardwareIdentity::new(&module, slot, &key_id, pin_func).context(HsmConnectionSnafu)?;
+    let principal = identity.sender().expect("infallible method");
+
+    let spec = IdentitySpec::Hsm {
+        principal,
+        module,
+        slot,
+        key_id,
+    };
+    identity_list.identities.insert(name.to_string(), spec);
+    identity_list.write_to(dirs)?;
 
     Ok(())
 }
@@ -687,6 +775,9 @@ pub enum ExportIdentityError {
 
     #[snafu(display("cannot export the anonymous identity"))]
     CannotExportAnonymous,
+
+    #[snafu(display("cannot export an HSM-backed identity"))]
+    CannotExportHsm,
 
     #[snafu(display("failed to read PEM file"))]
     ReadPemFileForExport { source: fs::IoError },
@@ -784,5 +875,6 @@ pub fn export_identity(
             Ok(pem)
         }
         IdentitySpec::Anonymous => CannotExportAnonymousSnafu.fail(),
+        IdentitySpec::Hsm { .. } => CannotExportHsmSnafu.fail(),
     }
 }

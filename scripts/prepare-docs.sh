@@ -42,7 +42,7 @@ echo ""
 echo "Step 1: Copying documentation files..."
 rm -rf "$TARGET_DIR"
 mkdir -p "$TARGET_DIR"
-rsync -a --exclude='schemas/' --exclude='README.md' --exclude='*/README.md' "$SOURCE_DIR/" "$TARGET_DIR/"
+rsync -a --exclude='schemas/' --exclude='README.md' --exclude='*/README.md' --exclude='VERSIONED_DOCS.md' "$SOURCE_DIR/" "$TARGET_DIR/"
 echo "✓ Files copied"
 
 # Step 2: Fix markdown links for Starlight's directory structure

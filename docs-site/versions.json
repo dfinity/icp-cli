@@ -1,0 +1,4 @@
+{
+  "$comment": "Before first release: Empty array redirects to /main/. After releases: Add versions here (newest first).",
+  "versions": []
+}

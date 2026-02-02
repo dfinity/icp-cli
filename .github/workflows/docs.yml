@@ -2,8 +2,16 @@ name: Documentation
 
 on:
   push:
+    tags:
+      - 'v*'
     branches:
-      - 'v*-docs'
+      - main
+      - 'docs/v*'
+    paths:
+      - 'docs/**'
+      - 'docs-site/**'
+      - 'scripts/prepare-docs.sh'
+      - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs/**'
@@ -14,9 +22,7 @@ on:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
@@ -25,7 +31,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Build job
+  # Build job - validates that docs build successfully
   build:
     runs-on: ubuntu-latest
     steps:
@@ -49,20 +55,141 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
-        with:
-          path: ./docs-site/dist
-
-  # Deployment job - only runs on the active docs branch
-  deploy:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.ACTIVE_DOCS_BRANCH)
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+  # Publish root index and versions list - only runs on main branch
+  publish-root-files:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: build
+    runs-on: ubuntu-latest
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup Node
+        uses: actions/setup-node@1a4442cacd436585916779262731d5b162bc6ec7 # v4.2.0
+        with:
+          node-version: '20'
+
+      - name: Prepare root files
+        run: |
+          mkdir -p root
+
+          # Copy versions.json from repo
+          cp docs-site/versions.json root/versions.json
+
+          # Extract latest version (first in list) from versions.json
+          LATEST_VERSION=$(jq -r '.versions[0].version // empty' docs-site/versions.json)
+
+          # If no releases yet, redirect to main branch docs
+          if [[ -z "$LATEST_VERSION" ]]; then
+            echo "⚠️  No releases yet, redirecting to main branch docs"
+            LATEST_VERSION="main"
+          else
+            echo "✅ Redirecting to version: ${LATEST_VERSION}"
+          fi
+
+          # Generate index.html that redirects to latest version
+          cat > root/index.html << EOF
+          <!doctype html>
+          <html>
+            <head>
+              <meta http-equiv="refresh" content="0; url=./${LATEST_VERSION}/" />
+              <meta name="robots" content="noindex" />
+            </head>
+          </html>
+          EOF
+
+      - name: Deploy root files to GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./root
+          keep_files: true
+
+  # Publish main branch docs for preview (always available at /main/)
+  publish-main-docs:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup Node
+        uses: actions/setup-node@1a4442cacd436585916779262731d5b162bc6ec7 # v4.2.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./docs-site
+        run: npm ci
+
+      - name: Build main branch docs
+        working-directory: ./docs-site
+        run: npm run build
+        env:
+          NODE_ENV: production
+          PUBLIC_BASE_PATH: /main/
+
+      - name: Deploy main docs to GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs-site/dist
+          destination_dir: main
+          keep_files: true
+
+  # Publish versioned docs - runs on tags (v*) or docs branches (docs/v*)
+  publish-docs:
+    if: github.ref != 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Setup Node
+        uses: actions/setup-node@1a4442cacd436585916779262731d5b162bc6ec7 # v4.2.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./docs-site
+        run: npm ci
+
+      - name: Extract version from tag or branch
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Tag: v0.1.0 -> extract major.minor -> 0.1
+            VERSION=${GITHUB_REF#refs/tags/v}
+            # Strip patch version (0.1.0 -> 0.1)
+            VERSION=${VERSION%.*}
+            echo "DOCS_VERSION=${VERSION}" >> $GITHUB_ENV
+            echo "DOCS_BASE=/${VERSION}/" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF}" == refs/heads/docs/v* ]]; then
+            # Branch: docs/v0.1 -> extract version -> 0.1
+            VERSION=${GITHUB_REF#refs/heads/docs/v}
+            echo "DOCS_VERSION=${VERSION}" >> $GITHUB_ENV
+            echo "DOCS_BASE=/${VERSION}/" >> $GITHUB_ENV
+          else
+            echo "❌ Docs should only be published for version tags (v*) or docs branches (docs/v*)"
+            echo "Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+
+      - name: Build documentation site
+        working-directory: ./docs-site
+        run: npm run build
+        env:
+          NODE_ENV: production
+          PUBLIC_BASE_PATH: ${{ env.DOCS_BASE }}
+
+      - name: Deploy versioned docs to GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs-site/dist
+          destination_dir: ${{ env.DOCS_VERSION }}

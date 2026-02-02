@@ -1,0 +1,266 @@
+---
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// Get current version from Cargo.toml
+let currentVersion = 'unknown';
+try {
+  const cargoToml = readFileSync(resolve('../Cargo.toml'), 'utf-8');
+  const versionMatch = cargoToml.match(/\[workspace\.package\][^\[]*version\s*=\s*"([^"]+)"/s)
+    || cargoToml.match(/^version\s*=\s*"([^"]+)"/m);
+  if (versionMatch) {
+    const fullVersion = versionMatch[1];
+    // Extract major.minor (e.g., "0.1.0" -> "0.1")
+    currentVersion = fullVersion.split('.').slice(0, 2).join('.');
+  }
+} catch (error) {
+  console.error('Failed to read version from Cargo.toml:', error);
+}
+
+// Detect environment and branch
+const isDev = import.meta.env.DEV;
+const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
+---
+
+<div class="version-switcher">
+  {isDev ? (
+    <!-- Development: Show dev badge -->
+    <div class="version-badge">
+      <span class="version-current">dev</span>
+    </div>
+  ) : isMainBranch ? (
+    <!-- Main branch: Show main badge -->
+    <div class="version-badge">
+      <span class="version-current">main</span>
+    </div>
+  ) : (
+    <!-- Production: Show interactive dropdown -->
+    <>
+      <button class="version-button" id="version-button" aria-label="Switch documentation version">
+        <span class="version-current">v{currentVersion}</span>
+        <svg class="version-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <div class="version-dropdown" id="version-dropdown" hidden>
+        <div class="version-dropdown-content">
+          <div class="version-loading">Loading versions...</div>
+        </div>
+      </div>
+    </>
+  )}
+</div>
+
+<script>
+  // Only run in production (when button exists)
+  const button = document.getElementById('version-button');
+  if (!button) return;
+
+  const dropdown = document.getElementById('version-dropdown');
+  let isOpen = false;
+  let versionsLoaded = false;
+
+  // Toggle dropdown
+  button?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    isOpen = !isOpen;
+
+    if (isOpen) {
+      dropdown?.removeAttribute('hidden');
+
+      // Load versions on first open
+      if (!versionsLoaded) {
+        await loadVersions();
+        versionsLoaded = true;
+      }
+    } else {
+      dropdown?.setAttribute('hidden', '');
+    }
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', () => {
+    if (isOpen) {
+      isOpen = false;
+      dropdown?.setAttribute('hidden', '');
+    }
+  });
+
+  // Prevent dropdown clicks from closing
+  dropdown?.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  async function loadVersions() {
+    const content = dropdown?.querySelector('.version-dropdown-content');
+    if (!content) return;
+
+    try {
+      // Fetch versions.json from repo root (/icp-cli/versions.json)
+      const response = await fetch('/icp-cli/versions.json');
+      if (!response.ok) throw new Error('Failed to fetch versions');
+
+      const data = await response.json();
+      const versions = data.versions || [];
+
+      if (versions.length === 0) {
+        content.innerHTML = '<div class="version-error">No versions available</div>';
+        return;
+      }
+
+      // Get current path to determine current version
+      const currentPath = window.location.pathname;
+      // Match pattern: /icp-cli/0.1/ or /icp-cli/0.2/
+      const currentVersionMatch = currentPath.match(/\/icp-cli\/(\d+\.\d+)\//);
+      const currentVersion = currentVersionMatch ? currentVersionMatch[1] : versions.find(v => v.latest)?.version;
+
+      // Render version list
+      content.innerHTML = versions.map(v => {
+        const isCurrent = v.version === currentVersion;
+        const label = v.latest ? `${v.label} (latest)` : v.label;
+        const href = `/icp-cli/${v.version}/`;
+
+        return `
+          <a
+            href="${href}"
+            class="version-item ${isCurrent ? 'version-current-item' : ''}"
+            ${isCurrent ? 'aria-current="page"' : ''}
+          >
+            <span class="version-label">${label}</span>
+            ${isCurrent ? '<span class="version-check">✓</span>' : ''}
+          </a>
+        `;
+      }).join('');
+    } catch (error) {
+      console.error('Failed to load versions:', error);
+      content.innerHTML = '<div class="version-error">Failed to load versions</div>';
+    }
+  }
+</script>
+
+<style>
+  .version-switcher {
+    position: relative;
+    display: inline-block;
+  }
+
+  .version-button,
+  .version-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-white);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+  }
+
+  .version-button {
+    cursor: pointer;
+  }
+
+  .version-badge {
+    cursor: default;
+  }
+
+  .version-button:hover {
+    background: var(--sl-color-gray-5);
+    border-color: var(--sl-color-gray-4);
+  }
+
+  :root[data-theme='light'] .version-button,
+  :root[data-theme='light'] .version-badge {
+    background: var(--sl-color-gray-5);
+    border-color: var(--sl-color-gray-4);
+  }
+
+  :root[data-theme='light'] .version-button:hover {
+    background: var(--sl-color-gray-6);
+    border-color: var(--sl-color-gray-5);
+  }
+
+  .version-chevron {
+    transition: transform 0.2s ease;
+  }
+
+  .version-button[aria-expanded="true"] .version-chevron {
+    transform: rotate(180deg);
+  }
+
+  .version-dropdown {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    min-width: 12rem;
+    background: var(--sl-color-bg-nav);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+  }
+
+  .version-dropdown[hidden] {
+    display: none;
+  }
+
+  .version-dropdown-content {
+    padding: 0.5rem;
+  }
+
+  .version-loading,
+  .version-error,
+  .version-info {
+    padding: 0.75rem;
+    text-align: center;
+    color: var(--sl-color-gray-3);
+    font-size: 0.875rem;
+  }
+
+  .version-error {
+    color: var(--sl-color-red);
+  }
+
+  .version-info {
+    color: var(--sl-color-gray-2);
+    font-style: italic;
+  }
+
+  .version-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.625rem 0.75rem;
+    color: var(--sl-color-white);
+    text-decoration: none;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    transition: background 0.2s ease;
+  }
+
+  .version-item:hover {
+    background: var(--sl-color-gray-6);
+  }
+
+  .version-current-item {
+    background: var(--sl-color-accent);
+    font-weight: 600;
+  }
+
+  .version-current-item:hover {
+    background: var(--sl-color-accent-high);
+  }
+
+  .version-check {
+    margin-left: 0.5rem;
+  }
+
+  .version-label {
+    flex: 1;
+  }
+</style>

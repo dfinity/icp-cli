@@ -1,7 +1,7 @@
 ---
 import type { Props } from '@astrojs/starlight/props';
 import config from 'virtual:starlight/user-config';
-import VersionBadge from './VersionBadge.astro';
+import VersionSwitcher from './VersionSwitcher.astro';
 
 const { hasSiteTitleLogo } = Astro.props;
 // Ensure title is a string
@@ -34,7 +34,7 @@ const titleText = typeof config.title === 'string' ? config.title : 'ICP CLI';
 	<span class:list={{ 'sr-only': hasSiteTitleLogo && config.logo?.replacesTitle }}>
 		{titleText}
 	</span>
-	<VersionBadge />
+	<VersionSwitcher />
 </a>
 
 <style>

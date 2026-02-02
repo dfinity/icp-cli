@@ -5,7 +5,11 @@ import rehypeExternalLinks from 'rehype-external-links';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://dfinity.github.io',
-  base: process.env.NODE_ENV === 'production' ? '/icp-cli/' : '/',
+  // For versioned deployments: /icp-cli/0.1/, /icp-cli/0.2/, etc.
+  // For non-versioned: /icp-cli/ in production, / in development
+  base: process.env.PUBLIC_BASE_PATH
+    ? `/icp-cli${process.env.PUBLIC_BASE_PATH}`
+    : (process.env.NODE_ENV === 'production' ? '/icp-cli/' : '/'),
   markdown: {
     rehypePlugins: [
       // Open external links in new tab

@@ -240,6 +240,32 @@ async fn main() -> Result<(), Error> {
                 }
             },
 
+            commands::canister::Command::Snapshot(cmd) => match cmd {
+                commands::canister::snapshot::Command::Create(args) => {
+                    commands::canister::snapshot::create::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Delete(args) => {
+                    commands::canister::snapshot::delete::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::List(args) => {
+                    commands::canister::snapshot::list::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Restore(args) => {
+                    commands::canister::snapshot::restore::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+            },
+
             commands::canister::Command::Start(args) => {
                 commands::canister::start::exec(&ctx, &args)
                     .instrument(trace_span)

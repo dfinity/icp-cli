@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: `icp canister snapshot` - create, delete, restore, list canister snapshots
+
 # v0.1.0-beta.6
 
 * feat: `icp identity export` to print the PEM file for the identity

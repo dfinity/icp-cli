@@ -4,7 +4,19 @@ A command-line tool for building and deploying applications on the [Internet Com
 
 ## Quick Start
 
-**Install:** See the [Installation Guide](docs/guides/installation.md) for your platform (macOS, Linux, Windows)
+**Prerequisites:** [Node.js](https://nodejs.org/) (LTS)
+
+**Install:**
+
+```bash
+# icp-cli and ic-wasm (required)
+npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
+
+# Motoko toolchain (for Motoko projects)
+npm install -g ic-mops && mops toolchain init
+```
+
+> **Alternative methods:** See the [Installation Guide](docs/guides/installation.md) for shell script, Homebrew, Rust setup, or platform-specific instructions.
 
 Then follow the **[Quickstart](docs/quickstart.md)** to deploy your first canister in under 5 minutes.
 

@@ -49,8 +49,6 @@ Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for de
 ### Prerequisites
 
 - Rust 1.88.0+ ([rustup.rs](https://rustup.rs/))
-- `wasm-tools` — Install via `cargo install wasm-tools` (required for test suite)
-- Platform dependencies:
 
 | Platform      | Install                                                                                                  |
 |---------------|----------------------------------------------------------------------------------------------------------|
@@ -59,6 +57,8 @@ Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for de
 | Fedora/RHEL   | `sudo dnf install gcc pkg-config openssl-devel`                                                          |
 | Arch Linux    | `sudo pacman -S base-devel openssl`                                                                      |
 | Windows       | VS build tools (see [Rustup's guide](https://rust-lang.github.io/rustup/installation/windows-msvc.html)) |
+
+Tests additionally depend on `wasm-tools`, `mitmproxy`, and SoftHSM2. 
 
 ### Build and Test
 

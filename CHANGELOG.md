@@ -1,6 +1,6 @@
 # Unreleased
 
-* feat: `icp canister snapshot` - create, delete, restore, list canister snapshots
+* feat: `icp canister snapshot` - create, delete, restore, list, download, and upload canister snapshots
 
 # v0.1.0-beta.6
 

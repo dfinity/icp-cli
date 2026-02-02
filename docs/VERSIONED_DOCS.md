@@ -53,7 +53,7 @@ gh-pages branch:
 - `build`: Validates docs build on all changes
 - `publish-root-files`: Updates index.html and versions.json (runs on `main`)
 - `publish-main-docs`: Deploys main branch docs to `/main/` (runs on `main`)
-- `publish-docs`: Publishes versioned docs (runs on tags or `docs/v*` branches)
+- `publish-versioned-docs`: Publishes versioned docs (runs on tags or `docs/v*` branches)
 
 ## Initial Setup
 

@@ -141,8 +141,8 @@ jobs:
           keep_files: true
 
   # Publish versioned docs - runs on tags (v*) or docs branches (docs/v*)
-  publish-docs:
-    if: github.ref != 'refs/heads/main'
+  publish-versioned-docs:
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/docs/v'))
     needs: build
     runs-on: ubuntu-latest
     steps:

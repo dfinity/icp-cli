@@ -57,7 +57,33 @@ gh-pages branch:
 
 ## Initial Setup
 
-### 1. GitHub Pages Settings
+### 1. Configuration
+
+The documentation system is fully configurable via environment variables in the workflow file [`.github/workflows/docs.yml`](.github/workflows/docs.yml).
+
+**Required environment variables:**
+- `PUBLIC_SITE`: The GitHub Pages base URL (e.g., `https://dfinity.github.io`)
+- `PUBLIC_BASE_PREFIX`: The repository path prefix (e.g., `/icp-cli`)
+
+**For the main dfinity/icp-cli repository:**
+```yaml
+env:
+  PUBLIC_SITE: https://dfinity.github.io
+  PUBLIC_BASE_PREFIX: /icp-cli
+```
+
+**For forks:**
+```yaml
+env:
+  PUBLIC_SITE: https://your-username.github.io
+  PUBLIC_BASE_PREFIX: /your-repo-name
+```
+
+These values are set at the workflow level and used by all build jobs. No hardcoded defaults exist in the source code.
+
+**Validation:** The `build` job validates that both variables are set before building the docs. If either variable is missing, the workflow fails early with a clear error message. Since all publish jobs depend on `build` (via `needs: build`), this single validation point protects the entire pipeline.
+
+### 2. GitHub Pages Settings
 
 Go to **Settings → Pages** in the GitHub repository and configure:
 
@@ -67,7 +93,7 @@ Go to **Settings → Pages** in the GitHub repository and configure:
 
 ⚠️ **Important**: Change from "GitHub Actions" to "Deploy from a branch" for this to work.
 
-### 2. Version List Configuration
+### 3. Version List Configuration
 
 The version list is stored in [docs-site/versions.json](../docs-site/versions.json).
 
@@ -84,7 +110,7 @@ The version list is stored in [docs-site/versions.json](../docs-site/versions.js
 ```json
 {
   "versions": [
-    {"version": "0.1", "label": "0.1", "latest": true}
+    {"version": "0.1", "latest": true}
   ]
 }
 ```
@@ -96,7 +122,7 @@ The workflow automatically:
 
 **You only need to update this file when releasing new versions** - the redirect is automated.
 
-### 3. First Deployment
+### 4. First Deployment
 
 **Before first release:**
 
@@ -124,7 +150,7 @@ The workflow automatically:
 2. **Update versions.json and push to main** (updates redirect):
    ```bash
    # Edit docs-site/versions.json to add:
-   # {"version": "0.1", "label": "0.1", "latest": true}
+   # {"version": "0.1", "latest": true}
 
    git add docs-site/versions.json
    git commit -m "docs: add v0.1 to version list"
@@ -171,7 +197,7 @@ git tag v0.2.0
 git push origin v0.2.0
 
 # Step 2: Edit docs-site/versions.json to add v0.2 at top (newest first):
-# {"version": "0.2", "label": "0.2", "latest": true}
+# {"version": "0.2", "latest": true}
 # And update v0.1 to remove latest flag (or omit it)
 
 # Step 3: Push to main (redirect now points to /0.2/, which exists)
@@ -267,6 +293,12 @@ The version switcher ([docs-site/src/components/VersionSwitcher.astro](docs-site
 
 ## Troubleshooting
 
+### Workflow fails with "environment variable is not set"
+- Error: `❌ Error: PUBLIC_SITE environment variable is not set` or `PUBLIC_BASE_PREFIX environment variable is not set`
+- Cause: Required environment variables are missing from workflow configuration
+- Fix: Add both `PUBLIC_SITE` and `PUBLIC_BASE_PREFIX` to the `env:` section at the top of [`.github/workflows/docs.yml`](.github/workflows/docs.yml)
+- See [Configuration](#1-configuration) section for examples
+
 ### Version switcher shows "Failed to load versions"
 - Check that `versions.json` was deployed to `/icp-cli/versions.json`
 - Check browser console for fetch errors
@@ -306,7 +338,7 @@ git push origin main
 git tag v0.1.0
 git push origin v0.1.0
 
-# 2. Edit docs-site/versions.json, add: {"version": "0.1", "label": "0.1", "latest": true}
+# 2. Edit docs-site/versions.json, add: {"version": "0.1", "latest": true}
 # 3. Push to main (updates redirect)
 git add docs-site/versions.json
 git commit -m "docs: add v0.1 to version list"

@@ -1,28 +1,21 @@
 ---
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-
-// Get current version from Cargo.toml
-let currentVersion = 'unknown';
-try {
-  const cargoToml = readFileSync(resolve('../Cargo.toml'), 'utf-8');
-  const versionMatch = cargoToml.match(/\[workspace\.package\][^\[]*version\s*=\s*"([^"]+)"/s)
-    || cargoToml.match(/^version\s*=\s*"([^"]+)"/m);
-  if (versionMatch) {
-    const fullVersion = versionMatch[1];
-    // Extract major.minor (e.g., "0.1.0" -> "0.1")
-    currentVersion = fullVersion.split('.').slice(0, 2).join('.');
-  }
-} catch (error) {
-  console.error('Failed to read version from Cargo.toml:', error);
-}
-
 // Detect environment and branch
 const isDev = import.meta.env.DEV;
 const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
+
+// Extract base prefix and version from BASE_URL
+// Examples: "/icp-cli/0.1/" -> prefix="/icp-cli", version="0.1"
+//           "/your-repo/0.2/" -> prefix="/your-repo", version="0.2"
+const baseUrl = import.meta.env.BASE_URL || '/';
+const basePrefixMatch = baseUrl.match(/^(\/[^\/]+)/);
+const basePrefix = basePrefixMatch ? basePrefixMatch[1] : '';
+
+// Extract version from BASE_URL (e.g., "/icp-cli/0.1/" -> "0.1")
+const versionMatch = baseUrl.match(/\/(\d+\.\d+)\//);
+const currentVersion = versionMatch ? versionMatch[1] : 'unknown';
 ---
 
-<div class="version-switcher">
+<div class="version-switcher" data-base-prefix={basePrefix}>
   {isDev ? (
     <!-- Development: Show dev badge -->
     <div class="version-badge">
@@ -59,6 +52,7 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
     if (!button) return;
 
     const dropdown = document.getElementById('version-dropdown');
+    const versionSwitcher = document.querySelector('.version-switcher');
     let isOpen = false;
     let versionsLoaded = false;
 
@@ -68,6 +62,7 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
       isOpen = !isOpen;
 
       if (isOpen) {
+        button.setAttribute('aria-expanded', 'true');
         dropdown?.removeAttribute('hidden');
 
         // Load versions on first open
@@ -76,14 +71,17 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
           versionsLoaded = true;
         }
       } else {
+        button.setAttribute('aria-expanded', 'false');
         dropdown?.setAttribute('hidden', '');
       }
     });
 
     // Close dropdown when clicking outside
-    document.addEventListener('click', () => {
-      if (isOpen) {
+    document.addEventListener('click', (e) => {
+      const target = e.target as Node;
+      if (isOpen && !versionSwitcher?.contains(target)) {
         isOpen = false;
+        button?.setAttribute('aria-expanded', 'false');
         dropdown?.setAttribute('hidden', '');
       }
     });
@@ -98,29 +96,42 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
       if (!content) return;
 
       try {
-        // Fetch versions.json from repo root (/icp-cli/versions.json)
-        const response = await fetch('/icp-cli/versions.json');
-        if (!response.ok) throw new Error('Failed to fetch versions');
+        // Get base prefix from data attribute (set at build time from workflow env vars)
+        const basePrefix = versionSwitcher?.getAttribute('data-base-prefix') || '';
+        const currentPath = window.location.pathname;
+
+        // Fetch versions.json from repo root
+        const fetchUrl = `${basePrefix}/versions.json`;
+        console.log('[VersionSwitcher] Fetching versions from:', fetchUrl);
+
+        const response = await fetch(fetchUrl);
+        if (!response.ok) {
+          console.error('[VersionSwitcher] Fetch failed:', response.status, response.statusText);
+          throw new Error('Failed to fetch versions');
+        }
 
         const data = await response.json();
         const versions = data.versions || [];
+
+        console.log('[VersionSwitcher] Loaded versions:', versions);
 
         if (versions.length === 0) {
           content.innerHTML = '<div class="version-error">No versions available</div>';
           return;
         }
 
-        // Get current path to determine current version
-        const currentPath = window.location.pathname;
-        // Match pattern: /icp-cli/0.1/ or /icp-cli/0.2/
-        const currentVersionMatch = currentPath.match(/\/icp-cli\/(\d+\.\d+)\//);
+        // Extract current version from path (e.g., /icp-cli/0.1/ -> "0.1")
+        const versionPattern = new RegExp(`${basePrefix.replace(/\//g, '\\/')}\\/(\\d+\\.\\d+)\\/`);
+        const currentVersionMatch = currentPath.match(versionPattern);
         const currentVersion = currentVersionMatch ? currentVersionMatch[1] : versions.find(v => v.latest)?.version;
+
+        console.log('[VersionSwitcher] Current version:', currentVersion, 'from path:', currentPath);
 
         // Render version list
         content.innerHTML = versions.map(v => {
           const isCurrent = v.version === currentVersion;
-          const label = v.latest ? `${v.label} (latest)` : v.label;
-          const href = `/icp-cli/${v.version}/`;
+          const label = v.latest ? `${v.version} (latest)` : v.version;
+          const href = `${basePrefix}/${v.version}/`;
 
           return `
             <a
@@ -134,7 +145,7 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
           `;
         }).join('');
       } catch (error) {
-        console.error('Failed to load versions:', error);
+        console.error('[VersionSwitcher] Error loading versions:', error);
         content.innerHTML = '<div class="version-error">Failed to load versions</div>';
       }
     }
@@ -142,6 +153,7 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
 </script>
 
 <style>
+  /* Static component styles (scoped) */
   .version-switcher {
     position: relative;
     display: inline-block;
@@ -174,25 +186,31 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
   .version-button:hover {
     background: var(--sl-color-gray-5);
     border-color: var(--sl-color-gray-4);
+    transform: translateY(-1px);
   }
 
-  :root[data-theme='light'] .version-button,
-  :root[data-theme='light'] .version-badge {
+  .version-button:active {
+    transform: translateY(0);
+  }
+
+  .version-button[aria-expanded="true"] {
     background: var(--sl-color-gray-5);
-    border-color: var(--sl-color-gray-4);
-  }
-
-  :root[data-theme='light'] .version-button:hover {
-    background: var(--sl-color-gray-6);
-    border-color: var(--sl-color-gray-5);
   }
 
   .version-chevron {
-    transition: transform 0.2s ease;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .version-button[aria-expanded="true"] .version-chevron {
     transform: rotate(180deg);
+  }
+
+  .version-button:hover .version-chevron {
+    transform: translateY(1px);
+  }
+
+  .version-button[aria-expanded="true"]:hover .version-chevron {
+    transform: rotate(180deg) translateY(-1px);
   }
 
   .version-dropdown {
@@ -203,8 +221,20 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
     background: var(--sl-color-bg-nav);
     border: 1px solid var(--sl-color-gray-5);
     border-radius: 0.5rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
     z-index: 1000;
+    animation: dropdown-appear 0.15s ease-out;
+  }
+
+  @keyframes dropdown-appear {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .version-dropdown[hidden] {
@@ -212,7 +242,10 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
   }
 
   .version-dropdown-content {
-    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.625rem;
   }
 
   .version-loading,
@@ -233,36 +266,102 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
     font-style: italic;
   }
 
-  .version-item {
+  /* Light theme overrides */
+  :root[data-theme='light'] .version-button,
+  :root[data-theme='light'] .version-badge {
+    background: var(--sl-color-gray-5);
+    border-color: var(--sl-color-gray-4);
+  }
+
+  :root[data-theme='light'] .version-button:hover {
+    background: var(--sl-color-gray-6);
+    border-color: var(--sl-color-gray-5);
+  }
+
+  /* Dynamically generated content styles (global) */
+  /* These must be global because they're created with innerHTML */
+  :global(.version-dropdown-content .version-item) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.625rem 0.75rem;
+    padding: 0.4rem 0.75rem;
     color: var(--sl-color-white);
     text-decoration: none;
-    border-radius: 0.375rem;
+    border-radius: 0.25rem;
     font-size: 0.875rem;
-    transition: background 0.2s ease;
+    background: transparent;
+    border-left: 3px solid transparent;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    position: relative;
   }
 
-  .version-item:hover {
-    background: var(--sl-color-gray-6);
+  :global(.version-dropdown-content .version-item:hover) {
+    background: rgba(255, 255, 255, 0.05);
+    border-left-color: var(--sl-color-gray-4);
+    text-decoration: none;
   }
 
-  .version-current-item {
-    background: var(--sl-color-accent);
-    font-weight: 600;
+  :global(.version-dropdown-content .version-item:active) {
+    background: rgba(255, 255, 255, 0.03);
   }
 
-  .version-current-item:hover {
-    background: var(--sl-color-accent-high);
+  /* Current version styling - subtle with left indicator */
+  :global(.version-dropdown-content .version-current-item) {
+    background: rgba(255, 255, 255, 0.08);
+    border-left-color: var(--sl-color-gray-2);
+    font-weight: 500;
   }
 
-  .version-check {
-    margin-left: 0.5rem;
+  :global(.version-dropdown-content .version-current-item:hover) {
+    background: rgba(255, 255, 255, 0.12);
+    border-left-color: var(--sl-color-gray-1);
   }
 
-  .version-label {
+  /* Version label and check */
+  :global(.version-dropdown-content .version-label) {
     flex: 1;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+
+  :global(.version-dropdown-content .version-current-item .version-label) {
+    font-weight: 500;
+  }
+
+  :global(.version-dropdown-content .version-check) {
+    margin-left: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Light theme for dynamic content */
+  :root[data-theme='light'] :global(.version-dropdown-content .version-item) {
+    color: var(--sl-color-gray-1);
+  }
+
+  :root[data-theme='light'] :global(.version-dropdown-content .version-item:hover) {
+    background: var(--sl-color-gray-6);
+    border-left-color: var(--sl-color-gray-3);
+    color: var(--sl-color-gray-1);
+  }
+
+  :root[data-theme='light'] :global(.version-dropdown-content .version-current-item) {
+    background: var(--sl-color-gray-5);
+    border-left-color: var(--sl-color-gray-2);
+    color: var(--sl-color-gray-1);
+  }
+
+  :root[data-theme='light'] :global(.version-dropdown-content .version-current-item:hover) {
+    background: var(--sl-color-gray-4);
+    border-left-color: var(--sl-color-gray-1);
+    color: var(--sl-color-gray-1);
+  }
+
+  :root[data-theme='light'] :global(.version-dropdown-content .version-check) {
+    color: var(--sl-color-gray-2);
   }
 </style>

@@ -24,6 +24,15 @@ on:
 permissions:
   contents: write
 
+env:
+  # Site configuration - customize these for forks
+  # Production (dfinity/icp-cli):
+  PUBLIC_SITE: https://dfinity.github.io
+  PUBLIC_BASE_PREFIX: /icp-cli
+  # Forks should update these values:
+  #   PUBLIC_SITE: https://your-username.github.io
+  #   PUBLIC_BASE_PREFIX: /your-repo-name
+
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
@@ -35,6 +44,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate required environment variables
+        run: |
+          if [[ -z "${{ env.PUBLIC_SITE }}" ]]; then
+            echo "❌ Error: PUBLIC_SITE environment variable is not set"
+            exit 1
+          fi
+          if [[ -z "${{ env.PUBLIC_BASE_PREFIX }}" ]]; then
+            echo "❌ Error: PUBLIC_BASE_PREFIX environment variable is not set"
+            exit 1
+          fi
+          echo "✅ Required environment variables are set:"
+          echo "  PUBLIC_SITE=${{ env.PUBLIC_SITE }}"
+          echo "  PUBLIC_BASE_PREFIX=${{ env.PUBLIC_BASE_PREFIX }}"
+
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
@@ -54,6 +77,8 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          PUBLIC_SITE: ${{ env.PUBLIC_SITE }}
+          PUBLIC_BASE_PREFIX: ${{ env.PUBLIC_BASE_PREFIX }}
 
   # Publish root index and versions list - only runs on main branch
   publish-root-files:
@@ -127,10 +152,14 @@ jobs:
 
       - name: Build main branch docs
         working-directory: ./docs-site
-        run: npm run build
+        run: |
+          BASE_PREFIX="${PUBLIC_BASE_PREFIX:-/icp-cli}"
+          echo "Building with base: ${BASE_PREFIX}/main/"
+          npm run build
         env:
           NODE_ENV: production
-          PUBLIC_BASE_PATH: /main/
+          PUBLIC_BASE_PATH: ${{ env.PUBLIC_BASE_PREFIX }}/main/
+          PUBLIC_SITE: ${{ env.PUBLIC_SITE }}
 
       - name: Deploy main docs to GitHub Pages
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
@@ -162,30 +191,36 @@ jobs:
 
       - name: Extract version from tag or branch
         run: |
+          # Use repo-specific base prefix from env vars (defaults to /icp-cli)
+          BASE_PREFIX="${PUBLIC_BASE_PREFIX:-/icp-cli}"
+
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             # Tag: v0.1.0 -> extract major.minor -> 0.1
             VERSION=${GITHUB_REF#refs/tags/v}
             # Strip patch version (0.1.0 -> 0.1)
             VERSION=${VERSION%.*}
             echo "DOCS_VERSION=${VERSION}" >> $GITHUB_ENV
-            echo "DOCS_BASE=/${VERSION}/" >> $GITHUB_ENV
+            echo "DOCS_BASE_PATH=${BASE_PREFIX}/${VERSION}/" >> $GITHUB_ENV
           elif [[ "${GITHUB_REF}" == refs/heads/docs/v* ]]; then
             # Branch: docs/v0.1 -> extract version -> 0.1
             VERSION=${GITHUB_REF#refs/heads/docs/v}
             echo "DOCS_VERSION=${VERSION}" >> $GITHUB_ENV
-            echo "DOCS_BASE=/${VERSION}/" >> $GITHUB_ENV
+            echo "DOCS_BASE_PATH=${BASE_PREFIX}/${VERSION}/" >> $GITHUB_ENV
           else
             echo "❌ Docs should only be published for version tags (v*) or docs branches (docs/v*)"
             echo "Current ref: ${GITHUB_REF}"
             exit 1
           fi
 
+          echo "Building docs for version ${VERSION} with base: ${BASE_PREFIX}/${VERSION}/"
+
       - name: Build documentation site
         working-directory: ./docs-site
         run: npm run build
         env:
           NODE_ENV: production
-          PUBLIC_BASE_PATH: ${{ env.DOCS_BASE }}
+          PUBLIC_BASE_PATH: ${{ env.DOCS_BASE_PATH }}
+          PUBLIC_SITE: ${{ env.PUBLIC_SITE }}
 
       - name: Deploy versioned docs to GitHub Pages
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0

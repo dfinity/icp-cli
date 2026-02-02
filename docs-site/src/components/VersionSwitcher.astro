@@ -53,90 +53,92 @@ const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
 </div>
 
 <script>
-  // Only run in production (when button exists)
-  const button = document.getElementById('version-button');
-  if (!button) return;
+  (() => {
+    // Only run in production (when button exists)
+    const button = document.getElementById('version-button');
+    if (!button) return;
 
-  const dropdown = document.getElementById('version-dropdown');
-  let isOpen = false;
-  let versionsLoaded = false;
+    const dropdown = document.getElementById('version-dropdown');
+    let isOpen = false;
+    let versionsLoaded = false;
 
-  // Toggle dropdown
-  button?.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    isOpen = !isOpen;
+    // Toggle dropdown
+    button?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      isOpen = !isOpen;
 
-    if (isOpen) {
-      dropdown?.removeAttribute('hidden');
+      if (isOpen) {
+        dropdown?.removeAttribute('hidden');
 
-      // Load versions on first open
-      if (!versionsLoaded) {
-        await loadVersions();
-        versionsLoaded = true;
+        // Load versions on first open
+        if (!versionsLoaded) {
+          await loadVersions();
+          versionsLoaded = true;
+        }
+      } else {
+        dropdown?.setAttribute('hidden', '');
       }
-    } else {
-      dropdown?.setAttribute('hidden', '');
-    }
-  });
+    });
 
-  // Close dropdown when clicking outside
-  document.addEventListener('click', () => {
-    if (isOpen) {
-      isOpen = false;
-      dropdown?.setAttribute('hidden', '');
-    }
-  });
-
-  // Prevent dropdown clicks from closing
-  dropdown?.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
-
-  async function loadVersions() {
-    const content = dropdown?.querySelector('.version-dropdown-content');
-    if (!content) return;
-
-    try {
-      // Fetch versions.json from repo root (/icp-cli/versions.json)
-      const response = await fetch('/icp-cli/versions.json');
-      if (!response.ok) throw new Error('Failed to fetch versions');
-
-      const data = await response.json();
-      const versions = data.versions || [];
-
-      if (versions.length === 0) {
-        content.innerHTML = '<div class="version-error">No versions available</div>';
-        return;
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+      if (isOpen) {
+        isOpen = false;
+        dropdown?.setAttribute('hidden', '');
       }
+    });
 
-      // Get current path to determine current version
-      const currentPath = window.location.pathname;
-      // Match pattern: /icp-cli/0.1/ or /icp-cli/0.2/
-      const currentVersionMatch = currentPath.match(/\/icp-cli\/(\d+\.\d+)\//);
-      const currentVersion = currentVersionMatch ? currentVersionMatch[1] : versions.find(v => v.latest)?.version;
+    // Prevent dropdown clicks from closing
+    dropdown?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
 
-      // Render version list
-      content.innerHTML = versions.map(v => {
-        const isCurrent = v.version === currentVersion;
-        const label = v.latest ? `${v.label} (latest)` : v.label;
-        const href = `/icp-cli/${v.version}/`;
+    async function loadVersions() {
+      const content = dropdown?.querySelector('.version-dropdown-content');
+      if (!content) return;
 
-        return `
-          <a
-            href="${href}"
-            class="version-item ${isCurrent ? 'version-current-item' : ''}"
-            ${isCurrent ? 'aria-current="page"' : ''}
-          >
-            <span class="version-label">${label}</span>
-            ${isCurrent ? '<span class="version-check">✓</span>' : ''}
-          </a>
-        `;
-      }).join('');
-    } catch (error) {
-      console.error('Failed to load versions:', error);
-      content.innerHTML = '<div class="version-error">Failed to load versions</div>';
+      try {
+        // Fetch versions.json from repo root (/icp-cli/versions.json)
+        const response = await fetch('/icp-cli/versions.json');
+        if (!response.ok) throw new Error('Failed to fetch versions');
+
+        const data = await response.json();
+        const versions = data.versions || [];
+
+        if (versions.length === 0) {
+          content.innerHTML = '<div class="version-error">No versions available</div>';
+          return;
+        }
+
+        // Get current path to determine current version
+        const currentPath = window.location.pathname;
+        // Match pattern: /icp-cli/0.1/ or /icp-cli/0.2/
+        const currentVersionMatch = currentPath.match(/\/icp-cli\/(\d+\.\d+)\//);
+        const currentVersion = currentVersionMatch ? currentVersionMatch[1] : versions.find(v => v.latest)?.version;
+
+        // Render version list
+        content.innerHTML = versions.map(v => {
+          const isCurrent = v.version === currentVersion;
+          const label = v.latest ? `${v.label} (latest)` : v.label;
+          const href = `/icp-cli/${v.version}/`;
+
+          return `
+            <a
+              href="${href}"
+              class="version-item ${isCurrent ? 'version-current-item' : ''}"
+              ${isCurrent ? 'aria-current="page"' : ''}
+            >
+              <span class="version-label">${label}</span>
+              ${isCurrent ? '<span class="version-check">✓</span>' : ''}
+            </a>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Failed to load versions:', error);
+        content.innerHTML = '<div class="version-error">Failed to load versions</div>';
+      }
     }
-  }
+  })();
 </script>
 
 <style>

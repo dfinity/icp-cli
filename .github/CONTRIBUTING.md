@@ -104,6 +104,22 @@ The documentation site uses [Astro](https://astro.build/) with [Starlight](https
 
 This architecture keeps source docs clean and GitHub-friendly while providing a polished documentation site.
 
+### Versioned Documentation Deployment
+
+The documentation site supports multiple versions simultaneously. When working with releases:
+
+- **Stable releases** (e.g., `v0.1.0`, `v0.2.0`) automatically deploy versioned docs
+- **Documentation updates** can be made to old versions via `docs/v*` branches
+- Users can switch between versions via the version switcher in the header
+
+For detailed information on the versioned documentation system, including:
+- How version deployment works (tags vs branches)
+- Releasing new versions
+- Updating existing version docs
+- Managing the version list
+
+See [docs/VERSIONED_DOCS.md](../docs/VERSIONED_DOCS.md).
+
 ### Writing Documentation
 
 1. **Create a markdown file** in the appropriate directory:

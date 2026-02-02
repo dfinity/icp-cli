@@ -1165,8 +1165,8 @@ async fn canister_snapshot_upload_resume() {
         .assert()
         .success();
 
-    // Start mitmproxy allowing 3 requests: status check + metadata upload + one data chunk
-    let proxy = MitmproxyGuard::start(real_port, 3);
+    // Start mitmproxy allowing 2 requests: metadata upload + one data chunk
+    let proxy = MitmproxyGuard::start(real_port, 2);
 
     // Modify the network descriptor to route through mitmproxy
     let mut modified_descriptor = descriptor.clone();

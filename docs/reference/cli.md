@@ -152,6 +152,14 @@ Make a canister call
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the call through.
+
+   When specified, instead of calling the target canister directly, the call will be sent to the proxy canister's `proxy` method, which forwards it to the target canister.
+* `--cycles <CYCLES>` — Cycles to forward with the proxied call.
+
+   Only used when --proxy is specified. Defaults to 0.
+
+  Default value: `0`
 
 
 

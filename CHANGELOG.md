@@ -1,6 +1,9 @@
 # Unreleased
 
 * feat: `icp canister snapshot` - create, delete, restore, list canister snapshots
+* feat: `icp canister call` now supports `--proxy` flag to route calls through a proxy canister
+  * Use `--proxy <CANISTER_ID>` to forward the call through a proxy canister's `proxy` method
+  * Use `--cycles <AMOUNT>` to specify cycles to forward with the proxied call (defaults to 0)
 
 # v0.1.0-beta.6
 

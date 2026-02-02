@@ -4,8 +4,11 @@ import rehypeExternalLinks from 'rehype-external-links';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://dfinity.github.io',
-  base: process.env.NODE_ENV === 'production' ? '/icp-cli/' : '/',
+  site: process.env.PUBLIC_SITE,
+  // For versioned deployments: /icp-cli/0.1/, /icp-cli/0.2/, etc.
+  // For non-versioned: /icp-cli/ in production, / in development
+  // Defaults are set in the workflow, not here
+  base: process.env.PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? process.env.PUBLIC_BASE_PREFIX + '/' : '/'),
   markdown: {
     rehypePlugins: [
       // Open external links in new tab
@@ -17,6 +20,9 @@ export default defineConfig({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
       favicon: '/favicon.png',
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+      },
       head: [
         {
           tag: 'script',
@@ -38,6 +44,7 @@ export default defineConfig({
       logo: {
         src: './src/assets/icp-logo.svg',
         replacesTitle: false,
+        alt: 'ICP',
       },
       customCss: [
         './src/styles/layers.css',

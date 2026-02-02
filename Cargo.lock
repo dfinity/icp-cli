@@ -3262,6 +3262,7 @@ dependencies = [
  "snafu",
  "sysinfo",
  "test-tag",
+ "time",
  "tiny-bip39",
  "tokio",
  "tracing",

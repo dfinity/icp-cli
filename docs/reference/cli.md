@@ -17,6 +17,11 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister settings show`↴](#icp-canister-settings-show)
 * [`icp canister settings update`↴](#icp-canister-settings-update)
 * [`icp canister settings sync`↴](#icp-canister-settings-sync)
+* [`icp canister snapshot`↴](#icp-canister-snapshot)
+* [`icp canister snapshot create`↴](#icp-canister-snapshot-create)
+* [`icp canister snapshot delete`↴](#icp-canister-snapshot-delete)
+* [`icp canister snapshot list`↴](#icp-canister-snapshot-list)
+* [`icp canister snapshot restore`↴](#icp-canister-snapshot-restore)
 * [`icp canister start`↴](#icp-canister-start)
 * [`icp canister status`↴](#icp-canister-status)
 * [`icp canister stop`↴](#icp-canister-stop)
@@ -114,6 +119,7 @@ Perform canister operations against a network
 * `list` — List the canisters in an environment
 * `metadata` — Read a metadata section from a canister
 * `settings` — Commands to manage canister settings
+* `snapshot` — Commands to manage canister snapshots
 * `start` — Start a canister on a network
 * `status` — Show the status of canister(s)
 * `stop` — Stop a canister on a network
@@ -146,6 +152,14 @@ Make a canister call
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the call through.
+
+   When specified, instead of calling the target canister directly, the call will be sent to the proxy canister's `proxy` method, which forwards it to the target canister.
+* `--cycles <CYCLES>` — Cycles to forward with the proxied call.
+
+   Only used when --proxy is specified. Defaults to 0.
+
+  Default value: `0`
 
 
 
@@ -342,6 +356,96 @@ Synchronize a canister's settings with those defined in the project
 ###### **Arguments:**
 
 * `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp canister snapshot`
+
+Commands to manage canister snapshots
+
+**Usage:** `icp canister snapshot <COMMAND>`
+
+###### **Subcommands:**
+
+* `create` — Create a snapshot of a canister's state
+* `delete` — Delete a canister snapshot
+* `list` — List all snapshots for a canister
+* `restore` — Restore a canister from a snapshot
+
+
+
+## `icp canister snapshot create`
+
+Create a snapshot of a canister's state
+
+**Usage:** `icp canister snapshot create [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
+
+
+
+## `icp canister snapshot delete`
+
+Delete a canister snapshot
+
+**Usage:** `icp canister snapshot delete [OPTIONS] <CANISTER> <SNAPSHOT_ID>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<SNAPSHOT_ID>` — The snapshot ID to delete (hex-encoded)
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp canister snapshot list`
+
+List all snapshots for a canister
+
+**Usage:** `icp canister snapshot list [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp canister snapshot restore`
+
+Restore a canister from a snapshot
+
+**Usage:** `icp canister snapshot restore [OPTIONS] <CANISTER> <SNAPSHOT_ID>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<SNAPSHOT_ID>` — The snapshot ID to restore (hex-encoded)
 
 ###### **Options:**
 

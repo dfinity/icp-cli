@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use candid::IDLArgs;
 use candid_parser::parse_idl_args;
 use icp::{fs, prelude::*};
+use time::{OffsetDateTime, macros::format_description};
 
 pub async fn fetch_canister_metadata(
     agent: &ic_agent::Agent,
@@ -59,6 +60,17 @@ pub(crate) fn parse_args<P: AsRef<Path>>(args_str: &str, base_path: &P) -> Resul
         "Failed to parse arguments as hex, Candid literal, or as path to existing file: '{}'",
         args_str
     )
+}
+
+/// Format a nanosecond timestamp as a human-readable UTC datetime string.
+pub(crate) fn format_timestamp(nanos: u64) -> String {
+    let Ok(datetime) = OffsetDateTime::from_unix_timestamp_nanos(nanos as i128) else {
+        return nanos.to_string();
+    };
+    let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second] UTC");
+    datetime
+        .format(&format)
+        .unwrap_or_else(|_| nanos.to_string())
 }
 
 #[cfg(test)]

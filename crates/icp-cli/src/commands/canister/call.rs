@@ -1,5 +1,5 @@
 use anyhow::{Context as _, bail};
-use candid::{IDLArgs, Principal, TypeEnv, types::Function};
+use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::utils::CandidSource;
 use clap::Args;
@@ -7,11 +7,13 @@ use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
 use icp::prelude::*;
+use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use std::io::{self, Write};
 use tracing::warn;
 
 use crate::{
     commands::args,
+    commands::parsers::parse_cycles_amount,
     operations::misc::{ParsedArguments, fetch_canister_metadata, parse_args},
 };
 
@@ -35,6 +37,20 @@ pub(crate) struct CallArgs {
     ///
     /// If not provided, an interactive prompt will be launched to help build the arguments.
     pub(crate) args: Option<String>,
+
+    /// Principal of a proxy canister to route the call through.
+    ///
+    /// When specified, instead of calling the target canister directly,
+    /// the call will be sent to the proxy canister's `proxy` method,
+    /// which forwards it to the target canister.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
+
+    /// Cycles to forward with the proxied call.
+    ///
+    /// Only used when --proxy is specified. Defaults to 0.
+    #[arg(long, requires = "proxy", value_parser = parse_cycles_amount, default_value = "0")]
+    pub(crate) cycles: u128,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
@@ -106,7 +122,33 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             .context("failed to serialize candid arguments with specific types")?,
     };
 
-    let res = agent.update(&cid, &args.method).with_arg(arg_bytes).await?;
+    let res = if let Some(proxy_cid) = args.proxy {
+        // Route the call through the proxy canister
+        let proxy_args = ProxyArgs {
+            canister_id: cid,
+            method: args.method.clone(),
+            args: arg_bytes,
+            cycles: Nat::from(args.cycles),
+        };
+        let proxy_arg_bytes =
+            Encode!(&proxy_args).context("failed to encode proxy call arguments")?;
+
+        let proxy_res = agent
+            .update(&proxy_cid, "proxy")
+            .with_arg(proxy_arg_bytes)
+            .await?;
+
+        let proxy_result: (ProxyResult,) =
+            candid::decode_args(&proxy_res).context("failed to decode proxy canister response")?;
+
+        match proxy_result.0 {
+            ProxyResult::Ok(ok) => ok.result,
+            ProxyResult::Err(err) => bail!(err.format_error()),
+        }
+    } else {
+        // Direct call to the target canister
+        agent.update(&cid, &args.method).with_arg(arg_bytes).await?
+    };
 
     let ret = IDLArgs::from_bytes(&res[..])?;
 

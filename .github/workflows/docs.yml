@@ -101,8 +101,8 @@ jobs:
           # Copy versions.json from repo
           cp docs-site/versions.json root/versions.json
 
-          # Extract latest version (first in list) from versions.json
-          LATEST_VERSION=$(jq -r '.versions[0].version // empty' docs-site/versions.json)
+          # Extract the latest version from versions.json
+          LATEST_VERSION=$(jq -r ".versions[] | select(.latest == true) | .version" docs-site/versions.json)
 
           # If no releases yet, redirect to main branch docs
           if [[ -z "$LATEST_VERSION" ]]; then

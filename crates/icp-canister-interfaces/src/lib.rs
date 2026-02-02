@@ -4,6 +4,7 @@ pub mod cycles_minting_canister;
 pub mod governance;
 pub mod icp_ledger;
 pub mod internet_identity;
+pub mod nns_migration;
 pub mod nns_root;
 pub mod proxy;
 pub mod registry;

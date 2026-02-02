@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: `icp cansister migrate-id` - initiate canister ID migration across subnets
+
 # v0.1.0
 
 * feat: `icp canister snapshot` - create, delete, restore, list, download, and upload canister snapshots

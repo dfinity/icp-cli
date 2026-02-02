@@ -220,6 +220,12 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
+            commands::canister::Command::MigrateId(args) => {
+                commands::canister::migrate_id::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
             commands::canister::Command::Settings(cmd) => match cmd {
                 commands::canister::settings::Command::Show(args) => {
                     commands::canister::settings::show::exec(&ctx, &args)

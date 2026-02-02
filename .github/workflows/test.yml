@@ -140,46 +140,6 @@ jobs:
           which wasm-tools
           wasm-tools --version
 
-      - name: install network launcher
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: ${{ !contains(matrix.os, 'windows') }}
-        run: |
-          VERSION=v11.0.0
-          OS=""
-          ARCH=""
-
-          # Map runner.os → release suffix
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            OS="linux"
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            OS="darwin"
-          else
-            echo "Unsupported OS: ${{ runner.os }}"
-            exit 1
-          fi
-
-          # Detect architecture
-          case "$(uname -m)" in
-            x86_64) ARCH="x86_64" ;;
-            arm64|aarch64) ARCH="arm64" ;;
-            *)
-              echo "Unsupported architecture: $(uname -m)"
-              exit 1
-              ;;
-          esac
-          PERCENT_VERSION=$(printf '%s' "$VERSION" |jq -sRr @uri)
-          URL="https://github.com/dfinity/icp-cli-network-launcher/releases/download/${PERCENT_VERSION}/icp-cli-network-launcher-${ARCH}-${OS}-${PERCENT_VERSION}.tar.gz"
-          DEST="/opt/icp-cli-network-launcher"
-
-          echo "Downloading $URL"
-          curl -L "$URL" -H "Authorization: Bearer ${GITHUB_TOKEN}" -o icp-cli-network-launcher.tar.gz
-          tar -xzf icp-cli-network-launcher.tar.gz
-          sudo mv icp-cli-network-launcher-${ARCH}-${OS}-${VERSION} "$DEST"
-
-          echo "Installed network launcher to $DEST"
-          echo "ICP_CLI_NETWORK_LAUNCHER_PATH=$DEST/icp-cli-network-launcher" >> "$GITHUB_ENV"
-
       - name: Run ${{ matrix.test }}
         # the macos runners do not support Docker
         run: cargo test --test ${{ matrix.test }} -- ${{ contains(matrix.os, 'macos') && '--skip :docker:' || '' }}

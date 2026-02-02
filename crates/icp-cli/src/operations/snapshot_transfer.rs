@@ -240,6 +240,9 @@ pub enum SnapshotTransferError {
         source: std::io::Error,
         path: PathBuf,
     },
+
+    #[snafu(display("Invalid snapshot metadata: {reason}"))]
+    InvalidSnapshotMetadata { reason: String },
 }
 
 /// Tracks upload progress for resumable uploads.
@@ -455,11 +458,21 @@ pub async fn upload_snapshot_metadata(
 ) -> Result<UploadCanisterSnapshotMetadataResult, SnapshotTransferError> {
     let mgmt = ManagementCanister::create(agent);
 
+    // Convert Option<SnapshotMetadataGlobal> to SnapshotMetadataGlobal, failing on None
+    let globals = metadata
+        .globals
+        .iter()
+        .cloned()
+        .collect::<Option<Vec<_>>>()
+        .ok_or(SnapshotTransferError::InvalidSnapshotMetadata {
+            reason: "snapshot metadata contains unparseable globals".to_string(),
+        })?;
+
     let args = UploadCanisterSnapshotMetadataArgs {
         canister_id,
         replace_snapshot: replace_snapshot.map(|s| s.to_vec()),
         wasm_module_size: metadata.wasm_module_size,
-        globals: metadata.globals.clone(),
+        globals,
         wasm_memory_size: metadata.wasm_memory_size,
         stable_memory_size: metadata.stable_memory_size,
         certified_data: metadata.certified_data.clone(),

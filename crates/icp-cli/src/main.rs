@@ -253,6 +253,12 @@ async fn main() -> Result<(), Error> {
                         .await?
                 }
 
+                commands::canister::snapshot::Command::Download(args) => {
+                    commands::canister::snapshot::download::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
                 commands::canister::snapshot::Command::List(args) => {
                     commands::canister::snapshot::list::exec(&ctx, &args)
                         .instrument(trace_span)
@@ -261,6 +267,12 @@ async fn main() -> Result<(), Error> {
 
                 commands::canister::snapshot::Command::Restore(args) => {
                     commands::canister::snapshot::restore::exec(&ctx, &args)
+                        .instrument(trace_span)
+                        .await?
+                }
+
+                commands::canister::snapshot::Command::Upload(args) => {
+                    commands::canister::snapshot::upload::exec(&ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }

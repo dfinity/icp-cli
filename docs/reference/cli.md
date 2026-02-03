@@ -20,8 +20,10 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister snapshot`↴](#icp-canister-snapshot)
 * [`icp canister snapshot create`↴](#icp-canister-snapshot-create)
 * [`icp canister snapshot delete`↴](#icp-canister-snapshot-delete)
+* [`icp canister snapshot download`↴](#icp-canister-snapshot-download)
 * [`icp canister snapshot list`↴](#icp-canister-snapshot-list)
 * [`icp canister snapshot restore`↴](#icp-canister-snapshot-restore)
+* [`icp canister snapshot upload`↴](#icp-canister-snapshot-upload)
 * [`icp canister start`↴](#icp-canister-start)
 * [`icp canister status`↴](#icp-canister-status)
 * [`icp canister stop`↴](#icp-canister-stop)
@@ -375,8 +377,10 @@ Commands to manage canister snapshots
 
 * `create` — Create a snapshot of a canister's state
 * `delete` — Delete a canister snapshot
+* `download` — Download a snapshot to local disk
 * `list` — List all snapshots for a canister
 * `restore` — Restore a canister from a snapshot
+* `upload` — Upload a snapshot from local disk
 
 
 
@@ -418,6 +422,27 @@ Delete a canister snapshot
 
 
 
+## `icp canister snapshot download`
+
+Download a snapshot to local disk
+
+**Usage:** `icp canister snapshot download [OPTIONS] --output <OUTPUT> <CANISTER> <SNAPSHOT_ID>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<SNAPSHOT_ID>` — The snapshot ID to download (hex-encoded)
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
+* `--resume` — Resume a previously interrupted download
+
+
+
 ## `icp canister snapshot list`
 
 List all snapshots for a canister
@@ -452,6 +477,27 @@ Restore a canister from a snapshot
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp canister snapshot upload`
+
+Upload a snapshot from local disk
+
+**Usage:** `icp canister snapshot upload [OPTIONS] --input <INPUT> <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-i`, `--input <INPUT>` — Input directory containing the snapshot files
+* `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one
+* `--resume` — Resume a previously interrupted upload
 
 
 

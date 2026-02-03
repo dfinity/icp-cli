@@ -836,7 +836,7 @@ impl MitmproxyGuard {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("tests/assets/limit_transfer.py");
-
+        #[allow(clippy::zombie_processes)]
         let child = std::process::Command::new("mitmdump")
             .args([
                 "--mode",

@@ -87,6 +87,6 @@ else
   echo -e "${RED}Missing binaries:${NC} $MISSING/$TOTAL"
   echo ""
   echo "Download missing binaries with:"
-  echo "  ./scripts/download-binaries.sh 0.1.0-beta.5"
+  echo "  ./scripts/download-binaries.sh 0.1.0"
   exit 1
 fi

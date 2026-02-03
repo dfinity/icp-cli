@@ -855,13 +855,18 @@ impl MitmproxyGuard {
             .spawn()
             .expect("failed to start mitmproxy - is it installed?");
 
-        // Give mitmproxy time to start
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
-        Self {
-            child,
-            port: proxy_port,
+        // Wait for mitmproxy to start listening (up to 5 seconds)
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(5) {
+            if std::net::TcpStream::connect(format!("127.0.0.1:{proxy_port}")).is_ok() {
+                return Self {
+                    child,
+                    port: proxy_port,
+                };
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
+        panic!("mitmproxy failed to start listening on port {proxy_port} within 5 seconds");
     }
 }
 

@@ -4,11 +4,11 @@ Set up everything you need to build and deploy canisters on the Internet Compute
 
 **What you'll install:**
 
-| Tool | Purpose |
-|------|---------|
-| **icp-cli** | Core CLI for building and deploying canisters |
-| **ic-wasm** | Optimizes WebAssembly for the Internet Computer |
-| **Language toolchain** | Motoko compiler (via mops) or Rust compiler |
+| Tool                   | Purpose                                         |
+|------------------------|-------------------------------------------------|
+| **icp-cli**            | Core CLI for building and deploying canisters   |
+| **ic-wasm**            | Optimizes WebAssembly for the Internet Computer |
+| **Language toolchain** | Motoko compiler (via mops) or Rust compiler     |
 
 > **Windows users:** Local networks require [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/), and Motoko requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install). For the full experience, install both and run commands inside WSL. Rust-only projects deploying to mainnet can run natively on Windows.
 
@@ -76,7 +76,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/re
 
 Restart your terminal after installation.
 
-**Homebrew (macOS only):**
+**Homebrew (macOS/Linux only):**
 
 ```bash
 brew install dfinity/tap/icp-cli

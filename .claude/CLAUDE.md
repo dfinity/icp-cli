@@ -26,8 +26,8 @@ cargo test
 # Run tests for specific package
 cargo test -p icp-cli
 
-# Run a specific test
-cargo test <test_name>
+# Run a specific test from <test_file>.rs
+cargo test --test <test_file> -- <test_name>
 
 # Run with verbose output
 cargo test -- --nocapture

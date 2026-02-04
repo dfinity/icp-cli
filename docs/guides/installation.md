@@ -2,44 +2,81 @@
 
 Set up everything you need to build and deploy canisters on the Internet Computer.
 
-This guide covers:
-- Prerequisites (Node.js)
-- Installing icp-cli (the core tool)
-- Installing language toolchains (Rust or Motoko compilers)
-- Installing ic-wasm for optimization
+**What you'll install:**
 
-## Prerequisites
+| Tool                   | Purpose                                         |
+|------------------------|-------------------------------------------------|
+| **icp-cli**            | Core CLI for building and deploying canisters   |
+| **ic-wasm**            | Optimizes WebAssembly for the Internet Computer |
+| **Language toolchain** | Motoko compiler (via mops) or Rust compiler     |
 
-[Node.js](https://nodejs.org/) (LTS recommended) is required for:
-- Installing the Motoko toolchain
-- Building frontend canisters
+> **Windows users:** Local networks require [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/), and Motoko requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install). For the full experience, install both and run commands inside WSL. Rust-only projects deploying to mainnet can run natively on Windows.
 
-> **Rust-only projects:** If you're only building Rust backend canisters without a frontend, you can skip Node.js.
+> **Linux users:** The pre-compiled binary requires system libraries that may be missing on minimal installs. If installation fails or `icp` won't start, install these dependencies:
+> ```bash
+> # Ubuntu/Debian
+> sudo apt-get install -y libdbus-1-3 libssl3 ca-certificates
+> # Fedora/RHEL
+> sudo dnf install -y dbus-libs openssl ca-certificates
+> ```
 
-## Install icp-cli
+## Quick Install (Recommended)
 
-**macOS / Linux / WSL:**
+**Required:** [Node.js](https://nodejs.org/) (LTS) — needed for npm and for building frontend canisters.
+
+**1. Install the core tools:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.6/icp-cli-installer.sh | sh
+npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
+```
+
+**2. Install your language toolchain:**
+
+**Motoko:**
+
+```bash
+npm install -g ic-mops && mops toolchain init
+```
+
+**Rust** (if not already installed):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add wasm32-unknown-unknown
+```
+
+**3. Verify installation:**
+
+```bash
+icp --version
+ic-wasm --version
+```
+
+---
+
+## Alternative Installation Methods
+
+If you prefer not to use npm, or need platform-specific options, see the sections below.
+
+### icp-cli
+
+**Shell Script (macOS / Linux / WSL):**
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/latest/download/icp-cli-installer.sh | sh
 ```
 
 Restart your shell or follow the instructions shown by the installer.
 
-**Windows:**
+**Shell Script (Windows, for Rust-only mainnet projects):**
 
 ```ps1
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.6/icp-cli-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/latest/download/icp-cli-installer.ps1 | iex"
 ```
 
 Restart your terminal after installation.
 
-> **Windows notes:**
-> - **Local networks** require [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)
-> - **Motoko canisters** require [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — the Motoko compiler doesn't run natively on Windows. Install icp-cli inside WSL and follow the macOS/Linux instructions instead.
-> - **Rust canisters** work natively on Windows without WSL
-
-**Alternative: Homebrew (macOS only)**
+**Homebrew (macOS/Linux only):**
 
 ```bash
 brew install dfinity/tap/icp-cli
@@ -47,38 +84,11 @@ brew install dfinity/tap/icp-cli
 
 To update later: `brew upgrade dfinity/tap/icp-cli`
 
-### Verify Installation
+> **Note:** Homebrew installs ic-wasm as a dependency, so you can skip the ic-wasm installation below.
 
-```bash
-icp --version
-```
+> **Note:** [Node.js](https://nodejs.org/) (LTS recommended) is still required for the Motoko toolchain and frontend canisters when using alternative installation methods.
 
-## Install Language Toolchains
-
-icp-cli uses your language's compiler to build canisters. Install what you need:
-
-**Rust canisters:**
-
-If you don't have Rust installed, install it from [rustup.rs](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-Then add the WebAssembly target:
-
-```bash
-rustup target add wasm32-unknown-unknown
-```
-
-**Motoko canisters:**
-
-```bash
-npm install -g ic-mops
-mops toolchain init
-```
-
-## Install ic-wasm (Required for templates and recipes)
+### ic-wasm
 
 `ic-wasm` is a WebAssembly post-processing tool that optimizes canisters for the Internet Computer. It provides:
 - **Optimization**: ~10% cycle reduction for Motoko, ~4% for Rust
@@ -87,25 +97,51 @@ mops toolchain init
 - **Shrinking**: Remove unused code and debug symbols
 
 **When is it needed?**
-- **Required** if using official templates (motoko, rust, hello-world) - all backend templates use recipes that depend on ic-wasm
-- **Required** if using official recipes (`@dfinity/motoko`, `@dfinity/rust`) - these recipes inject required metadata using ic-wasm
+- **Required** if using official templates (motoko, rust, hello-world) — all backend templates use recipes that depend on ic-wasm
+- **Required** if using official recipes (`@dfinity/motoko`, `@dfinity/rust`) — these recipes inject required metadata using ic-wasm
 - **Not required** if building canisters with custom script steps that don't invoke ic-wasm
 
 **Installation:**
 
-**Note:** If you installed icp-cli via Homebrew, ic-wasm is already installed as a dependency. Skip this section.
+> **Note:** If you installed icp-cli via Homebrew, ic-wasm is already included. Skip this section.
 
-**macOS/Linux:**
+**npm (recommended):**
+
+```bash
+npm install -g @icp-sdk/ic-wasm
+```
+
+**Shell Script (macOS/Linux):**
+
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/latest/download/ic-wasm-installer.sh | sh
 ```
 
-**Windows:**
+**Shell Script (Windows):**
+
 ```ps1
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/ic-wasm/releases/latest/download/ic-wasm-installer.ps1 | iex"
 ```
 
 Learn more: [ic-wasm repository](https://github.com/dfinity/ic-wasm)
+
+### Language Toolchains
+
+**Motoko:**
+
+```bash
+npm install -g ic-mops
+mops toolchain init
+```
+
+**Rust:**
+
+Install from [rustup.rs](https://rustup.rs/):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add wasm32-unknown-unknown
+```
 
 
 ## Troubleshooting

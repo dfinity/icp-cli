@@ -14,12 +14,33 @@ In this tutorial, you'll deploy two canisters:
 
 ## Prerequisites
 
-Complete the **[Installation Guide](guides/installation.md)** first.
+**Required:** [Node.js](https://nodejs.org/) (LTS) for the installation commands below.
 
-Verify icp-cli is installed:
+> **Windows users:** This tutorial requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (for Motoko) and [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (for local networks). Install both first, then run all commands inside WSL.
+
+Install the required tools:
+
+```bash
+# icp-cli and ic-wasm (required)
+npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
+
+# Motoko toolchain (for Motoko projects)
+npm install -g ic-mops && mops toolchain init
+```
+
+This installs:
+- **icp-cli** — the core CLI for building and deploying canisters
+- **ic-wasm** — optimizes WebAssembly for the Internet Computer
+- **mops** — Motoko package manager, which also installs the Motoko compiler
+
+> **Alternative methods:** See the [Installation Guide](guides/installation.md) for shell script, Homebrew, Rust setup, or other options.
+
+Verify the tools are installed:
 
 ```bash
 icp --version
+ic-wasm --version
+mops --version
 ```
 
 ## Create a Project

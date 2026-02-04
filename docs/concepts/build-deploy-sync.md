@@ -136,7 +136,13 @@ The `icp deploy` command is a composite command that executes multiple steps in 
 
 1. **Build** — Compile all target canisters to WASM (always runs)
 2. **Create** — Create canisters on the network (only for canisters that don't exist yet)
-3. **Update Canister Environment Variables** — Apply the updated Canister Environment Variables. These include variables used by bindings allowing canister interactions.
+3. **Update Canister Environment Variables** — For each canister being deployed:
+   - Collects IDs of all canisters in the environment
+   - Creates `PUBLIC_CANISTER_ID:<name>` variables for each canister
+   - Merges with any custom `environment_variables` from settings
+   - Updates canister settings via the Management Canister
+
+   This step enables canisters to discover each other without hardcoding IDs. See [Canister Discovery](canister-discovery.md) for details.
 4. **Update Settings** — Apply canister settings (controllers, memory allocation, compute allocation, etc.)
 5. **Install** — Install WASM code into canisters (always runs)
 6. **Sync** — Run post-deployment steps like asset uploads (only if sync steps are configured)
@@ -209,5 +215,6 @@ icp sync
 ## Next Steps
 
 - [Local Development](../guides/local-development.md) — Apply this in practice
+- [Canister Discovery](canister-discovery.md) — How canisters discover each other
 
 [Browse all documentation →](../index.md)

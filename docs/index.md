@@ -29,6 +29,8 @@ Understand how icp-cli works:
 - [Build, Deploy, Sync](concepts/build-deploy-sync.md) — The deployment lifecycle
 - [Environments and Networks](concepts/environments.md) — Deployment targets explained
 - [Recipes](concepts/recipes.md) — Templated build configurations
+- [Canister Discovery](concepts/canister-discovery.md) — How canisters discover each other
+- [Binding Generation](concepts/binding-generation.md) — Type-safe canister interfaces
 
 ## Reference
 

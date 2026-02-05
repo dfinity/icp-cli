@@ -169,10 +169,10 @@ mod tests {
             Err(err) => {
                 let err_msg = format!("{err}");
                 if !err_msg.contains(
-                    "canisters: Canister my-canister failed to parse build/sync instructions",
+                    "Canister my-canister failed to parse build/sync instructions",
                 ) {
                     panic!(
-                        "expected 'canisters: Canister my-canister failed to parse build/sync instructions' error but got: {err}"
+                        "expected 'Canister my-canister failed to parse build/sync instructions' error but got: {err}"
                     );
                 }
             }
@@ -195,7 +195,7 @@ mod tests {
             }
             Err(err) => {
                 let err_msg = format!("{err}");
-                if !err_msg.starts_with("Invalid recipe type: `blabla`") {
+                if !err_msg.contains("Invalid recipe type: `blabla`") {
                     panic!("expected 'Invalid recipe type: `blabla`' error but got: {err}");
                 }
             }

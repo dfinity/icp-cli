@@ -168,9 +168,8 @@ mod tests {
             }
             Err(err) => {
                 let err_msg = format!("{err}");
-                if !err_msg.contains(
-                    "Canister my-canister failed to parse build/sync instructions",
-                ) {
+                if !err_msg.contains("Canister my-canister failed to parse build/sync instructions")
+                {
                     panic!(
                         "expected 'Canister my-canister failed to parse build/sync instructions' error but got: {err}"
                     );

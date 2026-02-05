@@ -155,6 +155,32 @@ mod tests {
 
     #[test]
     fn project_with_invalid_canister_should_fail() {
+        // This canister is invalid because
+        match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
+                canisters:
+                  - name: my-canister
+                    build:
+                      steps: []
+            "#})
+        {
+            Ok(_) => {
+                panic!("A project manifest with an invalid canister manifest should be invalid");
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains(
+                    "canisters: Canister my-canister failed to parse build/sync instructions",
+                ) {
+                    panic!(
+                        "expected 'canisters: Canister my-canister failed to parse build/sync instructions' error but got: {err}"
+                    );
+                }
+            }
+        };
+    }
+
+    #[test]
+    fn project_with_invalid_recipe_type_should_fail() {
         // Test that errors from nested deserialization are properly propagated
         // through the custom Item<T> deserializer
         match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"

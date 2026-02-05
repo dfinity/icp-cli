@@ -1,3 +1,4 @@
+use std::io::{IsTerminal, stderr};
 use std::time::Duration;
 
 use anyhow::bail;
@@ -83,7 +84,8 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
     // If --resume-watch is set, skip all validation and migration initiation
     if !args.resume_watch {
-        if !args.yes {
+        let can_confirm = stderr().is_terminal();
+        if !args.yes && can_confirm {
             ctx.term.write_line(&format!(
                 "This will migrate canister '{source_name}' ({source_cid}) to replace '{target_name}' ({target_cid})."
             ))?;
@@ -132,19 +134,25 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         }
 
         if !args.yes && cycles > WARN_CYCLES_THRESHOLD {
-            ctx.term.write_line(&format!(
-                "Warning: Canister '{source_name}' has more than 15T cycles ({cycles} cycles)."
-            ))?;
-            ctx.term
-                .write_line("The extra cycles will get burned during the migration.")?;
+            if can_confirm {
+                ctx.term.write_line(&format!(
+                    "Warning: Canister '{source_name}' has more than 15T cycles ({cycles} cycles)."
+                ))?;
+                ctx.term
+                    .write_line("The extra cycles will get burned during the migration.")?;
 
-            let confirmed = Confirm::new()
-                .with_prompt("Do you want to proceed?")
-                .default(false)
-                .interact()?;
+                let confirmed = Confirm::new()
+                    .with_prompt("Do you want to proceed?")
+                    .default(false)
+                    .interact()?;
 
-            if !confirmed {
-                bail!("Operation cancelled by user");
+                if !confirmed {
+                    bail!("Operation cancelled by user");
+                }
+            } else {
+                bail!(
+                    "Canister '{source_name}' has more than 15T cycles ({cycles} cycles). The extra cycles will get burned during the migration. Rerun with --yes to proceed anyway"
+                );
             }
         }
 

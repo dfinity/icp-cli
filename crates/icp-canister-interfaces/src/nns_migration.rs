@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize, Principal, Reserved};
+use candid::{CandidType, Deserialize, Principal};
 use std::fmt;
 
 /// The NNS migration canister ID.
@@ -18,29 +18,29 @@ pub struct MigrateCanisterArgs {
 /// Validation errors returned by the NNS migration canister.
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum ValidationError {
-    MigrationsDisabled(Reserved),
-    RateLimited(Reserved),
+    MigrationsDisabled,
+    RateLimited,
     ValidationInProgress { canister: Principal },
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
-    SameSubnet(Reserved),
+    SameSubnet,
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    MigratedCanisterNotStopped(Reserved),
-    MigratedCanisterNotReady(Reserved),
-    ReplacedCanisterNotStopped(Reserved),
-    ReplacedCanisterHasSnapshots(Reserved),
-    MigratedCanisterInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped,
+    MigratedCanisterNotReady,
+    ReplacedCanisterNotStopped,
+    ReplacedCanisterHasSnapshots,
+    MigratedCanisterInsufficientCycles,
     CallFailed { reason: String },
 }
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValidationError::MigrationsDisabled(_) => {
+            ValidationError::MigrationsDisabled => {
                 write!(f, "Canister migrations are disabled at the moment")
             }
-            ValidationError::RateLimited(_) => {
+            ValidationError::RateLimited => {
                 write!(
                     f,
                     "Canister migration has been rate-limited. Try again later"
@@ -61,7 +61,7 @@ impl fmt::Display for ValidationError {
             ValidationError::CanisterNotFound { canister } => {
                 write!(f, "The canister {canister} does not exist")
             }
-            ValidationError::SameSubnet(_) => {
+            ValidationError::SameSubnet => {
                 write!(f, "Both canisters are on the same subnet")
             }
             ValidationError::CallerNotController { canister } => {
@@ -76,22 +76,22 @@ impl fmt::Display for ValidationError {
                     "The NNS migration canister ({NNS_MIGRATION_PRINCIPAL}) is not a controller of canister {canister}"
                 )
             }
-            ValidationError::MigratedCanisterNotStopped(_) => {
+            ValidationError::MigratedCanisterNotStopped => {
                 write!(f, "The migrated canister is not stopped")
             }
-            ValidationError::MigratedCanisterNotReady(_) => {
+            ValidationError::MigratedCanisterNotReady => {
                 write!(
                     f,
                     "The migrated canister is not ready for migration. Try again later"
                 )
             }
-            ValidationError::ReplacedCanisterNotStopped(_) => {
+            ValidationError::ReplacedCanisterNotStopped => {
                 write!(f, "The replaced canister is not stopped")
             }
-            ValidationError::ReplacedCanisterHasSnapshots(_) => {
+            ValidationError::ReplacedCanisterHasSnapshots => {
                 write!(f, "The replaced canister has snapshots")
             }
-            ValidationError::MigratedCanisterInsufficientCycles(_) => {
+            ValidationError::MigratedCanisterInsufficientCycles => {
                 write!(
                     f,
                     "The migrated canister does not have enough cycles for migration. Top up with at least 10T cycles"

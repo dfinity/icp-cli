@@ -143,6 +143,8 @@ jobs:
       - name: Run ${{ matrix.test }}
         # the macos runners do not support Docker
         run: cargo test --test ${{ matrix.test }} -- ${{ contains(matrix.os, 'macos') && '--skip :docker:' || '' }}
+        env:
+          ICP_CLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   aggregate:
     name: test:required

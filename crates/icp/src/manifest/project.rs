@@ -155,12 +155,13 @@ mod tests {
 
     #[test]
     fn project_with_invalid_canister_should_fail() {
-        // This canister is invalid because
+        // Test that errors from nested deserialization are properly propagated
+        // through the custom Item<T> deserializer
         match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
                 canisters:
                   - name: my-canister
-                    build:
-                      steps: []
+                    recipe:
+                      type: blabla
             "#})
         {
             Ok(_) => {
@@ -168,10 +169,8 @@ mod tests {
             }
             Err(err) => {
                 let err_msg = format!("{err}");
-                if !err_msg.contains("data did not match any variant of untagged enum Item") {
-                    panic!(
-                        "expected 'data did not match any variant of untagged enum Item' error but got: {err}"
-                    );
+                if !err_msg.starts_with("Invalid recipe type: `blabla`") {
+                    panic!("expected 'Invalid recipe type: `blabla`' error but got: {err}");
                 }
             }
         };

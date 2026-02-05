@@ -8,26 +8,23 @@ The `assets` recipe type provides a streamlined way to deploy static websites an
 
 ## Configuration
 
-The [`icp.yaml`](./icp.yaml) file configures a canister using the built-in `assets` recipe:
+The [`icp.yaml`](./icp.yaml) file configures a canister using the `@dfinity/asset-canister` recipe:
 
 ```yaml
-canister:
-  name: my-canister
-  recipe:
-    type: assets
-    configuration:
-      # assets canister version (default is 0.27.0)
-      version: 0.27.0
-
-      # assets directory (default is www)
-      dir: www
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/asset-canister"
+      configuration:
+        version: 0.29.2
+        dir: www
 ```
 
 ### Key Components
 
-- **`type: assets`**: Uses the built-in assets recipe type
-- **`version`**: Specifies the assets canister version to use (defaults to 0.27.0)
-- **`dir`**: Directory containing static assets to deploy (defaults to `www`)
+- **`type: "@dfinity/asset-canister"`**: Uses the official DFINITY asset canister recipe
+- **`version`**: Specifies the assets canister version to use (optional, defaults to latest)
+- **`dir`**: Directory containing static assets to deploy (required)
 
 ## Assets Directory
 

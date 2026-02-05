@@ -121,7 +121,7 @@ These variables are stored in canister settings and accessible to canister code 
 
 #### `PUBLIC_CANISTER_ID:<canister-name>`
 
-During deployment, icp-cli automatically creates environment variables containing the canister IDs of all canisters in the current environment.
+During deployment, icp-cli automatically creates canister environment variables containing the canister IDs of all canisters in the current environment.
 
 | Property | Value |
 |----------|-------|
@@ -175,7 +175,7 @@ See [Canister Discovery](../concepts/canister-discovery.md) for detailed usage p
 
 ### Custom Variables
 
-Define custom runtime variables in canister settings:
+Define custom canister environment variables in canister settings:
 
 ```yaml
 canisters:

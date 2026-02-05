@@ -20,7 +20,7 @@ Hardcoding IDs creates problems:
 
 ## Automatic Canister ID Injection
 
-icp-cli solves this by automatically injecting canister IDs as environment variables during deployment.
+icp-cli solves this by automatically injecting canister IDs as [canister environment variables](../reference/environment-variables.md#canister-runtime-environment-variables) during deployment.
 
 ### How It Works
 
@@ -31,6 +31,8 @@ During `icp deploy`, icp-cli automatically:
 3. Injects **all** these variables into **every** canister in the environment
 
 This means each canister receives the IDs of all other canisters, enabling any canister to call any other canister without hardcoding IDs.
+
+> **Note:** Variables are only updated for the canisters being deployed. If you deploy a single canister (`icp deploy backend`), only that canister receives updated variables. When adding new canisters to an existing project, run `icp deploy` without arguments to update all canisters with the complete set of IDs.
 
 ### Variable Format
 
@@ -90,7 +92,7 @@ For local development with a dev server, see the [Local Development Guide](../gu
 
 Since all canisters receive `PUBLIC_CANISTER_ID:*` variables for every canister in the environment, backend canisters can discover each other's IDs at runtime.
 
-### Reading Environment Variables
+### Reading Canister Environment Variables
 
 **Rust** canisters can read the injected canister IDs using [`ic_cdk::api::env_var_value`](https://docs.rs/ic-cdk/latest/ic_cdk/api/fn.env_var_value.html):
 
@@ -102,31 +104,37 @@ let backend_id = Principal::from_text(
 ).unwrap();
 ```
 
-**Motoko** does not currently have native support for reading canister environment variables. Use init arguments instead — pass canister IDs when initializing the canister:
+**Motoko** canisters can read canister environment variables using `Prim.envVar` (since Motoko 0.16.2):
 
 ```motoko
-actor class MyCanister(backend_id : Principal) {
-    // Use backend_id for inter-canister calls
+import Prim "mo:⛔";
+import Principal "mo:core/Principal";
+
+let ?backendIdText = Prim.envVar<system>("PUBLIC_CANISTER_ID:backend") else {
+    return #err("backend canister ID not set");
 };
+let backendId = Principal.fromText(backendIdText);
 ```
+
+> **Note:** `Prim` is an internal module not intended for general use. This functionality will be available in the Motoko core package in a future release.
 
 ### Making Inter-Canister Calls
 
 Once you have the target canister ID, make calls using your language's CDK:
 
-- **Rust**: [`ic_cdk::call`](https://docs.rs/ic-cdk) API
-- **Motoko**: [Actor imports](https://docs.internetcomputer.org/motoko/home)
+- **Rust**: [`ic_cdk::call`](https://docs.rs/ic-cdk/latest/ic_cdk/call/index.html) API
+- **Motoko**: [Inter-canister calls](https://docs.internetcomputer.org/motoko/fundamentals/actors/messaging#inter-canister-calls)
 
 ### Alternative Patterns
 
-Beyond environment variables (Rust) or when environment variables aren't available (Motoko):
+If you prefer not to use canister environment variables:
 
 1. **Init arguments** — Pass canister IDs as initialization parameters
 2. **Configuration** — Store IDs in canister state during setup
 
-## Custom Environment Variables
+## Custom Canister Environment Variables
 
-Beyond automatic `PUBLIC_CANISTER_ID:*` variables, you can define custom ones in `icp.yaml`. See the [Environment Variables Reference](../reference/environment-variables.md#custom-variables) for configuration syntax.
+Beyond automatic `PUBLIC_CANISTER_ID:*` variables, you can define custom canister environment variables in `icp.yaml`. See the [Environment Variables Reference](../reference/environment-variables.md#custom-variables) for configuration syntax.
 
 ## Troubleshooting
 
@@ -139,9 +147,9 @@ icp canister list  # Check what's deployed
 icp deploy         # Deploy all canisters
 ```
 
-### Environment variables not available
+### Canister environment variables not available
 
-Environment variables are set automatically during `icp deploy`. If you're using `icp canister install` directly, variables won't be set. Use `icp deploy` instead.
+Canister environment variables are set automatically during `icp deploy`. If you're using `icp canister install` directly, variables won't be set. Use `icp deploy` instead.
 
 ### Wrong canister ID in different environment
 

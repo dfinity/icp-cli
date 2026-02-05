@@ -157,7 +157,7 @@ The `icp deploy` command is a composite command that executes multiple steps in 
 
 **Subsequent deployments:**
 - Skip the canister creation
-- Settings and Environment Variables are applied if they've changed.
+- Settings and Canister Environment Variables are applied if they've changed.
 - WASM code is upgraded, preserving canister state
 
 Unlike `icp canister create` (which prints "already exists" and exits), `icp deploy` silently skips creation for existing canisters and continues with the remaining steps.

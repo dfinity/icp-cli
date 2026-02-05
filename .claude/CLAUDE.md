@@ -186,7 +186,38 @@ Tests are split between unit tests (in modules) and integration tests:
 - `MockProjectLoader::complex()`: Multiple canisters, networks, environments
 - `NoProjectLoader`: Simulates missing project for error cases
 
+### Integration Test Patterns
+
+Integration tests in `crates/icp-cli/tests/` use `TestContext` from `common/context.rs`:
+
+```rust
+let ctx = TestContext::new();
+ctx.icp().args(["network", "start"]).assert().success();
+```
+
+For tests that share resources (network ports), use `serial_test::file_serial`:
+
+```rust
+#[test]
+#[file_serial(network)]
+fn test_network_start() { ... }
+```
+
+Tests can be tagged for filtering with `#[tag(docker)]` for Docker-specific tests.
+
 ## Important Constraints
+
+### Conventional Commits
+
+Pull request titles must follow the conventional commits format:
+
+```
+verb(scope): description
+```
+
+Examples: `feat(cli): add new deploy flag`, `fix(network): handle timeout errors`, `docs(guides): update installation steps`
+
+Breaking changes use `!`: `feat(manifest)!: rename field`
 
 ### Rust Edition & Toolchain
 
@@ -222,12 +253,47 @@ Documentation follows the Diátaxis framework:
 - `docs/reference/` — Information-oriented technical specifications
 - `docs/migration/` — Migration guides (e.g., from dfx)
 
+### Documentation Guidelines
+
+- Use "canister environment variables" (not just "environment variables") when referring to runtime variables stored in canister settings — this distinguishes them from shell/build environment variables
+- Verify code examples and CLI commands work before committing; explain non-obvious flags
+- Link to anchors on other pages rather than duplicating content (e.g., `[Custom Variables](../reference/environment-variables.md#custom-variables)`)
+- Link to external tools rather than duplicating their documentation
+
+### Documentation Links
+
+Source documentation in `docs/` must work in two contexts:
+
+1. **GitHub**: Renders Markdown directly with `.md` extensions
+2. **Starlight docs site**: `scripts/prepare-docs.sh` transforms links to clean URLs
+
+**Link format rules:**
+
+- Always use relative paths with `.md` extensions: `[Link](../concepts/file.md)`
+- Anchors go after the extension: `[Link](../concepts/file.md#section-name)`
+- Never use absolute paths or URLs for internal docs links
+
+**Cross-reference examples:**
+
+```markdown
+# From docs/guides/local-development.md:
+[Canister Discovery](../concepts/canister-discovery.md)
+[Custom Variables](../reference/environment-variables.md#custom-variables)
+
+# From docs/concepts/canister-discovery.md:
+[same-directory link](binding-generation.md)
+[root-level link](../tutorial.md)
+```
+
+The `prepare-docs.sh` script handles the transformation to Starlight's URL structure. If you add new link patterns, verify they work by building the docs site locally with `cd docs-site && npm run build`.
+
 ### Paths
 
 All paths are UTF-8. `PathBuf` and `Path` are the types from `camino`.
 
 - You do not need to add `.display()` to use them in format strings
 - Do not import `Path` or `PathBuf` from `std`; if those names are not available, glob-import `icp::prelude::*` (or `crate::prelude::*` if in `icp`).
+- This is enforced by `clippy.toml` — using `std::path` types will fail linting
 
 ### Error handling
 
@@ -247,3 +313,15 @@ The `examples/` directory contains working project templates demonstrating:
 - `icp-pre-built/`: Using prebuilt WASM files
 
 These serve as integration tests and documentation for users and must be kept up to date.
+
+### Example Validation
+
+Examples are validated by `scripts/validate-examples.sh` and CI. Each example can have an optional `test.sh` script; otherwise validation runs `icp project show`. When modifying examples, run validation locally:
+
+```bash
+./scripts/validate-examples.sh
+```
+
+## Maintaining This File
+
+When the user corrects Claude's output with project-specific guidance (wrong APIs, incorrect terminology, outdated conventions), Claude should proactively offer to add that guidance to this file. This helps prevent the same mistakes in future conversations.

@@ -1,12 +1,10 @@
 # Binding Generation
 
-How to generate type-safe client code for calling canisters.
+Understanding and using type-safe client code for calling canisters.
 
 ## What Are Bindings?
 
 Bindings are generated code that provides type-safe access to canister methods. They're created from Candid interface files (`.did`), which define a canister's public API.
-
-icp-cli focuses on deployment — use these dedicated tools to generate bindings:
 
 ## Candid Interface Files
 
@@ -20,15 +18,19 @@ For Candid syntax and best practices, see the [Candid specification](https://git
 
 ## Generating Client Bindings
 
+icp-cli focuses on deployment — use these dedicated tools to generate bindings:
+
 | Language | Tool | Documentation |
 |----------|------|---------------|
-| TypeScript/JavaScript | `@icp-sdk/bindgen` | [npmjs.com/@icp-sdk/bindgen](https://www.npmjs.com/package/@icp-sdk/bindgen) |
+| TypeScript/JavaScript | `@icp-sdk/bindgen` | [js.icp.build/bindgen](https://js.icp.build/bindgen) |
 | Rust | `candid` crate | [docs.rs/candid](https://docs.rs/candid) |
 | Other languages | `didc` CLI | [github.com/dfinity/candid](https://github.com/dfinity/candid) |
 
+> **Note:** Generated bindings typically hardcode a canister ID or require one at initialization. With icp-cli, canister IDs differ between environments. You can look up IDs with `icp canister status <name> -i`, or read them from canister environment variables at runtime. See [Canister Discovery](canister-discovery.md) for details.
+
 ### TypeScript/JavaScript
 
-Use `@icp-sdk/bindgen` to generate TypeScript bindings from Candid files. See the [@icp-sdk/bindgen documentation](https://www.npmjs.com/package/@icp-sdk/bindgen) for usage and build tool integration.
+Use `@icp-sdk/bindgen` to generate TypeScript bindings from Candid files. See the [@icp-sdk/bindgen documentation](https://js.icp.build/bindgen) for usage and build tool integration.
 
 ### Rust
 

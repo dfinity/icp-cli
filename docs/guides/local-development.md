@@ -127,7 +127,7 @@ When a frontend calls a backend canister, it needs two things:
 
 Asset canisters solve this automatically via a cookie named `ic_env`:
 
-1. During `icp deploy`, canister IDs are injected as `PUBLIC_CANISTER_ID:*` environment variables
+1. During `icp deploy`, canister IDs are injected as `PUBLIC_CANISTER_ID:*` canister environment variables
 2. The asset canister serves these variables plus the network's root key via the `ic_env` cookie
 3. Your frontend reads the cookie using `@icp-sdk/core` to get canister IDs and root key
 

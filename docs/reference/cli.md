@@ -13,6 +13,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister install`↴](#icp-canister-install)
 * [`icp canister list`↴](#icp-canister-list)
 * [`icp canister metadata`↴](#icp-canister-metadata)
+* [`icp canister migrate-id`↴](#icp-canister-migrate-id)
 * [`icp canister settings`↴](#icp-canister-settings)
 * [`icp canister settings show`↴](#icp-canister-settings-show)
 * [`icp canister settings update`↴](#icp-canister-settings-update)
@@ -120,6 +121,7 @@ Perform canister operations against a network
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
 * `metadata` — Read a metadata section from a canister
+* `migrate-id` — Migrate a canister ID from one subnet to another
 * `settings` — Commands to manage canister settings
 * `snapshot` — Commands to manage canister snapshots
 * `start` — Start a canister on a network
@@ -271,6 +273,28 @@ Read a metadata section from a canister
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp canister migrate-id`
+
+Migrate a canister ID from one subnet to another
+
+**Usage:** `icp canister migrate-id [OPTIONS] --replace <REPLACE> <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--replace <REPLACE>` — The canister to replace with the source canister's ID
+* `-y`, `--yes` — Skip confirmation prompts
+* `--resume-watch` — Resume watching an already-initiated migration (skips validation and initiation)
+* `--skip-watch` — Exit as soon as the migrated canister is deleted (don't wait for full completion)
 
 
 

@@ -1,6 +1,7 @@
+use std::marker::PhantomData;
+
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use snafu::prelude::*;
 
 use crate::fs;
@@ -40,27 +41,47 @@ pub enum Item<T> {
 
 impl<'de, T> Deserialize<'de> for Item<T>
 where
-    T: DeserializeOwned,
+    T: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::Error;
+        use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
+        use std::fmt;
 
-        // Deserialize into a generic YAML value first
-        let value = serde_yaml::Value::deserialize(deserializer)?;
+        struct ItemVisitor<T>(PhantomData<T>);
 
-        // If it's a string, treat it as a path
-        if let serde_yaml::Value::String(s) = &value {
-            return Ok(Item::Path(s.clone()));
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ItemVisitor<T> {
+            type Value = Item<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string path or a manifest object")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Item::Path(v.to_owned()))
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Item::Path(v))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                T::deserialize(MapAccessDeserializer::new(map)).map(Item::Manifest)
+            }
         }
 
-        // Otherwise, try to deserialize as the manifest type T
-        // This will propagate the actual error message
-        serde_yaml::from_value::<T>(value)
-            .map(Item::Manifest)
-            .map_err(|e| Error::custom(e.to_string()))
+        deserializer.deserialize_any(ItemVisitor(PhantomData))
     }
 }
 

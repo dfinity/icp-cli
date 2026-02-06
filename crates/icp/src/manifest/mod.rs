@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use snafu::prelude::*;
 
 use crate::fs;
@@ -27,7 +28,7 @@ pub const CANISTER_MANIFEST: &str = "canister.yaml";
 // - CanisterManifest: path or glob pattern to the directory containing "canister.yaml"
 // - NetworkManifest: path to network manifest
 // - EnvironmentManifest: path to environment manifest
-#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {
     /// Path to a manifest
@@ -35,6 +36,32 @@ pub enum Item<T> {
 
     /// The manifest
     Manifest(T),
+}
+
+impl<'de, T> Deserialize<'de> for Item<T>
+where
+    T: DeserializeOwned,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        // Deserialize into a generic YAML value first
+        let value = serde_yaml::Value::deserialize(deserializer)?;
+
+        // If it's a string, treat it as a path
+        if let serde_yaml::Value::String(s) = &value {
+            return Ok(Item::Path(s.clone()));
+        }
+
+        // Otherwise, try to deserialize as the manifest type T
+        // This will propagate the actual error message
+        serde_yaml::from_value::<T>(value)
+            .map(Item::Manifest)
+            .map_err(|e| Error::custom(e.to_string()))
+    }
 }
 
 #[derive(Debug, Snafu)]

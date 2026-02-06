@@ -11,6 +11,7 @@ pub(crate) mod network;
 pub(crate) mod new;
 pub(crate) mod parsers;
 pub(crate) mod project;
+pub(crate) mod settings;
 pub(crate) mod sync;
 pub(crate) mod token;
 
@@ -53,6 +54,9 @@ pub(crate) enum Command {
     /// Display information about the current project
     #[command(subcommand)]
     Project(project::Command),
+
+    /// Configure user settings
+    Settings(settings::SettingsArgs),
 
     /// Synchronize canisters
     Sync(sync::SyncArgs),

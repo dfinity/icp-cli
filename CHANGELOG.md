@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: `icp settings autocontainerize true`, always use a docker container for all networks
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets
 
 # v0.1.0

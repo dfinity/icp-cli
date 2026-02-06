@@ -113,7 +113,98 @@ $env:ICP_CLI_BASH_PATH = "C:\Program Files\Git\bin\bash.exe"
 - Git Bash: `C:\Program Files\Git\bin\bash.exe`
 - MSYS2: `C:\msys64\usr\bin\bash.exe`
 
+## Canister Runtime Environment Variables
+
+These variables are stored in canister settings and accessible to canister code at runtime. They are distinct from the build-time and CLI configuration variables above.
+
+### Automatic Variables
+
+#### `PUBLIC_CANISTER_ID:<canister-name>`
+
+During deployment, icp-cli automatically creates canister environment variables containing the canister IDs of all canisters in the current environment.
+
+| Property | Value |
+|----------|-------|
+| Format | `PUBLIC_CANISTER_ID:<name>` |
+| Value | Canister principal (text) |
+| When Set | Automatically during `icp deploy` |
+
+**Example:**
+
+For an environment with canisters `backend` and `frontend`:
+
+```
+PUBLIC_CANISTER_ID:backend  = bkyz2-fmaaa-aaaaa-qaaaq-cai
+PUBLIC_CANISTER_ID:frontend = bd3sg-teaaa-aaaaa-qaaba-cai
+```
+
+**Purpose:** Enables canisters to discover other canisters in the same environment without hardcoding IDs. This is especially important for:
+
+- Frontend canisters calling backend canisters
+- Multi-canister architectures with service dependencies
+- Environment-agnostic deployments (same code works in local, staging, production)
+
+#### `IC_ROOT_KEY`
+
+The asset canister automatically includes the network's root key in the `ic_env` cookie. This is **not** set by icp-cli during deployment — the asset canister provides it directly based on the network it's running on.
+
+| Property | Value |
+|----------|-------|
+| Cookie key | `ic_root_key` (lowercase) |
+| Cookie value | Hex-encoded root key |
+| When Set | By the asset canister at request time |
+
+**Purpose:** The root key is required by the IC agent to verify response signatures. By providing it via the cookie, frontends work consistently across local networks and mainnet without code changes.
+
+**How frontends access these:** Use `@icp-sdk/core/agent/canister-env` to read the `ic_env` cookie. The library parses the hex-encoded root key and returns it as `Uint8Array`:
+
+```typescript
+import { getCanisterEnv } from "@icp-sdk/core/agent/canister-env";
+
+interface CanisterEnv {
+  "PUBLIC_CANISTER_ID:backend": string;
+  IC_ROOT_KEY: Uint8Array;  // Converted from hex by the library
+}
+
+const env = getCanisterEnv<CanisterEnv>();
+const backendId = env["PUBLIC_CANISTER_ID:backend"];
+const rootKey = env.IC_ROOT_KEY;  // Ready for agent's rootKey option
+```
+
+See [Canister Discovery](../concepts/canister-discovery.md) for detailed usage patterns.
+
+### Custom Variables
+
+Define custom canister environment variables in canister settings:
+
+```yaml
+canisters:
+  - name: backend
+    settings:
+      environment_variables:
+        API_ENDPOINT: "https://api.example.com"
+        DEBUG: "false"
+```
+
+Override per environment:
+
+```yaml
+environments:
+  - name: production
+    network: ic
+    canisters: [backend]
+    settings:
+      backend:
+        environment_variables:
+          API_ENDPOINT: "https://api.prod.example.com"
+```
+
+See [Canister Settings Reference](canister-settings.md#environment_variables) for full configuration options.
+
 ## See Also
 
+- [Canister Discovery](../concepts/canister-discovery.md) — How canisters discover each other
+- [Local Development](../guides/local-development.md#frontend-development) — Frontend development workflow
+- [Canister Settings Reference](canister-settings.md) — Full settings documentation
 - [Managing Identities](../guides/managing-identities.md) — Identity storage paths and directory contents
 - [Project Model](../concepts/project-model.md) — Project directory structure (`.icp/`) and what's safe to delete

@@ -3,24 +3,19 @@ import { createActor } from "./backend/api/hello_world";
 import { getCanisterEnv } from "@icp-sdk/core/agent/canister-env";
 import "./App.css";
 
-// Here we define the environment variables that the asset canister serves.
-// By default, the CLI sets all the canister IDs in the environment variables of the asset canister
-// using the `PUBLIC_CANISTER_ID:<canister-name>` format.
-// For this reason, we can expect the `PUBLIC_CANISTER_ID:backend` environment variable to be set.
+// The ic_env cookie provides canister IDs and root key.
+// Set by the asset canister (production) or dev server (development).
+// See: https://github.com/dfinity/icp-cli/blob/main/docs/concepts/canister-discovery.md
 interface CanisterEnv {
   readonly "PUBLIC_CANISTER_ID:backend": string;
+  readonly IC_ROOT_KEY: Uint8Array; // Parsed from hex by the library
 }
 
-// We only want to access the environment variables when serving the frontend from the asset canister.
-// In development mode, we use a fixed canister ID for the backend canister.
 const canisterEnv = getCanisterEnv<CanisterEnv>();
-const canisterId = canisterEnv["PUBLIC_CANISTER_ID:backend"];
 
-// We want to fetch the root key from the replica when developing locally.
-const helloWorldActor = createActor(canisterId, {
+const helloWorldActor = createActor(canisterEnv["PUBLIC_CANISTER_ID:backend"], {
   agentOptions: {
-    rootKey: !import.meta.env.DEV ? canisterEnv!.IC_ROOT_KEY : undefined,
-    shouldFetchRootKey: import.meta.env.DEV,
+    rootKey: canisterEnv.IC_ROOT_KEY,
   },
 });
 

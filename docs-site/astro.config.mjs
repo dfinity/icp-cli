@@ -82,6 +82,8 @@ export default defineConfig({
             { label: 'Project Model', slug: 'concepts/project-model' },
             { label: 'Build, Deploy, Sync', slug: 'concepts/build-deploy-sync' },
             { label: 'Environments and Networks', slug: 'concepts/environments' },
+            { label: 'Canister Discovery', slug: 'concepts/canister-discovery' },
+            { label: 'Binding Generation', slug: 'concepts/binding-generation' },
             { label: 'Recipes', slug: 'concepts/recipes' },
           ],
         },

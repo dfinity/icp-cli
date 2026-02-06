@@ -80,7 +80,6 @@ pub struct Managed {
 #[serde(untagged)]
 pub enum ManagedMode {
     Image(Box<ManagedImageConfig>),
-    Compose(Box<ManagedComposeConfig>),
     Launcher(Box<ManagedLauncherConfig>),
 }
 
@@ -91,19 +90,8 @@ pub struct ManagedLauncherConfig {
     pub ii: bool,
     pub nns: bool,
     pub subnets: Option<Vec<SubnetKind>>,
-}
-
-/// Configuration for Docker Compose managed networks
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct ManagedComposeConfig {
-    /// Path to the docker-compose.yml file (relative to project root)
-    #[schemars(with = "String")]
-    pub file: PathBuf,
-    /// Name of the service that runs the IC gateway
-    pub gateway_service: String,
-    /// Additional environment variables to pass to docker compose
-    pub environment: Vec<String>,
+    pub bitcoind_addr: Option<Vec<String>>,
+    pub dogecoind_addr: Option<Vec<String>>,
 }
 
 #[derive(
@@ -142,6 +130,8 @@ impl ManagedMode {
             ii: false,
             nns: false,
             subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
         }))
     }
 }
@@ -160,6 +150,12 @@ pub struct ManagedImageConfig {
     pub shm_size: Option<i64>,
     pub status_dir: String,
     pub mounts: Vec<String>,
+    pub artificial_delay_ms: Option<u64>,
+    pub ii: bool,
+    pub nns: bool,
+    pub subnets: Option<Vec<SubnetKind>>,
+    pub bitcoind_addr: Option<Vec<String>>,
+    pub dogecoind_addr: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -229,6 +225,8 @@ impl From<Mode> for Configuration {
                     ii,
                     nns,
                     subnets,
+                    bitcoind_addr,
+                    dogecoind_addr,
                 } => {
                     let gateway: Gateway = match gateway {
                         Some(g) => g.into(),
@@ -242,6 +240,8 @@ impl From<Mode> for Configuration {
                                 ii: ii.unwrap_or(false),
                                 nns: nns.unwrap_or(false),
                                 subnets,
+                                bitcoind_addr,
+                                dogecoind_addr,
                             })),
                         },
                     }
@@ -259,6 +259,12 @@ impl From<Mode> for Configuration {
                     shm_size,
                     status_dir,
                     mounts: mount,
+                    artificial_delay_ms,
+                    ii,
+                    nns,
+                    subnets,
+                    bitcoind_addr,
+                    dogecoind_addr,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image(Box::new(ManagedImageConfig {
@@ -274,20 +280,15 @@ impl From<Mode> for Configuration {
                             shm_size,
                             status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
                             mounts: mount.unwrap_or_default(),
+                            artificial_delay_ms,
+                            ii: ii.unwrap_or(false),
+                            nns: nns.unwrap_or(false),
+                            subnets,
+                            bitcoind_addr,
+                            dogecoind_addr,
                         })),
                     },
                 },
-                crate::manifest::network::ManagedMode::Compose { compose } => {
-                    Configuration::Managed {
-                        managed: Managed {
-                            mode: ManagedMode::Compose(Box::new(ManagedComposeConfig {
-                                file: PathBuf::from(&compose.file),
-                                gateway_service: compose.gateway_service,
-                                environment: compose.environment,
-                            })),
-                        },
-                    }
-                }
             },
             Mode::Connected(connected) => Configuration::Connected {
                 connected: connected.into(),
@@ -400,5 +401,104 @@ impl Access for MockNetworkAccessor {
                     network: network.name.clone(),
                 },
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::network::{
+        Gateway as ManifestGateway, Managed as ManifestManaged, ManagedMode as ManifestManagedMode,
+        Mode,
+    };
+
+    #[test]
+    fn from_mode_image_with_launcher_settings() {
+        let mode = Mode::Managed(ManifestManaged {
+            mode: Box::new(ManifestManagedMode::Image {
+                image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
+                port_mapping: vec!["8000:4943".to_string()],
+                rm_on_exit: None,
+                args: None,
+                entrypoint: None,
+                environment: None,
+                volumes: None,
+                platform: None,
+                user: None,
+                shm_size: None,
+                status_dir: None,
+                mounts: None,
+                artificial_delay_ms: Some(50),
+                ii: Some(true),
+                nns: None,
+                subnets: None,
+                bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+                dogecoind_addr: Some(vec!["127.0.0.1:22556".to_string()]),
+            }),
+        });
+
+        let config: Configuration = mode.into();
+        match config {
+            Configuration::Managed {
+                managed:
+                    Managed {
+                        mode: ManagedMode::Image(image_config),
+                    },
+            } => {
+                assert_eq!(
+                    image_config.image,
+                    "ghcr.io/dfinity/icp-cli-network-launcher"
+                );
+                assert!(image_config.ii);
+                assert!(!image_config.nns); // defaults to false
+                assert_eq!(image_config.artificial_delay_ms, Some(50));
+                assert_eq!(
+                    image_config.bitcoind_addr,
+                    Some(vec!["127.0.0.1:18444".to_string()])
+                );
+                assert_eq!(
+                    image_config.dogecoind_addr,
+                    Some(vec!["127.0.0.1:22556".to_string()])
+                );
+            }
+            _ => panic!("expected ManagedMode::Image"),
+        }
+    }
+
+    #[test]
+    fn from_mode_launcher_with_bitcoind_addr() {
+        let mode = Mode::Managed(ManifestManaged {
+            mode: Box::new(ManifestManagedMode::Launcher {
+                gateway: Some(ManifestGateway {
+                    host: None,
+                    port: Some(8000),
+                }),
+                artificial_delay_ms: None,
+                ii: None,
+                nns: None,
+                subnets: None,
+                bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+                dogecoind_addr: None,
+            }),
+        });
+
+        let config: Configuration = mode.into();
+        match config {
+            Configuration::Managed {
+                managed:
+                    Managed {
+                        mode: ManagedMode::Launcher(launcher_config),
+                    },
+            } => {
+                assert_eq!(
+                    launcher_config.bitcoind_addr,
+                    Some(vec!["127.0.0.1:18444".to_string()])
+                );
+                assert_eq!(launcher_config.dogecoind_addr, None);
+                assert!(!launcher_config.ii);
+                assert!(!launcher_config.nns);
+            }
+            _ => panic!("expected ManagedMode::Launcher"),
+        }
     }
 }

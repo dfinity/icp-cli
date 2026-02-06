@@ -203,10 +203,14 @@ networks:
 | `mode` | string | Yes | `managed` |
 | `gateway.host` | string | No | Host address (default: localhost) |
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
-| `artificial_delay_ms` | integer | No | Artificial delay to add to every update call (ms) |
+| `artificial-delay-ms` | integer | No | Artificial delay to add to every update call (ms) |
 | `ii` | boolean | No | Set up Internet Identity canister (default: false) |
 | `nns` | boolean | No | Set up NNS canisters (default: false) |
 | `subnets` | array | No | Configure subnet types (default: one application subnet) |
+| `bitcoind-addr` | array | No | Bitcoin P2P node addresses to connect to (e.g. `127.0.0.1:18444`) |
+| `dogecoind-addr` | array | No | Dogecoin P2P node addresses to connect to |
+
+**Note:** The settings `artificial-delay-ms`, `ii`, `nns`, `subnets`, `bitcoind-addr`, and `dogecoind-addr` also work with [Docker image mode](#docker-network). When using Docker, `bitcoind-addr` and `dogecoind-addr` addresses referencing `127.0.0.1` or `localhost` are automatically translated to `host.docker.internal`.
 
 #### Subnet Configuration
 
@@ -225,6 +229,45 @@ networks:
 Available subnet types: `application`, `system`, `verified-application`, `bitcoin`, `fiduciary`, `nns`, `sns`
 
 **Note:** Subnet type support depends on the network launcher version. The `application` type is commonly used for testing.
+
+#### Bitcoin and Dogecoin Integration
+
+Connect the local network to a Bitcoin or Dogecoin node for testing chain integration:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+```
+
+The `bitcoind-addr` field specifies the P2P address (not RPC) of the Bitcoin node. The network launcher will connect to the node and enable Bitcoin integration on the local network. Multiple addresses can be specified.
+
+Dogecoin integration works the same way via `dogecoind-addr`:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    dogecoind-addr:
+      - "127.0.0.1:22556"
+```
+
+Both can be configured simultaneously.
+
+**Note:** When `bitcoind-addr` or `dogecoind-addr` is configured, the network launcher automatically adds a bitcoin subnet. If you also explicitly specify `subnets`, you must include `application` to keep the default application subnet:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+    subnets:
+      - application
+      - system
+```
 
 ### Connected Network
 
@@ -254,32 +297,23 @@ networks:
       - "0:4943"
 ```
 
-See [Containerized Networks](../guides/containerized-networks.md) for full options.
-
-### Docker Compose Network
-
-For multi-container setups (like Bitcoin integration):
+Docker networks support all the same launcher settings as native managed networks (`ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`). These are translated into the appropriate container command arguments automatically:
 
 ```yaml
 networks:
-  - name: local
+  - name: docker-local
     mode: managed
-    compose:
-      file: docker-compose.yml
-      gateway-service: icp-network
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    ii: true
+    bitcoind-addr:
+      - "127.0.0.1:18444"
 ```
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `file` | string | Yes | Path to docker-compose.yml (relative to project root) |
-| `gateway-service` | string | Yes | Name of the service running the IC gateway |
-| `environment` | array | No | Additional environment variables for docker compose |
+**Docker networking:** When `bitcoind-addr` or `dogecoind-addr` addresses reference `127.0.0.1`, `localhost`, or `::1`, they are automatically translated to `host.docker.internal` so the container can reach services on the host. On Linux, `host.docker.internal:host-gateway` is added to ensure compatibility.
 
-The compose file must:
-- Have the gateway service mount `${ICP_STATUS_DIR}` to its status directory (default `/app/status`)
-- Write a status file when the network is ready
-
-See [Docker Compose Networks](../guides/containerized-networks.md#docker-compose-networks) for examples.
+See [Containerized Networks](../guides/containerized-networks.md) for full options.
 
 ## Environments
 

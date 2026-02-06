@@ -214,32 +214,6 @@
       ],
       "type": "object"
     },
-    "ComposeConfig": {
-      "description": "Docker Compose network configuration",
-      "properties": {
-        "environment": {
-          "default": [],
-          "description": "Additional environment variables to pass to docker compose",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "file": {
-          "description": "Path to the docker-compose.yml file (relative to project root)",
-          "type": "string"
-        },
-        "gateway-service": {
-          "description": "Name of the service that runs the IC gateway",
-          "type": "string"
-        }
-      },
-      "required": [
-        "file",
-        "gateway-service"
-      ],
-      "type": "object"
-    },
     "Connected": {
       "properties": {
         "root-key": {
@@ -421,6 +395,35 @@
                 "null"
               ]
             },
+            "artificial-delay-ms": {
+              "description": "Artificial delay to add to every update call",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "bitcoind-addr": {
+              "description": "Bitcoin P2P node addresses to connect to (e.g. \"127.0.0.1:18444\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "dogecoind-addr": {
+              "description": "Dogecoin P2P node addresses to connect to",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "entrypoint": {
               "description": "Entrypoint to use for the container",
               "items": {
@@ -441,6 +444,13 @@
                 "null"
               ]
             },
+            "ii": {
+              "description": "Set up the Internet Identity canister",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "image": {
               "description": "The docker image to use for the network",
               "type": "string"
@@ -452,6 +462,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "nns": {
+              "description": "Set up the NNS",
+              "type": [
+                "boolean",
                 "null"
               ]
             },
@@ -491,6 +508,16 @@
                 "null"
               ]
             },
+            "subnets": {
+              "description": "Configure the list of subnets (one application subnet by default)",
+              "items": {
+                "$ref": "#/$defs/SubnetKind"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "user": {
               "description": "The user to run the container as in the format user[:group]",
               "type": [
@@ -517,24 +544,32 @@
         },
         {
           "properties": {
-            "compose": {
-              "$ref": "#/$defs/ComposeConfig",
-              "description": "Docker Compose configuration"
-            }
-          },
-          "required": [
-            "compose"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
             "artificial-delay-ms": {
               "description": "Artificial delay to add to every update call",
               "format": "uint64",
               "minimum": 0,
               "type": [
                 "integer",
+                "null"
+              ]
+            },
+            "bitcoind-addr": {
+              "description": "Bitcoin P2P node addresses to connect to (e.g. \"127.0.0.1:18444\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "dogecoind-addr": {
+              "description": "Dogecoin P2P node addresses to connect to",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },

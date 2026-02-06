@@ -158,6 +158,30 @@ networks:
       - POCKET_IC_MUTE_SERVER=false
 ```
 
+### Launcher Settings
+
+You can use the same launcher settings as native managed networks. These are automatically translated into container command arguments:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    ii: true
+    nns: true
+    subnets:
+      - application
+      - bitcoin
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+```
+
+Available launcher settings: `ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`.
+
+**Docker networking note:** When `bitcoind-addr` or `dogecoind-addr` addresses reference `127.0.0.1`, `localhost`, or `::1`, they are automatically translated to `host.docker.internal` so the container can reach services running on the host machine. On Linux Docker Engine, `host.docker.internal:host-gateway` is added automatically to ensure compatibility.
+
 ### Remove Container on Exit
 
 Automatically delete the container when stopped:
@@ -295,6 +319,12 @@ All available configuration options for containerized networks:
 | `user`         | string   | No       | User to run as in `user[:group]` format (group is optional)                    |
 | `shm-size`     | number   | No       | Size of `/dev/shm` in bytes                                                    |
 | `status-dir`   | string   | No       | Status directory path (default: `/app/status`)                                 |
+| `ii`               | bool     | No       | Set up Internet Identity canister (default: `false`)                       |
+| `nns`              | bool     | No       | Set up NNS canisters (default: `false`)                                    |
+| `subnets`          | string[] | No       | Configure subnet types (default: one application subnet)                   |
+| `artificial-delay-ms` | number | No    | Artificial delay for update calls (ms)                                     |
+| `bitcoind-addr`    | string[] | No       | Bitcoin P2P node addresses (auto-translated for Docker)                    |
+| `dogecoind-addr`   | string[] | No       | Dogecoin P2P node addresses (auto-translated for Docker)                   |
 
 Example with multiple options:
 
@@ -462,152 +492,6 @@ port-mapping:
 If you're on Windows and want to use a manually instantiated `dockerd` in a WSL2 instance instead of Docker Desktop, set these environment variables:
 - `ICP_CLI_DOCKER_WSL2_DISTRO=<distro>` — the WSL2 distribution name running dockerd
 - `DOCKER_HOST=tcp://<ip>:<port>` — the TCP address where dockerd is listening
-
-## Docker Compose Networks
-
-For more complex setups involving multiple services (like Bitcoin integration), you can use Docker Compose to manage your local network.
-
-### When to Use Compose
-
-Use Docker Compose when you need:
-- Multiple services running together (e.g., Bitcoin node + IC replica)
-- Complex service dependencies
-- Custom networking between containers
-- Services that must start in a specific order
-
-### Basic Configuration
-
-Instead of specifying an `image`, use the `compose` configuration:
-
-```yaml
-networks:
-  - name: local
-    mode: managed
-    compose:
-      file: docker-compose.yml
-      gateway-service: icp-network
-```
-
-| Field             | Type   | Required | Description                                        |
-|-------------------|--------|----------|----------------------------------------------------|
-| `file`            | string | Yes      | Path to docker-compose.yml (relative to project)   |
-| `gateway-service` | string | Yes      | Name of the service running the IC gateway         |
-
-### Example: Bitcoin Integration
-
-Here's a complete setup for local Bitcoin development:
-
-**docker-compose.bitcoin.yml:**
-```yaml
-services:
-  bitcoind:
-    image: lncm/bitcoind:v27.2
-    command:
-      - -regtest
-      - -server
-      - -rpcbind=0.0.0.0
-      - -rpcallowip=0.0.0.0/0
-      - -rpcuser=ic-btc-integration
-      - -rpcpassword=ic-btc-integration
-      - -fallbackfee=0.00001
-    ports:
-      - "18443:18443"
-    healthcheck:
-      test: ["CMD", "bitcoin-cli", "-regtest", "-rpcuser=ic-btc-integration", "-rpcpassword=ic-btc-integration", "getblockchaininfo"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  icp-network:
-    image: ghcr.io/dfinity/icp-cli-network-launcher:latest
-    depends_on:
-      bitcoind:
-        condition: service_healthy
-    environment:
-      - ICP_CLI_NETWORK_LAUNCHER_INTERFACE_VERSION=1.0.0
-    command:
-      - --bitcoind-addr=bitcoind:18444
-    ports:
-      - "0:4943"
-    volumes:
-      - "${ICP_STATUS_DIR:-/tmp/icp-status}:/app/status"
-```
-
-> **Subnet configuration:** The network launcher defaults to creating an `application` subnet (plus the always-implied `nns` subnet). The `--bitcoind-addr` flag implicitly adds a `bitcoin` subnet. If you need additional subnets, use `--subnet` flags — but note that explicitly passing any `--subnet` flag **overrides the default** `application` subnet. To keep it, include `--subnet=application` explicitly. For example, to add a `system` subnet alongside bitcoin: `--subnet=application --subnet=system --bitcoind-addr=bitcoind:18444`.
-
-**icp.yaml:**
-```yaml
-networks:
-  - name: local
-    mode: managed
-    compose:
-      file: docker-compose.bitcoin.yml
-      gateway-service: icp-network
-
-environments:
-  - name: local
-    network: local
-    settings:
-      backend:
-        environment_variables:
-          BITCOIN_NETWORK: "regtest"
-```
-
-### How Compose Networks Work
-
-When you run `icp network start`:
-
-1. icp-cli creates a temporary status directory on the host
-2. Sets the `ICP_STATUS_DIR` environment variable pointing to this directory
-3. Runs `docker compose up -d` with the compose file
-4. Monitors the status directory for the gateway's status file
-5. Once ready, retrieves the mapped port from the gateway container
-
-The compose file must:
-- Mount `${ICP_STATUS_DIR}` to the gateway service's status path (default `/app/status`)
-- Have the gateway service write the status file when ready (same format as image-based networks)
-
-### Working with Bitcoin Regtest
-
-Generate blocks to create spendable Bitcoin:
-
-```bash
-# Generate 101 blocks (coinbase maturity is 100 blocks)
-docker compose -f docker-compose.bitcoin.yml exec bitcoind \
-  bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=ic-btc-integration \
-  generatetoaddress 101 "$(docker compose -f docker-compose.bitcoin.yml exec bitcoind \
-  bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=ic-btc-integration getnewaddress)"
-```
-
-Create and fund addresses:
-
-```bash
-# Get a new address
-docker compose -f docker-compose.bitcoin.yml exec bitcoind \
-  bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=ic-btc-integration \
-  getnewaddress
-
-# Send Bitcoin to an address
-docker compose -f docker-compose.bitcoin.yml exec bitcoind \
-  bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=ic-btc-integration \
-  sendtoaddress "bcrt1q..." 1.0
-```
-
-### Bitcoin Template
-
-For a quick start with Bitcoin integration, use the bitcoin template:
-
-```bash
-icp new my-bitcoin-project --template bitcoin
-cd my-bitcoin-project
-icp network start
-icp build && icp deploy
-```
-
-The template includes:
-- A backend canister with Bitcoin balance/UTXO query functions
-- Docker Compose configuration for bitcoind + IC replica
-- Environment variable configuration for network selection
 
 ## Related Documentation
 

@@ -35,14 +35,13 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Managed, ManagedComposeConfig, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
+        Managed, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{
             CheckPortInUseError, PortInUseError, SaveNetworkDescriptorError,
             save_network_descriptors,
         },
         managed::{
-            compose::{ComposeDropGuard, ComposeNetwork},
             docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
             launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
@@ -88,13 +87,6 @@ pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError
         } => {
             super::docker::stop_docker_launcher(socket, id, *rm_on_exit).await?;
         }
-        ChildLocator::Compose {
-            project_name,
-            compose_file,
-            ..
-        } => {
-            super::compose::stop_compose(compose_file, project_name).await?;
-        }
     }
     Ok(())
 }
@@ -117,11 +109,6 @@ pub enum StopNetworkError {
     DockerLauncher {
         source: super::docker::StopContainerError,
     },
-
-    #[snafu(transparent)]
-    ComposeLauncher {
-        source: super::compose::ComposeError,
-    },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -142,7 +129,6 @@ async fn run_network_launcher(
     enum LaunchMode<'a> {
         Image(ManagedImageOptions),
         NativeLauncher(&'a ManagedLauncherConfig),
-        Compose(&'a ManagedComposeConfig),
     }
     let (launch_mode, fixed_ports) = match &config.mode {
         ManagedMode::Image(image_config) => {
@@ -161,11 +147,6 @@ async fn run_network_launcher(
                 Port::Random => vec![],
             };
             (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
-        }
-        ManagedMode::Compose(compose_config) => {
-            // Compose networks don't have fixed ports configured in the manifest
-            // Port mapping is defined in the compose file
-            (LaunchMode::Compose(compose_config), vec![])
         }
     };
 
@@ -226,17 +207,6 @@ async fn run_network_launcher(
                         fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
-                }
-                LaunchMode::Compose(compose_config) => {
-                    let compose_network =
-                        ComposeNetwork::new(&nd.network_name, compose_config, project_root);
-                    let (guard, instance, locator) = compose_network.start().await?;
-                    let gateway = NetworkDescriptorGatewayPort {
-                        port: instance.gateway_port,
-                        // Compose networks manage their own port mapping
-                        fixed: false,
-                    };
-                    Ok((ShutdownGuard::Compose(guard), instance, gateway, locator))
                 }
             }
         })
@@ -305,11 +275,23 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
     use bollard::secret::PortBinding;
     use std::collections::HashMap;
 
+    use super::docker::{docker_extra_hosts_for_addrs, translate_launcher_args_for_docker};
+
     let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
     let args = launcher_settings_flags(config);
+    let args = translate_launcher_args_for_docker(args);
+
+    let all_addrs: Vec<String> = config
+        .bitcoind_addr
+        .iter()
+        .chain(config.dogecoind_addr.iter())
+        .flatten()
+        .cloned()
+        .collect();
+    let extra_hosts = docker_extra_hosts_for_addrs(&all_addrs);
 
     let platform = if cfg!(target_arch = "aarch64") {
         "linux/arm64".to_string()
@@ -339,13 +321,13 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         shm_size: None,
         status_dir: "/app/status".to_string(),
         mounts: vec![],
+        extra_hosts,
     }
 }
 
 enum ShutdownGuard {
     Container(AsyncDropper<DockerDropGuard>),
     Process(AsyncDropper<ChildSignalOnDrop>),
-    Compose(AsyncDropper<ComposeDropGuard>),
 }
 
 impl ShutdownGuard {
@@ -353,14 +335,12 @@ impl ShutdownGuard {
         match self {
             ShutdownGuard::Container(mut guard) => guard.async_drop().await,
             ShutdownGuard::Process(mut guard) => guard.async_drop().await,
-            ShutdownGuard::Compose(mut guard) => guard.async_drop().await,
         }
     }
     fn defuse(self) {
         match self {
             ShutdownGuard::Container(mut guard) => guard.defuse(),
             ShutdownGuard::Process(mut guard) => guard.defuse(),
-            ShutdownGuard::Compose(mut guard) => guard.defuse(),
         }
     }
 }
@@ -416,11 +396,6 @@ pub enum RunNetworkLauncherError {
     SpawnDockerLauncher {
         source: crate::network::managed::docker::DockerLauncherError,
     },
-
-    #[snafu(transparent)]
-    SpawnComposeLauncher {
-        source: crate::network::managed::compose::ComposeError,
-    },
 }
 
 #[derive(Debug)]
@@ -438,9 +413,9 @@ fn safe_eprintln(msg: &str) {
 
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
-        ShutdownGuard::Container(_) | ShutdownGuard::Compose(_) => {
+        ShutdownGuard::Container(_) => {
             stop_signal().await;
-            safe_eprintln("Received Ctrl-C, shutting down network...");
+            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {
@@ -784,4 +759,127 @@ async fn install_candid_ui(
     debug!("Installed Candid UI canister with ID {}", canister_id);
 
     Ok(canister_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::{Gateway, ManagedLauncherConfig, Port};
+
+    #[test]
+    fn transform_native_launcher_default_config() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                host: "localhost".to_string(),
+                port: Port::Fixed(8000),
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert_eq!(
+            opts.image,
+            "ghcr.io/dfinity/icp-cli-network-launcher:latest"
+        );
+        assert!(opts.args.is_empty());
+        assert!(opts.extra_hosts.is_empty());
+        assert!(opts.rm_on_exit);
+        assert_eq!(opts.status_dir, "/app/status");
+        // Port binding maps host 8000 to container 4943
+        let binding = opts.port_bindings.get("4943/tcp").unwrap().as_ref().unwrap();
+        assert_eq!(binding[0].host_port.as_deref(), Some("8000"));
+    }
+
+    #[test]
+    fn transform_native_launcher_random_port() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                host: "localhost".to_string(),
+                port: Port::Random,
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        let binding = opts.port_bindings.get("4943/tcp").unwrap().as_ref().unwrap();
+        assert_eq!(binding[0].host_port.as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn transform_native_launcher_with_bitcoind_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: true,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+            dogecoind_addr: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        // --ii flag should be present
+        assert!(opts.args.contains(&"--ii".to_string()));
+        // bitcoind-addr should be translated for Docker
+        assert!(opts
+            .args
+            .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string()));
+        // extra_hosts should include host.docker.internal mapping
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_with_dogecoind_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: Some(50),
+            ii: false,
+            nns: true,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(opts.args.contains(&"--nns".to_string()));
+        assert!(opts
+            .args
+            .contains(&"--artificial-delay-ms=50".to_string()));
+        assert!(opts
+            .args
+            .contains(&"--dogecoind-addr=host.docker.internal:22556".to_string()));
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_external_addr_no_extra_hosts() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
+            dogecoind_addr: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        // External address should pass through unchanged
+        assert!(opts
+            .args
+            .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string()));
+        // No extra_hosts needed for external addresses
+        assert!(opts.extra_hosts.is_empty());
+    }
 }

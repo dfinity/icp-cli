@@ -20,7 +20,7 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 
 ## Configuration
 
-- [Containerized Networks](containerized-networks.md) — Run managed networks in Docker containers, including Docker Compose and Bitcoin integration
+- [Containerized Networks](containerized-networks.md) — Run managed networks in Docker containers
 - [Using Recipes](using-recipes.md) — Reusable build templates for common patterns
 
 ## Advanced

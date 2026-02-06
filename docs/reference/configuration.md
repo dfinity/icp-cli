@@ -297,7 +297,7 @@ networks:
       - "0:4943"
 ```
 
-Docker networks support all the same launcher settings as native managed networks (`ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`). These are translated into the appropriate container command arguments automatically:
+Docker networks support all the same launcher settings as native managed networks (`ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`). This makes it easy to switch between native and Docker modes — just add or remove `image` and `port-mapping`, and all other settings stay the same. These are translated into the appropriate container command arguments automatically:
 
 ```yaml
 networks:
@@ -312,6 +312,8 @@ networks:
 ```
 
 **Docker networking:** When `bitcoind-addr` or `dogecoind-addr` addresses reference `127.0.0.1`, `localhost`, or `::1`, they are automatically translated to `host.docker.internal` so the container can reach services on the host. On Linux, `host.docker.internal:host-gateway` is added to ensure compatibility.
+
+> **Note:** Use the top-level fields (`bitcoind-addr`, `ii`, etc.) instead of passing these as raw flags via `args`. The `args` field is for additional flags not covered by the semantic settings. If specified in both places, flags will be duplicated and addresses in `args` will not be auto-translated for Docker networking.
 
 See [Containerized Networks](../guides/containerized-networks.md) for full options.
 

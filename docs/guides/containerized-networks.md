@@ -160,27 +160,36 @@ networks:
 
 ### Launcher Settings
 
-You can use the same launcher settings as native managed networks. These are automatically translated into container command arguments:
+Docker image networks support all the same launcher settings as native managed networks. This means you can switch between native and Docker modes by simply adding or removing the `image` and `port-mapping` fields — all other settings stay the same:
 
+**Native launcher:**
 ```yaml
 networks:
-  - name: docker-local
+  - name: local
     mode: managed
-    image: ghcr.io/dfinity/icp-cli-network-launcher
-    port-mapping:
-      - "8000:4943"
-    ii: true
-    nns: true
-    subnets:
-      - application
-      - bitcoin
     bitcoind-addr:
       - "127.0.0.1:18444"
 ```
 
+**Docker image (same settings, just add `image` and `port-mapping`):**
+```yaml
+networks:
+  - name: local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+```
+
+All launcher settings are automatically translated into the appropriate container command arguments.
+
 Available launcher settings: `ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`.
 
 **Docker networking note:** When `bitcoind-addr` or `dogecoind-addr` addresses reference `127.0.0.1`, `localhost`, or `::1`, they are automatically translated to `host.docker.internal` so the container can reach services running on the host machine. On Linux Docker Engine, `host.docker.internal:host-gateway` is added automatically to ensure compatibility.
+
+> **Note:** Do not pass launcher settings (like `--bitcoind-addr` or `--ii`) via `args` when using the corresponding top-level fields. The `args` field is intended for additional flags not covered by the semantic settings. If the same setting is specified in both places, it will be passed to the launcher twice, and addresses in `args` will **not** be automatically translated for Docker networking.
 
 ### Remove Container on Exit
 

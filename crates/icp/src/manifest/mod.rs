@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::prelude::*;
@@ -27,7 +29,7 @@ pub const CANISTER_MANIFEST: &str = "canister.yaml";
 // - CanisterManifest: path or glob pattern to the directory containing "canister.yaml"
 // - NetworkManifest: path to network manifest
 // - EnvironmentManifest: path to environment manifest
-#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {
     /// Path to a manifest
@@ -35,6 +37,52 @@ pub enum Item<T> {
 
     /// The manifest
     Manifest(T),
+}
+
+impl<'de, T> Deserialize<'de> for Item<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
+        use std::fmt;
+
+        struct ItemVisitor<T>(PhantomData<T>);
+
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ItemVisitor<T> {
+            type Value = Item<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string path or a manifest object")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Item::Path(v.to_owned()))
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Item::Path(v))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                T::deserialize(MapAccessDeserializer::new(map)).map(Item::Manifest)
+            }
+        }
+
+        deserializer.deserialize_any(ItemVisitor(PhantomData))
+    }
 }
 
 #[derive(Debug, Snafu)]

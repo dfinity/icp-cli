@@ -52,7 +52,7 @@ impl<'de> Deserialize<'de> for RecipeType {
             return Ok(Self::Url(v.to_owned()));
         }
 
-        if v.starts_with("@") {
+        if v.starts_with("@") && v.contains("/") {
             let recipe_type = v.strip_prefix("@").expect("prefix missing");
 
             // Check for version delimiter
@@ -74,7 +74,7 @@ impl<'de> Deserialize<'de> for RecipeType {
         }
 
         Err(serde::de::Error::custom(format!(
-            "Invalid recipe type: {v}"
+            "Invalid recipe type: `{v}`. Valid types are urls eg: http:// or file://, or @<registry>/<name>[@<version>]."
         )))
     }
 }

@@ -790,7 +790,12 @@ mod tests {
         assert!(opts.rm_on_exit);
         assert_eq!(opts.status_dir, "/app/status");
         // Port binding maps host 8000 to container 4943
-        let binding = opts.port_bindings.get("4943/tcp").unwrap().as_ref().unwrap();
+        let binding = opts
+            .port_bindings
+            .get("4943/tcp")
+            .unwrap()
+            .as_ref()
+            .unwrap();
         assert_eq!(binding[0].host_port.as_deref(), Some("8000"));
     }
 
@@ -809,7 +814,12 @@ mod tests {
             dogecoind_addr: None,
         };
         let opts = transform_native_launcher_to_container(&config);
-        let binding = opts.port_bindings.get("4943/tcp").unwrap().as_ref().unwrap();
+        let binding = opts
+            .port_bindings
+            .get("4943/tcp")
+            .unwrap()
+            .as_ref()
+            .unwrap();
         assert_eq!(binding[0].host_port.as_deref(), Some("0"));
     }
 
@@ -828,9 +838,10 @@ mod tests {
         // --ii flag should be present
         assert!(opts.args.contains(&"--ii".to_string()));
         // bitcoind-addr should be translated for Docker
-        assert!(opts
-            .args
-            .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
+        );
         // extra_hosts should include host.docker.internal mapping
         assert_eq!(
             opts.extra_hosts,
@@ -851,12 +862,11 @@ mod tests {
         };
         let opts = transform_native_launcher_to_container(&config);
         assert!(opts.args.contains(&"--nns".to_string()));
-        assert!(opts
-            .args
-            .contains(&"--artificial-delay-ms=50".to_string()));
-        assert!(opts
-            .args
-            .contains(&"--dogecoind-addr=host.docker.internal:22556".to_string()));
+        assert!(opts.args.contains(&"--artificial-delay-ms=50".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--dogecoind-addr=host.docker.internal:22556".to_string())
+        );
         assert_eq!(
             opts.extra_hosts,
             vec!["host.docker.internal:host-gateway".to_string()]
@@ -876,9 +886,10 @@ mod tests {
         };
         let opts = transform_native_launcher_to_container(&config);
         // External address should pass through unchanged
-        assert!(opts
-            .args
-            .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
+        );
         // No extra_hosts needed for external addresses
         assert!(opts.extra_hosts.is_empty());
     }

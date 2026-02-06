@@ -26,7 +26,11 @@ impl Create for Creator {
         let default_ingress_expiry = Duration::from_secs(4 * MINUTE);
         if let Ok(ms) = std::env::var("ICP_CLI_TEST_ADVANCE_TIME_MS") {
             b = b.with_ingress_expiry(
-                default_ingress_expiry + Duration::from_millis(ms.parse::<u64>().unwrap()),
+                default_ingress_expiry
+                    + Duration::from_millis(
+                        ms.parse::<u64>()
+                            .expect("ICP_CLI_TEST_ADVANCE_TIME_MS must be set to an int"),
+                    ),
             );
         } else {
             b = b.with_ingress_expiry(default_ingress_expiry);

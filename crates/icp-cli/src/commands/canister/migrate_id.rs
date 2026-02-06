@@ -1,5 +1,5 @@
 use std::io::{IsTerminal, stderr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::bail;
 use clap::Args;
@@ -234,6 +234,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
     spinner.set_message("Waiting for migration to complete...");
 
     // Poll for completion
+    let start = Instant::now();
     loop {
         match migration_status(&agent, source_cid, target_cid).await {
             Ok(Some(MigrationStatus::InProgress { status })) => {
@@ -277,6 +278,11 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         }
 
         tokio::time::sleep(Duration::from_secs(1)).await;
+        if Instant::now().duration_since(start) > Duration::from_secs(720) {
+            bail!(
+                "Timed out waiting for canister migration to complete (12 minutes). Rerun with --resume-watch to continue waiting"
+            );
+        }
     }
 
     ctx.term.write_line(&format!(

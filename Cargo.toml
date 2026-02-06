@@ -44,7 +44,7 @@ handlebars = "6.3.2"
 hex = "0.4.3"
 httptest = "0.16.3"
 ic-agent = { version = "0.45.0" }
-ic-asset = { git = "https://github.com/dfinity/sdk", rev = "32c21b06cf6bed4797fb58f2511859a1d6dfd5ef" }
+ic-asset = "0.27.0"
 ic-ed25519 = "0.5.0"
 ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.5.0" }

@@ -1,6 +1,6 @@
 # Unreleased
 
-* feat: `icp cansister migrate-id` - initiate canister ID migration across subnets
+* feat: `icp canister migrate-id` - initiate canister ID migration across subnets
 
 # v0.1.0
 

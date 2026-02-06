@@ -8,22 +8,23 @@ The `motoko` recipe type provides a streamlined way to build Motoko canisters us
 
 ## Configuration
 
-The [`icp.yaml`](./icp.yaml) file configures a canister using the built-in `motoko` recipe:
+The [`icp.yaml`](./icp.yaml) file configures a canister using the `@dfinity/motoko` recipe:
 
 ```yaml
-canister:
-  name: my-canister
-  recipe:
-    type: motoko
-    configuration:
-      # main motoko entry point (defaults to main.mo)
-      entry: src/main.mo
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/motoko"
+      configuration:
+        main: src/main.mo
+        args: --incremental-gc
 ```
 
 ### Key Components
 
-- **`type: motoko`**: Uses the built-in Motoko recipe type
-- **`entry`**: Specifies the main Motoko source file (defaults to `main.mo` if not provided)
+- **`type: "@dfinity/motoko"`**: Uses the official DFINITY Motoko recipe
+- **`main`**: Specifies the main Motoko source file (required)
+- **`args`**: Compiler flags passed to `moc` (optional)
 
 ## Source Code
 

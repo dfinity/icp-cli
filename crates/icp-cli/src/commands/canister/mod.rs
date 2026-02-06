@@ -6,6 +6,7 @@ pub(crate) mod delete;
 pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod metadata;
+pub(crate) mod migrate_id;
 pub(crate) mod settings;
 pub(crate) mod snapshot;
 pub(crate) mod start;
@@ -33,6 +34,9 @@ pub(crate) enum Command {
 
     /// Read a metadata section from a canister
     Metadata(metadata::MetadataArgs),
+
+    /// Migrate a canister ID from one subnet to another
+    MigrateId(migrate_id::MigrateIdArgs),
 
     /// Commands to manage canister settings
     #[command(subcommand)]

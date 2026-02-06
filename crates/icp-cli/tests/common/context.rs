@@ -1,9 +1,18 @@
-use std::{cell::OnceCell, env, ffi::OsString, fs};
+use std::{
+    cell::{Cell, OnceCell},
+    env,
+    ffi::OsString,
+    fs,
+    time::Duration,
+};
 
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use ic_agent::Agent;
 use icp::prelude::*;
+use reqwest::Client;
+use serde_json::json;
+use time::UtcDateTime;
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, softhsm::SoftHsmContext};
@@ -15,6 +24,8 @@ pub(crate) struct TestContext {
     mock_cred_dir: PathBuf,
     os_path: OsString,
     gateway_url: OnceCell<Url>,
+    config_url: OnceCell<Option<Url>>,
+    time_offset: Cell<Option<Duration>>,
     root_key: OnceCell<Vec<u8>>,
     softhsm: OnceCell<SoftHsmContext>,
 }
@@ -52,8 +63,10 @@ impl TestContext {
             mock_cred_dir,
             os_path,
             gateway_url: OnceCell::new(),
+            config_url: OnceCell::new(),
             root_key: OnceCell::new(),
             softhsm: OnceCell::new(),
+            time_offset: Cell::new(None),
         }
     }
 
@@ -90,6 +103,13 @@ impl TestContext {
         // If SoftHSM has been initialized, include its config
         if let Some(hsm) = self.softhsm.get() {
             cmd.env("SOFTHSM2_CONF", &hsm.config_path);
+        }
+
+        if let Some(offset) = self.time_offset.get() {
+            cmd.env(
+                "ICP_CLI_TEST_ADVANCE_TIME_MS",
+                offset.as_millis().to_string(),
+            );
         }
 
         cmd
@@ -233,6 +253,15 @@ impl TestContext {
                     .unwrap(),
             )
             .expect("Gateway URL should not be already initialized");
+        self.config_url
+            .set(network_descriptor.pocketic_config_port.and_then(|port| {
+                network_descriptor.pocketic_instance_id.map(|instance| {
+                    format!("http://localhost:{port}/instances/{instance}/")
+                        .parse()
+                        .expect("Failed to parse PocketIC config URL")
+                })
+            }))
+            .expect("Config URL should not be already initialized");
         child_guard
     }
 
@@ -302,6 +331,14 @@ impl TestContext {
             .and_then(|p| p.as_u64())
             .expect("network descriptor does not contain gateway port")
             as u16;
+        let pocketic_config_port: Option<u16> = network_descriptor
+            .get("pocketic-config-port")
+            .and_then(|p| p.as_u64())
+            .map(|p| p as u16);
+        let pocketic_instance_id: Option<usize> = network_descriptor
+            .get("pocketic-instance-id")
+            .and_then(|p| p.as_u64())
+            .map(|p| p as usize);
 
         let root_key = network_descriptor
             .get("root-key")
@@ -313,6 +350,8 @@ impl TestContext {
         TestNetwork {
             gateway_port,
             root_key,
+            pocketic_config_port,
+            pocketic_instance_id,
         }
     }
 
@@ -348,6 +387,34 @@ impl TestContext {
             .unwrap();
         agent.set_root_key(self.root_key.get().unwrap().clone());
         agent
+    }
+
+    pub(crate) async fn pocketic_time_fastforward(&self, duration: Duration) {
+        let now = UtcDateTime::now();
+        Client::new()
+            .post(
+                self.config_url
+                    .get()
+                    .expect("network must have been initialized")
+                    .as_ref()
+                    .expect("network must use pocket-ic")
+                    .join("update/set_time")
+                    .unwrap(),
+            )
+            .json(&json!({ "nanos_since_epoch": (now + duration).unix_timestamp_nanos() }))
+            .send()
+            .await
+            .expect("failed to update time")
+            .error_for_status()
+            .expect("failed to update time");
+        self.time_offset.set(Some(duration));
+    }
+
+    pub(crate) fn pocketic_config_url(&self) -> Option<&Url> {
+        self.config_url
+            .get()
+            .expect("network must have been initialized")
+            .as_ref()
     }
 
     pub(crate) fn docker_pull_network(&self) {

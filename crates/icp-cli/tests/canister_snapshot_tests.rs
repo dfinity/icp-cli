@@ -1244,3 +1244,248 @@ async fn canister_snapshot_upload_resume() {
         "upload progress file should be cleaned up after success"
     );
 }
+
+/// Tests canister ID migration between subnets using migrate-id command
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_migrate_id() {
+    use std::time::Duration;
+
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    // Network with NNS enabled and 2 application subnets for cross-subnet migration
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: source-canister
+            recipe:
+              type: "@dfinity/motoko"
+              configuration:
+                main: main.mo
+                args: ""
+            init_args: "(opt 42 : opt nat8)"
+
+          - name: target-canister
+            recipe:
+              type: "@dfinity/motoko"
+              configuration:
+                main: main.mo
+                args: ""
+            init_args: "(opt 99 : opt nat8)"
+
+        networks:
+          - name: random-network
+            mode: managed
+            nns: true
+            gateway:
+              port: 0
+            subnets: [application, application]
+
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Get available subnets from CMC
+    let cmc = clients::cmc(&ctx);
+    let subnets = cmc.get_default_subnets().await;
+    assert!(
+        subnets.len() >= 2,
+        "Expected at least 2 subnets, got {}",
+        subnets.len()
+    );
+
+    let subnet_a = subnets[0];
+    let subnet_b = subnets[1];
+
+    // Mint enough cycles for both canisters
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(50 * TRILLION);
+
+    // Deploy source canister to first subnet
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "source-canister",
+            "--subnet",
+            &subnet_a.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Deploy target canister to second subnet
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "target-canister",
+            "--subnet",
+            &subnet_b.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Get canister IDs
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    let source_cid = icp_client.get_canister_id("source-canister");
+    let target_cid = icp_client.get_canister_id("target-canister");
+
+    // Verify they're on different subnets
+    let registry = clients::registry(&ctx);
+    let source_subnet = registry.get_subnet_for_canister(source_cid).await;
+    let target_subnet = registry.get_subnet_for_canister(target_cid).await;
+    assert_ne!(
+        source_subnet, target_subnet,
+        "Canisters should be on different subnets for migration test"
+    );
+
+    // Verify source canister has value 42
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "source-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("\"42\""));
+
+    // Stop both canisters
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "source-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "target-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Top up source canister to ensure it has enough cycles for migration (15T)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "top-up",
+            "source-canister",
+            "--amount",
+            "15t",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Run migrate-id command. This takes six minutes so we will cut it early and then time-travel.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "migrate-id",
+            "source-canister",
+            "--replace",
+            "target-canister",
+            "--yes",
+            "--environment",
+            "random-environment",
+            "--skip-watch",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Migration will continue in the background"));
+
+    ctx.pocketic_time_fastforward(Duration::from_secs(360))
+        .await;
+
+    // Continue polling and use the new time
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "migrate-id",
+            "source-canister",
+            "--replace",
+            "target-canister",
+            "--yes",
+            "--environment",
+            "random-environment",
+            "--resume-watch",
+        ])
+        .assert()
+        .success()
+        .stdout(contains(format!(
+            "Canister 'source-canister' ({source_cid}) has been successfully migrated"
+        )));
+
+    // After migration, the target canister should now have the source's ID
+    // We need to call it using the source's canister ID but it should have target's state
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "start",
+            &source_cid.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The canister at source_cid should now return 99 (the target's value)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            &source_cid.to_string(),
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("\"99\""));
+
+    // The original target canister ID should no longer exist
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            &target_cid.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure();
+}

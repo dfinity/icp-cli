@@ -42,7 +42,7 @@ echo ""
 echo "Step 1: Copying documentation files..."
 rm -rf "$TARGET_DIR"
 mkdir -p "$TARGET_DIR"
-rsync -a --exclude='schemas/' --exclude='README.md' --exclude='*/README.md' "$SOURCE_DIR/" "$TARGET_DIR/"
+rsync -a --exclude='schemas/' --exclude='README.md' --exclude='*/README.md' --exclude='VERSIONED_DOCS.md' "$SOURCE_DIR/" "$TARGET_DIR/"
 echo "✓ Files copied"
 
 # Step 2: Fix markdown links for Starlight's directory structure
@@ -109,9 +109,9 @@ find "$TARGET_DIR" -name "*.md" -type f | while read -r file; do
   {
     echo "---"
     echo "title: $title"
-    # Add banner to all pages (will be removed once versioning is introduced)
+    # Banner encouraging user feedback
     echo "banner:"
-    echo "  content: 'This documentation reflects the latest main branch and may include features not yet in the <a href=\"https://github.com/dfinity/icp-cli/releases\" target=\"_blank\" rel=\"noopener noreferrer\">current beta release</a>. Feedback welcome on the <a href=\"https://forum.dfinity.org/t/first-beta-release-of-icp-cli/60410\" target=\"_blank\" rel=\"noopener noreferrer\">Forum</a> or <a href=\"https://discord.internetcomputer.org\" target=\"_blank\" rel=\"noopener noreferrer\">Discord</a>!'"
+    echo "  content: 'Feedback welcome! Report issues on <a href=\"https://github.com/dfinity/icp-cli/issues\" target=\"_blank\" rel=\"noopener noreferrer\">GitHub</a>, ask questions on the <a href=\"https://forum.dfinity.org/t/icp-cli-announcements-and-feedback-discussion/60410/1\" target=\"_blank\" rel=\"noopener noreferrer\">Forum</a>, or chat with us on <a href=\"https://discord.internetcomputer.org\" target=\"_blank\" rel=\"noopener noreferrer\">Discord</a>.'"
     echo "---"
     echo ""
     # Remove the first H1 heading line from content to avoid duplicates

@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
+#
+# This example demonstrates using a proxy canister to forward calls to other canisters.
+#
+# The proxy canister implements the interface defined at:
+# https://github.com/dfinity/proxy-canister
+#
+# Usage:
+#   # Deploy both canisters
+#   icp deploy
+#
+#   # Get the proxy canister ID
+#   icp canister status --id-only proxy
+#
+#   # Call the target canister directly
+#   icp canister call target greet '("World")'
+#
+#   # Call through the proxy canister (replace with actual proxy canister ID)
+#   icp canister call target greet '("World")' --proxy <PROXY_CANISTER_ID>
+#
+#   # Forward cycles with the proxied call
+#   icp canister call target greet '("World")' --proxy <PROXY_CANISTER_ID> --cycles 1t
+
+canisters:
+  # A simple target canister to be called through the proxy
+  - name: target
+    build:
+      steps:
+        - type: pre-built
+          path: ../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+  # The proxy canister from dfinity/proxy-canister
+  - name: proxy
+    build:
+      steps:
+        - type: pre-built
+          url: https://github.com/dfinity/proxy-canister/releases/download/v0.1.0-beta.1/proxy.wasm
+          sha256: 9e5abf27930b06df7f50c4baa1ec71b7e53408cb81849054fc51a1825eb6c5a4

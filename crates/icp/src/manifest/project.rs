@@ -168,10 +168,34 @@ mod tests {
             }
             Err(err) => {
                 let err_msg = format!("{err}");
-                if !err_msg.contains("data did not match any variant of untagged enum Item") {
+                if !err_msg.contains("Canister my-canister failed to parse build/sync instructions")
+                {
                     panic!(
-                        "expected 'data did not match any variant of untagged enum Item' error but got: {err}"
+                        "expected 'Canister my-canister failed to parse build/sync instructions' error but got: {err}"
                     );
+                }
+            }
+        };
+    }
+
+    #[test]
+    fn project_with_invalid_recipe_type_should_fail() {
+        // Test that errors from nested deserialization are properly propagated
+        // through the custom Item<T> deserializer
+        match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
+                canisters:
+                  - name: my-canister
+                    recipe:
+                      type: blabla
+            "#})
+        {
+            Ok(_) => {
+                panic!("A project manifest with an invalid canister manifest should be invalid");
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Invalid recipe type: `blabla`") {
+                    panic!("expected 'Invalid recipe type: `blabla`' error but got: {err}");
                 }
             }
         };

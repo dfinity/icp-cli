@@ -1,0 +1,26 @@
+{
+  "name": "@icp-sdk/icp-cli-darwin-arm64",
+  "version": "0.1.0",
+  "description": "icp-cli binary for macOS ARM64 (Apple Silicon)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dfinity/icp-cli.git",
+    "directory": "npm/icp-cli-darwin-arm64"
+  },
+  "license": "Apache-2.0",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.js",
+  "files": [
+    "bin/icp"
+  ],
+  "keywords": [
+    "icp",
+    "internet-computer",
+    "icp"
+  ]
+}

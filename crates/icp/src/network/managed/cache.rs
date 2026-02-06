@@ -40,9 +40,11 @@ pub enum ReadCacheError {
 
 pub async fn get_latest_launcher_version(client: &Client) -> Result<String, DownloadLauncherError> {
     let url = "https://api.github.com/repos/dfinity/icp-cli-network-launcher/releases/latest";
-    let response: serde_json::Value = client
-        .get(url)
-        .header("User-Agent", "icp-cli")
+    let mut req = client.get(url).header("User-Agent", "icp-cli");
+    if let Ok(token) = std::env::var("ICP_CLI_GITHUB_TOKEN") {
+        req = req.bearer_auth(token);
+    }
+    let response: serde_json::Value = req
         .send()
         .await
         .context(LatestVersionFetchSnafu)?

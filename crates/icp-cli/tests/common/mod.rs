@@ -77,6 +77,8 @@ pub(crate) fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httpte
 // after starting the network.
 pub(crate) struct TestNetwork {
     pub(crate) gateway_port: u16,
+    pub(crate) pocketic_config_port: Option<u16>,
+    pub(crate) pocketic_instance_id: Option<usize>,
     pub(crate) root_key: Vec<u8>,
 }
 

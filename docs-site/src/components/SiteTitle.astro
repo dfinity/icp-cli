@@ -1,0 +1,73 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import config from 'virtual:starlight/user-config';
+import VersionSwitcher from './VersionSwitcher.astro';
+import icpLogo from '../assets/icp-logo.svg';
+
+// Ensure title is a string
+const titleText = typeof config.title === 'string' ? config.title : 'ICP CLI';
+
+// Extract logo info safely, but use imported asset for src
+const logo = config.logo as any;
+const hasLightLogo = logo && 'src' in logo;
+const hasDarkLogo = logo && 'dark' in logo && typeof logo.dark === 'object' && logo.dark && 'src' in logo.dark;
+
+// Use imported logo asset instead of config path
+const logoSrc = icpLogo.src;
+---
+
+<div class="site-title-wrapper sl-flex">
+	<a href={import.meta.env.BASE_URL} class="site-title sl-flex">
+		{
+			hasLightLogo ? (
+				<img
+					class:list={{ 'light:sl-hidden': hasDarkLogo, logo: true }}
+					alt={logo.alt ?? 'Logo'}
+					src={logoSrc}
+					width={logo.width}
+					height={logo.height}
+				/>
+			) : null
+		}
+		{
+			hasDarkLogo ? (
+				<img
+					class:list={{ 'dark:sl-hidden': true, logo: true }}
+					alt={logo.dark.alt ?? logo.alt ?? 'Logo'}
+					src={logoSrc}
+					width={logo.dark.width ?? logo.width}
+					height={logo.dark.height ?? logo.height}
+				/>
+			) : null
+		}
+		<span class:list={{ 'sr-only': logo?.replacesTitle }}>
+			{titleText}
+		</span>
+	</a>
+	<VersionSwitcher />
+</div>
+
+<style>
+	.site-title-wrapper {
+		align-items: center;
+		gap: var(--sl-nav-gap);
+	}
+
+	.site-title {
+		align-items: center;
+		gap: var(--sl-nav-gap);
+		font-size: var(--sl-text-h4);
+		font-weight: 600;
+		color: var(--sl-color-text-accent);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+
+	.logo {
+		height: calc(var(--sl-nav-height) - 2 * var(--sl-nav-pad-y));
+		width: auto;
+		max-width: 100%;
+		object-fit: contain;
+		object-position: 0 50%;
+	}
+</style>

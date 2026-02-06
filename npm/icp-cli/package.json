@@ -1,0 +1,39 @@
+{
+  "name": "@icp-sdk/icp-cli",
+  "version": "0.1.0",
+  "description": "npm wrapper for icp-cli - Internet Computer Protocol command-line interface",
+  "main": "index.js",
+  "bin": {
+    "icp": "./bin/icp.js"
+  },
+  "scripts": {
+    "test": "node test.js",
+    "postinstall": "node postinstall.js"
+  },
+  "keywords": [
+    "icp",
+    "internet-computer",
+    "blockchain"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dfinity/icp-cli.git",
+    "directory": "npm/icp-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/dfinity/icp-cli/issues"
+  },
+  "homepage": "https://github.com/dfinity/icp-cli#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "optionalDependencies": {
+    "@icp-sdk/icp-cli-darwin-arm64": "0.1.0",
+    "@icp-sdk/icp-cli-darwin-x64": "0.1.0",
+    "@icp-sdk/icp-cli-linux-arm64": "0.1.0",
+    "@icp-sdk/icp-cli-linux-x64": "0.1.0",
+    "@icp-sdk/icp-cli-win32-x64": "0.1.0"
+  }
+}

@@ -1,6 +1,17 @@
 # Unreleased
 
 * feat: `icp settings autocontainerize true`, always use a docker container for all networks
+* feat: `icp canister migrate-id` - initiate canister ID migration across subnets
+
+# v0.1.0
+
+* feat: `icp canister snapshot` - create, delete, restore, list, download, and upload canister snapshots
+* feat: `icp canister call` now supports `--proxy` flag to route calls through a proxy canister
+  * Use `--proxy <CANISTER_ID>` to forward the call through a proxy canister's `proxy` method
+  * Use `--cycles <AMOUNT>` to specify cycles to forward with the proxied call (defaults to 0)
+
+# v0.1.0-beta.6
+
 * feat: `icp identity export` to print the PEM file for the identity
 
 # v0.1.0-beta.5

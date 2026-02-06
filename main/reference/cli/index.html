@@ -88,7 +88,7 @@
 		})();
 	</script> </sl-sidebar-state-persist>  <div class="md:sl-hidden"> <div class="mobile-preferences sl-flex astro-wu23bvmt"> <div class="social-icons astro-wu23bvmt"> <a href="https://github.com/dfinity/icp-cli" rel="me" class="sl-flex astro-wy4te6ga"><span class="sr-only astro-wy4te6ga">GitHub</span><svg aria-hidden="true" class="astro-wy4te6ga astro-c6vsoqas" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a> </div> <starlight-theme-select>  <label style="--sl-select-width: 6.25em" class="astro-4yphtoen"> <span class="sr-only astro-4yphtoen">Select theme</span> <svg aria-hidden="true" class="icon label-icon astro-4yphtoen astro-c6vsoqas" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg> <select autocomplete="off" class="astro-4yphtoen"> <option value="dark" class="astro-4yphtoen">Dark</option><option value="light" class="astro-4yphtoen">Light</option><option value="auto" selected class="astro-4yphtoen">Auto</option> </select> <svg aria-hidden="true" class="icon caret astro-4yphtoen astro-c6vsoqas" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg> </label>  </starlight-theme-select>  <script>
 	StarlightThemeProvider.updatePickers();
-</script>   </div>  </div> </div> </div> </nav> <div class="main-frame astro-vrdttmbt">  <script type="module">const a=document.getElementById("starlight__sidebar"),n=a?.querySelector("sl-sidebar-state-persist"),o="sl-sidebar-state",i=()=>{let t=[];const e=n?.dataset.hash||"";try{const s=sessionStorage.getItem(o),r=JSON.parse(s||"{}");Array.isArray(r.open)&&r.hash===e&&(t=r.open)}catch{}return{hash:e,open:t,scroll:a?.scrollTop||0}},c=t=>{try{sessionStorage.setItem(o,JSON.stringify(t))}catch{}},d=()=>c(i()),l=(t,e)=>{const s=i();s.open[e]=t,c(s)};n?.addEventListener("click",t=>{if(!(t.target instanceof Element))return;const e=t.target.closest("summary")?.closest("details");if(!e)return;const s=e.querySelector("sl-sidebar-restore"),r=parseInt(s?.dataset.index||"");isNaN(r)||l(!e.open,r)});addEventListener("visibilitychange",()=>{document.visibilityState==="hidden"&&d()});addEventListener("pageHide",d);</script> <div class="lg:sl-flex astro-67yu43on"> <aside class="right-sidebar-container print:hidden astro-67yu43on"> <div class="right-sidebar astro-67yu43on"> <script type="module" src="/icp-cli/main/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.C181hMzK.js"></script><script type="module" src="/icp-cli/main/_astro/TableOfContents.astro_astro_type_script_index_0_lang.CKWWgpjV.js"></script><div class="lg:sl-hidden astro-pb3aqygn"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-doynk5tl"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-doynk5tl"><details id="starlight__mobile-toc" class="astro-doynk5tl"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-doynk5tl"><span class="toggle sl-flex astro-doynk5tl">On this page<svg aria-hidden="true" class="caret astro-doynk5tl astro-c6vsoqas" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-doynk5tl"></span></summary><div class="dropdown astro-doynk5tl"><ul class="isMobile astro-g2bywc46" style="--depth: 0;"> <li class="astro-g2bywc46" style="--depth: 0;"> <a href="#_top" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-build" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp build</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-call" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister call</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-install" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister install</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-metadata" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister metadata</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-download" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot download</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-restore" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot restore</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-upload" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot upload</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-top-up" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister top-up</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-mint" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles mint</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles transfer</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-deploy" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp deploy</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-account-id" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity account-id</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-default" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity default</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-export" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity export</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-import" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity import</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link-hsm" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link hsm</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-principal" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity principal</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-rename" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity rename</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-ping" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network ping</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token transfer</span> </a>  </li> </ul> </div></details></nav></mobile-starlight-toc></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-pb3aqygn"><div class="sl-container astro-pb3aqygn"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-g2bywc46" style="--depth: 0;"> <li class="astro-g2bywc46" style="--depth: 0;"> <a href="#_top" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-build" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp build</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-call" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister call</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-install" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister install</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-metadata" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister metadata</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-download" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot download</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-restore" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot restore</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-upload" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot upload</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-top-up" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister top-up</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-mint" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles mint</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles transfer</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-deploy" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp deploy</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-account-id" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity account-id</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-default" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity default</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-export" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity export</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-import" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity import</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link-hsm" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link hsm</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-principal" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity principal</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-rename" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity rename</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-ping" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network ping</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token transfer</span> </a>  </li> </ul> </nav></starlight-toc></div></div> </div> </aside> <div class="main-pane astro-67yu43on">  <main data-pagefind-body class="astro-bguv2lll" lang="en" dir="ltr">  <div class="sl-banner astro-laz2plt2" data-pagefind-ignore>Feedback welcome! Report issues on <a href="https://github.com/dfinity/icp-cli/issues" target="_blank" rel="noopener noreferrer">GitHub</a>, ask questions on the <a href="https://forum.dfinity.org/t/icp-cli-announcements-and-feedback-discussion/60410/1" target="_blank" rel="noopener noreferrer">Forum</a>, or chat with us on <a href="https://discord.internetcomputer.org" target="_blank" rel="noopener noreferrer">Discord</a>.</div>  <div class="content-panel astro-7nkwcw3z"> <div class="sl-container astro-7nkwcw3z"> <h1 id="_top" class="astro-j6tvhyss">Command-Line Help for `icp`</h1>  </div> </div>  <div class="content-panel astro-7nkwcw3z"> <div class="sl-container astro-7nkwcw3z"> <div class="sl-markdown-content"> <p>This document contains the help content for the <code>icp</code> command-line program.</p>
+</script>   </div>  </div> </div> </div> </nav> <div class="main-frame astro-vrdttmbt">  <script type="module">const a=document.getElementById("starlight__sidebar"),n=a?.querySelector("sl-sidebar-state-persist"),o="sl-sidebar-state",i=()=>{let t=[];const e=n?.dataset.hash||"";try{const s=sessionStorage.getItem(o),r=JSON.parse(s||"{}");Array.isArray(r.open)&&r.hash===e&&(t=r.open)}catch{}return{hash:e,open:t,scroll:a?.scrollTop||0}},c=t=>{try{sessionStorage.setItem(o,JSON.stringify(t))}catch{}},d=()=>c(i()),l=(t,e)=>{const s=i();s.open[e]=t,c(s)};n?.addEventListener("click",t=>{if(!(t.target instanceof Element))return;const e=t.target.closest("summary")?.closest("details");if(!e)return;const s=e.querySelector("sl-sidebar-restore"),r=parseInt(s?.dataset.index||"");isNaN(r)||l(!e.open,r)});addEventListener("visibilitychange",()=>{document.visibilityState==="hidden"&&d()});addEventListener("pageHide",d);</script> <div class="lg:sl-flex astro-67yu43on"> <aside class="right-sidebar-container print:hidden astro-67yu43on"> <div class="right-sidebar astro-67yu43on"> <script type="module" src="/icp-cli/main/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.C181hMzK.js"></script><script type="module" src="/icp-cli/main/_astro/TableOfContents.astro_astro_type_script_index_0_lang.CKWWgpjV.js"></script><div class="lg:sl-hidden astro-pb3aqygn"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-doynk5tl"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-doynk5tl"><details id="starlight__mobile-toc" class="astro-doynk5tl"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-doynk5tl"><span class="toggle sl-flex astro-doynk5tl">On this page<svg aria-hidden="true" class="caret astro-doynk5tl astro-c6vsoqas" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-doynk5tl"></span></summary><div class="dropdown astro-doynk5tl"><ul class="isMobile astro-g2bywc46" style="--depth: 0;"> <li class="astro-g2bywc46" style="--depth: 0;"> <a href="#_top" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-build" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp build</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-call" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister call</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-install" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister install</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-metadata" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister metadata</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-migrate-id" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister migrate-id</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-download" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot download</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-restore" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot restore</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-upload" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot upload</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-top-up" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister top-up</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-mint" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles mint</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles transfer</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-deploy" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp deploy</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-account-id" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity account-id</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-default" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity default</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-export" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity export</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-import" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity import</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link-hsm" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link hsm</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-principal" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity principal</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-rename" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity rename</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-ping" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network ping</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token transfer</span> </a>  </li> </ul> </div></details></nav></mobile-starlight-toc></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-pb3aqygn"><div class="sl-container astro-pb3aqygn"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-g2bywc46" style="--depth: 0;"> <li class="astro-g2bywc46" style="--depth: 0;"> <a href="#_top" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-build" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp build</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-call" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister call</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-install" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister install</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-metadata" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister metadata</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-migrate-id" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister migrate-id</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-settings-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister settings sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-create" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot create</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-download" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot download</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-restore" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot restore</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-snapshot-upload" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister snapshot upload</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-canister-top-up" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp canister top-up</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-mint" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles mint</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-cycles-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp cycles transfer</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-deploy" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp deploy</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-environment-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp environment list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-account-id" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity account-id</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-default" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity default</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-delete" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity delete</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-export" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity export</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-import" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity import</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-link-hsm" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity link hsm</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-principal" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity principal</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-identity-rename" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp identity rename</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-list" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network list</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-ping" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network ping</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-start" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network start</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-status" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network status</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-stop" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network stop</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-network-update" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp network update</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-new" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp new</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-project-show" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp project show</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-sync" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp sync</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-balance" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token balance</span> </a>  </li><li class="astro-g2bywc46" style="--depth: 0;"> <a href="#icp-token-transfer" class="astro-g2bywc46" style="--depth: 0;"> <span class="astro-g2bywc46" style="--depth: 0;">icp token transfer</span> </a>  </li> </ul> </nav></starlight-toc></div></div> </div> </aside> <div class="main-pane astro-67yu43on">  <main data-pagefind-body class="astro-bguv2lll" lang="en" dir="ltr">  <div class="sl-banner astro-laz2plt2" data-pagefind-ignore>Feedback welcome! Report issues on <a href="https://github.com/dfinity/icp-cli/issues" target="_blank" rel="noopener noreferrer">GitHub</a>, ask questions on the <a href="https://forum.dfinity.org/t/icp-cli-announcements-and-feedback-discussion/60410/1" target="_blank" rel="noopener noreferrer">Forum</a>, or chat with us on <a href="https://discord.internetcomputer.org" target="_blank" rel="noopener noreferrer">Discord</a>.</div>  <div class="content-panel astro-7nkwcw3z"> <div class="sl-container astro-7nkwcw3z"> <h1 id="_top" class="astro-j6tvhyss">Command-Line Help for `icp`</h1>  </div> </div>  <div class="content-panel astro-7nkwcw3z"> <div class="sl-container astro-7nkwcw3z"> <div class="sl-markdown-content"> <p>This document contains the help content for the <code>icp</code> command-line program.</p>
 <p><strong>Command Overview:</strong></p>
 <ul>
 <li><a href="#icp"><code>icp</code>↴</a></li>
@@ -100,6 +100,7 @@
 <li><a href="#icp-canister-install"><code>icp canister install</code>↴</a></li>
 <li><a href="#icp-canister-list"><code>icp canister list</code>↴</a></li>
 <li><a href="#icp-canister-metadata"><code>icp canister metadata</code>↴</a></li>
+<li><a href="#icp-canister-migrate-id"><code>icp canister migrate-id</code>↴</a></li>
 <li><a href="#icp-canister-settings"><code>icp canister settings</code>↴</a></li>
 <li><a href="#icp-canister-settings-show"><code>icp canister settings show</code>↴</a></li>
 <li><a href="#icp-canister-settings-update"><code>icp canister settings update</code>↴</a></li>
@@ -200,6 +201,7 @@
 <li><code>install</code> — Install a built WASM to a canister on a network</li>
 <li><code>list</code> — List the canisters in an environment</li>
 <li><code>metadata</code> — Read a metadata section from a canister</li>
+<li><code>migrate-id</code> — Migrate a canister ID from one subnet to another</li>
 <li><code>settings</code> — Commands to manage canister settings</li>
 <li><code>snapshot</code> — Commands to manage canister snapshots</li>
 <li><code>start</code> — Start a canister on a network</li>
@@ -374,6 +376,23 @@
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
+<h2 id="icp-canister-migrate-id"><code>icp canister migrate-id</code></h2>
+<p>Migrate a canister ID from one subnet to another</p>
+<p><strong>Usage:</strong> <code>icp canister migrate-id [OPTIONS] --replace &#x3C;REPLACE> &#x3C;CANISTER></code></p>
+<h6 id="arguments-6"><strong>Arguments:</strong></h6>
+<ul>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+</ul>
+<h6 id="options-8"><strong>Options:</strong></h6>
+<ul>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
+<li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--replace &#x3C;REPLACE></code> — The canister to replace with the source canister’s ID</li>
+<li><code>-y</code>, <code>--yes</code> — Skip confirmation prompts</li>
+<li><code>--resume-watch</code> — Resume watching an already-initiated migration (skips validation and initiation)</li>
+<li><code>--skip-watch</code> — Exit as soon as the migrated canister is deleted (don’t wait for full completion)</li>
+</ul>
 <h2 id="icp-canister-settings"><code>icp canister settings</code></h2>
 <p>Commands to manage canister settings</p>
 <p><strong>Usage:</strong> <code>icp canister settings &#x3C;COMMAND></code></p>
@@ -387,11 +406,11 @@
 <p>Show the status of a canister.</p>
 <p>By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.</p>
 <p><strong>Usage:</strong> <code>icp canister settings show [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-6"><strong>Arguments:</strong></h6>
+<h6 id="arguments-7"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — canister name or principal to target. When using a name, an enviroment must be specified</li>
 </ul>
-<h6 id="options-8"><strong>Options:</strong></h6>
+<h6 id="options-9"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -403,11 +422,11 @@
 <h2 id="icp-canister-settings-update"><code>icp canister settings update</code></h2>
 <p>Change a canister’s settings to specified values</p>
 <p><strong>Usage:</strong> <code>icp canister settings update [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-7"><strong>Arguments:</strong></h6>
+<h6 id="arguments-8"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-9"><strong>Options:</strong></h6>
+<h6 id="options-10"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</p>
@@ -472,11 +491,11 @@
 <h2 id="icp-canister-settings-sync"><code>icp canister settings sync</code></h2>
 <p>Synchronize a canister’s settings with those defined in the project</p>
 <p><strong>Usage:</strong> <code>icp canister settings sync [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-8"><strong>Arguments:</strong></h6>
+<h6 id="arguments-9"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-10"><strong>Options:</strong></h6>
+<h6 id="options-11"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -497,11 +516,11 @@
 <h2 id="icp-canister-snapshot-create"><code>icp canister snapshot create</code></h2>
 <p>Create a snapshot of a canister’s state</p>
 <p><strong>Usage:</strong> <code>icp canister snapshot create [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-9"><strong>Arguments:</strong></h6>
+<h6 id="arguments-10"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-11"><strong>Options:</strong></h6>
+<h6 id="options-12"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -511,12 +530,12 @@
 <h2 id="icp-canister-snapshot-delete"><code>icp canister snapshot delete</code></h2>
 <p>Delete a canister snapshot</p>
 <p><strong>Usage:</strong> <code>icp canister snapshot delete [OPTIONS] &#x3C;CANISTER> &#x3C;SNAPSHOT_ID></code></p>
-<h6 id="arguments-10"><strong>Arguments:</strong></h6>
+<h6 id="arguments-11"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 <li><code>&#x3C;SNAPSHOT_ID></code> — The snapshot ID to delete (hex-encoded)</li>
 </ul>
-<h6 id="options-12"><strong>Options:</strong></h6>
+<h6 id="options-13"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -525,12 +544,12 @@
 <h2 id="icp-canister-snapshot-download"><code>icp canister snapshot download</code></h2>
 <p>Download a snapshot to local disk</p>
 <p><strong>Usage:</strong> <code>icp canister snapshot download [OPTIONS] --output &#x3C;OUTPUT> &#x3C;CANISTER> &#x3C;SNAPSHOT_ID></code></p>
-<h6 id="arguments-11"><strong>Arguments:</strong></h6>
+<h6 id="arguments-12"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 <li><code>&#x3C;SNAPSHOT_ID></code> — The snapshot ID to download (hex-encoded)</li>
 </ul>
-<h6 id="options-13"><strong>Options:</strong></h6>
+<h6 id="options-14"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -541,11 +560,11 @@
 <h2 id="icp-canister-snapshot-list"><code>icp canister snapshot list</code></h2>
 <p>List all snapshots for a canister</p>
 <p><strong>Usage:</strong> <code>icp canister snapshot list [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-12"><strong>Arguments:</strong></h6>
+<h6 id="arguments-13"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-14"><strong>Options:</strong></h6>
+<h6 id="options-15"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -554,12 +573,12 @@
 <h2 id="icp-canister-snapshot-restore"><code>icp canister snapshot restore</code></h2>
 <p>Restore a canister from a snapshot</p>
 <p><strong>Usage:</strong> <code>icp canister snapshot restore [OPTIONS] &#x3C;CANISTER> &#x3C;SNAPSHOT_ID></code></p>
-<h6 id="arguments-13"><strong>Arguments:</strong></h6>
+<h6 id="arguments-14"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 <li><code>&#x3C;SNAPSHOT_ID></code> — The snapshot ID to restore (hex-encoded)</li>
 </ul>
-<h6 id="options-15"><strong>Options:</strong></h6>
+<h6 id="options-16"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -568,11 +587,11 @@
 <h2 id="icp-canister-snapshot-upload"><code>icp canister snapshot upload</code></h2>
 <p>Upload a snapshot from local disk</p>
 <p><strong>Usage:</strong> <code>icp canister snapshot upload [OPTIONS] --input &#x3C;INPUT> &#x3C;CANISTER></code></p>
-<h6 id="arguments-14"><strong>Arguments:</strong></h6>
+<h6 id="arguments-15"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-16"><strong>Options:</strong></h6>
+<h6 id="options-17"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -584,11 +603,11 @@
 <h2 id="icp-canister-start"><code>icp canister start</code></h2>
 <p>Start a canister on a network</p>
 <p><strong>Usage:</strong> <code>icp canister start [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-15"><strong>Arguments:</strong></h6>
+<h6 id="arguments-16"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-17"><strong>Options:</strong></h6>
+<h6 id="options-18"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -598,11 +617,11 @@
 <p>Show the status of canister(s).</p>
 <p>By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.</p>
 <p><strong>Usage:</strong> <code>icp canister status [OPTIONS] [CANISTER]</code></p>
-<h6 id="arguments-16"><strong>Arguments:</strong></h6>
+<h6 id="arguments-17"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — An optional canister name or principal to target. When using a name, an enviroment must be specified</li>
 </ul>
-<h6 id="options-18"><strong>Options:</strong></h6>
+<h6 id="options-19"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -614,11 +633,11 @@
 <h2 id="icp-canister-stop"><code>icp canister stop</code></h2>
 <p>Stop a canister on a network</p>
 <p><strong>Usage:</strong> <code>icp canister stop [OPTIONS] &#x3C;CANISTER></code></p>
-<h6 id="arguments-17"><strong>Arguments:</strong></h6>
+<h6 id="arguments-18"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-19"><strong>Options:</strong></h6>
+<h6 id="options-20"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -627,11 +646,11 @@
 <h2 id="icp-canister-top-up"><code>icp canister top-up</code></h2>
 <p>Top up a canister with cycles</p>
 <p><strong>Usage:</strong> <code>icp canister top-up [OPTIONS] --amount &#x3C;AMOUNT> &#x3C;CANISTER></code></p>
-<h6 id="arguments-18"><strong>Arguments:</strong></h6>
+<h6 id="arguments-19"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
 </ul>
-<h6 id="options-20"><strong>Options:</strong></h6>
+<h6 id="options-21"><strong>Options:</strong></h6>
 <ul>
 <li><code>--amount &#x3C;AMOUNT></code> — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
@@ -650,7 +669,7 @@
 <h2 id="icp-cycles-balance"><code>icp cycles balance</code></h2>
 <p>Display the cycles balance</p>
 <p><strong>Usage:</strong> <code>icp cycles balance [OPTIONS]</code></p>
-<h6 id="options-21"><strong>Options:</strong></h6>
+<h6 id="options-22"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -659,7 +678,7 @@
 <h2 id="icp-cycles-mint"><code>icp cycles mint</code></h2>
 <p>Convert icp to cycles</p>
 <p><strong>Usage:</strong> <code>icp cycles mint [OPTIONS]</code></p>
-<h6 id="options-22"><strong>Options:</strong></h6>
+<h6 id="options-23"><strong>Options:</strong></h6>
 <ul>
 <li><code>--icp &#x3C;ICP></code> — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>--cycles &#x3C;CYCLES></code> — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
@@ -670,12 +689,12 @@
 <h2 id="icp-cycles-transfer"><code>icp cycles transfer</code></h2>
 <p>Transfer cycles to another principal</p>
 <p><strong>Usage:</strong> <code>icp cycles transfer [OPTIONS] &#x3C;AMOUNT> &#x3C;RECEIVER></code></p>
-<h6 id="arguments-19"><strong>Arguments:</strong></h6>
+<h6 id="arguments-20"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;AMOUNT></code> — Cycles amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>&#x3C;RECEIVER></code> — The receiver of the cycles transfer</li>
 </ul>
-<h6 id="options-23"><strong>Options:</strong></h6>
+<h6 id="options-24"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -684,11 +703,11 @@
 <h2 id="icp-deploy"><code>icp deploy</code></h2>
 <p>Deploy a project to an environment</p>
 <p><strong>Usage:</strong> <code>icp deploy [OPTIONS] [NAMES]...</code></p>
-<h6 id="arguments-20"><strong>Arguments:</strong></h6>
+<h6 id="arguments-21"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAMES></code> — Canister names</li>
 </ul>
-<h6 id="options-24"><strong>Options:</strong></h6>
+<h6 id="options-25"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-m</code>, <code>--mode &#x3C;MODE></code> — Specifies the mode of canister installation</p>
@@ -741,7 +760,7 @@
 <h2 id="icp-identity-account-id"><code>icp identity account-id</code></h2>
 <p>Display the ICP ledger account identifier for the current identity</p>
 <p><strong>Usage:</strong> <code>icp identity account-id [OPTIONS]</code></p>
-<h6 id="options-25"><strong>Options:</strong></h6>
+<h6 id="options-26"><strong>Options:</strong></h6>
 <ul>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--of-principal &#x3C;OF_PRINCIPAL></code> — Convert this Principal instead of the current identity’s Principal</li>
@@ -749,36 +768,36 @@
 <h2 id="icp-identity-default"><code>icp identity default</code></h2>
 <p>Display the currently selected identity</p>
 <p><strong>Usage:</strong> <code>icp identity default [NAME]</code></p>
-<h6 id="arguments-21"><strong>Arguments:</strong></h6>
+<h6 id="arguments-22"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Identity to set as default. If omitted, prints the current default</li>
 </ul>
 <h2 id="icp-identity-delete"><code>icp identity delete</code></h2>
 <p>Delete an identity</p>
 <p><strong>Usage:</strong> <code>icp identity delete &#x3C;NAME></code></p>
-<h6 id="arguments-22"><strong>Arguments:</strong></h6>
+<h6 id="arguments-23"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Name of the identity to delete</li>
 </ul>
 <h2 id="icp-identity-export"><code>icp identity export</code></h2>
 <p>Print the PEM file for the identity</p>
 <p><strong>Usage:</strong> <code>icp identity export [OPTIONS] &#x3C;NAME></code></p>
-<h6 id="arguments-23"><strong>Arguments:</strong></h6>
+<h6 id="arguments-24"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Name of the identity to export</li>
 </ul>
-<h6 id="options-26"><strong>Options:</strong></h6>
+<h6 id="options-27"><strong>Options:</strong></h6>
 <ul>
 <li><code>--password-file &#x3C;FILE></code> — Read the password from a file instead of prompting (only required for identities created or imported with —storage password)</li>
 </ul>
 <h2 id="icp-identity-import"><code>icp identity import</code></h2>
 <p>Import a new identity</p>
 <p><strong>Usage:</strong> <code>icp identity import [OPTIONS] &#x3C;--from-pem &#x3C;FILE>|--read-seed-phrase|--from-seed-file &#x3C;FILE>> &#x3C;NAME></code></p>
-<h6 id="arguments-24"><strong>Arguments:</strong></h6>
+<h6 id="arguments-25"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Name for the imported identity</li>
 </ul>
-<h6 id="options-27"><strong>Options:</strong></h6>
+<h6 id="options-28"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>--storage &#x3C;STORAGE></code> — Where to store the private key</p>
@@ -814,11 +833,11 @@
 <h2 id="icp-identity-link-hsm"><code>icp identity link hsm</code></h2>
 <p>Link an HSM key to a new identity</p>
 <p><strong>Usage:</strong> <code>icp identity link hsm [OPTIONS] --pkcs11-module &#x3C;PKCS11_MODULE> --key-id &#x3C;KEY_ID> &#x3C;NAME></code></p>
-<h6 id="arguments-25"><strong>Arguments:</strong></h6>
+<h6 id="arguments-26"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Name for the linked identity</li>
 </ul>
-<h6 id="options-28"><strong>Options:</strong></h6>
+<h6 id="options-29"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>--pkcs11-module &#x3C;PKCS11_MODULE></code> — Path to the PKCS#11 module (shared library) for the HSM</p>
@@ -840,11 +859,11 @@
 <h2 id="icp-identity-new"><code>icp identity new</code></h2>
 <p>Create a new identity</p>
 <p><strong>Usage:</strong> <code>icp identity new [OPTIONS] &#x3C;NAME></code></p>
-<h6 id="arguments-26"><strong>Arguments:</strong></h6>
+<h6 id="arguments-27"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Name for the new identity</li>
 </ul>
-<h6 id="options-29"><strong>Options:</strong></h6>
+<h6 id="options-30"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>--storage &#x3C;STORAGE></code> — Where to store the private key</p>
@@ -861,14 +880,14 @@
 <h2 id="icp-identity-principal"><code>icp identity principal</code></h2>
 <p>Display the principal for the current identity</p>
 <p><strong>Usage:</strong> <code>icp identity principal [OPTIONS]</code></p>
-<h6 id="options-30"><strong>Options:</strong></h6>
+<h6 id="options-31"><strong>Options:</strong></h6>
 <ul>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
 <h2 id="icp-identity-rename"><code>icp identity rename</code></h2>
 <p>Rename an identity</p>
 <p><strong>Usage:</strong> <code>icp identity rename &#x3C;OLD_NAME> &#x3C;NEW_NAME></code></p>
-<h6 id="arguments-27"><strong>Arguments:</strong></h6>
+<h6 id="arguments-28"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;OLD_NAME></code> — Current name of the identity</li>
 <li><code>&#x3C;NEW_NAME></code> — New name for the identity</li>
@@ -898,14 +917,14 @@
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Ping using ICP_ENVIRONMENT variable</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network ping</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Name overrides ICP_ENVIRONMENT</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network ping local</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Wait until healthy</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network ping --wait-healthy</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Ping default &#x27;local&#x27; networkicp network ping# Ping explicit networkicp network ping mynetwork# Ping using environment flagicp network ping -e staging# Ping using ICP_ENVIRONMENT variableICP_ENVIRONMENT=staging icp network ping# Name overrides ICP_ENVIRONMENTICP_ENVIRONMENT=staging icp network ping local# Wait until healthyicp network ping --wait-healthy"><div></div></button></div></figure></div>
-<h6 id="arguments-28"><strong>Arguments:</strong></h6>
+<h6 id="arguments-29"><strong>Arguments:</strong></h6>
 <ul>
 <li>
 <p><code>&#x3C;NAME></code> — Name of the network to use.</p>
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-31"><strong>Options:</strong></h6>
+<h6 id="options-32"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -926,14 +945,14 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Use ICP_ENVIRONMENT variable</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network start</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Name overrides ICP_ENVIRONMENT</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network start local</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Background mode with environment</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network start -e staging -d</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Use default &#x27;local&#x27; networkicp network start# Use explicit network nameicp network start mynetwork# Use environment flagicp network start -e staging# Use ICP_ENVIRONMENT variableICP_ENVIRONMENT=staging icp network start# Name overrides ICP_ENVIRONMENTICP_ENVIRONMENT=staging icp network start local# Background mode with environmenticp network start -e staging -d"><div></div></button></div></figure></div>
-<h6 id="arguments-29"><strong>Arguments:</strong></h6>
+<h6 id="arguments-30"><strong>Arguments:</strong></h6>
 <ul>
 <li>
 <p><code>&#x3C;NAME></code> — Name of the network to use.</p>
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-32"><strong>Options:</strong></h6>
+<h6 id="options-33"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -954,14 +973,14 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Get status using ICP_ENVIRONMENT variable</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network status</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Name overrides ICP_ENVIRONMENT</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network status local</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># JSON output</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network status --json</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Get status of default &#x27;local&#x27; networkicp network status# Get status of explicit networkicp network status mynetwork# Get status using environment flagicp network status -e staging# Get status using ICP_ENVIRONMENT variableICP_ENVIRONMENT=staging icp network status# Name overrides ICP_ENVIRONMENTICP_ENVIRONMENT=staging icp network status local# JSON outputicp network status --json"><div></div></button></div></figure></div>
-<h6 id="arguments-30"><strong>Arguments:</strong></h6>
+<h6 id="arguments-31"><strong>Arguments:</strong></h6>
 <ul>
 <li>
 <p><code>&#x3C;NAME></code> — Name of the network to use.</p>
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-33"><strong>Options:</strong></h6>
+<h6 id="options-34"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -981,14 +1000,14 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Stop using environment flag</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network stop -e staging</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Stop using ICP_ENVIRONMENT variable</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network stop</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Name overrides ICP_ENVIRONMENT</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network stop local</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Stop default &#x27;local&#x27; networkicp network stop# Stop explicit networkicp network stop mynetwork# Stop using environment flagicp network stop -e staging# Stop using ICP_ENVIRONMENT variableICP_ENVIRONMENT=staging icp network stop# Name overrides ICP_ENVIRONMENTICP_ENVIRONMENT=staging icp network stop local"><div></div></button></div></figure></div>
-<h6 id="arguments-31"><strong>Arguments:</strong></h6>
+<h6 id="arguments-32"><strong>Arguments:</strong></h6>
 <ul>
 <li>
 <p><code>&#x3C;NAME></code> — Name of the network to use.</p>
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-34"><strong>Options:</strong></h6>
+<h6 id="options-35"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -1003,11 +1022,11 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p>Create a new ICP project from a template</p>
 <p>Under the hood templates are generated with <code>cargo-generate</code>. See the cargo-generate docs for a guide on how to write your own templates: <a href="https://docs.rs/cargo-generate/0.23.7/cargo_generate/" rel="noopener noreferrer" target="_blank">https://docs.rs/cargo-generate/0.23.7/cargo_generate/</a></p>
 <p><strong>Usage:</strong> <code>icp new [OPTIONS] &#x3C;NAME></code></p>
-<h6 id="arguments-32"><strong>Arguments:</strong></h6>
+<h6 id="arguments-33"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAME></code> — Directory to create / project name; if the name isn’t in kebab-case, it will be converted to kebab-case unless <code>--force</code> is given</li>
 </ul>
-<h6 id="options-35"><strong>Options:</strong></h6>
+<h6 id="options-36"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>--subfolder &#x3C;SUBFOLDER></code> — Specifies the subfolder within the template repository to be used as the actual template</p>
@@ -1093,11 +1112,11 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <h2 id="icp-sync"><code>icp sync</code></h2>
 <p>Synchronize canisters</p>
 <p><strong>Usage:</strong> <code>icp sync [OPTIONS] [CANISTERS]...</code></p>
-<h6 id="arguments-33"><strong>Arguments:</strong></h6>
+<h6 id="arguments-34"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTERS></code> — Canister names (if empty, sync all canisters in environment)</li>
 </ul>
-<h6 id="options-36"><strong>Options:</strong></h6>
+<h6 id="options-37"><strong>Options:</strong></h6>
 <ul>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
@@ -1110,7 +1129,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>balance</code> — Display the token balance on the ledger (default token: icp)</li>
 <li><code>transfer</code> — Transfer ICP or ICRC1 tokens through their ledger (default token: icp)</li>
 </ul>
-<h6 id="arguments-34"><strong>Arguments:</strong></h6>
+<h6 id="arguments-35"><strong>Arguments:</strong></h6>
 <ul>
 <li>
 <p><code>&#x3C;TOKEN|LEDGER_ID></code> — The token or ledger canister id to execute the operation on, defaults to <code>icp</code></p>
@@ -1120,7 +1139,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <h2 id="icp-token-balance"><code>icp token balance</code></h2>
 <p>Display the token balance on the ledger (default token: icp)</p>
 <p><strong>Usage:</strong> <code>icp token [TOKEN|LEDGER_ID] balance [OPTIONS]</code></p>
-<h6 id="options-37"><strong>Options:</strong></h6>
+<h6 id="options-38"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -1129,12 +1148,12 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <h2 id="icp-token-transfer"><code>icp token transfer</code></h2>
 <p>Transfer ICP or ICRC1 tokens through their ledger (default token: icp)</p>
 <p><strong>Usage:</strong> <code>icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] &#x3C;AMOUNT> &#x3C;RECEIVER></code></p>
-<h6 id="arguments-35"><strong>Arguments:</strong></h6>
+<h6 id="arguments-36"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;AMOUNT></code> — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>&#x3C;RECEIVER></code> — The receiver of the token transfer. Can be a Principal or an AccountIdentifier hex string (only for ICP ledger)</li>
 </ul>
-<h6 id="options-38"><strong>Options:</strong></h6>
+<h6 id="options-39"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>

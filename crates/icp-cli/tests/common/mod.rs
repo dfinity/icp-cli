@@ -49,6 +49,22 @@ environments:
     network: docker-network
 "#;
 
+/// A network manifest for a compose-based network
+pub(crate) const NETWORK_COMPOSE: &str = r#"
+networks:
+  - name: compose-network
+    mode: managed
+    compose:
+      file: compose/docker-compose.test.yml
+      gateway-service: icp-network
+"#;
+
+pub(crate) const ENVIRONMENT_COMPOSE: &str = r#"
+environments:
+  - name: compose-environment
+    network: compose-network
+"#;
+
 /// This ID is dependent on the toplogy being served by pocket-ic
 /// NOTE: If the topology is changed (another subnet is added, etc) the ID may change.
 /// References:

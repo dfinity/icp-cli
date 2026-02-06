@@ -56,6 +56,10 @@ pub enum ManagedMode {
         /// Bind mounts to add to the container in the format relative_host_path:container_path[:options]
         mounts: Option<Vec<String>>,
     },
+    Compose {
+        /// Docker Compose configuration
+        compose: ComposeConfig,
+    },
     Launcher {
         /// HTTP gateway configuration
         gateway: Option<Gateway>,
@@ -68,6 +72,21 @@ pub enum ManagedMode {
         /// Configure the list of subnets (one application subnet by default)
         subnets: Option<Vec<SubnetKind>>,
     },
+}
+
+/// Docker Compose network configuration
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub struct ComposeConfig {
+    /// Path to the docker-compose.yml file (relative to project root)
+    pub file: String,
+
+    /// Name of the service that runs the IC gateway
+    pub gateway_service: String,
+
+    /// Additional environment variables to pass to docker compose
+    #[serde(default)]
+    pub environment: Vec<String>,
 }
 
 impl Default for ManagedMode {

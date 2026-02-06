@@ -256,6 +256,31 @@ networks:
 
 See [Containerized Networks](../guides/containerized-networks.md) for full options.
 
+### Docker Compose Network
+
+For multi-container setups (like Bitcoin integration):
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    compose:
+      file: docker-compose.yml
+      gateway-service: icp-network
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `file` | string | Yes | Path to docker-compose.yml (relative to project root) |
+| `gateway-service` | string | Yes | Name of the service running the IC gateway |
+| `environment` | array | No | Additional environment variables for docker compose |
+
+The compose file must:
+- Have the gateway service mount `${ICP_STATUS_DIR}` to its status directory (default `/app/status`)
+- Write a status file when the network is ready
+
+See [Docker Compose Networks](../guides/containerized-networks.md#docker-compose-networks) for examples.
+
 ## Environments
 
 ```yaml

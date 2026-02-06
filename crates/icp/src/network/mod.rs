@@ -80,6 +80,7 @@ pub struct Managed {
 #[serde(untagged)]
 pub enum ManagedMode {
     Image(Box<ManagedImageConfig>),
+    Compose(Box<ManagedComposeConfig>),
     Launcher(Box<ManagedLauncherConfig>),
 }
 
@@ -90,6 +91,19 @@ pub struct ManagedLauncherConfig {
     pub ii: bool,
     pub nns: bool,
     pub subnets: Option<Vec<SubnetKind>>,
+}
+
+/// Configuration for Docker Compose managed networks
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ManagedComposeConfig {
+    /// Path to the docker-compose.yml file (relative to project root)
+    #[schemars(with = "String")]
+    pub file: PathBuf,
+    /// Name of the service that runs the IC gateway
+    pub gateway_service: String,
+    /// Additional environment variables to pass to docker compose
+    pub environment: Vec<String>,
 }
 
 #[derive(
@@ -263,6 +277,17 @@ impl From<Mode> for Configuration {
                         })),
                     },
                 },
+                crate::manifest::network::ManagedMode::Compose { compose } => {
+                    Configuration::Managed {
+                        managed: Managed {
+                            mode: ManagedMode::Compose(Box::new(ManagedComposeConfig {
+                                file: PathBuf::from(&compose.file),
+                                gateway_service: compose.gateway_service,
+                                environment: compose.environment,
+                            })),
+                        },
+                    }
+                }
             },
             Mode::Connected(connected) => Configuration::Connected {
                 connected: connected.into(),

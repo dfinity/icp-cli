@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "ComposeConfig": {
+      "description": "Docker Compose network configuration",
+      "properties": {
+        "environment": {
+          "default": [],
+          "description": "Additional environment variables to pass to docker compose",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "file": {
+          "description": "Path to the docker-compose.yml file (relative to project root)",
+          "type": "string"
+        },
+        "gateway-service": {
+          "description": "Name of the service that runs the IC gateway",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "gateway-service"
+      ],
+      "type": "object"
+    },
     "Connected": {
       "properties": {
         "root-key": {
@@ -145,6 +171,18 @@
           "required": [
             "image",
             "port-mapping"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "compose": {
+              "$ref": "#/$defs/ComposeConfig",
+              "description": "Docker Compose configuration"
+            }
+          },
+          "required": [
+            "compose"
           ],
           "type": "object"
         },

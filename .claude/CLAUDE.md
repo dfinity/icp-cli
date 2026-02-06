@@ -236,7 +236,7 @@ This project uses Snafu for error handling.
 - Every new *primary erroring action* gets its own error variant. There is no `MyError::Io { source: io::Error }`, instead (hypothetically) `OpenSocket` and `WriteSocket` should be separate. `snafu(context(false))` is not permitted. `snafu(transparent)` should *only* be used for source error types defined elsewhere in this repo, *not* for foreign error types.
 - Every error regarding a file in some way (processing, creating, etc.) should contain the file path of the error. It is okay to add 'dummy' file path parameters only used in error handling routes. For 'basic' file ops and JSON/YML loading use the functions in `icp::fs`, whose errors include the file path and can be made `snafu(transparent)`. 
 
-## Examples
+## Examples and Templates
 
 The `examples/` directory contains working project templates demonstrating:
 
@@ -284,3 +284,19 @@ Before finalizing recipe-related changes, ask the user:
 - What branch or version to compare with
 
 Then verify documentation matches the recipe templates from the specified source.
+
+### Dependency Versions in Examples/Templates
+
+When creating or updating examples and templates:
+
+1. **Always use the latest versions** of dependencies like `candid`, `ic-cdk`, `ic-cdk-macros`, etc. Use `cargo search <crate-name> --limit 1` to check the current latest version on crates.io before specifying dependency versions.
+
+2. **When updating a single example**, ask the developer whether other examples should also be updated to maintain consistency across all examples.
+
+3. **Schema references** in YAML files (`$schema=`) should point to the latest stable release tag (e.g., `v0.1.0`), not beta versions.
+
+4. **Related repository**: The `icp-cli-templates` repository (https://github.com/dfinity/icp-cli-templates) contains cargo-generate templates that should follow the same versioning guidelines.
+
+5. **Motoko imports**: When writing Motoko code, prefer `mo:core` over `mo:base`. See https://docs.internetcomputer.org/motoko/core for documentation.
+
+6. **Gitignore for ICP projects**: Only add `.icp/cache/` to `.gitignore`, NOT the entire `.icp/` directory. The `.icp/data/` directory contains mainnet canister ID mappings that should be version controlled to preserve deployment information.

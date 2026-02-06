@@ -88,6 +88,15 @@ pub enum ChildLocator {
         /// Whether to remove the container when it exits.
         rm_on_exit: bool,
     },
+    /// A Docker Compose project (used for multi-container setups like Bitcoin).
+    Compose {
+        /// The compose project name (e.g., "icp-local-bitcoin").
+        project_name: String,
+        /// Path to the docker-compose.yml file.
+        compose_file: String,
+        /// Docker socket path.
+        socket: String,
+    },
 }
 
 impl ChildLocator {
@@ -106,6 +115,11 @@ impl ChildLocator {
             ChildLocator::Container { id, socket, .. } => {
                 crate::network::managed::docker::is_container_running(socket, id).await
             }
+            ChildLocator::Compose {
+                project_name,
+                socket,
+                ..
+            } => crate::network::managed::compose::is_compose_running(socket, project_name).await,
         }
     }
 }

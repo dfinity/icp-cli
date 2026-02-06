@@ -65,6 +65,12 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
                 &id[..12]
             ));
         }
+        ChildLocator::Compose { project_name, .. } => {
+            let _ = ctx.term.write_line(&format!(
+                "Stopping compose network (project: {})...",
+                project_name
+            ));
+        }
     }
 
     stop_network(&descriptor.child_locator).await?;

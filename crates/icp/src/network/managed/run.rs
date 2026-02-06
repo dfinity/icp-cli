@@ -35,13 +35,14 @@ use uuid::Uuid;
 use crate::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{
-        Managed, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
+        Managed, ManagedComposeConfig, ManagedLauncherConfig, ManagedMode, NetworkDirectory, Port,
         config::{ChildLocator, NetworkDescriptorGatewayPort, NetworkDescriptorModel},
         directory::{
             CheckPortInUseError, PortInUseError, SaveNetworkDescriptorError,
             save_network_descriptors,
         },
         managed::{
+            compose::{ComposeDropGuard, ComposeNetwork},
             docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
             launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
@@ -87,6 +88,13 @@ pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError
         } => {
             super::docker::stop_docker_launcher(socket, id, *rm_on_exit).await?;
         }
+        ChildLocator::Compose {
+            project_name,
+            compose_file,
+            ..
+        } => {
+            super::compose::stop_compose(compose_file, project_name).await?;
+        }
     }
     Ok(())
 }
@@ -109,6 +117,11 @@ pub enum StopNetworkError {
     DockerLauncher {
         source: super::docker::StopContainerError,
     },
+
+    #[snafu(transparent)]
+    ComposeLauncher {
+        source: super::compose::ComposeError,
+    },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -129,6 +142,7 @@ async fn run_network_launcher(
     enum LaunchMode<'a> {
         Image(ManagedImageOptions),
         NativeLauncher(&'a ManagedLauncherConfig),
+        Compose(&'a ManagedComposeConfig),
     }
     let (launch_mode, fixed_ports) = match &config.mode {
         ManagedMode::Image(image_config) => {
@@ -147,6 +161,11 @@ async fn run_network_launcher(
                 Port::Random => vec![],
             };
             (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
+        }
+        ManagedMode::Compose(compose_config) => {
+            // Compose networks don't have fixed ports configured in the manifest
+            // Port mapping is defined in the compose file
+            (LaunchMode::Compose(compose_config), vec![])
         }
     };
 
@@ -207,6 +226,17 @@ async fn run_network_launcher(
                         fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
+                }
+                LaunchMode::Compose(compose_config) => {
+                    let compose_network =
+                        ComposeNetwork::new(&nd.network_name, compose_config, project_root);
+                    let (guard, instance, locator) = compose_network.start().await?;
+                    let gateway = NetworkDescriptorGatewayPort {
+                        port: instance.gateway_port,
+                        // Compose networks manage their own port mapping
+                        fixed: false,
+                    };
+                    Ok((ShutdownGuard::Compose(guard), instance, gateway, locator))
                 }
             }
         })
@@ -315,6 +345,7 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
 enum ShutdownGuard {
     Container(AsyncDropper<DockerDropGuard>),
     Process(AsyncDropper<ChildSignalOnDrop>),
+    Compose(AsyncDropper<ComposeDropGuard>),
 }
 
 impl ShutdownGuard {
@@ -322,12 +353,14 @@ impl ShutdownGuard {
         match self {
             ShutdownGuard::Container(mut guard) => guard.async_drop().await,
             ShutdownGuard::Process(mut guard) => guard.async_drop().await,
+            ShutdownGuard::Compose(mut guard) => guard.async_drop().await,
         }
     }
     fn defuse(self) {
         match self {
             ShutdownGuard::Container(mut guard) => guard.defuse(),
             ShutdownGuard::Process(mut guard) => guard.defuse(),
+            ShutdownGuard::Compose(mut guard) => guard.defuse(),
         }
     }
 }
@@ -383,6 +416,11 @@ pub enum RunNetworkLauncherError {
     SpawnDockerLauncher {
         source: crate::network::managed::docker::DockerLauncherError,
     },
+
+    #[snafu(transparent)]
+    SpawnComposeLauncher {
+        source: crate::network::managed::compose::ComposeError,
+    },
 }
 
 #[derive(Debug)]
@@ -400,9 +438,9 @@ fn safe_eprintln(msg: &str) {
 
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
-        ShutdownGuard::Container(_) => {
+        ShutdownGuard::Container(_) | ShutdownGuard::Compose(_) => {
             stop_signal().await;
-            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
+            safe_eprintln("Received Ctrl-C, shutting down network...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {

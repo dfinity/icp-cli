@@ -8,21 +8,23 @@ The `rust` recipe type provides a streamlined way to build Rust canisters using 
 
 ## Configuration
 
-The [`icp.yaml`](./icp.yaml) file configures a canister using the built-in `rust` recipe:
+The [`icp.yaml`](./icp.yaml) file configures a canister using the `@dfinity/rust` recipe:
 
 ```yaml
-canister:
-  name: my-canister
-  recipe:
-    type: rust
-    configuration:
-      package: icp-rust-recipe
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/rust"
+      configuration:
+        package: icp-canister
+        shrink: true
 ```
 
 ### Key Components
 
-- **`type: rust`**: Uses the built-in Rust recipe type
+- **`type: "@dfinity/rust"`**: Uses the official DFINITY Rust recipe
 - **`package`**: Specifies the Cargo package name to build (required)
+- **`shrink`**: Enables WASM optimization (optional)
 
 ## Project Structure
 

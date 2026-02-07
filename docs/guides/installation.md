@@ -20,7 +20,7 @@ Set up everything you need to build and deploy canisters on the Internet Compute
 > sudo dnf install -y dbus-libs openssl ca-certificates
 > ```
 
-## Quick Install (Recommended)
+## Quick Install via npm (Recommended)
 
 **Required:** [Node.js](https://nodejs.org/) (LTS) — needed for npm and for building frontend canisters.
 
@@ -60,33 +60,23 @@ If you prefer not to use npm, or need platform-specific options, see the section
 
 ### icp-cli
 
-**Shell Script (macOS / Linux / WSL):**
+**Homebrew (macOS/Linux):**
+
+```bash
+brew install icp-cli
+```
+
+**Shell Script (macOS/Linux/WSL):**
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/latest/download/icp-cli-installer.sh | sh
 ```
 
-Restart your shell or follow the instructions shown by the installer.
-
-**Shell Script (Windows, for Rust-only mainnet projects):**
+**Shell Script (Windows):**
 
 ```ps1
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/dfinity/icp-cli/releases/latest/download/icp-cli-installer.ps1 | iex"
 ```
-
-Restart your terminal after installation.
-
-**Homebrew (macOS/Linux only):**
-
-```bash
-brew install dfinity/tap/icp-cli
-```
-
-To update later: `brew upgrade dfinity/tap/icp-cli`
-
-> **Note:** Homebrew installs ic-wasm as a dependency, so you can skip the ic-wasm installation below.
-
-> **Note:** [Node.js](https://nodejs.org/) (LTS recommended) is still required for the Motoko toolchain and frontend canisters when using alternative installation methods.
 
 ### ic-wasm
 
@@ -103,12 +93,10 @@ To update later: `brew upgrade dfinity/tap/icp-cli`
 
 **Installation:**
 
-> **Note:** If you installed icp-cli via Homebrew, ic-wasm is already included. Skip this section.
-
-**npm (recommended):**
+**Homebrew (macOS/Linux):**
 
 ```bash
-npm install -g @icp-sdk/ic-wasm
+brew install ic-wasm
 ```
 
 **Shell Script (macOS/Linux):**
@@ -130,9 +118,10 @@ Learn more: [ic-wasm repository](https://github.com/dfinity/ic-wasm)
 **Motoko:**
 
 ```bash
-npm install -g ic-mops
-mops toolchain init
+curl -fsSL cli.mops.one/install.sh | sh && mops toolchain init
 ```
+
+> **Note:** Requires [Node.js](https://nodejs.org/) and a package manager (npm, pnpm, or bun). The shell script installs the latest Mops version stored onchain on ICP.
 
 **Rust:**
 

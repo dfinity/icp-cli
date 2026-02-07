@@ -33,7 +33,7 @@ This installs:
 - **ic-wasm** — optimizes WebAssembly for the Internet Computer
 - **mops** — Motoko package manager, which also installs the Motoko compiler
 
-> **Alternative methods:** See the [Installation Guide](guides/installation.md) for shell script, Homebrew, Rust setup, or other options.
+> **Alternative methods:** See the [Installation Guide](guides/installation.md) for Homebrew, shell script, Rust setup, or other options.
 
 Verify the tools are installed:
 

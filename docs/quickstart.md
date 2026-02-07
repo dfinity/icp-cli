@@ -16,7 +16,7 @@ npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
 npm install -g ic-mops && mops toolchain init
 ```
 
-> **Alternative methods:** See the [Installation Guide](guides/installation.md) for shell script, Homebrew, or other options.
+> **Alternative methods:** See the [Installation Guide](guides/installation.md) for Homebrew, shell script, or other options.
 
 ## Steps
 

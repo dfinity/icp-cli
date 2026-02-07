@@ -203,10 +203,14 @@ networks:
 | `mode` | string | Yes | `managed` |
 | `gateway.host` | string | No | Host address (default: localhost) |
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
-| `artificial_delay_ms` | integer | No | Artificial delay to add to every update call (ms) |
+| `artificial-delay-ms` | integer | No | Artificial delay to add to every update call (ms) |
 | `ii` | boolean | No | Set up Internet Identity canister (default: false) |
 | `nns` | boolean | No | Set up NNS canisters (default: false) |
 | `subnets` | array | No | Configure subnet types (default: one application subnet) |
+| `bitcoind-addr` | array | No | Bitcoin P2P node addresses to connect to (e.g. `127.0.0.1:18444`) |
+| `dogecoind-addr` | array | No | Dogecoin P2P node addresses to connect to |
+
+**Note:** The settings `artificial-delay-ms`, `ii`, `nns`, `subnets`, `bitcoind-addr`, and `dogecoind-addr` also work with [Docker image mode](#docker-network). When using Docker, `bitcoind-addr` and `dogecoind-addr` addresses referencing `127.0.0.1` or `localhost` are automatically translated to `host.docker.internal`.
 
 #### Subnet Configuration
 
@@ -225,6 +229,45 @@ networks:
 Available subnet types: `application`, `system`, `verified-application`, `bitcoin`, `fiduciary`, `nns`, `sns`
 
 **Note:** Subnet type support depends on the network launcher version. The `application` type is commonly used for testing.
+
+#### Bitcoin and Dogecoin Integration
+
+Connect the local network to a Bitcoin or Dogecoin node for testing chain integration:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+```
+
+The `bitcoind-addr` field specifies the P2P address (not RPC) of the Bitcoin node. The network launcher will connect to the node and enable Bitcoin integration on the local network. Multiple addresses can be specified.
+
+Dogecoin integration works the same way via `dogecoind-addr`:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    dogecoind-addr:
+      - "127.0.0.1:22556"
+```
+
+Both can be configured simultaneously.
+
+**Note:** When `bitcoind-addr` or `dogecoind-addr` is configured, the network launcher automatically adds a bitcoin subnet. If you also explicitly specify `subnets`, you must include `application` to keep the default application subnet:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+    subnets:
+      - application
+      - system
+```
 
 ### Connected Network
 
@@ -253,6 +296,24 @@ networks:
     port-mapping:
       - "0:4943"
 ```
+
+Docker networks support all the same launcher settings as native managed networks (`ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`). This makes it easy to switch between native and Docker modes — just add or remove `image` and `port-mapping`, and all other settings stay the same. These are translated into the appropriate container command arguments automatically:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    ii: true
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+```
+
+**Docker networking:** When `bitcoind-addr` or `dogecoind-addr` addresses reference `127.0.0.1`, `localhost`, or `::1`, they are automatically translated to `host.docker.internal` so the container can reach services on the host. On Linux, `host.docker.internal:host-gateway` is added to ensure compatibility.
+
+> **Note:** Use the top-level fields (`bitcoind-addr`, `ii`, etc.) instead of passing these as raw flags via `args`. The `args` field is for additional flags not covered by the semantic settings. If specified in both places, flags will be duplicated and addresses in `args` will not be auto-translated for Docker networking.
 
 See [Containerized Networks](../guides/containerized-networks.md) for full options.
 

@@ -20,9 +20,12 @@ use tokio::select;
 use wslpath2::Conversion;
 
 use crate::network::{
-    ManagedImageConfig, config::ChildLocator, managed::launcher::NetworkInstance,
+    Gateway, ManagedImageConfig, ManagedLauncherConfig, config::ChildLocator,
+    managed::launcher::NetworkInstance,
 };
 use crate::prelude::*;
+
+use super::launcher::launcher_settings_flags;
 
 use super::launcher::wait_for_launcher_status;
 
@@ -52,6 +55,8 @@ pub struct ManagedImageOptions {
     pub status_dir: String,
     /// Parsed mounts (excluding the status directory mount, which is added at runtime).
     pub mounts: Vec<Mount>,
+    /// Extra hosts entries for Docker networking (e.g. "host.docker.internal:host-gateway").
+    pub extra_hosts: Vec<String>,
 }
 
 impl ManagedImageOptions {
@@ -147,11 +152,38 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             .map(|v| convert_volume(wsl2_convert, wsl2_distro, v))
             .try_collect()?;
 
+        // Generate launcher settings flags from semantic fields
+        let launcher_config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: config.artificial_delay_ms,
+            ii: config.ii,
+            nns: config.nns,
+            subnets: config.subnets.clone(),
+            bitcoind_addr: config.bitcoind_addr.clone(),
+            dogecoind_addr: config.dogecoind_addr.clone(),
+        };
+        let launcher_flags =
+            translate_launcher_args_for_docker(launcher_settings_flags(&launcher_config));
+
+        // Append launcher flags to explicit user args
+        let mut all_args = config.args.clone();
+        all_args.extend(launcher_flags);
+
+        // Compute extra_hosts for Docker networking
+        let all_addrs: Vec<String> = config
+            .bitcoind_addr
+            .iter()
+            .chain(config.dogecoind_addr.iter())
+            .flatten()
+            .cloned()
+            .collect();
+        let extra_hosts = docker_extra_hosts_for_addrs(&all_addrs);
+
         Ok(ManagedImageOptions {
             image: config.image.clone(),
             port_bindings,
             rm_on_exit: config.rm_on_exit,
-            args: config.args.clone(),
+            args: all_args,
             entrypoint: config.entrypoint.clone(),
             environment: config.environment.clone(),
             volumes,
@@ -160,6 +192,7 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             shm_size: config.shm_size,
             status_dir: config.status_dir.clone(),
             mounts,
+            extra_hosts,
         })
     }
 }
@@ -187,6 +220,52 @@ pub enum ManagedImageConversionError {
     WslPathConvert { source: WslPathConversionError },
 }
 
+/// Translates a host:port address for use inside a Docker container.
+/// Replaces `127.0.0.1`, `localhost`, and `::1` with `host.docker.internal`
+/// so the container can reach services running on the host machine.
+pub(super) fn translate_addr_for_docker(addr: &str) -> String {
+    if let Some((host, port)) = addr.rsplit_once(':') {
+        let translated = match host {
+            "127.0.0.1" | "localhost" | "::1" => "host.docker.internal",
+            _ => host,
+        };
+        format!("{translated}:{port}")
+    } else {
+        addr.to_string()
+    }
+}
+
+/// Returns extra_hosts entries needed for Docker to resolve `host.docker.internal`.
+/// On Linux, Docker Engine does not provide `host.docker.internal` by default,
+/// so we add `host.docker.internal:host-gateway` when any addresses reference localhost.
+pub(super) fn docker_extra_hosts_for_addrs(addrs: &[String]) -> Vec<String> {
+    let needs_host_gateway = addrs.iter().any(|addr| {
+        addr.rsplit_once(':')
+            .map(|(host, _)| matches!(host, "127.0.0.1" | "localhost" | "::1"))
+            .unwrap_or(false)
+    });
+    if needs_host_gateway {
+        vec!["host.docker.internal:host-gateway".to_string()]
+    } else {
+        vec![]
+    }
+}
+
+/// Translates localhost addresses in `--bitcoind-addr=` and `--dogecoind-addr=` flags
+/// for use inside a Docker container.
+pub(super) fn translate_launcher_args_for_docker(args: Vec<String>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| {
+            for prefix in ["--bitcoind-addr=", "--dogecoind-addr="] {
+                if let Some(addr) = arg.strip_prefix(prefix) {
+                    return format!("{prefix}{}", translate_addr_for_docker(addr));
+                }
+            }
+            arg
+        })
+        .collect()
+}
+
 pub async fn spawn_docker_launcher(
     options: &ManagedImageOptions,
 ) -> Result<
@@ -211,6 +290,7 @@ pub async fn spawn_docker_launcher(
         shm_size,
         status_dir,
         mounts,
+        extra_hosts,
     } = options;
 
     // Create status tmpdir and convert path for WSL2 if needed
@@ -320,6 +400,11 @@ pub async fn spawn_docker_launcher(
                     mounts: Some(all_mounts),
                     binds: Some(volumes.clone()),
                     shm_size: *shm_size,
+                    extra_hosts: if extra_hosts.is_empty() {
+                        None
+                    } else {
+                        Some(extra_hosts.clone())
+                    },
                     ..<_>::default()
                 }),
                 ..<_>::default()
@@ -698,5 +783,195 @@ impl DockerDropGuard {
 impl AsyncDrop for DockerDropGuard {
     async fn async_drop(&mut self) {
         _ = self.stop().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn translate_addr_localhost_ipv4() {
+        assert_eq!(
+            translate_addr_for_docker("127.0.0.1:18444"),
+            "host.docker.internal:18444"
+        );
+    }
+
+    #[test]
+    fn translate_addr_localhost_name() {
+        assert_eq!(
+            translate_addr_for_docker("localhost:18444"),
+            "host.docker.internal:18444"
+        );
+    }
+
+    #[test]
+    fn translate_addr_localhost_ipv6() {
+        assert_eq!(
+            translate_addr_for_docker("::1:18444"),
+            "host.docker.internal:18444"
+        );
+    }
+
+    #[test]
+    fn translate_addr_remote_unchanged() {
+        assert_eq!(
+            translate_addr_for_docker("192.168.1.5:18444"),
+            "192.168.1.5:18444"
+        );
+    }
+
+    #[test]
+    fn translate_addr_hostname_unchanged() {
+        assert_eq!(
+            translate_addr_for_docker("my-bitcoin-node:18444"),
+            "my-bitcoin-node:18444"
+        );
+    }
+
+    #[test]
+    fn translate_addr_no_port_unchanged() {
+        assert_eq!(translate_addr_for_docker("just-a-string"), "just-a-string");
+    }
+
+    #[test]
+    fn extra_hosts_for_localhost_addr() {
+        let addrs = vec!["127.0.0.1:18444".to_string()];
+        assert_eq!(
+            docker_extra_hosts_for_addrs(&addrs),
+            vec!["host.docker.internal:host-gateway"]
+        );
+    }
+
+    #[test]
+    fn extra_hosts_for_remote_addr() {
+        let addrs = vec!["192.168.1.5:18444".to_string()];
+        assert!(docker_extra_hosts_for_addrs(&addrs).is_empty());
+    }
+
+    #[test]
+    fn extra_hosts_for_mixed_addrs() {
+        let addrs = vec![
+            "127.0.0.1:18444".to_string(),
+            "192.168.1.5:22556".to_string(),
+        ];
+        assert_eq!(
+            docker_extra_hosts_for_addrs(&addrs),
+            vec!["host.docker.internal:host-gateway"]
+        );
+    }
+
+    #[test]
+    fn extra_hosts_for_empty_addrs() {
+        let addrs: Vec<String> = vec![];
+        assert!(docker_extra_hosts_for_addrs(&addrs).is_empty());
+    }
+
+    #[test]
+    fn translate_launcher_args_bitcoind() {
+        let args = vec![
+            "--ii".to_string(),
+            "--bitcoind-addr=127.0.0.1:18444".to_string(),
+        ];
+        assert_eq!(
+            translate_launcher_args_for_docker(args),
+            vec![
+                "--ii".to_string(),
+                "--bitcoind-addr=host.docker.internal:18444".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn translate_launcher_args_dogecoind() {
+        let args = vec!["--dogecoind-addr=localhost:22556".to_string()];
+        assert_eq!(
+            translate_launcher_args_for_docker(args),
+            vec!["--dogecoind-addr=host.docker.internal:22556".to_string()]
+        );
+    }
+
+    #[test]
+    fn translate_launcher_args_non_addr_unchanged() {
+        let args = vec![
+            "--nns".to_string(),
+            "--artificial-delay-ms=100".to_string(),
+            "--subnet=bitcoin".to_string(),
+        ];
+        let expected = args.clone();
+        assert_eq!(translate_launcher_args_for_docker(args), expected);
+    }
+
+    #[test]
+    fn image_config_conversion_with_launcher_settings() {
+        let config = ManagedImageConfig {
+            image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
+            port_mapping: vec!["8000:4943".to_string()],
+            rm_on_exit: false,
+            args: vec!["--custom-flag".to_string()],
+            entrypoint: None,
+            environment: vec![],
+            volumes: vec![],
+            platform: None,
+            user: None,
+            shm_size: None,
+            status_dir: "/app/status".to_string(),
+            mounts: vec![],
+            artificial_delay_ms: None,
+            ii: true,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+            dogecoind_addr: None,
+        };
+        let options = ManagedImageOptions::try_from(&config).unwrap();
+
+        // User args come first, then generated launcher flags
+        assert!(options.args.contains(&"--custom-flag".to_string()));
+        assert!(options.args.contains(&"--ii".to_string()));
+        assert!(
+            options
+                .args
+                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
+        );
+
+        // extra_hosts for Linux Docker compatibility
+        assert_eq!(
+            options.extra_hosts,
+            vec!["host.docker.internal:host-gateway"]
+        );
+    }
+
+    #[test]
+    fn image_config_conversion_without_localhost_no_extra_hosts() {
+        let config = ManagedImageConfig {
+            image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
+            port_mapping: vec!["8000:4943".to_string()],
+            rm_on_exit: false,
+            args: vec![],
+            entrypoint: None,
+            environment: vec![],
+            volumes: vec![],
+            platform: None,
+            user: None,
+            shm_size: None,
+            status_dir: "/app/status".to_string(),
+            mounts: vec![],
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
+            dogecoind_addr: None,
+        };
+        let options = ManagedImageOptions::try_from(&config).unwrap();
+
+        assert!(
+            options
+                .args
+                .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
+        );
+        assert!(options.extra_hosts.is_empty());
     }
 }

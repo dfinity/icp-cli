@@ -318,6 +318,8 @@ pub async fn consolidate_manifest(
                             ii: false,
                             nns: false,
                             subnets: None,
+                            bitcoind_addr: None,
+                            dogecoind_addr: None,
                         })),
                     },
                 },

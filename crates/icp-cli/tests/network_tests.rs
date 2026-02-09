@@ -7,7 +7,8 @@ use icp_canister_interfaces::{
 use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
-    str::{PredicateStrExt, contains, is_match},
+    prelude::*,
+    str::{contains, is_match},
 };
 use serde_json::Value;
 use serial_test::file_serial;
@@ -618,4 +619,79 @@ async fn override_local_network_as_connected() {
         .args(["network", "ping", "local"])
         .assert()
         .success();
+}
+
+/// Test that setting autocontainerize=true causes the network launcher to run in Docker
+/// even when a native launcher configuration is used.
+///
+/// This test is skipped on Windows because autocontainerize has no effect there
+/// (Docker is always used on Windows).
+#[cfg(not(windows))]
+#[tag(docker)]
+#[tokio::test]
+async fn network_autocontainerize_uses_docker() {
+    let ctx = TestContext::new();
+
+    // Set autocontainerize to true
+    ctx.icp()
+        .args(["settings", "autocontainerize", "true"])
+        .assert()
+        .success();
+
+    let project_dir = ctx.create_project_dir("autocontainerize-test");
+
+    // Use a native launcher configuration (not an explicit docker image)
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // Pull the docker image first
+    ctx.docker_pull_network();
+
+    // Start the network
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
+
+    // Verify the descriptor contains a container ID (not a PID)
+    let descriptor_file_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("networks")
+        .join("random-network")
+        .join("descriptor.json");
+
+    let descriptor_contents =
+        read_to_string(&descriptor_file_path).expect("Failed to read network descriptor file");
+    let descriptor: Value = descriptor_contents
+        .trim()
+        .parse()
+        .expect("Descriptor file should contain valid JSON");
+
+    // When running in Docker, the child-locator should have an "id" field (container ID)
+    // rather than a "pid" field
+    let child_locator = descriptor
+        .get("child-locator")
+        .expect("Descriptor should have child-locator");
+
+    assert!(
+        child_locator.get("id").is_some(),
+        "With autocontainerize=true, child-locator should have container 'id', not 'pid'. Got: {child_locator}"
+    );
+    assert!(
+        child_locator.get("pid").is_none(),
+        "With autocontainerize=true, child-locator should not have 'pid'. Got: {child_locator}"
+    );
+
+    let container_id = child_locator
+        .get("id")
+        .and_then(|id| id.as_str())
+        .expect("Container ID should be a string");
+
+    // Verify the container is running
+    let output = std::process::Command::new("docker")
+        .args(["inspect", container_id])
+        .output()
+        .expect("Failed to run docker inspect");
+    assert!(
+        output.status.success(),
+        "Container should be running while network is active"
+    );
 }

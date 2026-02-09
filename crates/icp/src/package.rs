@@ -15,12 +15,72 @@ impl PackageCachePaths {
     pub fn launcher_dir(&self) -> PathBuf {
         self.root.join("network-launcher")
     }
+    pub fn recipes_dir(&self) -> PathBuf {
+        self.root.join("recipes")
+    }
+    pub fn project_templates_dir(&self) -> PathBuf {
+        self.root.join("project-templates")
+    }
+    pub fn canisters_dir(&self) -> PathBuf {
+        self.root.join("canisters")
+    }
     pub fn launcher_version(&self, version: &str) -> PathBuf {
         self.launcher_dir().join(version)
+    }
+    pub fn canister_sha(&self, sha: &str) -> CanisterCache {
+        CanisterCache {
+            dir: self.canisters_dir().join(sha),
+        }
     }
     pub fn manifest(&self) -> PathBuf {
         self.root.join("manifest.json")
     }
+}
+
+pub struct CanisterCache {
+    dir: PathBuf,
+}
+
+impl CanisterCache {
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+    pub fn wasm(&self) -> PathBuf {
+        self.dir.join("canister.wasm")
+    }
+    pub fn atime(&self) -> PathBuf {
+        self.dir.join(".atime")
+    }
+}
+
+pub fn read_cached_prebuilt(
+    cache: LRead<&PackageCachePaths>,
+    sha: &str,
+) -> Result<Option<Vec<u8>>, crate::fs::IoError> {
+    let cache_path = cache.canister_sha(sha);
+    let cache_wasm_path = cache_path.wasm();
+    if cache_wasm_path.exists() {
+        let wasm = crate::fs::read(&cache_wasm_path)?;
+        _ = crate::fs::write(&cache_path.atime(), b"");
+        Ok(Some(wasm))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn cache_prebuilt(
+    cache: LWrite<&PackageCachePaths>,
+    sha: &str,
+    wasm: &[u8],
+) -> Result<(), crate::fs::IoError> {
+    let cache_path = cache.canister_sha(sha);
+    let cache_wasm_path = cache_path.wasm();
+    if !cache_wasm_path.exists() {
+        crate::fs::create_dir_all(cache_path.dir())?;
+        crate::fs::write(&cache_wasm_path, wasm)?;
+        _ = crate::fs::write(&cache_path.atime(), b"");
+    }
+    Ok(())
 }
 
 pub type PackageCache = DirectoryStructureLock<PackageCachePaths>;

@@ -9,6 +9,7 @@ use url::Url;
 use crate::{
     fs::{read, write},
     manifest::adapter::prebuilt::{Adapter, SourceField},
+    package::{PackageCache, cache_prebuilt, read_cached_prebuilt},
 };
 
 use super::Params;
@@ -40,12 +41,22 @@ pub enum PrebuiltError {
 
     #[snafu(display("failed to write wasm output file"))]
     WriteFile { source: crate::fs::IoError },
+
+    #[snafu(display("failed to read cached prebuilt canister file"))]
+    ReadCache { source: crate::fs::IoError },
+
+    #[snafu(display("failed to cache wasm file"))]
+    CacheFile { source: crate::fs::IoError },
+
+    #[snafu(display("failed to acquire lock on package cache"))]
+    LockCache { source: crate::fs::lock::LockError },
 }
 
 pub(super) async fn build(
     adapter: &Adapter,
     params: &Params,
     stdio: Option<Sender<String>>,
+    pkg_cache: &PackageCache,
 ) -> Result<(), PrebuiltError> {
     let wasm = match &adapter.source {
         // Local path
@@ -60,7 +71,23 @@ pub(super) async fn build(
         }
 
         // Remote url
-        SourceField::Remote(s) => {
+        SourceField::Remote(s) => 'wasm: {
+            // If it's already cached, use it instead of downloading again
+            if let Some(expected) = &adapter.sha256 {
+                let maybe_cached = pkg_cache
+                    .with_read(async |r| read_cached_prebuilt(r, expected).context(ReadCacheSnafu))
+                    .await
+                    .context(LockCacheSnafu)?;
+                if let Some(cached) = maybe_cached? {
+                    if let Some(stdio) = &stdio {
+                        stdio
+                            .send("Using cached file".to_string())
+                            .await
+                            .context(LogSnafu)?;
+                    }
+                    break 'wasm cached;
+                }
+            }
             // Initialize a new http client
             let http_client = Client::new();
 
@@ -94,6 +121,13 @@ pub(super) async fn build(
         }
     };
 
+    // Calculate checksum
+    let cksum = hex::encode({
+        let mut h = Sha256::new();
+        h.update(&wasm);
+        h.finalize()
+    });
+
     // Verify the checksum if it's provided
     if let Some(expected) = &adapter.sha256 {
         if let Some(stdio) = &stdio {
@@ -102,21 +136,23 @@ pub(super) async fn build(
                 .await
                 .context(LogSnafu)?;
         }
-        // Calculate checksum
-        let actual = hex::encode({
-            let mut h = Sha256::new();
-            h.update(&wasm);
-            h.finalize()
-        });
 
         // Verify Checksum
-        if &actual != expected {
+        if &cksum != expected {
             return ChecksumMismatchSnafu {
                 expected: expected.to_owned(),
-                actual,
+                actual: cksum,
             }
             .fail();
         }
+    }
+
+    if matches!(&adapter.source, SourceField::Remote(_)) {
+        // Cache to disk
+        pkg_cache
+            .with_write(async |w| cache_prebuilt(w, &cksum, &wasm).context(CacheFileSnafu))
+            .await
+            .context(LockCacheSnafu)??;
     }
 
     // Set WASM file

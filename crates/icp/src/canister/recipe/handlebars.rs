@@ -123,18 +123,19 @@ impl Handlebars {
                     panic!("only the dfinity registry is currently supported");
                 }
 
+                let package = format!("@{registry}/{recipe_name}");
                 let release_tag = format!("{recipe_name}-{version}");
 
                 // Check cache
                 let maybe_cached = self
                     .pkg_cache
                     .with_read(async |r| {
-                        read_cached_recipe(r, &release_tag).context(ReadCacheSnafu)
+                        read_cached_recipe(r, &package, &version).context(ReadCacheSnafu)
                     })
                     .await
                     .context(LockCacheSnafu)?;
                 if let Some(cached) = maybe_cached? {
-                    debug!("Using cached recipe template for {release_tag}");
+                    debug!("Using cached recipe template for {package}@{version}");
                     parse_bytes_to_string(cached)?
                 } else {
                     // Download the template
@@ -155,7 +156,7 @@ impl Handlebars {
                     // Cache the template keyed by the git SHA
                     self.pkg_cache
                         .with_write(async |w| {
-                            cache_recipe(w, &release_tag, &git_sha, &bytes)
+                            cache_recipe(w, &package, &version, &git_sha, &bytes)
                                 .context(CacheRecipeSnafu)
                         })
                         .await

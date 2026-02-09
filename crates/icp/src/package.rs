@@ -105,14 +105,18 @@ pub fn cache_prebuilt(
     Ok(())
 }
 
-/// Read a cached recipe template by its tag (e.g., `rust-v1.0.2`).
-/// Resolves the tag to a git SHA via the package manifest, then reads
+/// Read a cached recipe template by recipe and version (e.g., `@dfinity/rust`, `v1.0.2`).
+/// Resolves the version to a git SHA via the package manifest, then reads
 /// the cached template from `recipes/{sha}/recipe.hbs`.
 pub fn read_cached_recipe(
     cache: LRead<&PackageCachePaths>,
-    tag: &str,
+    recipe: &str,
+    version: &str,
 ) -> Result<Option<Vec<u8>>, RecipeCacheError> {
-    let Some(sha) = get_tag(cache, "recipe", tag).context(LoadRecipeTagSnafu)? else {
+    assert!(recipe.starts_with('@'));
+    let Some(sha) =
+        get_tag(cache, &format!("recipe{recipe}"), version).context(LoadRecipeTagSnafu)?
+    else {
         return Ok(None);
     };
     let cache_path = cache.recipe_sha(&sha);
@@ -126,16 +130,19 @@ pub fn read_cached_recipe(
     }
 }
 
-/// Cache a recipe template. `tag` is the recipe release tag (e.g., `rust-v1.0.2`),
-/// `sha` is the git commit SHA that the tag resolves to. Stores the tag→SHA mapping
-/// in the package manifest and writes the template to `recipes/{sha}/recipe.hbs`.
+/// Cache a recipe template. `recipe` is the registry-qualified name (e.g., `@dfinity/rust`),
+/// `version` is the recipe version (e.g., `v1.0.2`), and `sha` is the git commit SHA that
+/// the version resolves to. Stores the version→SHA mapping in the package manifest and
+/// writes the template to `recipes/{sha}/recipe.hbs`.
 pub fn cache_recipe(
     cache: LWrite<&PackageCachePaths>,
-    tag: &str,
+    recipe: &str,
+    version: &str,
     sha: &str,
     template: &[u8],
 ) -> Result<(), RecipeCacheError> {
-    set_tag(cache, "recipe", sha, tag).context(SaveRecipeTagSnafu)?;
+    assert!(recipe.starts_with('@'));
+    set_tag(cache, &format!("recipe{recipe}"), sha, version).context(SaveRecipeTagSnafu)?;
     let cache_path = cache.recipe_sha(sha);
     let template_path = cache_path.template();
     if !template_path.exists() {

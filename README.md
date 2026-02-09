@@ -16,7 +16,7 @@ npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
 npm install -g ic-mops && mops toolchain init
 ```
 
-> **Alternative methods:** See the [Installation Guide](docs/guides/installation.md) for shell script, Homebrew, Rust setup, or platform-specific instructions.
+> **Alternative methods:** See the [Installation Guide](docs/guides/installation.md) for Homebrew, shell script, Rust setup, or platform-specific instructions.
 
 Then follow the **[Quickstart](docs/quickstart.md)** to deploy your first canister in under 5 minutes.
 

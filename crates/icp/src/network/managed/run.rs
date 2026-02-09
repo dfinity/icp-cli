@@ -10,8 +10,8 @@ use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs,
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
     cycles_ledger::{
-        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs,
-        CreateCanisterResponse,
+        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs,
+        CreateCanisterResponse, CreationArgs,
     },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
@@ -53,8 +53,10 @@ pub async fn run_network(
     config: &Managed,
     nd: NetworkDirectory,
     project_root: &Path,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
+    all_identities: Vec<Principal>,
+    default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
+    proxy_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
     network_launcher_path: Option<&Path>,
@@ -66,8 +68,10 @@ pub async fn run_network(
         config,
         &nd,
         project_root,
-        seed_accounts,
+        all_identities,
+        default_identity,
         candid_ui_wasm,
+        proxy_wasm,
         background,
         verbose,
     )
@@ -117,8 +121,10 @@ async fn run_network_launcher(
     config: &Managed,
     nd: &NetworkDirectory,
     project_root: &Path,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
+    all_identities: Vec<Principal>,
+    default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
+    proxy_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
 ) -> Result<(), RunNetworkLauncherError> {
@@ -216,13 +222,16 @@ async fn run_network_launcher(
         // background means we're using stdio files - otherwise the launcher already prints this
         eprintln!("Network started on port {}", instance.gateway_port);
     }
-    let candid_ui_canister_id = initialize_network(
+
+    let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
         &format!("http://localhost:{}", instance.gateway_port)
             .parse()
             .unwrap(),
         &instance.root_key,
-        seed_accounts,
+        all_identities,
+        default_identity,
         candid_ui_wasm,
+        proxy_wasm,
     )
     .await?;
 
@@ -246,6 +255,7 @@ async fn run_network_launcher(
                 pocketic_config_port: instance.pocketic_config_port,
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
+                proxy_canister_id,
             };
 
             // Save descriptor to project root and all fixed port directories
@@ -469,14 +479,17 @@ pub enum WaitForPortError {
 /// Initialize the network:
 /// - Seed ICP and cycles to the given accounts
 /// - Install the candid UI canister
+/// - Install the proxy canister
 ///
-/// Returns the canister id of the candid ui canister
+/// Returns a tuple of (candid_ui_canister_id, proxy_canister_id)
 pub async fn initialize_network(
     gateway_url: &Url,
     root_key: &[u8],
-    seed_accounts: impl IntoIterator<Item = Principal> + Clone,
+    all_identities: Vec<Principal>,
+    default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
-) -> Result<Option<Principal>, InitializeNetworkError> {
+    proxy_wasm: Option<&[u8]>,
+) -> Result<(Option<Principal>, Option<Principal>), InitializeNetworkError> {
     eprintln!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
         .with_url(gateway_url.as_str())
@@ -486,28 +499,28 @@ pub async fn initialize_network(
             url: gateway_url.as_str(),
         })?;
     agent.set_root_key(root_key.to_vec());
+
     let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&agent).await?;
     let icp_amount = 100_000_000_000_000u64;
     let display_icp_amount = BigDecimal::new(icp_amount.into(), 8).normalized();
     let seed_icp = join_all(
-        seed_accounts
-            .clone()
-            .into_iter()
-            .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic (or whatever the launcher is doing)
+        all_identities
+            .iter()
+            .filter(|account| **account != Principal::anonymous()) // Anon gets seeded by pocket-ic (or whatever the launcher is doing)
             .map(|account| {
                 debug!("Seeding {} ICP to account {}", display_icp_amount, account);
-                acquire_icp_to_account(&agent, account, icp_amount)
+                acquire_icp_to_account(&agent, *account, icp_amount)
             }),
     );
     let cycles_amount = 1_000_000_000_000_000u128; // 1_000T cycles
     let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
 
-    let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
+    let seed_cycles = join_all(all_identities.iter().map(|account| {
         debug!(
             "Seeding {}T cycles to account {}",
             display_cycles_amount, account
         );
-        mint_cycles_to_account(&agent, account, cycles_amount, icp_xdr_conversion_rate)
+        mint_cycles_to_account(&agent, *account, cycles_amount, icp_xdr_conversion_rate)
     }));
     let (seed_icp_results, seed_cycles_results) = join(seed_icp, seed_cycles).await;
     seed_icp_results
@@ -517,11 +530,44 @@ pub async fn initialize_network(
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    if let Some(candid_ui_wasm) = candid_ui_wasm {
-        Ok(Some(install_candid_ui(&agent, candid_ui_wasm).await?))
+    // Install Candid UI if provided
+    let candid_ui_id = if let Some(candid_ui_wasm) = candid_ui_wasm {
+        Some(install_candid_ui(&agent, candid_ui_wasm).await?)
     } else {
-        Ok(None)
-    }
+        None
+    };
+
+    // Install proxy canister if provided
+    let proxy_id = if let Some(proxy_wasm) = proxy_wasm {
+        // Determine controllers based on the number of identities
+        // IC protocol limits: max 10 controllers per canister
+        let controllers = if all_identities.len() <= 10 {
+            // Use all identities as controllers
+            all_identities
+        } else {
+            // Use only anonymous and default identity
+            debug!(
+                "More than 10 identities detected ({} total). IC protocol limits canisters to 10 controllers. \
+                 Proxy canister will be created with only anonymous and default identity as controllers.",
+                all_identities.len()
+            );
+            let mut limited_controllers = vec![Principal::anonymous()];
+            if let Some(default) = default_identity {
+                // Only add default if it's different from anonymous
+                if default != Principal::anonymous() {
+                    limited_controllers.push(default);
+                }
+            }
+
+            limited_controllers
+        };
+
+        Some(install_proxy(&agent, proxy_wasm, controllers).await?)
+    } else {
+        None
+    };
+
+    Ok((candid_ui_id, proxy_id))
 }
 
 #[derive(Debug, Snafu)]
@@ -534,6 +580,9 @@ pub enum InitializeNetworkError {
 
     #[snafu(display("Failed to install Candid UI canister: {error}"))]
     CandidUI { error: String },
+
+    #[snafu(display("Failed to install proxy canister: {error}"))]
+    Proxy { error: String },
 }
 
 async fn mint_cycles_to_account(
@@ -744,6 +793,78 @@ async fn install_candid_ui(
             error: format!("Failed to install Candid UI canister: {e}"),
         })?;
     debug!("Installed Candid UI canister with ID {}", canister_id);
+
+    Ok(canister_id)
+}
+
+async fn install_proxy(
+    agent: &Agent,
+    proxy_wasm: &[u8],
+    controllers: Vec<Principal>,
+) -> Result<Principal, InitializeNetworkError> {
+    debug!("Creating canister for proxy");
+    let amount = 10 * TRILLION;
+
+    // Prepare controller settings
+    let creation_args = if !controllers.is_empty() {
+        Some(CreationArgs {
+            subnet_selection: None,
+            settings: Some(CanisterSettingsArg {
+                controllers: Some(controllers.clone()),
+                freezing_threshold: None,
+                reserved_cycles_limit: None,
+                log_visibility: None,
+                memory_allocation: None,
+                compute_allocation: None,
+            }),
+        })
+    } else {
+        None
+    };
+
+    let response = agent
+        .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
+        .with_arg(
+            Encode!(&CreateCanisterArgs {
+                from_subaccount: None,
+                created_at_time: None,
+                amount: Nat::from(amount),
+                creation_args,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|e| InitializeNetworkError::Proxy {
+            error: format!("Failed to create canister for proxy: {e}"),
+        })?;
+    let response =
+        Decode!(&response, CreateCanisterResponse).map_err(|e| InitializeNetworkError::Proxy {
+            error: format!("Failed to decode create canister response for proxy: {e}"),
+        })?;
+    let canister_id = match response {
+        CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+        CreateCanisterResponse::Err(err) => {
+            return Err(InitializeNetworkError::Proxy {
+                error: format!(
+                    "Failed to create canister for proxy: {}",
+                    err.format_error(amount)
+                ),
+            });
+        }
+    };
+    debug!("Installing proxy wasm into canister {}", canister_id);
+
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+    mgmt.install_code(&canister_id, proxy_wasm)
+        .with_mode(CanisterInstallMode::Install)
+        .await
+        .map_err(|e| InitializeNetworkError::Proxy {
+            error: format!("Failed to install proxy canister: {e}"),
+        })?;
+    debug!(
+        "Installed proxy canister with ID {} and controllers: {:?}",
+        canister_id, controllers
+    );
 
     Ok(canister_id)
 }

@@ -391,23 +391,31 @@ impl TestContext {
 
     pub(crate) async fn pocketic_time_fastforward(&self, duration: Duration) {
         let now = UtcDateTime::now();
-        Client::new()
-            .post(
-                self.config_url
-                    .get()
-                    .expect("network must have been initialized")
-                    .as_ref()
-                    .expect("network must use pocket-ic")
-                    .join("update/set_time")
-                    .unwrap(),
-            )
-            .json(&json!({ "nanos_since_epoch": (now + duration).unix_timestamp_nanos() }))
-            .send()
-            .await
-            .expect("failed to update time")
-            .error_for_status()
-            .expect("failed to update time");
-        self.time_offset.set(Some(duration));
+        let url = self
+            .config_url
+            .get()
+            .expect("network must have been initialized")
+            .as_ref()
+            .expect("network must use pocket-ic")
+            .join("update/set_time")
+            .unwrap();
+        let body = json!({ "nanos_since_epoch": (now + duration).unix_timestamp_nanos() });
+        for attempt in 0..5 {
+            let response = Client::new()
+                .post(url.clone())
+                .json(&body)
+                .send()
+                .await
+                .expect("failed to update time");
+            if response.status() == reqwest::StatusCode::CONFLICT {
+                tokio::time::sleep(Duration::from_millis(100 * (attempt + 1))).await;
+                continue;
+            }
+            response.error_for_status().expect("failed to update time");
+            self.time_offset.set(Some(duration));
+            return;
+        }
+        panic!("failed to update time: still receiving 409 Conflict after 5 attempts");
     }
 
     pub(crate) fn pocketic_config_url(&self) -> Option<&Url> {

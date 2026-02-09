@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Recipes and prebuilt canisters are now cached locally
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets
 
 # v0.1.0

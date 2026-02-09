@@ -158,38 +158,26 @@ networks:
       - POCKET_IC_MUTE_SERVER=false
 ```
 
-### Launcher Settings
+### Passing Arguments to the Container
 
-Docker image networks support all the same launcher settings as native managed networks. This means you can switch between native and Docker modes by simply adding or removing the `image` and `port-mapping` fields — all other settings stay the same:
+Use the `args` field to pass command-line arguments to the container's entrypoint. This is how you configure image-specific behavior such as enabling Internet Identity, NNS, Bitcoin integration, or other flags supported by the image:
 
-**Native launcher:**
 ```yaml
 networks:
-  - name: local
-    mode: managed
-    bitcoind-addr:
-      - "127.0.0.1:18444"
-```
-
-**Docker image (same settings, just add `image` and `port-mapping`):**
-```yaml
-networks:
-  - name: local
+  - name: docker-local
     mode: managed
     image: ghcr.io/dfinity/icp-cli-network-launcher
     port-mapping:
       - "8000:4943"
-    bitcoind-addr:
-      - "127.0.0.1:18444"
+    args:
+      - "--ii"
 ```
 
-All launcher settings are automatically translated into the appropriate container command arguments.
+The `args` field passes values directly to the container entrypoint with no processing. The Docker image determines what arguments it accepts — see the image's documentation for available options.
 
-Available launcher settings: `ii`, `nns`, `subnets`, `artificial-delay-ms`, `bitcoind-addr`, `dogecoind-addr`.
+**Comparison with native launcher mode:** When using native managed networks (without `image`), settings like `bitcoind-addr`, `ii`, `nns`, and `subnets` are configured as top-level YAML fields. In Docker image mode, these are passed via `args` instead, since the image could be any Docker image — not necessarily the official network launcher.
 
-**Docker networking note:** When `bitcoind-addr` or `dogecoind-addr` addresses reference `127.0.0.1`, `localhost`, or `::1`, they are automatically translated to `host.docker.internal` so the container can reach services running on the host machine. On Linux Docker Engine, `host.docker.internal:host-gateway` is added automatically to ensure compatibility.
-
-> **Note:** Do not pass launcher settings (like `--bitcoind-addr` or `--ii`) via `args` when using the corresponding top-level fields. The `args` field is intended for additional flags not covered by the semantic settings. If the same setting is specified in both places, it will be passed to the launcher twice, and addresses in `args` will **not** be automatically translated for Docker networking.
+> **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, you may need to pass `--add-host=host.docker.internal:host-gateway` or equivalent to ensure it resolves.
 
 ### Remove Container on Exit
 
@@ -328,12 +316,6 @@ All available configuration options for containerized networks:
 | `user`         | string   | No       | User to run as in `user[:group]` format (group is optional)                    |
 | `shm-size`     | number   | No       | Size of `/dev/shm` in bytes                                                    |
 | `status-dir`   | string   | No       | Status directory path (default: `/app/status`)                                 |
-| `ii`               | bool     | No       | Set up Internet Identity canister (default: `false`)                       |
-| `nns`              | bool     | No       | Set up NNS canisters (default: `false`)                                    |
-| `subnets`          | string[] | No       | Configure subnet types (default: one application subnet)                   |
-| `artificial-delay-ms` | number | No    | Artificial delay for update calls (ms)                                     |
-| `bitcoind-addr`    | string[] | No       | Bitcoin P2P node addresses (auto-translated for Docker)                    |
-| `dogecoind-addr`   | string[] | No       | Dogecoin P2P node addresses (auto-translated for Docker)                   |
 
 Example with multiple options:
 

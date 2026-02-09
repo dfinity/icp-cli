@@ -54,35 +54,6 @@
                 "null"
               ]
             },
-            "artificial-delay-ms": {
-              "description": "Artificial delay to add to every update call",
-              "format": "uint64",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "bitcoind-addr": {
-              "description": "Bitcoin P2P node addresses to connect to (e.g. \"127.0.0.1:18444\")",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "dogecoind-addr": {
-              "description": "Dogecoin P2P node addresses to connect to",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
             "entrypoint": {
               "description": "Entrypoint to use for the container",
               "items": {
@@ -103,13 +74,6 @@
                 "null"
               ]
             },
-            "ii": {
-              "description": "Set up the Internet Identity canister",
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
             "image": {
               "description": "The docker image to use for the network",
               "type": "string"
@@ -121,13 +85,6 @@
               },
               "type": [
                 "array",
-                "null"
-              ]
-            },
-            "nns": {
-              "description": "Set up the NNS",
-              "type": [
-                "boolean",
                 "null"
               ]
             },
@@ -164,16 +121,6 @@
               "description": "The status directory inside the container. Defaults to /app/status",
               "type": [
                 "string",
-                "null"
-              ]
-            },
-            "subnets": {
-              "description": "Configure the list of subnets (one application subnet by default)",
-              "items": {
-                "$ref": "#/$defs/SubnetKind"
-              },
-              "type": [
-                "array",
                 "null"
               ]
             },

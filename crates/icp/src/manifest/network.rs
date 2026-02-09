@@ -55,18 +55,6 @@ pub enum ManagedMode {
         status_dir: Option<String>,
         /// Bind mounts to add to the container in the format relative_host_path:container_path[:options]
         mounts: Option<Vec<String>>,
-        /// Artificial delay to add to every update call
-        artificial_delay_ms: Option<u64>,
-        /// Set up the Internet Identity canister
-        ii: Option<bool>,
-        /// Set up the NNS
-        nns: Option<bool>,
-        /// Configure the list of subnets (one application subnet by default)
-        subnets: Option<Vec<SubnetKind>>,
-        /// Bitcoin P2P node addresses to connect to (e.g. "127.0.0.1:18444")
-        bitcoind_addr: Option<Vec<String>>,
-        /// Dogecoin P2P node addresses to connect to
-        dogecoind_addr: Option<Vec<String>>,
     },
     Launcher {
         /// HTTP gateway configuration
@@ -357,90 +345,6 @@ mod tests {
                 configuration: Mode::Managed(Managed {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: None,
-                        artificial_delay_ms: None,
-                        ii: None,
-                        nns: None,
-                        subnets: None,
-                        bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
-                        dogecoind_addr: None,
-                    })
-                })
-            },
-        );
-    }
-
-    #[test]
-    fn image_network_with_launcher_settings() {
-        assert_eq!(
-            validate_network_yaml(indoc! {r#"
-                    name: my-network
-                    mode: managed
-                    image: ghcr.io/dfinity/icp-cli-network-launcher
-                    port-mapping:
-                      - "8000:4943"
-                    ii: true
-                    nns: true
-                    bitcoind-addr:
-                      - "127.0.0.1:18444"
-                    dogecoind-addr:
-                      - "127.0.0.1:22556"
-                "#}),
-            NetworkManifest {
-                name: "my-network".to_string(),
-                configuration: Mode::Managed(Managed {
-                    mode: Box::new(ManagedMode::Image {
-                        image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
-                        port_mapping: vec!["8000:4943".to_string()],
-                        rm_on_exit: None,
-                        args: None,
-                        entrypoint: None,
-                        environment: None,
-                        volumes: None,
-                        platform: None,
-                        user: None,
-                        shm_size: None,
-                        status_dir: None,
-                        mounts: None,
-                        artificial_delay_ms: None,
-                        ii: Some(true),
-                        nns: Some(true),
-                        subnets: None,
-                        bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
-                        dogecoind_addr: Some(vec!["127.0.0.1:22556".to_string()]),
-                    })
-                })
-            },
-        );
-    }
-
-    #[test]
-    fn image_network_with_bitcoind_addr() {
-        assert_eq!(
-            validate_network_yaml(indoc! {r#"
-                    name: my-network
-                    mode: managed
-                    image: ghcr.io/dfinity/icp-cli-network-launcher
-                    port-mapping:
-                      - "0:4943"
-                    bitcoind-addr:
-                      - "127.0.0.1:18444"
-                "#}),
-            NetworkManifest {
-                name: "my-network".to_string(),
-                configuration: Mode::Managed(Managed {
-                    mode: Box::new(ManagedMode::Image {
-                        image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
-                        port_mapping: vec!["0:4943".to_string()],
-                        rm_on_exit: None,
-                        args: None,
-                        entrypoint: None,
-                        environment: None,
-                        volumes: None,
-                        platform: None,
-                        user: None,
-                        shm_size: None,
-                        status_dir: None,
-                        mounts: None,
                         artificial_delay_ms: None,
                         ii: None,
                         nns: None,

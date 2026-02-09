@@ -20,12 +20,9 @@ use tokio::select;
 use wslpath2::Conversion;
 
 use crate::network::{
-    Gateway, ManagedImageConfig, ManagedLauncherConfig, config::ChildLocator,
-    managed::launcher::NetworkInstance,
+    ManagedImageConfig, config::ChildLocator, managed::launcher::NetworkInstance,
 };
 use crate::prelude::*;
-
-use super::launcher::launcher_settings_flags;
 
 use super::launcher::wait_for_launcher_status;
 
@@ -152,38 +149,11 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             .map(|v| convert_volume(wsl2_convert, wsl2_distro, v))
             .try_collect()?;
 
-        // Generate launcher settings flags from semantic fields
-        let launcher_config = ManagedLauncherConfig {
-            gateway: Gateway::default(),
-            artificial_delay_ms: config.artificial_delay_ms,
-            ii: config.ii,
-            nns: config.nns,
-            subnets: config.subnets.clone(),
-            bitcoind_addr: config.bitcoind_addr.clone(),
-            dogecoind_addr: config.dogecoind_addr.clone(),
-        };
-        let launcher_flags =
-            translate_launcher_args_for_docker(launcher_settings_flags(&launcher_config));
-
-        // Append launcher flags to explicit user args
-        let mut all_args = config.args.clone();
-        all_args.extend(launcher_flags);
-
-        // Compute extra_hosts for Docker networking
-        let all_addrs: Vec<String> = config
-            .bitcoind_addr
-            .iter()
-            .chain(config.dogecoind_addr.iter())
-            .flatten()
-            .cloned()
-            .collect();
-        let extra_hosts = docker_extra_hosts_for_addrs(&all_addrs);
-
         Ok(ManagedImageOptions {
             image: config.image.clone(),
             port_bindings,
             rm_on_exit: config.rm_on_exit,
-            args: all_args,
+            args: config.args.clone(),
             entrypoint: config.entrypoint.clone(),
             environment: config.environment.clone(),
             volumes,
@@ -192,7 +162,7 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             shm_size: config.shm_size,
             status_dir: config.status_dir.clone(),
             mounts,
-            extra_hosts,
+            extra_hosts: vec![],
         })
     }
 }
@@ -901,77 +871,5 @@ mod tests {
         ];
         let expected = args.clone();
         assert_eq!(translate_launcher_args_for_docker(args), expected);
-    }
-
-    #[test]
-    fn image_config_conversion_with_launcher_settings() {
-        let config = ManagedImageConfig {
-            image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
-            port_mapping: vec!["8000:4943".to_string()],
-            rm_on_exit: false,
-            args: vec!["--custom-flag".to_string()],
-            entrypoint: None,
-            environment: vec![],
-            volumes: vec![],
-            platform: None,
-            user: None,
-            shm_size: None,
-            status_dir: "/app/status".to_string(),
-            mounts: vec![],
-            artificial_delay_ms: None,
-            ii: true,
-            nns: false,
-            subnets: None,
-            bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
-            dogecoind_addr: None,
-        };
-        let options = ManagedImageOptions::try_from(&config).unwrap();
-
-        // User args come first, then generated launcher flags
-        assert!(options.args.contains(&"--custom-flag".to_string()));
-        assert!(options.args.contains(&"--ii".to_string()));
-        assert!(
-            options
-                .args
-                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
-        );
-
-        // extra_hosts for Linux Docker compatibility
-        assert_eq!(
-            options.extra_hosts,
-            vec!["host.docker.internal:host-gateway"]
-        );
-    }
-
-    #[test]
-    fn image_config_conversion_without_localhost_no_extra_hosts() {
-        let config = ManagedImageConfig {
-            image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
-            port_mapping: vec!["8000:4943".to_string()],
-            rm_on_exit: false,
-            args: vec![],
-            entrypoint: None,
-            environment: vec![],
-            volumes: vec![],
-            platform: None,
-            user: None,
-            shm_size: None,
-            status_dir: "/app/status".to_string(),
-            mounts: vec![],
-            artificial_delay_ms: None,
-            ii: false,
-            nns: false,
-            subnets: None,
-            bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
-            dogecoind_addr: None,
-        };
-        let options = ManagedImageOptions::try_from(&config).unwrap();
-
-        assert!(
-            options
-                .args
-                .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
-        );
-        assert!(options.extra_hosts.is_empty());
     }
 }

@@ -150,12 +150,6 @@ pub struct ManagedImageConfig {
     pub shm_size: Option<i64>,
     pub status_dir: String,
     pub mounts: Vec<String>,
-    pub artificial_delay_ms: Option<u64>,
-    pub ii: bool,
-    pub nns: bool,
-    pub subnets: Option<Vec<SubnetKind>>,
-    pub bitcoind_addr: Option<Vec<String>>,
-    pub dogecoind_addr: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -259,12 +253,6 @@ impl From<Mode> for Configuration {
                     shm_size,
                     status_dir,
                     mounts: mount,
-                    artificial_delay_ms,
-                    ii,
-                    nns,
-                    subnets,
-                    bitcoind_addr,
-                    dogecoind_addr,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image(Box::new(ManagedImageConfig {
@@ -280,12 +268,6 @@ impl From<Mode> for Configuration {
                             shm_size,
                             status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
                             mounts: mount.unwrap_or_default(),
-                            artificial_delay_ms,
-                            ii: ii.unwrap_or(false),
-                            nns: nns.unwrap_or(false),
-                            subnets,
-                            bitcoind_addr,
-                            dogecoind_addr,
                         })),
                     },
                 },
@@ -411,59 +393,6 @@ mod tests {
         Gateway as ManifestGateway, Managed as ManifestManaged, ManagedMode as ManifestManagedMode,
         Mode,
     };
-
-    #[test]
-    fn from_mode_image_with_launcher_settings() {
-        let mode = Mode::Managed(ManifestManaged {
-            mode: Box::new(ManifestManagedMode::Image {
-                image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
-                port_mapping: vec!["8000:4943".to_string()],
-                rm_on_exit: None,
-                args: None,
-                entrypoint: None,
-                environment: None,
-                volumes: None,
-                platform: None,
-                user: None,
-                shm_size: None,
-                status_dir: None,
-                mounts: None,
-                artificial_delay_ms: Some(50),
-                ii: Some(true),
-                nns: None,
-                subnets: None,
-                bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
-                dogecoind_addr: Some(vec!["127.0.0.1:22556".to_string()]),
-            }),
-        });
-
-        let config: Configuration = mode.into();
-        match config {
-            Configuration::Managed {
-                managed:
-                    Managed {
-                        mode: ManagedMode::Image(image_config),
-                    },
-            } => {
-                assert_eq!(
-                    image_config.image,
-                    "ghcr.io/dfinity/icp-cli-network-launcher"
-                );
-                assert!(image_config.ii);
-                assert!(!image_config.nns); // defaults to false
-                assert_eq!(image_config.artificial_delay_ms, Some(50));
-                assert_eq!(
-                    image_config.bitcoind_addr,
-                    Some(vec!["127.0.0.1:18444".to_string()])
-                );
-                assert_eq!(
-                    image_config.dogecoind_addr,
-                    Some(vec!["127.0.0.1:22556".to_string()])
-                );
-            }
-            _ => panic!("expected ManagedMode::Image"),
-        }
-    }
 
     #[test]
     fn from_mode_launcher_with_bitcoind_addr() {

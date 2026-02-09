@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use snafu::prelude::*;
 
 use crate::{
     fs::lock::{DirectoryStructureLock, LRead, LWrite, LockError, PathsAccess},
@@ -32,6 +33,11 @@ impl PackageCachePaths {
             dir: self.canisters_dir().join(sha),
         }
     }
+    pub fn recipe_sha(&self, sha: &str) -> RecipeCache {
+        RecipeCache {
+            dir: self.recipes_dir().join(sha),
+        }
+    }
     pub fn manifest(&self) -> PathBuf {
         self.root.join("manifest.json")
     }
@@ -47,6 +53,22 @@ impl CanisterCache {
     }
     pub fn wasm(&self) -> PathBuf {
         self.dir.join("canister.wasm")
+    }
+    pub fn atime(&self) -> PathBuf {
+        self.dir.join(".atime")
+    }
+}
+
+pub struct RecipeCache {
+    dir: PathBuf,
+}
+
+impl RecipeCache {
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+    pub fn template(&self) -> PathBuf {
+        self.dir.join("recipe.hbs")
     }
     pub fn atime(&self) -> PathBuf {
         self.dir.join(".atime")
@@ -83,6 +105,59 @@ pub fn cache_prebuilt(
     Ok(())
 }
 
+/// Read a cached recipe template by its tag (e.g., `rust-v1.0.2`).
+/// Resolves the tag to a git SHA via the package manifest, then reads
+/// the cached template from `recipes/{sha}/recipe.hbs`.
+pub fn read_cached_recipe(
+    cache: LRead<&PackageCachePaths>,
+    tag: &str,
+) -> Result<Option<Vec<u8>>, RecipeCacheError> {
+    let Some(sha) = get_tag(cache, "recipe", tag).context(LoadRecipeTagSnafu)? else {
+        return Ok(None);
+    };
+    let cache_path = cache.recipe_sha(&sha);
+    let template_path = cache_path.template();
+    if template_path.exists() {
+        let template = crate::fs::read(&template_path).context(RecipeCacheIoSnafu)?;
+        _ = crate::fs::write(&cache_path.atime(), b"");
+        Ok(Some(template))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Cache a recipe template. `tag` is the recipe release tag (e.g., `rust-v1.0.2`),
+/// `sha` is the git commit SHA that the tag resolves to. Stores the tag→SHA mapping
+/// in the package manifest and writes the template to `recipes/{sha}/recipe.hbs`.
+pub fn cache_recipe(
+    cache: LWrite<&PackageCachePaths>,
+    tag: &str,
+    sha: &str,
+    template: &[u8],
+) -> Result<(), RecipeCacheError> {
+    set_tag(cache, "recipe", sha, tag).context(SaveRecipeTagSnafu)?;
+    let cache_path = cache.recipe_sha(sha);
+    let template_path = cache_path.template();
+    if !template_path.exists() {
+        crate::fs::create_dir_all(cache_path.dir()).context(RecipeCacheIoSnafu)?;
+        crate::fs::write(&template_path, template).context(RecipeCacheIoSnafu)?;
+        _ = crate::fs::write(&cache_path.atime(), b"");
+    }
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub enum RecipeCacheError {
+    #[snafu(display("failed to load recipe cache tag"))]
+    LoadRecipeTag { source: crate::fs::json::Error },
+
+    #[snafu(display("failed to save recipe cache tag"))]
+    SaveRecipeTag { source: crate::fs::json::Error },
+
+    #[snafu(display("failed to read or write recipe cache file"))]
+    RecipeCacheIo { source: crate::fs::IoError },
+}
+
 pub type PackageCache = DirectoryStructureLock<PackageCachePaths>;
 
 impl PackageCache {
@@ -100,10 +175,10 @@ impl PathsAccess for PackageCachePaths {
 pub fn get_tag(
     paths: LRead<&PackageCachePaths>,
     tool: &str,
-    version: &str,
+    tag: &str,
 ) -> Result<Option<String>, crate::fs::json::Error> {
     let manifest: Manifest = crate::fs::json::load_or_default(&paths.manifest())?;
-    Ok(manifest.tags.get(&format!("{tool}:{version}")).cloned())
+    Ok(manifest.tags.get(&format!("{tool}:{tag}")).cloned())
 }
 
 pub fn set_tag(

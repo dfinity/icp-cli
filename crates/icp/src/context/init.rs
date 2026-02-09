@@ -28,6 +28,9 @@ pub enum ContextInitError {
 
     #[snafu(display("failed to lock identity directory"))]
     IdentityDirectory { source: crate::fs::lock::LockError },
+
+    #[snafu(display("failed to lock package cache directory"))]
+    PackageCache { source: crate::fs::lock::LockError },
 }
 
 pub fn initialize(
@@ -57,8 +60,14 @@ pub fn initialize(
     // Prepare http client
     let http_client = reqwest::Client::new();
 
+    // Package cache
+    let pkg_cache = dirs.package_cache().context(PackageCacheSnafu)?;
+
     // Recipes
-    let recipe = Arc::new(Handlebars { http_client });
+    let recipe = Arc::new(Handlebars {
+        http_client,
+        pkg_cache,
+    });
 
     // Canister builder
     let builder = Arc::new(Builder);

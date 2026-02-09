@@ -60,6 +60,7 @@ pub async fn run_network(
     background: bool,
     verbose: bool,
     network_launcher_path: Option<&Path>,
+    autocontainerize: bool,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
 
@@ -74,6 +75,7 @@ pub async fn run_network(
         proxy_wasm,
         background,
         verbose,
+        autocontainerize,
     )
     .await?;
     Ok(())
@@ -127,6 +129,7 @@ async fn run_network_launcher(
     proxy_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
+    autocontainerize: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
 
@@ -142,7 +145,7 @@ async fn run_network_launcher(
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
-        ManagedMode::Launcher(launcher_config) if cfg!(windows) => {
+        ManagedMode::Launcher(launcher_config) if autocontainerize => {
             let options = transform_native_launcher_to_container(launcher_config);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)

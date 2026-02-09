@@ -5,6 +5,7 @@ use icp::prelude::*;
 use icp::{
     identity::manifest::IdentityList,
     network::{Configuration, run_network},
+    settings::Settings,
 };
 use tracing::debug;
 
@@ -105,6 +106,12 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     let candid_ui_wasm = crate::artifacts::get_candid_ui_wasm();
     let proxy_wasm = crate::artifacts::get_proxy_wasm();
 
+    let settings = ctx
+        .dirs
+        .settings()?
+        .with_read(async |dirs| Settings::load_from(dirs))
+        .await??;
+
     let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
         Some(PathBuf::from(var))
     } else {
@@ -134,6 +141,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         }
     };
 
+    // On Windows, always use Docker since the native launcher doesn't run there
+    let autocontainerize = cfg!(windows) || settings.autocontainerize;
+
     run_network(
         cfg,
         nd,
@@ -145,6 +155,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         args.background,
         ctx.debug,
         network_launcher_path.as_deref(),
+        autocontainerize,
     )
     .await?;
     Ok(())

@@ -85,7 +85,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         })
         .transpose()?;
 
-    let arg_bytes = match (candid_types, parsed_args) {
+    let arg_bytes = match (&candid_types, parsed_args) {
         (None, None) => bail!(
             "arguments was not provided and could not fetch candid type to assist building arguments"
         ),
@@ -98,7 +98,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         }
         (Some((type_env, func)), None) => {
             // interactive argument building using candid assist
-            let context = assist::Context::new(type_env);
+            let context = assist::Context::new(type_env.clone());
             eprintln!("Please use the following interactive prompt to build the arguments.");
             let arguments = assist::input_args(&context, &func.args)?;
             eprintln!("Sending the following argument:\n{arguments}\n");
@@ -118,7 +118,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             bytes
         }
         (Some((type_env, func)), Some(ParsedArguments::Candid(arguments))) => arguments
-            .to_bytes_with_types(&type_env, &func.args)
+            .to_bytes_with_types(type_env, &func.args)
             .context("failed to serialize candid arguments with specific types")?,
     };
 
@@ -150,7 +150,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         agent.update(&cid, &args.method).with_arg(arg_bytes).await?
     };
 
-    let ret = IDLArgs::from_bytes(&res[..])?;
+    let ret = match &candid_types {
+        Some((type_env, func)) => IDLArgs::from_bytes_with_types(&res[..], type_env, &func.rets)
+            .context("failed to decode candid response with types")?,
+        None => IDLArgs::from_bytes(&res[..]).context("failed to decode candid response")?,
+    };
 
     print_candid_for_term(&mut Term::buffered_stdout(), &ret)
         .context("failed to print candid return value")?;
@@ -195,4 +199,48 @@ async fn get_candid_type(
     let actor = ty?;
     let func = type_env.get_method(&actor, method_name).ok()?.clone();
     Some((type_env, func))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typed_decoding_preserves_record_field_names() {
+        // Encode a record — field names become hashes in the Candid binary format
+        let args = candid_parser::parse_idl_args(
+            r#"(record { network = "regtest"; bitcoin_canister_id = "abc" })"#,
+        )
+        .unwrap();
+        let bytes = args.to_bytes().unwrap();
+
+        // Without types: field names are lost, displayed as hash numbers
+        let untyped = IDLArgs::from_bytes(&bytes).unwrap();
+        let untyped_str = format!("{untyped}");
+        assert!(
+            !untyped_str.contains("network"),
+            "untyped decoding should not contain field names: {untyped_str}"
+        );
+
+        // With types: field names are restored from the type environment
+        let did = r#"
+            type config = record { network : text; bitcoin_canister_id : text };
+            service : { "get_config" : () -> (config) query }
+        "#;
+        let source = CandidSource::Text(did);
+        let (type_env, ty) = source.load().unwrap();
+        let actor = ty.unwrap();
+        let func = type_env.get_method(&actor, "get_config").unwrap().clone();
+
+        let typed = IDLArgs::from_bytes_with_types(&bytes, &type_env, &func.rets).unwrap();
+        let typed_str = format!("{typed}");
+        assert!(
+            typed_str.contains("network"),
+            "typed decoding should contain 'network': {typed_str}"
+        );
+        assert!(
+            typed_str.contains("bitcoin_canister_id"),
+            "typed decoding should contain 'bitcoin_canister_id': {typed_str}"
+        );
+    }
 }

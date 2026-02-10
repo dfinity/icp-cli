@@ -18,7 +18,7 @@ Given this recipe usage:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust"
+      type: "@dfinity/rust@v3.0.0"
       configuration:
         package: my-backend
 ```
@@ -46,16 +46,9 @@ Official recipes from the DFINITY registry:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust"
+  type: "@dfinity/rust@v3.0.0"
   configuration:
     package: my-crate
-```
-
-Version pinning:
-
-```yaml
-recipe:
-  type: "@dfinity/rust@v1.0.0"
 ```
 
 The `@dfinity` prefix resolves to [github.com/dfinity/icp-cli-recipes](https://github.com/dfinity/icp-cli-recipes).
@@ -89,10 +82,10 @@ Always include `sha256` for remote recipes.
 
 | Recipe | Purpose |
 |--------|---------|
-| `@dfinity/rust` | Rust canisters with Cargo |
-| `@dfinity/motoko` | Motoko canisters |
-| `@dfinity/asset-canister` | Asset canisters for static files |
-| `@dfinity/prebuilt` | Pre-compiled WASM files |
+| `@dfinity/rust@<version>` | Rust canisters with Cargo |
+| `@dfinity/motoko@<version>` | Motoko canisters |
+| `@dfinity/asset-canister@<version>` | Asset canisters for static files |
+| `@dfinity/prebuilt@<version>` | Pre-compiled WASM files |
 
 ## Recipe Template Syntax
 

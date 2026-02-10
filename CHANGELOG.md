@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Recipes and prebuilt canisters are now cached locally
 * feat: `icp settings autocontainerize true`, always use a docker container for all networks
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets
 * feat: install proxy canister when starting managed networks with all identities as controllers (or anonymous + default if more than 10 identities)

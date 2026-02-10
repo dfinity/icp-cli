@@ -88,6 +88,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         canisters_to_build,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
+        &ctx.dirs.package_cache()?,
         Arc::new(ctx.term.clone()),
         ctx.debug,
     )

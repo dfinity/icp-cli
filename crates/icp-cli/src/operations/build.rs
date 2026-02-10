@@ -6,6 +6,7 @@ use icp::{
     Canister,
     canister::build::{Build, BuildError, Params},
     context::TermWriter,
+    package::PackageCache,
     prelude::*,
 };
 use snafu::{ResultExt, Snafu};
@@ -51,6 +52,7 @@ pub(crate) async fn build(
     pb: &mut MultiStepProgressBar,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
+    pkg_cache: &PackageCache,
 ) -> Result<(), BuildOperationError> {
     let build_dir = tempdir().context(TempDirSnafu)?;
     let wasm_output_path = build_dir.path().join("out.wasm");
@@ -69,6 +71,7 @@ pub(crate) async fn build(
                     output: wasm_output_path.to_owned(),
                 },
                 Some(tx),
+                pkg_cache,
             )
             .await;
 
@@ -95,6 +98,7 @@ pub(crate) async fn build_many_with_progress_bar(
     canisters: Vec<(PathBuf, Canister)>,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
+    pkg_cache: &PackageCache,
     term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), BuildManyError> {
@@ -106,7 +110,15 @@ pub(crate) async fn build_many_with_progress_bar(
         let builder = builder.clone();
         let artifacts = artifacts.clone();
         let fut = async move {
-            let build_result = build(&canister_path, &canister, &mut pb, builder, artifacts).await;
+            let build_result = build(
+                &canister_path,
+                &canister,
+                &mut pb,
+                builder,
+                artifacts,
+                pkg_cache,
+            )
+            .await;
 
             // Execute with progress tracking for final state
             let result = ProgressManager::execute_with_progress(

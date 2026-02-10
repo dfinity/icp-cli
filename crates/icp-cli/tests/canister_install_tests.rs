@@ -218,7 +218,7 @@ async fn canister_install_with_init_args_candid() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -283,7 +283,7 @@ async fn canister_install_with_init_args_hex() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -347,7 +347,7 @@ async fn canister_install_with_environment_init_args_override() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -416,7 +416,7 @@ async fn canister_install_with_invalid_init_args() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -641,7 +641,7 @@ async fn canister_install_with_args_from_file() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -740,7 +740,7 @@ async fn deploy_with_init_args_from_file_in_manifest() {
         name: my-canister
         init_args: "init.txt"
         recipe:
-          type: "@dfinity/motoko"
+          type: "@dfinity/motoko@v4.0.0"
           configuration:
             main: main.mo
             args: ""

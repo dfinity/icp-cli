@@ -14,7 +14,7 @@ The [`icp.yaml`](./icp.yaml) file configures a canister using the `@dfinity/asse
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/asset-canister"
+      type: "@dfinity/asset-canister@v2.1.0"
       configuration:
         version: 0.29.2
         dir: www
@@ -22,8 +22,8 @@ canisters:
 
 ### Key Components
 
-- **`type: "@dfinity/asset-canister"`**: Uses the official DFINITY asset canister recipe
-- **`version`**: Specifies the assets canister version to use (optional, defaults to latest)
+- **`type: "@dfinity/asset-canister@v2.1.0"`**: Uses the official DFINITY asset canister recipe
+- **`version`**: Specifies the assets canister WASM version to use
 - **`dir`**: Directory containing static assets to deploy (required)
 
 ## Assets Directory

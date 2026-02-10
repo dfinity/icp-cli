@@ -558,7 +558,7 @@ mod tests {
             validate_canister_yaml(indoc! {r#"
                     name: my-canister
                     recipe:
-                      type: "@dfinity/dummy"
+                      type: "@dfinity/dummy@v1.0.0"
                       sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
                 "#}),
             CanisterManifest {
@@ -570,7 +570,7 @@ mod tests {
                         recipe_type: RecipeType::Registry {
                             name: "dfinity".to_string(),
                             recipe: "dummy".to_string(),
-                            version: "latest".to_string(),
+                            version: "v1.0.0".to_string(),
                         },
                         configuration: HashMap::new(),
                         sha256: Some(

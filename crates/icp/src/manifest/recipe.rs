@@ -57,9 +57,9 @@ impl<'de> Deserialize<'de> for RecipeType {
         {
             // Check for version delimiter
             let Some((fq_name, version)) = fq_recipe.rsplit_once("@") else {
-                return Err(D::Error::custom(
-                    "version must be specified for registry recipes",
-                ));
+                return Err(D::Error::custom(format!(
+                    "Missing version from recipe `{v}@<version>`"
+                )));
             };
 
             let (registry, recipe) = fq_name.split_once("/").expect("delimiter missing");

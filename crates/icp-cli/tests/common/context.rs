@@ -93,7 +93,12 @@ impl TestContext {
         cmd.current_dir(self.home_path());
         // Isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
-        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        cmd.env("HOME", self.home_path())
+            .env_remove("ICP_HOME")
+            // Also set XDG directories to ensure isolation on Linux
+            .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
+            .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
+            .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
         // Run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
@@ -225,7 +230,14 @@ impl TestContext {
         cmd.current_dir(project_dir);
         // isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
-        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        {
+            cmd.env("HOME", self.home_path())
+                .env_remove("ICP_HOME")
+                // Also set XDG directories to ensure isolation on Linux
+                .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
+                .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
+                .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
+        }
         // run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
@@ -391,23 +403,31 @@ impl TestContext {
 
     pub(crate) async fn pocketic_time_fastforward(&self, duration: Duration) {
         let now = UtcDateTime::now();
-        Client::new()
-            .post(
-                self.config_url
-                    .get()
-                    .expect("network must have been initialized")
-                    .as_ref()
-                    .expect("network must use pocket-ic")
-                    .join("update/set_time")
-                    .unwrap(),
-            )
-            .json(&json!({ "nanos_since_epoch": (now + duration).unix_timestamp_nanos() }))
-            .send()
-            .await
-            .expect("failed to update time")
-            .error_for_status()
-            .expect("failed to update time");
-        self.time_offset.set(Some(duration));
+        let url = self
+            .config_url
+            .get()
+            .expect("network must have been initialized")
+            .as_ref()
+            .expect("network must use pocket-ic")
+            .join("update/set_time")
+            .unwrap();
+        let body = json!({ "nanos_since_epoch": (now + duration).unix_timestamp_nanos() });
+        for attempt in 0..5 {
+            let response = Client::new()
+                .post(url.clone())
+                .json(&body)
+                .send()
+                .await
+                .expect("failed to update time");
+            if response.status() == reqwest::StatusCode::CONFLICT {
+                tokio::time::sleep(Duration::from_millis(100 * (attempt + 1))).await;
+                continue;
+            }
+            response.error_for_status().expect("failed to update time");
+            self.time_offset.set(Some(duration));
+            return;
+        }
+        panic!("failed to update time: still receiving 409 Conflict after 5 attempts");
     }
 
     pub(crate) fn pocketic_config_url(&self) -> Option<&Url> {

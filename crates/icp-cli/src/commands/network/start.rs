@@ -1,9 +1,11 @@
 use anyhow::{Context as _, bail};
+use candid::Principal;
 use clap::Args;
 use icp::prelude::*;
 use icp::{
     identity::manifest::IdentityList,
     network::{Configuration, run_network},
+    settings::Settings,
 };
 use tracing::debug;
 
@@ -81,19 +83,34 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     }
 
     // Identities
-    let ids = ctx
+    let (ids, defaults) = ctx
         .dirs
         .identity()?
-        .with_read(async |dirs| IdentityList::load_from(dirs))
+        .with_read(async |dirs| {
+            let ids = IdentityList::load_from(dirs)?;
+            let defaults = icp::identity::manifest::IdentityDefaults::load_from(dirs)?;
+            Ok::<_, anyhow::Error>((ids, defaults))
+        })
         .await??;
 
-    // Determine ICP accounts to seed
-    let seed_accounts = ids.identities.values().map(|id| id.principal());
+    let all_identities: Vec<Principal> = ids.identities.values().map(|id| id.principal()).collect();
+
+    let default_identity = ids
+        .identities
+        .get(&defaults.default)
+        .map(|id| id.principal());
 
     debug!("Project root: {pdir}");
     debug!("Network root: {}", nd.network_root);
 
     let candid_ui_wasm = crate::artifacts::get_candid_ui_wasm();
+    let proxy_wasm = crate::artifacts::get_proxy_wasm();
+
+    let settings = ctx
+        .dirs
+        .settings()?
+        .with_read(async |dirs| Settings::load_from(dirs))
+        .await??;
 
     let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
         Some(PathBuf::from(var))
@@ -124,15 +141,21 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         }
     };
 
+    // On Windows, always use Docker since the native launcher doesn't run there
+    let autocontainerize = cfg!(windows) || settings.autocontainerize;
+
     run_network(
         cfg,
         nd,
         pdir,
-        seed_accounts,
+        all_identities,
+        default_identity,
         Some(candid_ui_wasm),
+        Some(proxy_wasm),
         args.background,
         ctx.debug,
         network_launcher_path.as_deref(),
+        autocontainerize,
     )
     .await?;
     Ok(())

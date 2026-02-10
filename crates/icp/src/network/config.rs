@@ -59,6 +59,8 @@ pub struct NetworkDescriptorModel {
     pub pocketic_instance_id: Option<usize>,
     /// Canister ID of the deployed Candid UI, if any.
     pub candid_ui_canister_id: Option<Principal>,
+    /// Canister ID of the deployed proxy canister, if any.
+    pub proxy_canister_id: Option<Principal>,
 }
 
 /// Identifies the process or container running a managed network.

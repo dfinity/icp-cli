@@ -287,6 +287,15 @@ Source documentation in `docs/` must work in two contexts:
 
 The `prepare-docs.sh` script handles the transformation to Starlight's URL structure. If you add new link patterns, verify they work by building the docs site locally with `cd docs-site && npm run build`.
 
+### Installation Instructions
+
+- **npm is the recommended installation method** for quickstarts, tutorials, and READMEs
+- Only `docs/guides/installation.md` should list all installation options
+- Follow DRY: other docs should link to the installation guide rather than duplicating instructions
+- Consistent ordering: npm (in Quick Install), then Homebrew, then Shell Script (in Alternative Methods)
+- When referencing alternatives in other docs, maintain this order: "Homebrew, shell script, ..." (e.g., "See the Installation Guide for Homebrew, shell script, or other options")
+- Both `icp-cli` and `ic-wasm` are available as official Homebrew formulas: `brew install icp-cli` and `brew install ic-wasm`
+
 ### Paths
 
 All paths are UTF-8. `PathBuf` and `Path` are the types from `camino`.

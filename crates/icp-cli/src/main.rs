@@ -466,6 +466,13 @@ async fn main() -> Result<(), Error> {
             }
         },
 
+        // Settings
+        Command::Settings(args) => {
+            commands::settings::exec(&ctx, &args)
+                .instrument(trace_span)
+                .await?
+        }
+
         // Sync
         Command::Sync(args) => {
             commands::sync::exec(&ctx, &args)

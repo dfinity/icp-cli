@@ -1,190 +1,37 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 `icp-cli` is a command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).
 
 ## Essential Commands
 
-### Building & Testing
-
 ```bash
-# Build all crates in workspace
-cargo build
-
-# Build in release mode
-cargo build --release
-
-# Build only the CLI binary
-cargo build --bin icp
-
-# Run all tests (network launcher is auto-downloaded on first run)
-cargo test
-
-# Run tests for specific package
-cargo test -p icp-cli
-
-# Run a specific test from <test_file>.rs
-cargo test --test <test_file> -- <test_name>
-
-# Run with verbose output
-cargo test -- --nocapture
-```
-
-### Development Workflow
-
-```bash
-# Add CLI to path for testing
-export PATH=$(pwd)/target/debug:$PATH
-
-# Check if CLI works
-icp help
-
-# if the commands have changed, generate CLI documentation:
-./scripts/generate-cli-docs.sh
-
-
-# if the manifest types change regenerate the schema:
-./scripts/generate-config-schemas.sh
-
-# After making changes and if the tests pass run cargo fmt and cargo clippy:
-cargo fmt && cargo clippy
+cargo build --bin icp                # Build the CLI binary
+cargo test                           # Run all tests (launcher auto-downloads on first run)
+cargo test -p icp-cli                # Tests for a specific package
+cargo test --test <file> -- <name>   # Specific test
+cargo fmt && cargo clippy            # Run after changes pass tests
+./scripts/generate-cli-docs.sh       # Regenerate CLI docs when commands change
+./scripts/generate-config-schemas.sh # Regenerate schema when manifest types change
 ```
 
 ## Architecture
 
 ### Workspace Structure
 
-This is a Rust workspace with multiple crates:
-
 - **`crates/icp-cli`**: Main CLI binary (`icp`) with command implementations
 - **`crates/icp`**: Core library with project model, manifest loading, canister management, network configuration
 - **`crates/icp-canister-interfaces`**: Canister interface definitions for ICP system canisters
 - **`crates/schema-gen`**: JSON schema generation for manifest validation
 
-### Core Concepts
-
-#### Project Model
-
-The project model is built hierarchally through manifest consolidation:
-
-1. **Project Manifest** (`icp.yaml`): Root configuration defining canisters, networks, and environments
-2. **Canister Manifest** (`canister.yaml`): Per-canister configuration for build and sync steps
-3. **Consolidated Project**: Final `Project` struct combining all manifests into a unified view
-
-Key types in `crates/icp/src/lib.rs`:
-- `Project`: Contains all canisters, networks, and environments
-- `Environment`: Links a network with a set of canisters
-- `Network`: Configuration for local (managed) or remote (connected) networks
-- `Canister`: Build and sync configuration for a single canister
-
-#### Manifest System
-
-Manifests are YAML files that define project structure. The system supports:
-
-- **Inline definitions**: Define resources directly in `icp.yaml`
-- **Path references**: Reference external manifest files
-- **Glob patterns**: For canisters, use globs like `canisters/*` to auto-discover
-
-The `consolidate_manifest` function in `crates/icp/src/project.rs` transforms raw manifests into the final `Project` structure.
-
-#### Build Adapters
-
-Canisters are built using adapter pipelines defined in `crates/icp/src/manifest/adapter/`:
-
-- **Script Adapter**: Runs shell commands with environment variables (e.g., `$ICP_WASM_OUTPUT_PATH`)
-- **Prebuilt Adapter**: Uses pre-compiled WASM from local files, URLs, or registry
-- **Assets Adapter**: Packages static assets for frontend canisters
-
-Build steps are executed sequentially in `crates/icp/src/canister/build/`.
-
-#### Recipe System
-
-Recipes are Handlebars templates that generate build/sync configuration. Implementation in `crates/icp/src/canister/recipe/`:
-
-- **Registry recipes**: `@dfinity/rust@v3.0.0` resolves to GitHub releases URL
-- **Local recipes**: `file://path/to/recipe.hbs`
-- **Remote recipes**: Direct URLs with SHA256 verification
-
-The `@dfinity` prefix is hardcoded to `https://github.com/dfinity/icp-cli-recipes/releases/download/{recipe}-{version}/recipe.hbs`
-
-#### Network Management
-
-Two network types in `crates/icp/src/network/`:
-
-- **Managed Networks**: Local test networks launched via `icp-cli-network-launcher` (wraps PocketIC)
-- **Connected Networks**: Remote networks (mainnet, testnets) accessed via HTTP
-
-The network launcher is automatically downloaded on first use. For development/debugging, you can override with `ICP_CLI_NETWORK_LAUNCHER_PATH`.
-
-##### Implicit Networks and Environments
-
-The CLI provides two implicit networks and environments that are always available:
-
-- **`local` network**: A default managed network on `localhost:8000`. Users can override this in their `icp.yaml` to customize the local development environment (e.g., different port or connecting to an existing network).
-- **`ic` network**: The IC mainnet at `https://icp-api.io`. This network is **protected** and cannot be overridden to prevent accidental production deployment with incorrect settings.
-
-Corresponding implicit environments are also provided:
-- **`local` environment**: Uses the `local` network with all project canisters. This is the default environment when none is specified.
-- **`ic` environment**: Uses the `ic` network with all project canisters.
-
-These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` and are used throughout the codebase.
-
-#### Identity & Canister IDs
-
-- **Identities**: Stored in platform-specific directories as PEM files (Secp256k1 or Ed25519):
-  - macOS: `~/Library/Application Support/org.dfinity.icp-cli/identity/`
-  - Linux: `~/.local/share/icp-cli/identity/`
-  - Windows: `%APPDATA%\icp-cli\data\identity\`
-  - Override with `ICP_HOME` environment variable: `$ICP_HOME/identity/`
-- **Canister IDs**: Persisted in `.icp/{cache,data}/mappings/<environment>.ids.json` within project directories
-  - Managed networks (local) use `.icp/cache/mappings/`
-  - Connected networks (mainnet) use `.icp/data/mappings/`
-
-Store management is in `crates/icp/src/store_id.rs`.
-
 ### Command Structure
 
-Commands are organized in `crates/icp-cli/src/commands/`:
+Commands are in `crates/icp-cli/src/commands/`, each as a module with an `exec()` function receiving a `Context` (from `crates/icp/src/context/`). Dispatched via `clap` in `main.rs`. Traits like `ProjectLoad` and `ProjectRootLocate` enable dependency injection for testing.
 
-- Each command/subcommand is a module with an `exec()` function
-- Commands receive a `Context` (from `crates/icp/src/context/`) containing:
-  - Project loader for lazy manifest loading
-  - Terminal for user interaction
-  - Configuration settings
-- The main router in `main.rs` dispatches commands using `clap`
+See `.claude/architecture.md` for detailed subsystem documentation (manifests, build adapters, recipes, networks, identity).
 
-### Key Patterns
-
-- **Async/Await**: Heavy use of `tokio` for async operations (network calls, file I/O)
-- **Error Handling**: Uses `snafu` for structured error types with context
-- **Dependency Injection**: Traits like `ProjectLoad`, `ProjectRootLocate` enable testing with mocks
-- **Lazy Loading**: Project manifests are loaded on-demand to avoid unnecessary work
-
-## Testing
-
-### Test Structure
-
-Tests are split between unit tests (in modules) and integration tests:
-
-- Integration tests in `crates/icp-cli/tests/` test full command execution
-- Use `assert_cmd` for CLI assertions and `predicates` for output matching
-- Use `serial_test` with file locks for tests that share resources (network ports)
-
-### Test Requirements
-
-- The network launcher is automatically downloaded on first test run
-- Some tests launch local networks and require available ports
-
-### Mock Helpers
-
-`crates/icp/src/lib.rs` provides test utilities:
-
-- `MockProjectLoader::minimal()`: Single canister, network, environment
-- `MockProjectLoader::complex()`: Multiple canisters, networks, environments
-- `NoProjectLoader`: Simulates missing project for error cases
+See `.claude/testing.md` for test structure, mock helpers, and test requirements.
 
 ## Important Constraints
 
@@ -193,43 +40,9 @@ Tests are split between unit tests (in modules) and integration tests:
 - Uses **Rust 2024 edition** (requires Rust 1.88.0+)
 - Update `rust-version` in workspace `Cargo.toml` when changing
 
-### Network Launcher Dependency
+### Network Launcher
 
-- The network launcher is automatically downloaded on first use (both CLI and tests)
-- `ICP_CLI_NETWORK_LAUNCHER_PATH` can be set to override the auto-downloaded version for debugging
-- Manual download available from: github.com/dfinity/icp-cli-network-launcher/releases
-
-### Schema Generation
-
-The project includes JSON schemas for manifest validation:
-
-- Schema is generated in `crates/schema-gen/`
-- Referenced in `icp.yaml` files via `# yaml-language-server: $schema=...`
-- Regenerate when manifest types change by running: `./scripts/generate-config-schema.sh`
-
-### Docs generation
-
-- The CLI reference is generated in `docs/reference/cli.md`.
-- Regenerate the CLI reference when commands change by running: `./scripts/generate-cli-docs.sh`
-
-### Documentation Structure
-
-Documentation follows the Diátaxis framework:
-
-- `docs/tutorial.md` — Learning-oriented first deployment guide
-- `docs/guides/` — Task-oriented how-to guides
-- `docs/concepts/` — Understanding-oriented explanations
-- `docs/reference/` — Information-oriented technical specifications
-- `docs/migration/` — Migration guides (e.g., from dfx)
-
-### Installation Instructions
-
-- **npm is the recommended installation method** for quickstarts, tutorials, and READMEs
-- Only `docs/guides/installation.md` should list all installation options
-- Follow DRY: other docs should link to the installation guide rather than duplicating instructions
-- Consistent ordering: npm (in Quick Install), then Homebrew, then Shell Script (in Alternative Methods)
-- When referencing alternatives in other docs, maintain this order: "Homebrew, shell script, ..." (e.g., "See the Installation Guide for Homebrew, shell script, or other options")
-- Both `icp-cli` and `ic-wasm` are available as official Homebrew formulas: `brew install icp-cli` and `brew install ic-wasm`
+The `icp-cli-network-launcher` (wraps PocketIC) is automatically downloaded on first use, both for the CLI and tests. Override with `ICP_CLI_NETWORK_LAUNCHER_PATH` for debugging.
 
 ### Paths
 
@@ -243,53 +56,12 @@ All paths are UTF-8. `PathBuf` and `Path` are the types from `camino`.
 This project uses Snafu for error handling.
 
 - Every new *primary erroring action* gets its own error variant. There is no `MyError::Io { source: io::Error }`, instead (hypothetically) `OpenSocket` and `WriteSocket` should be separate. `snafu(context(false))` is not permitted. `snafu(transparent)` should *only* be used for source error types defined elsewhere in this repo, *not* for foreign error types.
-- Every error regarding a file in some way (processing, creating, etc.) should contain the file path of the error. It is okay to add 'dummy' file path parameters only used in error handling routes. For 'basic' file ops and JSON/YML loading use the functions in `icp::fs`, whose errors include the file path and can be made `snafu(transparent)`. 
+- Every error regarding a file in some way (processing, creating, etc.) should contain the file path of the error. It is okay to add 'dummy' file path parameters only used in error handling routes. For 'basic' file ops and JSON/YML loading use the functions in `icp::fs`, whose errors include the file path and can be made `snafu(transparent)`.
 
-## Examples
+## Documentation & Examples
 
-The `examples/` directory contains working project templates demonstrating:
+See `.claude/docs-guidelines.md` for documentation structure, installation instructions guidance, and schema/CLI docs generation.
 
-- `icp-motoko/`: Motoko canister with script adapter
-- `icp-rust/`: Rust canister compilation
-- `icp-project-multi-canister/`: Multi-canister projects with environments
-- `icp-network-connected/`: Remote network configuration
-- `icp-pre-built/`: Using prebuilt WASM files
+See `.claude/recipe-docs.md` for recipe documentation verification rules and cross-repository checks.
 
-These serve as integration tests and documentation for users and must be kept up to date.
-
-## Recipe Documentation Verification
-
-**IMPORTANT**: This project uses recipes from `icp-cli-recipes` repository. When working with recipe-related documentation or examples:
-
-### Always Verify Against icp-cli-recipes
-
-1. **Check the actual recipe template**: Recipe templates are in `github.com/dfinity/icp-cli-recipes/recipes/<name>/recipe.hbs`
-2. **Verify parameters match**: Documentation must match what the recipe template actually supports
-3. **Check required vs optional**: Parameters used directly in templates (not in `{{#if}}`) are required
-
-### Documentation Consistency Checklist
-
-When modifying recipe-related docs or examples, verify:
-
-1. **YAML syntax**: Use `canisters: - name:` array syntax, not singular `canister:`
-2. **Recipe type format**: Use `@dfinity/<recipe-name>@<version>` (e.g., `@dfinity/rust@v3.0.0`), not just `rust`
-3. **Parameter accuracy**: Only document parameters that exist in the recipe template
-4. **Config option descriptions**: Each parameter description must accurately describe what it does, verified against the actual behavior in the `recipe.hbs` template
-5. **Example accuracy**: Examples in `examples/` directories must use correct recipe syntax
-6. **README consistency**: Example READMEs must match their `icp.yaml` files
-
-### Key Files to Keep in Sync
-
-- `docs/guides/using-recipes.md` - Main recipe usage guide
-- `docs/migration/from-dfx.md` - Migration examples using recipes
-- `docs/guides/creating-templates.md` - Template examples using recipes
-- `examples/icp-*-recipe/` - Example projects using recipes
-
-### Cross-Repository Verification
-
-Before finalizing recipe-related changes, ask the user:
-- Whether they have a local clone of `icp-cli-recipes` with changes to verify against
-- Or whether to fetch the latest recipe templates from the remote repository
-- What branch or version to compare with
-
-Then verify documentation matches the recipe templates from the specified source.
+The `examples/` directory contains working project templates that serve as integration tests and must be kept up to date.

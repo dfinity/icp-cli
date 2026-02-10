@@ -22,9 +22,9 @@ $(git rev-parse --show-toplevel)/target/debug/icp --markdown-help > $(git rev-pa
 # resulting in "icp token icp token ...". This sed command removes the duplication.
 # Note: sed -i has different syntax on macOS vs Linux
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's/icp token icp token/icp token/g' $(git rev-parse --show-toplevel)/docs/reference/cli.md
+    sed -i '' -e 's/icp token icp token/icp token/g' -e 's/icp icp settings/icp settings/g' $(git rev-parse --show-toplevel)/docs/reference/cli.md
 else
-    sed -i 's/icp token icp token/icp token/g' $(git rev-parse --show-toplevel)/docs/reference/cli.md
+    sed -i -e 's/icp token icp token/icp token/g' -e 's/icp icp settings/icp settings/g' $(git rev-parse --show-toplevel)/docs/reference/cli.md
 fi
 
 echo "Documentation generated successfully at docs/reference/cli.md"

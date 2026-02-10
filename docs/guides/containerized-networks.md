@@ -204,11 +204,11 @@ When using a containerized network, the Docker image must fulfill a specific con
 The container must write a status file to `/app/status/status.json` (configurable via `status-dir`) when the network is ready. This file tells icp-cli how to connect to the network.
 
 **Required fields:**
-| Field          | Type   | Description                                      |
-|----------------|--------|--------------------------------------------------|
-| `v`            | string | Must be `"1"` (status file format version)       |
-| `gateway_port` | number | Container port where the HTTP gateway listens    |
-| `root_key`     | string | Hex-encoded root key of the network              |
+| Field          | Type   | Description                                   |
+|----------------|--------|-----------------------------------------------|
+| `v`            | string | Must be `"1"` (status file format version)    |
+| `gateway_port` | number | Container port where the HTTP gateway listens |
+| `root_key`     | string | Hex-encoded root key of the network           |
 
 **Example:**
 ```json
@@ -483,6 +483,23 @@ port-mapping:
 If you're on Windows and want to use a manually instantiated `dockerd` in a WSL2 instance instead of Docker Desktop, set these environment variables:
 - `ICP_CLI_DOCKER_WSL2_DISTRO=<distro>` — the WSL2 distribution name running dockerd
 - `DOCKER_HOST=tcp://<ip>:<port>` — the TCP address where dockerd is listening
+
+## Always Use Containers
+
+If you prefer containers for all local networks without configuring each one individually, enable the `autocontainerize` setting:
+
+```bash
+icp settings autocontainerize true
+```
+
+This makes all managed networks (including the implicit `local` network) run in Docker containers automatically. To check the current value or disable it:
+
+```bash
+icp settings autocontainerize       # Print current value
+icp settings autocontainerize false # Disable
+```
+
+Note that this is the default behavior on Windows, where the setting will be ignored.
 
 ## Related Documentation
 

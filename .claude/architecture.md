@@ -38,7 +38,7 @@ Build steps are executed sequentially in `crates/icp/src/canister/build/`.
 
 Recipes are Handlebars templates that generate build/sync configuration. Implementation in `crates/icp/src/canister/recipe/`:
 
-- **Registry recipes**: `@dfinity/rust` resolves to GitHub releases URL
+- **Registry recipes**: `@dfinity/rust@v3.0.0` resolves to GitHub releases URL
 - **Local recipes**: `file://path/to/recipe.hbs`
 - **Remote recipes**: Direct URLs with SHA256 verification
 

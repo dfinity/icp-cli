@@ -13,7 +13,7 @@
 When modifying recipe-related docs or examples, verify:
 
 1. **YAML syntax**: Use `canisters: - name:` array syntax, not singular `canister:`
-2. **Recipe type format**: Use `@dfinity/<recipe-name>` (e.g., `@dfinity/rust`), not just `rust`
+2. **Recipe type format**: Use `@dfinity/<recipe-name>@<version>` (e.g., `@dfinity/rust@v3.0.0`), not just `rust`
 3. **Parameter accuracy**: Only document parameters that exist in the recipe template
 4. **Config option descriptions**: Each parameter description must accurately describe what it does, verified against the actual behavior in the `recipe.hbs` template
 5. **Example accuracy**: Examples in `examples/` directories must use correct recipe syntax

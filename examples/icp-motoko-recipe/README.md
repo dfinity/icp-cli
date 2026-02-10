@@ -14,7 +14,7 @@ The [`icp.yaml`](./icp.yaml) file configures a canister using the `@dfinity/moto
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/motoko"
+      type: "@dfinity/motoko@v4.0.0"
       configuration:
         main: src/main.mo
         args: --incremental-gc
@@ -22,7 +22,7 @@ canisters:
 
 ### Key Components
 
-- **`type: "@dfinity/motoko"`**: Uses the official DFINITY Motoko recipe
+- **`type: "@dfinity/motoko@v4.0.0"`**: Uses the official DFINITY Motoko recipe
 - **`main`**: Specifies the main Motoko source file (required)
 - **`args`**: Compiler flags passed to `moc` (optional)
 

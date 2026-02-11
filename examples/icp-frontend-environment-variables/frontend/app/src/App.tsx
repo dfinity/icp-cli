@@ -12,8 +12,9 @@ interface CanisterEnv {
 }
 
 const canisterEnv = getCanisterEnv<CanisterEnv>();
+const canisterId = canisterEnv["PUBLIC_CANISTER_ID:backend"];
 
-const helloWorldActor = createActor(canisterEnv["PUBLIC_CANISTER_ID:backend"], {
+const backendActor = createActor(canisterId, {
   agentOptions: {
     rootKey: canisterEnv.IC_ROOT_KEY,
   },
@@ -28,7 +29,7 @@ function App() {
       "name"
     ) as HTMLInputElement;
 
-    helloWorldActor.greet(nameInput.value).then(setGreeting);
+    backendActor.greet(nameInput.value).then(setGreeting);
     return false;
   }
 

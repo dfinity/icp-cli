@@ -14,7 +14,7 @@ Documentation follows the Diátaxis framework:
 
 - Schema is generated in `crates/schema-gen/`
 - Referenced in `icp.yaml` files via `# yaml-language-server: $schema=...`
-- Regenerate when manifest types change: `./scripts/generate-config-schema.sh`
+- Regenerate when manifest types change: `./scripts/generate-config-schemas.sh`
 
 ## CLI Docs Generation
 

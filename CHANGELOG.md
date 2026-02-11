@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Support subaccounts and ICRC-1 IDs in `icp token`, `icp cycles`, and `icp identity account-id`
 * feat!: Recipes are now specified `@registry/recipe@version`, the version component is required. The `latest` version is no longer assumed and the version tags will be removed soon.
 * feat: Recipes and prebuilt canisters are now cached locally
 * feat: `icp settings autocontainerize true`, always use a docker container for all networks

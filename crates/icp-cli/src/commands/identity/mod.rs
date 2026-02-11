@@ -13,7 +13,7 @@ pub(crate) mod rename;
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Display the ICP ledger account identifier for the current identity
+    /// Display the ICP ledger and ICRC-1 account identifiers for the current identity
     AccountId(account_id::AccountIdArgs),
 
     /// Display the currently selected identity

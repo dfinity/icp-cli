@@ -65,6 +65,8 @@ icp network start
 icp deploy backend
 ```
 
+> **Important:** The backend must be deployed before starting the dev server. The dev server needs to fetch the backend's canister ID to configure the `ic_env` cookie. If the backend isn't deployed, you'll see an error with instructions.
+
 Install dependencies and start the dev server:
 
 ```bash

@@ -599,7 +599,7 @@
           ]
         },
         "type": {
-          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes\n`version` is optional and defaults to `latest`\n\nIt is always recommended to pin the version and provide a hash for it in the `sha256` field",
+          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>@<version>` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` registry at https://github.com/dfinity/icp-cli-recipes\n\nIt is recommended to also provide a hash in the `sha256` field",
           "type": "string"
         }
       },

@@ -21,7 +21,7 @@ async fn canister_snapshot_workflow() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -278,7 +278,7 @@ async fn canister_snapshot_replace() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -418,7 +418,7 @@ async fn canister_snapshot_download_upload_roundtrip() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -685,7 +685,7 @@ async fn canister_snapshot_requires_stopped() {
         canisters:
           - name: my-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -893,7 +893,7 @@ async fn canister_snapshot_download_resume() {
         canisters:
           - name: large-canister
             recipe:
-              type: "@dfinity/prebuilt"
+              type: "@dfinity/prebuilt@v2.0.0"
               configuration:
                 path: "{wasm_path}"
 
@@ -1067,7 +1067,7 @@ async fn canister_snapshot_upload_resume() {
         canisters:
           - name: large-canister
             recipe:
-              type: "@dfinity/prebuilt"
+              type: "@dfinity/prebuilt@v2.0.0"
               configuration:
                 path: "{wasm_path}"
 
@@ -1261,7 +1261,7 @@ async fn canister_migrate_id() {
         canisters:
           - name: source-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""
@@ -1269,7 +1269,7 @@ async fn canister_migrate_id() {
 
           - name: target-canister
             recipe:
-              type: "@dfinity/motoko"
+              type: "@dfinity/motoko@v4.0.0"
               configuration:
                 main: main.mo
                 args: ""

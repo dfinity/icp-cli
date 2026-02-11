@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, de::Error as _};
 
 /// Represents the accepted values for a recipe type in
 /// the canister manifest
@@ -23,7 +23,7 @@ pub enum RecipeType {
         /// the name of the recipe
         recipe: String,
 
-        /// the version of the recipe, deserializes to `latest` when not provided
+        /// the version of the recipe
         version: String,
     },
 }
@@ -42,8 +42,8 @@ impl<'de> Deserialize<'de> for RecipeType {
     {
         let v = String::deserialize(deserializer)?;
 
-        if v.starts_with("file://") {
-            let path = v.strip_prefix("file://").expect("prefix missing").into();
+        if let Some(path) = v.strip_prefix("file://") {
+            let path = path.into();
 
             return Ok(Self::File(path));
         }
@@ -52,19 +52,17 @@ impl<'de> Deserialize<'de> for RecipeType {
             return Ok(Self::Url(v.to_owned()));
         }
 
-        if v.starts_with("@") && v.contains("/") {
-            let recipe_type = v.strip_prefix("@").expect("prefix missing");
-
+        if let Some(fq_recipe) = v.strip_prefix("@")
+            && v.contains("/")
+        {
             // Check for version delimiter
-            let (v, version) = if recipe_type.contains("@") {
-                // Version is specified
-                recipe_type.rsplit_once("@").expect("delimiter missing")
-            } else {
-                // Assume latest
-                (recipe_type, "latest")
+            let Some((fq_name, version)) = fq_recipe.rsplit_once("@") else {
+                return Err(D::Error::custom(format!(
+                    "Missing version from recipe `{v}@<version>`"
+                )));
             };
 
-            let (registry, recipe) = v.split_once("/").expect("delimiter missing");
+            let (registry, recipe) = fq_name.split_once("/").expect("delimiter missing");
 
             return Ok(Self::Registry {
                 name: registry.to_owned(),
@@ -73,8 +71,8 @@ impl<'de> Deserialize<'de> for RecipeType {
             });
         }
 
-        Err(serde::de::Error::custom(format!(
-            "Invalid recipe type: `{v}`. Valid types are urls eg: http:// or file://, or @<registry>/<name>[@<version>]."
+        Err(D::Error::custom(format!(
+            "Invalid recipe type: `{v}`. Valid types are urls eg: http:// or file://, or @<registry>/<name>@<version>."
         )))
     }
 }
@@ -101,12 +99,11 @@ pub struct Recipe {
     ///
     /// `http://<url_to_recipe>` - point to a remote recipe template
     ///
-    /// `@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.
+    /// `@<registry>/<recipe_name>@<version>` - Point to a recipe in a known registry.
     ///
-    /// For now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes
-    /// `version` is optional and defaults to `latest`
+    /// For now the only registry is the `dfinity` registry at https://github.com/dfinity/icp-cli-recipes
     ///
-    /// It is always recommended to pin the version and provide a hash for it in the `sha256` field
+    /// It is recommended to also provide a hash in the `sha256` field
     #[serde(rename = "type")]
     #[schemars(with = "String")]
     pub recipe_type: RecipeType,

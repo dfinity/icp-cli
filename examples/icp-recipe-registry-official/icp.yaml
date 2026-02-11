@@ -3,20 +3,6 @@
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/prebuilt"
-      configuration:
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-
-  - name: my-canister-with-latest
-    recipe:
-      type: "@dfinity/prebuilt@latest"
-      configuration:
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-
-  - name: my-canister-with-version
-    recipe:
       type: "@dfinity/prebuilt@v2.0.0"
       configuration:
         path: ../icp-pre-built/dist/hello_world.wasm

@@ -3,7 +3,7 @@
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust"
+      type: "@dfinity/rust@v3.0.0"
       configuration:
         # cargo package for canister (required field)
         package: icp-canister

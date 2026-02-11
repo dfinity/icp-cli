@@ -13,50 +13,30 @@ The registry-style recipe syntax allows you to reference well-maintained, versio
 
 ## Configuration
 
-The [`icp.yaml`](./icp.yaml) file demonstrates three different ways to reference registry recipes:
+The [`icp.yaml`](./icp.yaml) file demonstrates how to reference a registry recipe with a pinned version:
 
 ```yaml
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/prebuilt"
-      configuration:
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-
-  - name: my-canister-with-latest
-    recipe:
-      type: "@dfinity/prebuilt@latest"
-      configuration:
-        path: ../icp-pre-built/dist/hello_world.wasm
-        sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
-
-  - name: my-canister-with-version
-    recipe:
-      type: "@dfinity/prebuilt@v1.0.5"
+      type: "@dfinity/prebuilt@v2.0.0"
       configuration:
         path: ../icp-pre-built/dist/hello_world.wasm
         sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 ```
 
-### Registry Syntax Variants
+### Registry Syntax
 
-1. **Default Version**: `@dfinity/prebuilt`
-   - Uses the default version (typically latest stable)
-   - Simplest form for getting started
+Registry recipes use the format `@<registry>/<recipe>@<version>`:
 
-2. **Latest Version**: `@dfinity/prebuilt@latest`
-   - Explicitly requests the latest available version
-   - Useful for getting cutting-edge features
+- **`@dfinity/prebuilt@v2.0.0`** — Uses the `prebuilt` recipe from the `dfinity` registry at version `v2.0.0`
 
-3. **Specific Version**: `@dfinity/prebuilt@v1.0.5`
-   - Locks to a specific version for reproducible builds
-   - Recommended for production deployments
+A version is always required for registry recipes.
 
 ## How It Works
 
-1. ICP-CLI resolves the registry reference (`@dfinity/prebuilt`) to the official recipe repository
-2. The specified version (or default) is fetched from the registry
+1. ICP-CLI resolves the registry reference (`@dfinity/prebuilt@v2.0.0`) to the official recipe repository
+2. The specified version is fetched from the registry
 3. The recipe template is downloaded and processed with the provided configuration
 4. Build and sync steps are generated based on the template
 5. The canister is built and deployed according to the resolved instructions
@@ -73,10 +53,9 @@ canisters:
 
 | Recipe Type | Use Case | Example |
 |-------------|----------|---------|
-| Registry (`@scope/name`) | Official, versioned recipes | `@dfinity/prebuilt@v1.0.5` |
+| Registry (`@scope/name@version`) | Official, versioned recipes | `@dfinity/prebuilt@v2.0.0` |
 | Remote URL | Custom/community recipes | `https://github.com/user/repo/recipe.hbs` |
 | Local File | Development/testing | `file://recipe.hb.yaml` |
-| Built-in | Simple, common patterns | `motoko`, `rust`, `assets` |
 
 ## Related Examples
 

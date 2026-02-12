@@ -1,5 +1,7 @@
 use indoc::formatdoc;
-use predicates::{ord::eq, str::PredicateStrExt};
+use predicates::ord::eq;
+use predicates::prelude::PredicateBooleanExt;
+use predicates::str::{PredicateStrExt, contains};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext};
 use icp::fs::write_string;
@@ -75,6 +77,23 @@ async fn canister_call_with_arguments() {
             "my-canister",
             "greet",
             "4449444c00017105776f726c64",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // Test calling with --query flag (greet is a query method in the Candid interface)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--query",
+            "my-canister",
+            "greet",
+            "(\"world\")",
         ])
         .assert()
         .success()
@@ -282,4 +301,24 @@ async fn canister_call_through_proxy() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, world!\")").trim());
+}
+
+#[tokio::test]
+async fn canister_call_query_conflicts_with_proxy() {
+    let ctx = TestContext::new();
+
+    // --query and --proxy conflict at the clap level, so no network setup is needed.
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--query",
+            "--proxy",
+            "aaaaa-aa",
+            "some-canister",
+            "some-method",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("--query").and(contains("--proxy")));
 }

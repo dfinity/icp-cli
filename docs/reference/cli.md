@@ -167,6 +167,9 @@ Make a canister call
    Only used when --proxy is specified. Defaults to 0.
 
   Default value: `0`
+* `--query` — Sends a query request to a canister instead of an update request.
+
+   Query calls are faster but return uncertified responses. Cannot be used with --proxy (proxy calls are always update calls).
 
 
 

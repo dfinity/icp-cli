@@ -7,6 +7,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use crate::commands::parsers::parse_subaccount;
 use crate::options::IdentityOpt;
 
+/// Display the ICP ledger and ICRC-1 account identifiers for the current identity
 #[derive(Debug, Args)]
 pub(crate) struct AccountIdArgs {
     #[command(flatten)]

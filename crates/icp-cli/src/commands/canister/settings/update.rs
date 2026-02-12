@@ -81,6 +81,7 @@ impl EnvironmentVariableOpt {
     }
 }
 
+/// Change a canister's settings to specified values
 #[derive(Debug, Args)]
 pub(crate) struct UpdateArgs {
     #[command(flatten)]

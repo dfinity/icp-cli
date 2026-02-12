@@ -9,6 +9,7 @@ use crate::{
     options::{EnvironmentOpt, IdentityOpt},
 };
 
+/// Synchronize canisters
 #[derive(Debug, Args)]
 pub(crate) struct SyncArgs {
     /// Canister names (if empty, sync all canisters in environment)

@@ -3,6 +3,16 @@ use clap::Args;
 
 use icp::context::Context;
 
+/// Outputs the project's effective yaml configuration.
+///
+/// The effective yaml configuration includes:
+///
+/// - implicit networks
+///
+/// - implicit environments
+///
+/// - processed recipes
+///
 #[derive(Args, Debug)]
 pub(crate) struct ShowArgs;
 

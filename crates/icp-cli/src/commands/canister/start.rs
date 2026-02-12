@@ -3,6 +3,7 @@ use icp::context::Context;
 
 use crate::commands::args;
 
+/// Start a canister on a network
 #[derive(Debug, Args)]
 pub(crate) struct StartArgs {
     #[command(flatten)]

@@ -7,6 +7,7 @@ use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::{parse_cycles_amount, parse_subaccount, parse_token_amount};
 use crate::operations::token::mint::mint_cycles;
 
+/// Convert icp to cycles
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
     /// Amount of ICP to mint to cycles.

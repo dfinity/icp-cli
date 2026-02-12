@@ -27,6 +27,7 @@ use crate::{
     progress::{ProgressManager, ProgressManagerSettings},
 };
 
+/// Deploy a project to an environment
 #[derive(Args, Debug)]
 pub(crate) struct DeployArgs {
     /// Canister names

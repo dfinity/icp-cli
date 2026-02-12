@@ -29,6 +29,11 @@ fn validate_name(s: &str) -> Result<String, String> {
     }
 }
 
+/// Create a new ICP project from a template
+///
+/// Under the hood templates are generated with `cargo-generate`.
+/// See the cargo-generate docs for a guide on how to write your own templates:
+/// https://docs.rs/cargo-generate/0.23.7/cargo_generate/
 #[derive(Clone, Debug, Args)]
 pub struct IcpGenerateArgs {
     #[command(flatten)]

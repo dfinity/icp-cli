@@ -33,6 +33,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<u64>,
 }
 
+/// Create a canister on a network
 #[derive(Debug, Args)]
 pub(crate) struct CreateArgs {
     #[command(flatten)]

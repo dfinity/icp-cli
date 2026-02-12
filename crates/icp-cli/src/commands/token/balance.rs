@@ -5,6 +5,7 @@ use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
 use crate::operations::token::balance::get_balance;
 
+/// Display the token balance on the ledger (default token: icp)
 #[derive(Args, Clone, Debug)]
 #[command(override_usage = "icp token [TOKEN|LEDGER_ID] balance [OPTIONS]")]
 pub(crate) struct BalanceArgs {

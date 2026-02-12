@@ -7,6 +7,7 @@ use icp::context::Context;
 use super::SnapshotId;
 use crate::commands::args;
 
+/// Restore a canister from a snapshot
 #[derive(Debug, Args)]
 pub(crate) struct RestoreArgs {
     #[command(flatten)]

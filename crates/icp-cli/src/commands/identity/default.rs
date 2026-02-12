@@ -2,6 +2,7 @@ use clap::Args;
 use icp::context::Context;
 use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 
+/// Display the currently selected identity
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {
     /// Identity to set as default. If omitted, prints the current default.

@@ -6,6 +6,7 @@ use crate::commands::args::{FlexibleAccountId, TokenCommandArgs};
 use crate::commands::parsers::{parse_subaccount, parse_token_amount};
 use crate::operations::token::transfer::transfer;
 
+/// Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 #[derive(Debug, Args)]
 #[command(override_usage = "icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] <AMOUNT> <RECEIVER>")]
 pub(crate) struct TransferArgs {

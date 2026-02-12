@@ -11,6 +11,7 @@ use crate::commands::args;
 use crate::commands::parsers::parse_cycles_amount;
 use crate::operations::token::TokenAmount;
 
+/// Top up a canister with cycles
 #[derive(Debug, Args)]
 pub(crate) struct TopUpArgs {
     /// Amount of cycles to top up.

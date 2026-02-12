@@ -3,6 +3,7 @@ use dialoguer::Password;
 use icp::{context::Context, identity::key::link_hsm_identity, prelude::*};
 use snafu::{ResultExt, Snafu};
 
+/// Link an HSM key to a new identity
 #[derive(Debug, Args)]
 pub(crate) struct HsmArgs {
     /// Name for the linked identity

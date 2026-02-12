@@ -12,6 +12,7 @@ use crate::operations::snapshot_transfer::{
     load_metadata, read_snapshot_metadata, save_metadata,
 };
 
+/// Download a snapshot to local disk
 #[derive(Debug, Args)]
 pub(crate) struct DownloadArgs {
     #[command(flatten)]

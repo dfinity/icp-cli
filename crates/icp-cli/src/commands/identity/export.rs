@@ -6,6 +6,7 @@ use icp::fs::read_to_string;
 use icp::identity::key::export_identity;
 use icp::prelude::*;
 
+/// Print the PEM file for the identity
 #[derive(Debug, Args)]
 pub(crate) struct ExportArgs {
     /// Name of the identity to export

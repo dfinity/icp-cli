@@ -5,7 +5,11 @@ use icp::network::ManagedMode;
 use icp::prelude::*;
 use icp::{
     identity::manifest::IdentityList,
-    network::{Configuration, run_network},
+    network::{
+        Configuration,
+        managed::cache::{download_launcher_version, get_cached_launcher_version},
+        run_network,
+    },
     settings::Settings,
 };
 use tracing::debug;
@@ -119,9 +123,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
         Some(PathBuf::from(var))
     } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
-        use icp::network::managed::cache::{
-            download_launcher_version, get_cached_launcher_version,
-        };
         let version = managed_cfg.version.as_deref().unwrap_or("latest");
         ctx.dirs
             .package_cache()?

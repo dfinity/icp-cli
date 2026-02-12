@@ -1,6 +1,9 @@
-use anyhow::bail;
+use anyhow::Context as _;
 use clap::Args;
-use icp::{context::Context, network::Configuration};
+use icp::{
+    context::{Context, IC_ROOT_KEY},
+    network::Configuration,
+};
 use serde::Serialize;
 
 use super::args::NetworkOrEnvironmentArgs;
@@ -39,6 +42,8 @@ pub(crate) struct StatusArgs {
 
 #[derive(Debug, Serialize)]
 struct NetworkStatus {
+    managed: bool,
+    url: String,
     port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     candid_ui_principal: Option<String>,
@@ -54,27 +59,46 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     // Convert args to selection and get network
     let selection: Result<_, _> = args.network_selection.clone().into();
     let network = ctx.get_network_or_environment(&selection?).await?;
+    let network_access = ctx.network.access(&network).await.context(format!(
+        "unable to access network '{}', is it running?",
+        network.name
+    ))?;
 
-    // Ensure it's a managed network
-    if let Configuration::Connected { connected: _ } = &network.configuration {
-        bail!("network '{}' is not a managed network", network.name)
-    };
+    let status = match &network.configuration {
+        Configuration::Managed { managed: _ } => {
+            // Network directory
+            let nd = ctx.network.get_network_directory(&network)?;
 
-    // Network directory
-    let nd = ctx.network.get_network_directory(&network)?;
+            // Load network descriptor
+            let descriptor = nd
+                .load_network_descriptor()
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("network '{}' is not running", network.name))?;
 
-    // Load network descriptor
-    let descriptor = nd
-        .load_network_descriptor()
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("network '{}' is not running", network.name))?;
-
-    // Build status structure
-    let status = NetworkStatus {
-        port: descriptor.gateway.port,
-        root_key: hex::encode(&descriptor.root_key),
-        candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
-        proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
+            // Build status structure
+            NetworkStatus {
+                managed: true,
+                url: network_access.url.to_string(),
+                port: network_access
+                    .url
+                    .port_or_known_default()
+                    .expect("Didn't find a valid default port for url"),
+                root_key: hex::encode(network_access.root_key.unwrap_or(IC_ROOT_KEY.to_vec())),
+                candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
+                proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
+            }
+        }
+        Configuration::Connected { connected: _ } => NetworkStatus {
+            managed: false,
+            url: network_access.url.to_string(),
+            port: network_access
+                .url
+                .port_or_known_default()
+                .expect("Didn't find a valid default port for url"),
+            candid_ui_principal: None,
+            proxy_canister_principal: None,
+            root_key: hex::encode(network_access.root_key.unwrap_or(IC_ROOT_KEY.to_vec())),
+        },
     };
 
     // Display
@@ -82,6 +106,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         serde_json::to_string_pretty(&status).expect("Serializing network status to JSON failed")
     } else {
         let mut output = String::new();
+        output.push_str(&format!("Url: {}\n", status.url));
         output.push_str(&format!("Port: {}\n", status.port));
         output.push_str(&format!("Root Key: {}\n", status.root_key));
         if let Some(ref principal) = status.candid_ui_principal {

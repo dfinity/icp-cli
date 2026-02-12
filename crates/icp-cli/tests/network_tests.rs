@@ -688,7 +688,8 @@ async fn network_launcher_uses_configured_version() {
         .file_name()
         .expect("Parent should have a directory name");
     assert_eq!(
-        version_dir_name, "v12.0.0",
+        version_dir_name,
+        "v12.0.0",
         "Launcher should run from the v12.0.0 version directory, but exe was at: {}",
         exe_path.display()
     );

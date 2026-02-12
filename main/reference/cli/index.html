@@ -677,6 +677,7 @@
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--subaccount &#x3C;SUBACCOUNT></code> — The subaccount to check the balance for</li>
 </ul>
 <h2 id="icp-cycles-mint"><code>icp cycles mint</code></h2>
 <p>Convert icp to cycles</p>
@@ -685,6 +686,8 @@
 <ul>
 <li><code>--icp &#x3C;ICP></code> — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>--cycles &#x3C;CYCLES></code> — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
+<li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — Subaccount to withdraw the ICP from</li>
+<li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — Subaccount to deposit the cycles to</li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
@@ -699,6 +702,8 @@
 </ul>
 <h6 id="options-24"><strong>Options:</strong></h6>
 <ul>
+<li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — The subaccount to transfer to (only if the receiver is a principal)</li>
+<li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code></li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
@@ -749,7 +754,7 @@
 <p><strong>Usage:</strong> <code>icp identity &#x3C;COMMAND></code></p>
 <h6 id="subcommands-6"><strong>Subcommands:</strong></h6>
 <ul>
-<li><code>account-id</code> — Display the ICP ledger account identifier for the current identity</li>
+<li><code>account-id</code> — Display the ICP ledger and ICRC-1 account identifiers for the current identity</li>
 <li><code>default</code> — Display the currently selected identity</li>
 <li><code>delete</code> — Delete an identity</li>
 <li><code>export</code> — Print the PEM file for the identity</li>
@@ -761,12 +766,13 @@
 <li><code>rename</code> — Rename an identity</li>
 </ul>
 <h2 id="icp-identity-account-id"><code>icp identity account-id</code></h2>
-<p>Display the ICP ledger account identifier for the current identity</p>
+<p>Display the ICP ledger and ICRC-1 account identifiers for the current identity</p>
 <p><strong>Usage:</strong> <code>icp identity account-id [OPTIONS]</code></p>
 <h6 id="options-26"><strong>Options:</strong></h6>
 <ul>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--of-principal &#x3C;OF_PRINCIPAL></code> — Convert this Principal instead of the current identity’s Principal</li>
+<li><code>--of-subaccount &#x3C;OF_SUBACCOUNT></code> — Specify a subaccount. If absent, the ICRC-1 account will be omitted as it is just the principal</li>
 </ul>
 <h2 id="icp-identity-default"><code>icp identity default</code></h2>
 <p>Display the currently selected identity</p>
@@ -1164,6 +1170,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--subaccount &#x3C;SUBACCOUNT></code> — The subaccount to check the balance for</li>
 </ul>
 <h2 id="icp-token-transfer"><code>icp token transfer</code></h2>
 <p>Transfer ICP or ICRC1 tokens through their ledger (default token: icp)</p>
@@ -1171,10 +1178,12 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <h6 id="arguments-37"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;AMOUNT></code> — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
-<li><code>&#x3C;RECEIVER></code> — The receiver of the token transfer. Can be a Principal or an AccountIdentifier hex string (only for ICP ledger)</li>
+<li><code>&#x3C;RECEIVER></code> — The receiver of the token transfer. Can be a principal, an ICRC1 account ID, or an ICP ledger account ID (hex)</li>
 </ul>
 <h6 id="options-39"><strong>Options:</strong></h6>
 <ul>
+<li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — The subaccount to transfer to (only if the receiver is a principal)</li>
+<li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — The subaccount to transfer from</li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>

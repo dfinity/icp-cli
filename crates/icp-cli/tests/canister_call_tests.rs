@@ -245,8 +245,8 @@ async fn canister_call_through_proxy() {
         .args(["network", "status", "random-network", "--json"])
         .output()
         .expect("failed to get network status");
-    let status_json: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .expect("failed to parse network status JSON");
+    let status_json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("failed to parse network status JSON");
     let proxy_cid = status_json
         .get("proxy_canister_principal")
         .and_then(|v| v.as_str())

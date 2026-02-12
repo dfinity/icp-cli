@@ -12,6 +12,7 @@ use crate::{
     },
 };
 
+/// Install a built WASM to a canister on a network
 #[derive(Debug, Args)]
 pub(crate) struct InstallArgs {
     /// Specifies the mode of canister installation.

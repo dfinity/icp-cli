@@ -4,6 +4,7 @@ use icp::context::Context;
 
 use crate::{commands::args, operations::misc::fetch_canister_metadata};
 
+/// Read a metadata section from a canister
 #[derive(Debug, Args)]
 pub(crate) struct MetadataArgs {
     #[command(flatten)]

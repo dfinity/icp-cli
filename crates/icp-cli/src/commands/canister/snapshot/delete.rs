@@ -6,6 +6,7 @@ use icp::context::Context;
 use super::SnapshotId;
 use crate::commands::args;
 
+/// Delete a canister snapshot
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
     #[command(flatten)]

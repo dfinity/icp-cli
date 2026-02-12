@@ -3,6 +3,7 @@ use icp::context::Context;
 
 use crate::options::EnvironmentOpt;
 
+/// List the canisters in an environment
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
     #[command(flatten)]

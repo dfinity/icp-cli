@@ -4,6 +4,7 @@ use itertools::Itertools;
 
 use icp::context::Context;
 
+/// List the identities
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs;
 

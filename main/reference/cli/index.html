@@ -259,6 +259,10 @@
 <p>Only used when —proxy is specified. Defaults to 0.</p>
 <p>Default value: <code>0</code></p>
 </li>
+<li>
+<p><code>--query</code> — Sends a query request to a canister instead of an update request.</p>
+<p>Query calls are faster but return uncertified responses. Cannot be used with —proxy (proxy calls are always update calls).</p>
+</li>
 </ul>
 <h2 id="icp-canister-create"><code>icp canister create</code></h2>
 <p>Create a canister on a network</p>

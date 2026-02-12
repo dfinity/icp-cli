@@ -28,9 +28,11 @@ pub(crate) struct CanisterSettings {
     #[arg(long)]
     pub(crate) freezing_threshold: Option<u64>,
 
-    /// Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles.
-    #[arg(long)]
-    pub(crate) reserved_cycles_limit: Option<u64>,
+    /// Optional upper limit on cycles reserved for future resource payments.
+    /// Memory allocations that would push the reserved balance above this limit will fail.
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(long, value_parser = parse_cycles_amount)]
+    pub(crate) reserved_cycles_limit: Option<u128>,
 }
 
 #[derive(Debug, Args)]
@@ -76,7 +78,7 @@ impl CreateArgs {
             reserved_cycles_limit: self
                 .settings
                 .reserved_cycles_limit
-                .or(default.settings.reserved_cycles_limit)
+                .or(default.settings.reserved_cycles_limit.map(u128::from))
                 .map(Nat::from),
             log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self

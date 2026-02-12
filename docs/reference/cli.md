@@ -167,6 +167,7 @@ Make a canister call
    Only used when --proxy is specified. Defaults to 0.
 
   Default value: `0`
+* `--json` — Format output as JSON
 
 
 

@@ -79,6 +79,23 @@ async fn canister_call_with_arguments() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, world!\")").trim());
+
+    // Test calling with --json output
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--json",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("\"Hello, world!\"").trim());
 }
 
 #[tokio::test]

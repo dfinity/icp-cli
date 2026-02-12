@@ -56,6 +56,13 @@ pub(crate) struct CallArgs {
     /// Format output as JSON
     #[arg(long = "json")]
     pub(crate) json_format: bool,
+
+    /// Sends a query request to a canister instead of an update request.
+    ///
+    /// Query calls are faster but return uncertified responses.
+    /// Cannot be used with --proxy (proxy calls are always update calls).
+    #[arg(long, conflicts_with = "proxy")]
+    pub(crate) query: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
@@ -150,8 +157,24 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             ProxyResult::Ok(ok) => ok.result,
             ProxyResult::Err(err) => bail!(err.format_error()),
         }
+    } else if args.query {
+        // Preemptive check: error if Candid shows this is an update method
+        if let Some((_, func)) = &candid_types
+            && !func.is_query()
+        {
+            bail!(
+                "`{}` is an update method, not a query method. \
+                 Run the command without `--query`.",
+                args.method
+            );
+        }
+        agent
+            .query(&cid, &args.method)
+            .with_arg(arg_bytes)
+            .call()
+            .await?
     } else {
-        // Direct call to the target canister
+        // Direct update call to the target canister
         agent.update(&cid, &args.method).with_arg(arg_bytes).await?
     };
 
@@ -286,6 +309,31 @@ mod tests {
         assert!(
             typed_str.contains("bitcoin_canister_id"),
             "typed decoding should contain 'bitcoin_canister_id': {typed_str}"
+        );
+    }
+
+    #[test]
+    fn is_query_detects_method_types() {
+        let did = r#"
+            service : {
+                "get_value" : () -> (text) query;
+                "set_value" : (text) -> ()
+            }
+        "#;
+        let source = CandidSource::Text(did);
+        let (type_env, ty) = source.load().unwrap();
+        let actor = ty.unwrap();
+
+        let query_func = type_env.get_method(&actor, "get_value").unwrap();
+        assert!(
+            query_func.is_query(),
+            "get_value should be detected as query"
+        );
+
+        let update_func = type_env.get_method(&actor, "set_value").unwrap();
+        assert!(
+            !update_func.is_query(),
+            "set_value should be detected as update"
         );
     }
 }

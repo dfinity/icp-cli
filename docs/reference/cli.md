@@ -168,6 +168,9 @@ Make a canister call
 
   Default value: `0`
 * `--json` — Format output as JSON
+* `--query` — Sends a query request to a canister instead of an update request.
+
+   Query calls are faster but return uncertified responses. Cannot be used with --proxy (proxy calls are always update calls).
 
 
 
@@ -632,6 +635,7 @@ Display the cycles balance
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
 
 
 
@@ -645,6 +649,8 @@ Convert icp to cycles
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `--from-subaccount <FROM_SUBACCOUNT>` — Subaccount to withdraw the ICP from
+* `--to-subaccount <TO_SUBACCOUNT>` — Subaccount to deposit the cycles to
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -664,6 +670,8 @@ Transfer cycles to another principal
 
 ###### **Options:**
 
+* `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
+* `--from-subaccount <FROM_SUBACCOUNT>`
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -726,7 +734,7 @@ Manage your identities
 
 ###### **Subcommands:**
 
-* `account-id` — Display the ICP ledger account identifier for the current identity
+* `account-id` — Display the ICP ledger and ICRC-1 account identifiers for the current identity
 * `default` — Display the currently selected identity
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
@@ -741,7 +749,7 @@ Manage your identities
 
 ## `icp identity account-id`
 
-Display the ICP ledger account identifier for the current identity
+Display the ICP ledger and ICRC-1 account identifiers for the current identity
 
 **Usage:** `icp identity account-id [OPTIONS]`
 
@@ -749,6 +757,7 @@ Display the ICP ledger account identifier for the current identity
 
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--of-principal <OF_PRINCIPAL>` — Convert this Principal instead of the current identity's Principal
+* `--of-subaccount <OF_SUBACCOUNT>` — Specify a subaccount. If absent, the ICRC-1 account will be omitted as it is just the principal
 
 
 
@@ -1249,6 +1258,7 @@ Display the token balance on the ledger (default token: icp)
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
 
 
 
@@ -1261,10 +1271,12 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 ###### **Arguments:**
 
 * `<AMOUNT>` — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `<RECEIVER>` — The receiver of the token transfer. Can be a Principal or an AccountIdentifier hex string (only for ICP ledger)
+* `<RECEIVER>` — The receiver of the token transfer. Can be a principal, an ICRC1 account ID, or an ICP ledger account ID (hex)
 
 ###### **Options:**
 
+* `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
+* `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer from
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as

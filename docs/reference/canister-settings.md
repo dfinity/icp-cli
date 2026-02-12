@@ -51,7 +51,7 @@ Time in seconds before the canister freezes due to low cycles.
 |----------|-------|
 | Type | Integer |
 | Unit | Seconds |
-| Default | 2592000 (30 days) |
+| Default | 2,592,000 (30 days) |
 
 ```yaml
 settings:
@@ -164,11 +164,11 @@ canisters:
             - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
-      memory_allocation: 2147483648       # 2GB
-      freezing_threshold: 2592000         # 30 days
-      reserved_cycles_limit: 5000000000000
-      wasm_memory_limit: 1073741824       # 1GB
-      wasm_memory_threshold: 536870912    # 512MB
+      memory_allocation: 2147483648        # 2GB
+      freezing_threshold: 2592000          # 30 days
+      reserved_cycles_limit: 5000000000000 # 5T cycles
+      wasm_memory_limit: 1073741824        # 1GB
+      wasm_memory_threshold: 536870912     # 512MB
       log_visibility: controllers
       environment_variables:
         ENV: "production"

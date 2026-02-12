@@ -121,6 +121,8 @@ Deployed canisters:
 
 Open the **frontend URL** in your browser. You'll see a React app that calls your backend canister.
 
+**How does the frontend know the backend's canister ID?** The asset canister (which serves your frontend) provides canister IDs via a cookie. The template's frontend code reads this cookie to discover the backend. This works the same way locally and on mainnet — see [Canister Discovery](concepts/canister-discovery.md) for details.
+
 ### Candid UI
 
 Open the **Candid UI URL** (shown next to "backend"). Candid UI is a web interface that lets you interact with any canister that has a known [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) interface — no frontend code required.

@@ -1,34 +1,75 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { icpBindgen } from "@icp-sdk/bindgen/plugins/vite";
+import { execSync } from "child_process";
 
-// Change these values to match your local replica.
-// The `icp network start` command will print the root key
-// and the `icp deploy` command will print the backend canister id.
-const IC_ROOT_KEY_HEX =
-  "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010361008b52b4994f94c7ce4be1c1542d7c81dc79fea17d49efe8fa42e8566373581d4b969c4a59e96a0ef51b711fe5027ec01601182519d0a788f4bfe388e593b97cd1d7e44904de79422430bca686ac8c21305b3397b5ba4d7037d17877312fb7ee34";
-const BACKEND_CANISTER_ID = "txyno-ch777-77776-aaaaq-cai";
+// Usage: ICP_ENVIRONMENT=staging npm run dev
+const environment = process.env.ICP_ENVIRONMENT || "local";
+const CANISTER_NAME = "backend";
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [
+export default defineConfig(({ command }) => {
+  const plugins = [
     react(),
     icpBindgen({
-      didFile: "../../backend/dist/hello_world.did",
-      outDir: "./src/backend/api",
+      didFile: `../../${CANISTER_NAME}/dist/hello_world.did`,
+      outDir: `./src/${CANISTER_NAME}/api`,
     }),
-  ],
-  server: {
-    headers: {
-      "Set-Cookie": `ic_env=${encodeURIComponent(
-        `ic_root_key=${IC_ROOT_KEY_HEX}&PUBLIC_CANISTER_ID:backend=${BACKEND_CANISTER_ID}`
-      )}; SameSite=Lax;`,
-    },
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8000",
-        changeOrigin: true,
+  ];
+
+  // Build mode: asset canister handles ic_env cookie automatically
+  if (command !== "serve") {
+    return { plugins };
+  }
+
+  // Dev server mode: configure ic_env cookie and proxy
+  const networkStatus = JSON.parse(
+    execSync(`icp network status -e ${environment} --json`, { encoding: "utf-8" })
+  );
+  const rootKey: string = networkStatus.root_key;
+  // TODO: Use networkStatus.api_url when CLI supports it
+  const proxyTarget: string = `http://localhost:8000`;
+
+  // Backend must be deployed before starting dev server
+  let canisterId: string;
+  try {
+    canisterId = execSync(`icp canister status ${CANISTER_NAME} -e ${environment} -i`, {
+      encoding: "utf-8",
+    }).trim();
+  } catch {
+    console.error(`
+❌ Backend canister "${CANISTER_NAME}" not found in environment "${environment}"
+
+   Before running the dev server, deploy the backend canister:
+
+     icp deploy ${CANISTER_NAME} -e ${environment}
+`);
+    process.exit(1);
+  }
+
+  console.log(`
+🌐 ICP Dev Server Configuration
+
+   Environment:         ${environment}
+   Backend Canister ID: ${canisterId}
+   IC API URL:          ${proxyTarget}
+   IC Root Key:         ${rootKey.slice(0, 20)}...${rootKey.slice(-20)}
+`);
+
+  return {
+    plugins,
+    server: {
+      headers: {
+        // Note: ic_root_key must be lowercase - library converts to uppercase IC_ROOT_KEY
+        "Set-Cookie": `ic_env=${encodeURIComponent(
+          `PUBLIC_CANISTER_ID:${CANISTER_NAME}=${canisterId}&ic_root_key=${rootKey}`
+        )}; SameSite=Lax;`,
+      },
+      proxy: {
+        "/api": {
+          target: proxyTarget,
+          changeOrigin: true,
+        },
       },
     },
-  },
+  };
 });

@@ -14,8 +14,8 @@ Recipes are reusable build templates that simplify canister configuration. Inste
 DFINITY maintains recipes for common use cases at [github.com/dfinity/icp-cli-recipes](https://github.com/dfinity/icp-cli-recipes).
 
 You can reference recipes by pointing to a URL. For the official recipes, you can use a shorthand for example these recipe types are equivalent:
-* `@dfinity/rust`
-* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-latest/recipe.hbs`
+* `@dfinity/rust@v3.0.0`
+* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.0.0/recipe.hbs`
 
 ### Rust Canister
 
@@ -25,7 +25,7 @@ For building a rust canister:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust"
+      type: "@dfinity/rust@v3.0.0"
       configuration:
         package: backend
 ```
@@ -38,7 +38,7 @@ For building a motoko canister:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/motoko"
+      type: "@dfinity/motoko@v4.0.0"
       configuration:
         main: src/main.mo
 ```
@@ -51,7 +51,7 @@ For deploying an asset canister with frontend assets:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister"
+      type: "@dfinity/asset-canister@v2.1.0"
       configuration:
         dir: dist
 ```
@@ -64,7 +64,7 @@ For deploying a prebuilt WASM:
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/prebuilt"
+      type: "@dfinity/prebuilt@v2.0.0"
       configuration:
         path: ./my-canister.wasm
         sha256: d7c1aba0de1d7152897aeca49bd5fe89a174b076a0ee1cc3b9e45fcf6bde71a6
@@ -72,7 +72,7 @@ canisters:
 
 ## Recipe Versioning
 
-Pin recipes to specific versions for reproducible builds. These two types are equivalent:
+A version is always required for registry recipes. These two types are equivalent:
 
 * `@dfinity/rust@v3.0.0`
 * `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.0.0/recipe.hbs`
@@ -151,7 +151,7 @@ in the configuration file. eg:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust"
+      type: "@dfinity/rust@v3.0.0"
       configuration:
         package: backend
     settings:

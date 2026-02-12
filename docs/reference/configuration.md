@@ -158,7 +158,7 @@ Script sync steps support the same `command` and `commands` fields as build scri
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust"
+      type: "@dfinity/rust@v3.0.0"
       sha256: abc123...  # Required for remote URLs
       configuration:
         package: my-crate
@@ -174,8 +174,7 @@ canisters:
 
 ```yaml
 # Registry (recommended)
-type: "@dfinity/rust"
-type: "@dfinity/rust@v1.0.0"  # With version
+type: "@dfinity/rust@v3.0.0"
 
 # Local file
 type: ./recipes/my-recipe.hb.yaml
@@ -398,7 +397,7 @@ init_args: "4449444c016d7b0100010203"
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister"
+      type: "@dfinity/asset-canister@v2.1.0"
       configuration:
         dir: dist
     settings:

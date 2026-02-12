@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat!: Recipes are now specified `@registry/recipe@version`, the version component is required. The `latest` version is no longer assumed and the version tags will be removed soon.
 * feat: Recipes and prebuilt canisters are now cached locally
 * feat: `icp settings autocontainerize true`, always use a docker container for all networks
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets

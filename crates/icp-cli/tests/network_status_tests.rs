@@ -33,7 +33,8 @@ async fn status_when_network_running() {
         .success()
         .stdout(contains("Port:"))
         .stdout(contains("Root Key:"))
-        .stdout(contains("Candid UI Principal:"));
+        .stdout(contains("Candid UI Principal:"))
+        .stdout(contains("Proxy Canister Principal:"));
 
     // Stop network
     ctx.icp()
@@ -83,6 +84,7 @@ async fn status_with_json() {
     assert!(json.get("port").is_some());
     assert!(json.get("root_key").is_some());
     assert!(json.get("candid_ui_principal").is_some());
+    assert!(json.get("proxy_canister_principal").is_some());
 
     // Stop network
     ctx.icp()

@@ -52,11 +52,6 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("failed to load network descriptor"))]
     LoadNetworkDescriptor { source: LoadNetworkFileError },
-    #[snafu(display("failed to parse URL {url}"))]
-    ParseUrl {
-        url: String,
-        source: url::ParseError,
-    },
 }
 
 pub async fn get_managed_network_access(
@@ -106,13 +101,7 @@ pub async fn get_connected_network_access(
 
     Ok(NetworkAccess {
         root_key,
-        api_url: Url::parse(&connected.api_url).context(ParseUrlSnafu {
-            url: &connected.api_url,
-        })?,
-        gateway_url: connected
-            .gateway_url
-            .as_ref()
-            .map(|url| Url::parse(url).context(ParseUrlSnafu { url }))
-            .transpose()?,
+        api_url: connected.api_url.clone(),
+        gateway_url: connected.gateway_url.clone(),
     })
 }

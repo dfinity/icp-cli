@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
+use url::Url;
 
 use crate::network::SubnetKind;
 
@@ -101,15 +102,15 @@ pub struct Connected {
 pub enum Endpoints {
     Explicit {
         /// The URL of the gateway endpoint. Should support prefixing canister IDs as subdomains.
-        gateway_url: Option<String>,
+        gateway_url: Option<Url>,
         /// The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).
         /// If no gateway endpoint is provided, canister URLs will not be printed in deploy operations.
-        api_url: String,
+        api_url: Url,
     },
     Implicit {
         /// The URL this network can be reached at.
         /// Assumed to be both gateway (canister-id.domain.com) and API (domain.com/api/v3).
-        url: String,
+        url: Url,
     },
 }
 
@@ -181,7 +182,7 @@ mod tests {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
                     endpoints: Endpoints::Implicit {
-                        url: "https://ic0.app".to_string(),
+                        url: "https://ic0.app".parse().unwrap(),
                     },
                     root_key: None
                 }),
@@ -223,7 +224,7 @@ mod tests {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
                     endpoints: Endpoints::Implicit {
-                        url: "https://ic0.app".to_string(),
+                        url: "https://ic0.app".parse().unwrap(),
                     },
                     root_key: Some(
                         RootKey::try_from(

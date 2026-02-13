@@ -8,6 +8,7 @@ use snafu::prelude::*;
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 use strum::EnumString;
+use url::Url;
 
 use crate::{
     CACHE_DIR, ICP_BASE, Network,
@@ -154,10 +155,10 @@ pub struct ManagedImageConfig {
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
     /// The URL this network's API can be reached at.
-    pub api_url: String,
+    pub api_url: Url,
 
     /// The URL this network's HTTP gateway can be reached at.
-    pub gateway_url: Option<String>,
+    pub gateway_url: Option<Url>,
 
     /// The root key of this network
     pub root_key: Option<Vec<u8>>,

@@ -163,8 +163,8 @@ impl Context {
                         name: IC.to_string(),
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
-                                api_url: IC_MAINNET_NETWORK_API_URL.to_string(),
-                                gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.to_string()),
+                                api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
+                                gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
                                 root_key: None,
                             },
                         },
@@ -180,8 +180,8 @@ impl Context {
                 name: url.to_string(),
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
-                        api_url: url.to_string(),
-                        gateway_url: Some(url.to_string()),
+                        api_url: url.clone(),
+                        gateway_url: Some(url.clone()),
                         root_key: None,
                     },
                 },

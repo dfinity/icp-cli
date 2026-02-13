@@ -23,6 +23,7 @@ const MIN_CYCLES_FOR_MIGRATION: u128 = 10_000_000_000_000;
 /// Cycles threshold for warning (15T).
 const WARN_CYCLES_THRESHOLD: u128 = 15_000_000_000_000;
 
+/// Migrate a canister ID from one subnet to another
 #[derive(Debug, Args)]
 pub(crate) struct MigrateIdArgs {
     #[command(flatten)]

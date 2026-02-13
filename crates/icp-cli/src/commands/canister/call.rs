@@ -17,6 +17,7 @@ use crate::{
     operations::misc::{ParsedArguments, fetch_canister_metadata, parse_args},
 };
 
+/// Make a canister call
 #[derive(Args, Debug)]
 pub(crate) struct CallArgs {
     #[command(flatten)]

@@ -51,7 +51,7 @@ Time in seconds before the canister freezes due to low cycles.
 |----------|-------|
 | Type | Integer |
 | Unit | Seconds |
-| Default | 2592000 (30 days) |
+| Default | 2,592,000 (30 days) |
 
 ```yaml
 settings:
@@ -62,13 +62,13 @@ The canister freezes if its cycles balance would be exhausted within this thresh
 
 ### reserved_cycles_limit
 
-Maximum cycles the canister can hold in reserve.
+Upper limit on cycles reserved for future resource payments. When a canister allocates new storage on a subnet above 750 GiB usage, cycles are moved from its main balance into a reserved balance to pre-pay for future storage costs. This setting caps that reserved balance — memory allocations that would push it above the limit will fail. Set to `0` to disable resource reservation entirely (prevents memory allocation on subnets above 750 GiB).
 
 | Property | Value |
 |----------|-------|
 | Type | Integer |
 | Unit | Cycles |
-| Default | No limit |
+| IC Default | 5,000,000,000,000 (5T) |
 
 ```yaml
 settings:
@@ -164,11 +164,11 @@ canisters:
             - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
-      memory_allocation: 2147483648       # 2GB
-      freezing_threshold: 2592000         # 30 days
-      reserved_cycles_limit: 5000000000000
-      wasm_memory_limit: 1073741824       # 1GB
-      wasm_memory_threshold: 536870912    # 512MB
+      memory_allocation: 2147483648        # 2GB
+      freezing_threshold: 2592000          # 30 days
+      reserved_cycles_limit: 5000000000000 # 5T cycles
+      wasm_memory_limit: 1073741824        # 1GB
+      wasm_memory_threshold: 536870912     # 512MB
       log_visibility: controllers
       environment_variables:
         ENV: "production"

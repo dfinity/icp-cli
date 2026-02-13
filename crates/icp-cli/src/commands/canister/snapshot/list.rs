@@ -5,6 +5,7 @@ use icp::context::Context;
 
 use crate::{commands::args, operations::misc::format_timestamp};
 
+/// List all snapshots for a canister
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
     #[command(flatten)]

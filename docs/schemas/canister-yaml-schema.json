@@ -271,7 +271,7 @@
           ]
         },
         "reserved_cycles_limit": {
-          "description": "Reserved cycles limit. If set, the canister cannot consume more than this many cycles.",
+          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.",
           "format": "uint64",
           "minimum": 0,
           "type": [

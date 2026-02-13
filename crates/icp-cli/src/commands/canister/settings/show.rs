@@ -6,6 +6,11 @@ use crate::commands::{
     canister::status::{self, StatusArgs, StatusArgsOptions},
 };
 
+/// Show the status of a canister.
+///
+/// By default this queries the status endpoint of the management canister.
+/// If the caller is not a controller, falls back on fetching public
+/// information from the state tree.
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
     /// canister name or principal to target.

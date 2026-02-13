@@ -16,6 +16,7 @@ use icp::context::Context;
 
 use crate::commands::identity::StorageMode;
 
+/// Create a new identity
 #[derive(Debug, Args)]
 pub(crate) struct NewArgs {
     /// Name for the new identity

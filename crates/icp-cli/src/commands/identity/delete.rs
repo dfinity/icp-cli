@@ -2,6 +2,7 @@ use clap::Args;
 use icp::context::Context;
 use icp::identity::key::delete_identity;
 
+/// Delete an identity
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
     /// Name of the identity to delete

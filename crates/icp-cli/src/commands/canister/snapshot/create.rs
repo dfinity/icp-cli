@@ -8,6 +8,7 @@ use icp::context::Context;
 use super::SnapshotId;
 use crate::{commands::args, operations::misc::format_timestamp};
 
+/// Create a snapshot of a canister's state
 #[derive(Debug, Args)]
 pub(crate) struct CreateArgs {
     #[command(flatten)]

@@ -8,6 +8,7 @@ use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::{parse_cycles_amount, parse_subaccount};
 use crate::operations::token::transfer::icrc1_transfer;
 
+/// Transfer cycles to another principal
 #[derive(Debug, Args)]
 pub(crate) struct TransferArgs {
     /// Cycles amount to transfer.

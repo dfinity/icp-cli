@@ -159,21 +159,23 @@ pub fn read_cached_recipe(
 }
 
 /// Cache a recipe template. `recipe` is the registry-qualified name (e.g., `@dfinity/rust`),
-/// `version` is the recipe version (e.g., `v1.0.2`), and `sha` is the git commit SHA that
-/// the version resolves to. Stores the version→SHA mapping in the package manifest and
-/// writes the template to `recipes/{sha}/recipe.hbs`.
+/// `version` is the recipe version (e.g., `v1.0.2`), and `sha2` is the hash of the recipe
+/// (not the git commit sha). Stores the version→SHA mapping in the package manifest and
+/// writes the template to `recipes/{sha2}/recipe.hbs`.
 pub fn cache_registry_recipe(
     cache: LWrite<&PackageCachePaths>,
     recipe: &str,
     version: &str,
-    sha: &str,
+    sha2: &str,
     template: &[u8],
 ) -> Result<(), RecipeCacheError> {
     assert!(recipe.starts_with('@'));
-    set_tag(cache, &format!("recipe{recipe}"), sha, version).context(SaveRecipeTagSnafu)?;
-    cache_recipe(cache, sha, template)
+    set_tag(cache, &format!("recipe{recipe}"), sha2, version).context(SaveRecipeTagSnafu)?;
+    cache_recipe(cache, sha2, template)
 }
 
+/// Cache a recipe template from a URL. Stores the version→SHA mapping in the package manifest
+/// and writes the template to `recipes/{sha2}/recipe.hbs`.
 pub fn cache_uri_recipe(
     cache: LWrite<&PackageCachePaths>,
     uri: &str,

@@ -81,12 +81,6 @@ pub enum HandlebarsError {
 
     #[snafu(display("failed to acquire lock on package cache"))]
     LockCache { source: crate::fs::lock::LockError },
-
-    #[snafu(display("failed to resolve git tag '{tag}' for recipe"))]
-    ResolveGitTag { source: reqwest::Error, tag: String },
-
-    #[snafu(display("failed to parse git tag response for '{tag}'"))]
-    ParseGitTag { tag: String },
 }
 
 impl Handlebars {
@@ -106,7 +100,6 @@ impl Handlebars {
         };
 
         // Retrieve the template, using cache for remote/registry sources
-        let mut git_tag_sha = None;
         let (tmpl, should_cache) = match &tmpl_source {
             TemplateSource::LocalPath(path) => {
                 let bytes = read(path).context(ReadFileSnafu)?;
@@ -159,12 +152,6 @@ impl Handlebars {
                         "https://github.com/dfinity/icp-cli-recipes/releases/download/{release_tag}/recipe.hbs"
                     );
                     let bytes = self.fetch_remote_bytes(&url).await?;
-
-                    // Resolve the git tag to a commit SHA for caching
-                    let git_sha = self
-                        .resolve_git_tag_sha("dfinity", "icp-cli-recipes", &release_tag)
-                        .await?;
-                    git_tag_sha = Some(git_sha.clone());
 
                     (parse_bytes_to_string(bytes)?, true)
                 }
@@ -251,7 +238,7 @@ impl Handlebars {
                                 w,
                                 &package,
                                 &version,
-                                &git_tag_sha.unwrap(),
+                                &hex::encode(hash),
                                 tmpl.as_bytes(),
                             )
                             .context(CacheRecipeSnafu)
@@ -284,67 +271,6 @@ impl Handlebars {
         }
 
         Ok(resp.bytes().await.context(HttpRequestSnafu)?.to_vec())
-    }
-
-    /// Resolve a GitHub release tag to its underlying git commit SHA.
-    async fn resolve_git_tag_sha(
-        &self,
-        owner: &str,
-        repo: &str,
-        tag: &str,
-    ) -> Result<String, HandlebarsError> {
-        let ref_response = self
-            .github_api_get(
-                &format!("https://api.github.com/repos/{owner}/{repo}/git/ref/tags/{tag}"),
-                tag,
-            )
-            .await?;
-
-        let obj_type = ref_response["object"]["type"]
-            .as_str()
-            .ok_or_else(|| ParseGitTagSnafu { tag }.build())?;
-        let obj_sha = ref_response["object"]["sha"]
-            .as_str()
-            .ok_or_else(|| ParseGitTagSnafu { tag }.build())?;
-
-        match obj_type {
-            // Lightweight tag — points directly at the commit
-            "commit" => Ok(obj_sha.to_owned()),
-            // Annotated tag — dereference through the tag object to get the commit
-            "tag" => {
-                let tag_response = self
-                    .github_api_get(
-                        &format!("https://api.github.com/repos/{owner}/{repo}/git/tags/{obj_sha}"),
-                        tag,
-                    )
-                    .await?;
-                tag_response["object"]["sha"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .ok_or_else(|| ParseGitTagSnafu { tag }.build())
-            }
-            _ => ParseGitTagSnafu { tag }.fail(),
-        }
-    }
-
-    /// Make an authenticated GET request to the GitHub API.
-    async fn github_api_get(
-        &self,
-        url: &str,
-        tag: &str,
-    ) -> Result<serde_json::Value, HandlebarsError> {
-        let mut req = self.http_client.get(url).header("User-Agent", "icp-cli");
-        if let Ok(token) = std::env::var("ICP_CLI_GITHUB_TOKEN") {
-            req = req.bearer_auth(token);
-        }
-        req.send()
-            .await
-            .context(ResolveGitTagSnafu { tag })?
-            .error_for_status()
-            .context(ResolveGitTagSnafu { tag })?
-            .json()
-            .await
-            .context(ResolveGitTagSnafu { tag })
     }
 }
 

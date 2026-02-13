@@ -394,7 +394,9 @@ async fn print_canister_urls(
             let has_http = has_http_request(&agent, canister_id).await;
             let domain = if let Some(domain) = gateway_url.domain() {
                 Some(domain)
-            } else if gateway_url.authority() == "127.0.0.1" || gateway_url.authority() == "[::1]" {
+            } else if let Some(host) = gateway_url.host_str()
+                && (host == "127.0.0.1" || host == "[::1]")
+            {
                 Some("localhost")
             } else {
                 None

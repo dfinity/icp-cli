@@ -67,6 +67,8 @@ pub enum ManagedMode {
         nns: Option<bool>,
         /// Configure the list of subnets (one application subnet by default)
         subnets: Option<Vec<SubnetKind>>,
+        /// The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.
+        version: Option<String>,
     },
 }
 
@@ -78,6 +80,7 @@ impl Default for ManagedMode {
             ii: None,
             nns: None,
             subnets: None,
+            version: None,
         }
     }
 }
@@ -231,7 +234,8 @@ mod tests {
                         artificial_delay_ms: None,
                         ii: None,
                         nns: None,
-                        subnets: None
+                        subnets: None,
+                        version: None,
                     })
                 })
             },
@@ -259,6 +263,7 @@ mod tests {
                         ii: None,
                         nns: None,
                         subnets: None,
+                        version: None,
                     })
                 })
             },
@@ -287,6 +292,7 @@ mod tests {
                         ii: None,
                         nns: None,
                         subnets: None,
+                        version: None,
                     })
                 })
             },

@@ -308,9 +308,10 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         }]),
     )]
     .into();
+    let version = config.version.as_deref().unwrap_or("latest");
 
     ManagedImageOptions {
-        image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+        image: format!("ghcr.io/dfinity/icp-cli-network-launcher:{version}"),
         port_bindings,
         rm_on_exit: true,
         args,

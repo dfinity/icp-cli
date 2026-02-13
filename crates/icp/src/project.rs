@@ -318,6 +318,7 @@ pub async fn consolidate_manifest(
                             ii: false,
                             nns: false,
                             subnets: None,
+                            version: None,
                         })),
                     },
                 },

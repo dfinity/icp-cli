@@ -22,7 +22,8 @@ pub fn get_cached_launcher_version(
         };
         version.to_owned()
     } else {
-        format!("v{version}")
+        assert!(version.starts_with('v'));
+        version.to_owned()
     };
     let version_path = paths.launcher_version(&declared_version);
     if version_path.exists() {
@@ -69,7 +70,8 @@ pub async fn download_launcher_version(
         set_tag(paths, "icp-cli-network-launcher", &latest, "latest").context(CreateTagSnafu)?;
         latest
     } else {
-        format!("v{version_req}")
+        assert!(version_req.starts_with('v'));
+        version_req.to_owned()
     };
     let version_path = paths.launcher_version(&pkg_version);
     crate::fs::create_dir_all(&paths.launcher_dir()).context(CreateDirSnafu)?;

@@ -621,6 +621,87 @@ async fn override_local_network_as_connected() {
         .success();
 }
 
+/// Test that specifying a launcher version in the manifest causes the network to use that
+/// specific version. Verifies the running launcher binary lives in the v12.0.0 cache directory.
+#[cfg(unix)]
+#[tokio::test]
+async fn network_launcher_uses_configured_version() {
+    use sysinfo::{ProcessesToUpdate, System};
+
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("versioned-launcher");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: versioned-network
+                mode: managed
+                gateway:
+                  port: 0
+                version: "v12.0.0"
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Start in background mode. ctx.icp() does NOT set ICP_CLI_NETWORK_LAUNCHER_PATH,
+    // so start.rs will resolve the launcher from the version-based cache.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "versioned-network", "--background"])
+        .assert()
+        .success();
+
+    let _network = ctx.wait_for_network_descriptor(&project_dir, "versioned-network");
+
+    let descriptor_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("networks")
+        .join("versioned-network")
+        .join("descriptor.json");
+    let descriptor_contents =
+        read_to_string(&descriptor_path).expect("Failed to read network descriptor");
+    let descriptor: Value = descriptor_contents
+        .trim()
+        .parse()
+        .expect("Descriptor should contain valid JSON");
+
+    let launcher_pid = descriptor
+        .get("child-locator")
+        .and_then(|cl| cl.get("pid"))
+        .and_then(|pid| pid.as_u64())
+        .expect("Descriptor should contain launcher PID");
+    let sysinfo_pid = sysinfo::Pid::from(launcher_pid as usize);
+
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[sysinfo_pid]), true);
+    let process = system
+        .process(sysinfo_pid)
+        .expect("Launcher process should be running");
+    let exe_path = process
+        .exe()
+        .expect("Should be able to read launcher exe path");
+    let version_dir_name = exe_path
+        .parent()
+        .expect("Exe should have a parent directory")
+        .file_name()
+        .expect("Parent should have a directory name");
+    assert_eq!(
+        version_dir_name,
+        "v12.0.0",
+        "Launcher should run from the v12.0.0 version directory, but exe was at: {}",
+        exe_path.display()
+    );
+
+    // Clean up the background network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "stop", "versioned-network"])
+        .assert()
+        .success();
+}
+
 /// Test that setting autocontainerize=true causes the network launcher to run in Docker
 /// even when a native launcher configuration is used.
 ///

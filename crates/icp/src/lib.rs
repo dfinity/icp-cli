@@ -296,13 +296,15 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            context::IC_ROOT_KEY, manifest::{
+            context::IC_ROOT_KEY,
+            manifest::{
                 adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
                 canister::{BuildStep, BuildSteps, SyncSteps},
-            }, network::{
+            },
+            network::{
                 Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode,
                 Port,
-            }
+            },
         };
 
         // Create canisters

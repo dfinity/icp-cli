@@ -3,16 +3,21 @@ use std::collections::{HashMap, HashSet, hash_map::Entry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, Network, Project, canister::recipe, context::IC_ROOT_KEY, manifest::{
+    Canister, Environment, Network, Project,
+    canister::recipe,
+    context::IC_ROOT_KEY,
+    manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
         NetworkManifest, ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
         recipe::RecipeType,
-    }, network::{
+    },
+    network::{
         Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode, Port,
-    }, prelude::*
+    },
+    prelude::*,
 };
 
 pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";

@@ -215,6 +215,39 @@
       "type": "object"
     },
     "Connected": {
+      "anyOf": [
+        {
+          "properties": {
+            "url": {
+              "description": "The URL this network can be reached at.\nAssumed to be both gateway (canister-id.domain.com) and API (domain.com/api/v3).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "api-url": {
+              "description": "The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).\nIf no gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
+              "type": "string"
+            },
+            "gateway-url": {
+              "description": "The URL of the gateway endpoint. Should support prefixing canister IDs as subdomains.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "api-url"
+          ],
+          "type": "object"
+        }
+      ],
       "properties": {
         "root-key": {
           "description": "The root key of this network",
@@ -223,15 +256,8 @@
             "string",
             "null"
           ]
-        },
-        "url": {
-          "description": "The URL this network can be reached at.",
-          "type": "string"
         }
       },
-      "required": [
-        "url"
-      ],
       "type": "object"
     },
     "EnvironmentManifest": {

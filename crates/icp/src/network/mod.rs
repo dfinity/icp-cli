@@ -13,7 +13,7 @@ use crate::{
     CACHE_DIR, ICP_BASE, Network,
     manifest::{
         ProjectRootLocate, ProjectRootLocateError,
-        network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
+        network::{Connected as ManifestConnected, Endpoints, Gateway as ManifestGateway, Mode},
     },
     network::access::{
         GetNetworkAccessError, NetworkAccess, get_connected_network_access,
@@ -153,8 +153,11 @@ pub struct ManagedImageConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
-    /// The URL this network can be reached at.
-    pub url: String,
+    /// The URL this network's API can be reached at.
+    pub api_url: String,
+
+    /// The URL this network's HTTP gateway can be reached at.
+    pub gateway_url: Option<String>,
 
     /// The root key of this network
     pub root_key: Option<Vec<u8>>,
@@ -201,9 +204,21 @@ impl From<ManifestGateway> for Gateway {
 
 impl From<ManifestConnected> for Connected {
     fn from(value: ManifestConnected) -> Self {
-        let url = value.url.clone();
-        let root_key = value.root_key.map(|rk| rk.0);
-        Connected { url, root_key }
+        match value.endpoints {
+            Endpoints::Implicit { url } => Connected {
+                api_url: url.clone(),
+                gateway_url: Some(url),
+                root_key: value.root_key.map(|rk| rk.0),
+            },
+            Endpoints::Explicit {
+                api_url,
+                gateway_url,
+            } => Connected {
+                api_url,
+                gateway_url,
+                root_key: value.root_key.map(|rk| rk.0),
+            },
+        }
     }
 }
 

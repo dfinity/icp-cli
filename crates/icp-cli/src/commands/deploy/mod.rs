@@ -367,16 +367,16 @@ async fn print_canister_urls(
         NetworkConfiguration::Managed { managed: _ } => {
             // For managed networks, construct localhost URL
             let access = ctx.network.access(&env.network).await?;
-            access.url.to_string()
+            access.gateway_url.map(|url| url.to_string())
         }
         NetworkConfiguration::Connected { connected } => {
             // For connected networks, use the configured URL
-            connected.url.clone()
+            connected.gateway_url.clone()
         }
     };
 
     // Remove trailing slash if present
-    let base_url = network_url.trim_end_matches('/');
+    let base_url = network_url.map(|url| url.trim_end_matches('/').to_string());
 
     let _ = ctx.term.write_line("\n\nDeployed canisters:");
 
@@ -392,72 +392,81 @@ async fn print_canister_urls(
             Err(_) => continue,
         };
 
-        // Check if canister has http_request
-        let has_http = has_http_request(&agent, canister_id).await;
+        if let Some(base_url) = &base_url {
+            // Check if canister has http_request
+            let has_http = has_http_request(&agent, canister_id).await;
 
-        if has_http {
-            // For canisters with http_request, show the direct canister URL
-            let canister_url = if base_url.contains("localhost") || base_url.contains("127.0.0.1") {
-                // Local network format: extract port from base_url
-                let port = base_url.split(':').next_back().unwrap_or("8000");
-                format!("http://{}.localhost:{}", canister_id, port)
-            } else {
-                // IC network format: extract scheme and domain from base_url
-                // base_url is like "https://icp0.io" -> "https://<canister_id>.icp0.io"
-                if let Some(domain) = base_url
-                    .strip_prefix("https://")
-                    .or_else(|| base_url.strip_prefix("http://"))
-                {
-                    let scheme = if base_url.starts_with("https://") {
-                        "https"
+            if has_http {
+                // For canisters with http_request, show the direct canister URL
+                let canister_url =
+                    if base_url.contains("localhost") || base_url.contains("127.0.0.1") {
+                        // Local network format: extract port from base_url
+                        let port = base_url.split(':').next_back().unwrap_or("8000");
+                        format!("http://{}.localhost:{}", canister_id, port)
                     } else {
-                        "http"
-                    };
-                    format!("{}://{}.{}", scheme, canister_id, domain)
-                } else {
-                    // Fallback if URL doesn't have a recognized scheme
-                    format!("https://{}.{}", canister_id, base_url)
-                }
-            };
-            let _ = ctx
-                .term
-                .write_line(&format!("  {}: {}", name, canister_url));
-        } else {
-            // For canisters without http_request, show the Candid UI URL
-            if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
-                let candid_url = if base_url.contains("localhost") || base_url.contains("127.0.0.1")
-                {
-                    // Local network format: extract port from base_url
-                    let port = base_url.split(':').next_back().unwrap_or("8000");
-                    format!("http://{}.localhost:{}/?id={}", ui_id, port, canister_id)
-                } else {
-                    // IC network format: extract scheme and domain from base_url
-                    // base_url is like "https://icp0.io" -> "https://<candid_ui_id>.raw.icp0.io/?id=<canister_id>"
-                    if let Some(domain) = base_url
-                        .strip_prefix("https://")
-                        .or_else(|| base_url.strip_prefix("http://"))
-                    {
-                        let scheme = if base_url.starts_with("https://") {
-                            "https"
+                        // IC network format: extract scheme and domain from base_url
+                        // base_url is like "https://icp0.io" -> "https://<canister_id>.icp0.io"
+                        if let Some(domain) = base_url
+                            .strip_prefix("https://")
+                            .or_else(|| base_url.strip_prefix("http://"))
+                        {
+                            let scheme = if base_url.starts_with("https://") {
+                                "https"
+                            } else {
+                                "http"
+                            };
+                            format!("{}://{}.{}", scheme, canister_id, domain)
                         } else {
-                            "http"
-                        };
-                        format!("{}://{}.raw.{}/?id={}", scheme, ui_id, domain, canister_id)
-                    } else {
-                        // Fallback if URL doesn't have a recognized scheme
-                        format!("https://{}.raw.{}/?id={}", ui_id, base_url, canister_id)
-                    }
-                };
+                            // Fallback if URL doesn't have a recognized scheme
+                            format!("https://{}.{}", canister_id, base_url)
+                        }
+                    };
                 let _ = ctx
                     .term
-                    .write_line(&format!("  {} (Candid UI): {}", name, candid_url));
+                    .write_line(&format!("  {}: {}", name, canister_url));
             } else {
-                // No Candid UI available - just show the canister ID
-                let _ = ctx.term.write_line(&format!(
-                    "  {}: {} (Candid UI not available)",
-                    name, canister_id
-                ));
+                // For canisters without http_request, show the Candid UI URL
+                if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                    let candid_url =
+                        if base_url.contains("localhost") || base_url.contains("127.0.0.1") {
+                            // Local network format: extract port from base_url
+                            let port = base_url.split(':').next_back().unwrap_or("8000");
+                            format!("http://{}.localhost:{}/?id={}", ui_id, port, canister_id)
+                        } else {
+                            // IC network format: extract scheme and domain from base_url
+                            // base_url is like "https://icp0.io" -> "https://<candid_ui_id>.raw.icp0.io/?id=<canister_id>"
+                            if let Some(domain) = base_url
+                                .strip_prefix("https://")
+                                .or_else(|| base_url.strip_prefix("http://"))
+                            {
+                                let scheme = if base_url.starts_with("https://") {
+                                    "https"
+                                } else {
+                                    "http"
+                                };
+                                format!("{}://{}.raw.{}/?id={}", scheme, ui_id, domain, canister_id)
+                            } else {
+                                // Fallback if URL doesn't have a recognized scheme
+                                format!("https://{}.raw.{}/?id={}", ui_id, base_url, canister_id)
+                            }
+                        };
+                    let _ = ctx
+                        .term
+                        .write_line(&format!("  {} (Candid UI): {}", name, candid_url));
+                } else {
+                    // No Candid UI available - just show the canister ID
+                    let _ = ctx.term.write_line(&format!(
+                        "  {}: {} (Candid UI not available)",
+                        name, canister_id
+                    ));
+                }
             }
+        } else {
+            // No gateway subdomains available - just show the canister ID
+            let _ = ctx.term.write_line(&format!(
+                "  {}: {} (No network URL available)",
+                name, canister_id
+            ));
         }
     }
 

@@ -12,14 +12,17 @@ pub struct NetworkAccess {
     pub root_key: Option<Vec<u8>>,
 
     /// Routing configuration
-    pub url: Url,
+    pub api_url: Url,
+
+    pub gateway_url: Option<Url>,
 }
 
 impl NetworkAccess {
-    pub fn new(url: &Url) -> Self {
+    pub fn new(api_url: &Url, gateway_url: Option<&Url>) -> Self {
         Self {
             root_key: None,
-            url: url.clone(),
+            api_url: api_url.clone(),
+            gateway_url: gateway_url.cloned(),
         }
     }
 }
@@ -88,10 +91,11 @@ pub async fn get_managed_network_access(
             .fail();
         }
     }
-
+    let gateway_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
     Ok(NetworkAccess {
         root_key: Some(desc.root_key),
-        url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
+        api_url: gateway_url.clone(),
+        gateway_url: Some(gateway_url),
     })
 }
 
@@ -102,8 +106,13 @@ pub async fn get_connected_network_access(
 
     Ok(NetworkAccess {
         root_key,
-        url: Url::parse(&connected.url).context(ParseUrlSnafu {
-            url: connected.url.clone(),
+        api_url: Url::parse(&connected.api_url).context(ParseUrlSnafu {
+            url: &connected.api_url,
         })?,
+        gateway_url: connected
+            .gateway_url
+            .as_ref()
+            .map(|url| Url::parse(url).context(ParseUrlSnafu { url }))
+            .transpose()?,
     })
 }

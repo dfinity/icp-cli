@@ -4,24 +4,14 @@
       "anyOf": [
         {
           "properties": {
-            "url": {
-              "description": "The URL this network can be reached at.\nAssumed to be both gateway (canister-id.domain.com) and API (domain.com/api/v3).",
-              "type": "string"
-            }
-          },
-          "required": [
-            "url"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
             "api-url": {
-              "description": "The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).\nIf no gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
+              "description": "The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).",
+              "format": "uri",
               "type": "string"
             },
             "gateway-url": {
-              "description": "The URL of the gateway endpoint. Should support prefixing canister IDs as subdomains.",
+              "description": "The URL of the gateway endpoint. Should support prefixing canister IDs as subdomains,\notherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.\n\nIf no gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
+              "format": "uri",
               "type": [
                 "string",
                 "null"
@@ -30,6 +20,19 @@
           },
           "required": [
             "api-url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "url": {
+              "description": "The URL this network can be reached at.\n\nAssumed to be the URL of both the HTTP gateway (canister-id.domain.com) and API (domain.com/api/v3).",
+              "format": "uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
           ],
           "type": "object"
         }

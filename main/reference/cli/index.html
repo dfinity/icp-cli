@@ -295,7 +295,7 @@
 <p><code>--freezing-threshold &#x3C;FREEZING_THRESHOLD></code> — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen</p>
 </li>
 <li>
-<p><code>--reserved-cycles-limit &#x3C;RESERVED_CYCLES_LIMIT></code> — Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles</p>
+<p><code>--reserved-cycles-limit &#x3C;RESERVED_CYCLES_LIMIT></code> — Optional upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</p>
 </li>
 <li>
 <p><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only canister IDs, one per line, to stdout</p>
@@ -468,7 +468,7 @@
 <p><code>--freezing-threshold &#x3C;FREEZING_THRESHOLD></code></p>
 </li>
 <li>
-<p><code>--reserved-cycles-limit &#x3C;RESERVED_CYCLES_LIMIT></code> — Reserved cycles limit for the canister. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</p>
+<p><code>--reserved-cycles-limit &#x3C;RESERVED_CYCLES_LIMIT></code> — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</p>
 </li>
 <li>
 <p><code>--wasm-memory-limit &#x3C;WASM_MEMORY_LIMIT></code></p>
@@ -733,7 +733,7 @@
 <p><code>--controller &#x3C;CONTROLLER></code> — One or more controllers for the canisters being deployed. Repeat <code>--controller</code> to specify multiple</p>
 </li>
 <li>
-<p><code>--cycles &#x3C;CYCLES></code> — Cycles to fund canister creation (in cycles)</p>
+<p><code>--cycles &#x3C;CYCLES></code> — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</p>
 <p>Default value: <code>2000000000000</code></p>
 </li>
 <li>

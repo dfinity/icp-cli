@@ -44,7 +44,6 @@ pub(crate) struct StatusArgs {
 struct NetworkStatus {
     managed: bool,
     url: String,
-    port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     candid_ui_principal: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,10 +78,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             NetworkStatus {
                 managed: true,
                 url: network_access.url.to_string(),
-                port: network_access
-                    .url
-                    .port_or_known_default()
-                    .expect("Didn't find a valid default port for url"),
                 root_key: hex::encode(network_access.root_key.unwrap_or(IC_ROOT_KEY.to_vec())),
                 candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
                 proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
@@ -91,10 +86,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         Configuration::Connected { connected: _ } => NetworkStatus {
             managed: false,
             url: network_access.url.to_string(),
-            port: network_access
-                .url
-                .port_or_known_default()
-                .expect("Didn't find a valid default port for url"),
             candid_ui_principal: None,
             proxy_canister_principal: None,
             root_key: hex::encode(network_access.root_key.unwrap_or(IC_ROOT_KEY.to_vec())),
@@ -107,7 +98,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     } else {
         let mut output = String::new();
         output.push_str(&format!("Url: {}\n", status.url));
-        output.push_str(&format!("Port: {}\n", status.port));
         output.push_str(&format!("Root Key: {}\n", status.root_key));
         if let Some(ref principal) = status.candid_ui_principal {
             output.push_str(&format!("Candid UI Principal: {}\n", principal));

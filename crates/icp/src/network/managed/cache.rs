@@ -22,6 +22,7 @@ pub fn get_cached_launcher_version(
         };
         version.to_owned()
     } else {
+        assert!(version.starts_with('v'));
         version.to_owned()
     };
     let version_path = paths.launcher_version(&declared_version);
@@ -69,6 +70,7 @@ pub async fn download_launcher_version(
         set_tag(paths, "icp-cli-network-launcher", &latest, "latest").context(CreateTagSnafu)?;
         latest
     } else {
+        assert!(version_req.starts_with('v'));
         version_req.to_owned()
     };
     let version_path = paths.launcher_version(&pkg_version);

@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
 use icp::{
-    context::{Context, IC_ROOT_KEY},
+    context::Context,
     network::Configuration,
 };
 use serde::Serialize;
@@ -78,7 +78,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             NetworkStatus {
                 managed: true,
                 url: network_access.url.to_string(),
-                root_key: hex::encode(network_access.root_key.unwrap_or(IC_ROOT_KEY.to_vec())),
+                root_key: hex::encode(network_access.root_key),
                 candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
                 proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
             }
@@ -88,7 +88,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             url: network_access.url.to_string(),
             candid_ui_principal: None,
             proxy_canister_principal: None,
-            root_key: hex::encode(network_access.root_key.unwrap_or(IC_ROOT_KEY.to_vec())),
+            root_key: hex::encode(network_access.root_key),
         },
     };
 

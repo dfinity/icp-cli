@@ -296,14 +296,13 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            manifest::{
+            context::IC_ROOT_KEY, manifest::{
                 adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
                 canister::{BuildStep, BuildSteps, SyncSteps},
-            },
-            network::{
+            }, network::{
                 Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode,
                 Port,
-            },
+            }
         };
 
         // Create canisters
@@ -396,7 +395,7 @@ impl MockProjectLoader {
             configuration: Configuration::Connected {
                 connected: Connected {
                     url: "https://ic0.app".to_string(),
-                    root_key: None,
+                    root_key: IC_ROOT_KEY.to_vec(),
                 },
             },
         };

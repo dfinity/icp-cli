@@ -166,7 +166,7 @@ impl Context {
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
                                 url: IC_MAINNET_NETWORK_URL.to_string(),
-                                root_key: None,
+                                root_key: IC_ROOT_KEY.to_vec(),
                             },
                         },
                     })
@@ -182,7 +182,7 @@ impl Context {
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
                         url: url.to_string(),
-                        root_key: None,
+                        root_key: IC_ROOT_KEY.to_vec(),
                     },
                 },
             }),
@@ -371,9 +371,7 @@ impl Context {
         network_access: NetworkAccess,
     ) -> Result<Agent, CreateAgentError> {
         let agent = self.agent.create(id, network_access.url.as_str()).await?;
-        if let Some(k) = network_access.root_key {
-            agent.set_root_key(k);
-        }
+        agent.set_root_key(network_access.root_key);
         Ok(agent)
     }
 

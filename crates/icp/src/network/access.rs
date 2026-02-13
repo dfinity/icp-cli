@@ -9,20 +9,20 @@ use crate::{
 #[derive(Clone)]
 pub struct NetworkAccess {
     /// Network's root-key
-    pub root_key: Option<Vec<u8>>,
+    pub root_key: Vec<u8>,
 
     /// Routing configuration
     pub url: Url,
 }
 
-impl NetworkAccess {
-    pub fn new(url: &Url) -> Self {
-        Self {
-            root_key: None,
-            url: url.clone(),
-        }
-    }
-}
+// impl NetworkAccess {
+//     pub fn new(url: &Url) -> Self {
+//         Self {
+//             root_key: None,
+//             url: url.clone(),
+//         }
+//     }
+// }
 
 #[derive(Debug, Snafu)]
 pub enum GetNetworkAccessError {
@@ -90,7 +90,7 @@ pub async fn get_managed_network_access(
     }
 
     Ok(NetworkAccess {
-        root_key: Some(desc.root_key),
+        root_key: desc.root_key,
         url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
     })
 }

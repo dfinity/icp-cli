@@ -56,9 +56,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
         .get_agent_for_url(&IdentitySelection::Anonymous, &access.url)
         .await?;
 
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+        agent.set_root_key(access.root_key);
 
     // Query
     let status = match args.wait_healthy {

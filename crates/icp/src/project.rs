@@ -3,20 +3,16 @@ use std::collections::{HashMap, HashSet, hash_map::Entry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, Network, Project,
-    canister::recipe,
-    manifest::{
+    Canister, Environment, Network, Project, canister::recipe, context::IC_ROOT_KEY, manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
         NetworkManifest, ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
         recipe::RecipeType,
-    },
-    network::{
+    }, network::{
         Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode, Port,
-    },
-    prelude::*,
+    }, prelude::*
 };
 
 pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
@@ -240,9 +236,7 @@ pub async fn consolidate_manifest(
             configuration: Configuration::Connected {
                 connected: Connected {
                     url: IC_MAINNET_NETWORK_URL.to_string(),
-                    // Will use the IC Root key hard coded in agent-rs.
-                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
-                    root_key: None,
+                    root_key: IC_ROOT_KEY.to_vec(),
                 },
             },
         },

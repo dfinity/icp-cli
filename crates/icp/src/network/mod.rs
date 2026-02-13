@@ -150,14 +150,16 @@ pub struct ManagedImageConfig {
     pub mounts: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
     /// The URL this network can be reached at.
     pub url: String,
 
     /// The root key of this network
-    pub root_key: Option<Vec<u8>>,
+    #[serde(with = "hex::serde")]
+    #[schemars(with = "String")]
+    pub root_key: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -202,7 +204,7 @@ impl From<ManifestGateway> for Gateway {
 impl From<ManifestConnected> for Connected {
     fn from(value: ManifestConnected) -> Self {
         let url = value.url.clone();
-        let root_key = value.root_key.map(|rk| rk.0);
+        let root_key = value.root_key.map_or_else(|| crate::context::IC_ROOT_KEY.to_vec(), |rk| rk.0);
         Connected { url, root_key }
     }
 }

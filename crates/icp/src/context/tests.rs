@@ -336,7 +336,8 @@ async fn test_remove_canister_id_for_env_nonexistent_canister() {
 
 #[tokio::test]
 async fn test_get_agent_for_env_uses_environment_network() {
-    let staging_root_key = vec![1, 2, 3];
+    let local_root_key = vec![1, 2, 3];
+    let staging_root_key = vec![4, 5, 6];
 
     // Complex project has "test" environment which uses "staging" network
     let ctx = Context {
@@ -346,14 +347,14 @@ async fn test_get_agent_for_env_uses_environment_network() {
                 .with_network(
                     "local",
                     NetworkAccess {
-                        root_key: None,
+                        root_key: local_root_key.clone(),
                         url: Url::parse("http://localhost:8000").unwrap(),
                     },
                 )
                 .with_network(
                     "staging",
                     NetworkAccess {
-                        root_key: Some(staging_root_key.clone()),
+                        root_key: staging_root_key.clone(),
                         url: Url::parse("http://staging:9000").unwrap(),
                     },
                 ),
@@ -425,7 +426,7 @@ async fn test_get_agent_for_network_success() {
         network: Arc::new(MockNetworkAccessor::new().with_network(
             "local",
             NetworkAccess {
-                root_key: Some(root_key.clone()),
+                root_key: root_key.clone(),
                 url: Url::parse("http://localhost:8000").unwrap(),
             },
         )),
@@ -634,7 +635,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
         network: Arc::new(MockNetworkAccessor::new().with_network(
             LOCAL,
             NetworkAccess {
-                root_key: Some(local_root_key.clone()),
+                root_key: local_root_key.clone(),
                 url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
             },
         )),
@@ -702,7 +703,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
         network: Arc::new(MockNetworkAccessor::new().with_network(
             LOCAL,
             NetworkAccess {
-                root_key: Some(custom_root_key.clone()),
+                root_key: custom_root_key.clone(),
                 url: Url::parse("http://localhost:9000").unwrap(), // Custom port
             },
         )),
@@ -784,6 +785,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
         environments,
     };
 
+    let local_root_key = vec![1, 2, 3, 4];
     let custom_root_key = vec![5, 6, 7, 8];
 
     let ctx = Context {
@@ -793,14 +795,14 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                 .with_network(
                     LOCAL,
                     NetworkAccess {
-                        root_key: None,
+                        root_key: local_root_key.clone(),
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     },
                 )
                 .with_network(
                     "custom",
                     NetworkAccess {
-                        root_key: Some(custom_root_key.clone()),
+                        root_key: custom_root_key.clone(),
                         url: Url::parse("http://localhost:7000").unwrap(),
                     },
                 ),
@@ -823,6 +825,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
 
 #[tokio::test]
 async fn test_get_agent_explicit_network_inside_project() {
+    let local_root_key = vec![2, 3, 4];
     let staging_root_key = vec![12, 13, 14];
 
     let ctx = Context {
@@ -832,14 +835,14 @@ async fn test_get_agent_explicit_network_inside_project() {
                 .with_network(
                     LOCAL,
                     NetworkAccess {
-                        root_key: None,
+                        root_key: local_root_key.clone(),
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     },
                 )
                 .with_network(
                     "staging",
                     NetworkAccess {
-                        root_key: Some(staging_root_key.clone()),
+                        root_key: staging_root_key.clone(),
                         url: Url::parse("http://localhost:8001").unwrap(),
                     },
                 ),
@@ -862,6 +865,7 @@ async fn test_get_agent_explicit_network_inside_project() {
 
 #[tokio::test]
 async fn test_get_agent_explicit_environment_inside_project() {
+    let local_root_key = vec![5, 6, 7];
     let staging_root_key = vec![15, 16, 17];
 
     // complex() has "test" environment using "staging" network
@@ -872,14 +876,14 @@ async fn test_get_agent_explicit_environment_inside_project() {
                 .with_network(
                     LOCAL,
                     NetworkAccess {
-                        root_key: None,
+                        root_key: local_root_key.clone(),
                         url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     },
                 )
                 .with_network(
                     "staging",
                     NetworkAccess {
-                        root_key: Some(staging_root_key.clone()),
+                        root_key: staging_root_key.clone(),
                         url: Url::parse("http://localhost:8001").unwrap(),
                     },
                 ),

@@ -95,7 +95,7 @@ impl Handlebars {
         recipe: &Recipe,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
         // Determine the template source
-        let tmpl = match &recipe.recipe_type {
+        let tmpl_source = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
             RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
             RecipeType::Registry {
@@ -106,10 +106,11 @@ impl Handlebars {
         };
 
         // Retrieve the template, using cache for remote/registry sources
-        let tmpl = match tmpl {
+        let mut git_tag_sha = None;
+        let (tmpl, should_cache) = match &tmpl_source {
             TemplateSource::LocalPath(path) => {
-                let bytes = read(&path).context(ReadFileSnafu)?;
-                parse_bytes_to_string(bytes)?
+                let bytes = read(path).context(ReadFileSnafu)?;
+                (parse_bytes_to_string(bytes)?, false)
             }
 
             TemplateSource::RemoteUrl(u) => {
@@ -117,27 +118,18 @@ impl Handlebars {
                 let maybe_cached = self
                     .pkg_cache
                     .with_read(async |r| {
-                        read_cached_uri_recipe(r, &u, recipe.sha256.as_deref())
+                        read_cached_uri_recipe(r, u, recipe.sha256.as_deref())
                             .context(ReadCacheSnafu)
                     })
                     .await
                     .context(LockCacheSnafu)?;
                 if let Some(cached) = maybe_cached? {
                     debug!("Using cached recipe template for {u}");
-                    parse_bytes_to_string(cached)?
+                    (parse_bytes_to_string(cached)?, false)
                 } else {
                     // Download the template
-                    let tmpl = self.fetch_remote_bytes(&u).await?;
-                    // Cache the template keyed by the URL and checksum
-                    self.pkg_cache
-                        .with_write(async |w| {
-                            cache_uri_recipe(w, &u, &hex::encode(Sha256::digest(&tmpl)), &tmpl)
-                                .context(CacheRecipeSnafu)?;
-                            Ok(())
-                        })
-                        .await
-                        .context(LockCacheSnafu)??;
-                    parse_bytes_to_string(tmpl)?
+                    let tmpl = self.fetch_remote_bytes(u).await?;
+                    (parse_bytes_to_string(tmpl)?, true)
                 }
             }
 
@@ -154,13 +146,13 @@ impl Handlebars {
                 let maybe_cached = self
                     .pkg_cache
                     .with_read(async |r| {
-                        read_cached_registry_recipe(r, &package, &version).context(ReadCacheSnafu)
+                        read_cached_registry_recipe(r, &package, version).context(ReadCacheSnafu)
                     })
                     .await
                     .context(LockCacheSnafu)?;
                 if let Some(cached) = maybe_cached? {
                     debug!("Using cached recipe template for {package}@{version}");
-                    parse_bytes_to_string(cached)?
+                    (parse_bytes_to_string(cached)?, false)
                 } else {
                     // Download the template
                     let url = format!(
@@ -172,24 +164,18 @@ impl Handlebars {
                     let git_sha = self
                         .resolve_git_tag_sha("dfinity", "icp-cli-recipes", &release_tag)
                         .await?;
+                    git_tag_sha = Some(git_sha.clone());
 
-                    // Cache the template keyed by the git SHA
-                    self.pkg_cache
-                        .with_write(async |w| {
-                            cache_registry_recipe(w, &package, &version, &git_sha, &bytes)
-                                .context(CacheRecipeSnafu)
-                        })
-                        .await
-                        .context(LockCacheSnafu)??;
-
-                    parse_bytes_to_string(bytes)?
+                    (parse_bytes_to_string(bytes)?, true)
                 }
             }
         };
 
-        if let Some(sha256) = &recipe.sha256 {
-            verify_checksum(tmpl.as_bytes(), sha256)?;
-        }
+        let hash = if let Some(sha256) = &recipe.sha256 {
+            verify_checksum(tmpl.as_bytes(), sha256)?
+        } else {
+            Sha256::digest(tmpl.as_bytes()).into()
+        };
 
         // Load the template via handlebars
         let mut reg = handlebars::Handlebars::new();
@@ -228,8 +214,8 @@ impl Handlebars {
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        match insts {
-            Ok(helper) => Ok((helper.build, helper.sync)),
+        let (build, sync) = match insts {
+            Ok(helper) => (helper.build, helper.sync),
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
@@ -241,7 +227,41 @@ impl Handlebars {
                 ------
             "#, recipe.recipe_type}
             ),
+        };
+
+        // The template is verified good - now cache it if it was remote
+        if should_cache {
+            match tmpl_source {
+                TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
+                TemplateSource::RemoteUrl(u) => {
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_uri_recipe(w, &u, &hex::encode(hash), tmpl.as_bytes())
+                                .context(CacheRecipeSnafu)?;
+                            Ok(())
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                }
+                TemplateSource::Registry(registry, recipe_name, version) => {
+                    let package = format!("@{registry}/{recipe_name}");
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_registry_recipe(
+                                w,
+                                &package,
+                                &version,
+                                &git_tag_sha.unwrap(),
+                                tmpl.as_bytes(),
+                            )
+                            .context(CacheRecipeSnafu)
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                }
+            }
         }
+        Ok((build, sync))
     }
 
     /// Fetch raw bytes from a remote URL.
@@ -364,13 +384,13 @@ impl HelperDef for ReplaceHelper {
 }
 
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> {
-    let actual = hex::encode({
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], HandlebarsError> {
+    let actual_hash = {
         let mut h = Sha256::new();
         h.update(bytes);
         h.finalize()
-    });
-
+    };
+    let actual = hex::encode(actual_hash);
     if actual != expected {
         return ChecksumMismatchSnafu {
             expected: expected.to_string(),
@@ -378,8 +398,7 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> 
         }
         .fail();
     }
-
-    Ok(())
+    Ok(actual_hash.into())
 }
 
 /// Helper function to parse bytes into a UTF-8 string

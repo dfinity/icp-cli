@@ -158,6 +158,27 @@ networks:
       - POCKET_IC_MUTE_SERVER=false
 ```
 
+### Passing Arguments to the Container
+
+Use the `args` field to pass command-line arguments to the container's entrypoint. This is how you configure image-specific behavior such as enabling Internet Identity, NNS, Bitcoin integration, or other flags supported by the image:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    args:
+      - "--ii"
+```
+
+The `args` field passes values directly to the container entrypoint with no processing. The Docker image determines what arguments it accepts — see the image's documentation for available options.
+
+**Comparison with native launcher mode:** When using native managed networks (without `image`), settings like `bitcoind-addr`, `ii`, `nns`, and `subnets` are configured as top-level YAML fields. In Docker image mode, these are passed via `args` instead, since the image could be any Docker image — not necessarily the official network launcher.
+
+> **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, you may need to pass `--add-host=host.docker.internal:host-gateway` or equivalent to ensure it resolves.
+
 ### Remove Container on Exit
 
 Automatically delete the container when stopped:

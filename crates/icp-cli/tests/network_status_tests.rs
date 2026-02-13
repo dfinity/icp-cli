@@ -154,7 +154,9 @@ fn status_when_network_not_running() {
         .args(["network", "status", "random-network"])
         .assert()
         .failure()
-        .stderr(contains("unable to access network 'random-network', is it running"));
+        .stderr(contains(
+            "unable to access network 'random-network', is it running",
+        ));
 }
 
 #[test]
@@ -198,9 +200,7 @@ networks:
         .args(["network", "status", "connected-network"])
         .assert()
         .success()
-        .stdout(contains(
-            "Url: https://ic0.app",
-        ));
+        .stdout(contains("Url: https://ic0.app"));
 }
 
 #[test]

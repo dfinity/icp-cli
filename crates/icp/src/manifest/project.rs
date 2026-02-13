@@ -289,7 +289,8 @@ mod tests {
                             artificial_delay_ms: None,
                             ii: None,
                             nns: None,
-                            subnets: None
+                            subnets: None,
+                            version: None,
                         }),
                     }),
                 })],

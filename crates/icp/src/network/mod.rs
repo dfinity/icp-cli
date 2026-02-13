@@ -90,6 +90,7 @@ pub struct ManagedLauncherConfig {
     pub ii: bool,
     pub nns: bool,
     pub subnets: Option<Vec<SubnetKind>>,
+    pub version: Option<String>,
 }
 
 #[derive(
@@ -128,6 +129,7 @@ impl ManagedMode {
             ii: false,
             nns: false,
             subnets: None,
+            version: None,
         }))
     }
 }
@@ -215,10 +217,21 @@ impl From<Mode> for Configuration {
                     ii,
                     nns,
                     subnets,
+                    version,
                 } => {
                     let gateway: Gateway = match gateway {
                         Some(g) => g.into(),
                         None => Gateway::default(),
+                    };
+                    let version = match version {
+                        Some(v) => {
+                            if v.starts_with('v') {
+                                Some(v)
+                            } else {
+                                Some(format!("v{v}"))
+                            }
+                        }
+                        None => None,
                     };
                     Configuration::Managed {
                         managed: Managed {
@@ -228,6 +241,7 @@ impl From<Mode> for Configuration {
                                 ii: ii.unwrap_or(false),
                                 nns: nns.unwrap_or(false),
                                 subnets,
+                                version,
                             })),
                         },
                     }

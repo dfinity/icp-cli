@@ -8,6 +8,7 @@ use crate::commands::parsers::parse_subaccount;
 use crate::operations::token::TokenAmount;
 use crate::operations::token::balance::get_raw_balance;
 
+/// Display the cycles balance
 #[derive(Args, Clone, Debug)]
 pub(crate) struct BalanceArgs {
     #[command(flatten)]

@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand};
 use icp::{context::Context, settings::Settings};
 
+/// Configure user settings
 #[derive(Debug, Args)]
 pub(crate) struct SettingsArgs {
     #[command(subcommand)]

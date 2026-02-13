@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 pub(crate) mod balance;
 pub(crate) mod transfer;
 
+/// Perform token transactions
 #[derive(Debug, Parser)]
 pub(crate) struct Command {
     /// The token or ledger canister id to execute the operation on, defaults to `icp`
@@ -15,9 +16,6 @@ pub(crate) struct Command {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Commands {
-    /// Display the token balance on the ledger (default token: icp)
     Balance(balance::BalanceArgs),
-
-    /// Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
     Transfer(transfer::TransferArgs),
 }

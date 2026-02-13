@@ -1,6 +1,7 @@
 use clap::Args;
 use icp::context::Context;
 
+/// Display a list of enviroments
 #[derive(Args, Debug)]
 pub(crate) struct ListArgs;
 

@@ -17,6 +17,11 @@ const E_CANISTER_NOT_FOUND: &str = "IC0301";
 /// Error code returned by the replica if the caller is not a controller
 const E_NOT_A_CONTROLLER: &str = "IC0512";
 
+/// Show the status of canister(s).
+///
+/// By default this queries the status endpoint of the management canister.
+/// If the caller is not a controller, falls back on fetching public
+/// information from the state tree.
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
     /// An optional canister name or principal to target.

@@ -124,7 +124,7 @@ async fn canister_create_with_settings() {
             "--environment",
             "random-environment",
             "--cycles",
-            &format!("{}", 70 * TRILLION), /* 70T cycles because compute allocation is expensive */
+            "70t", /* 70T cycles because compute allocation is expensive */
         ])
         .assert()
         .success();
@@ -234,10 +234,12 @@ async fn canister_create_with_settings_cmdline_override() {
             "my-canister",
             "--compute-allocation",
             "2",
+            "--reserved-cycles-limit",
+            "5t",
             "--environment",
             "random-environment",
             "--cycles",
-            &format!("{}", 70 * TRILLION), /* 70T cycles because compute allocation is expensive */
+            "70t", /* 70T cycles because compute allocation is expensive */
         ])
         .assert()
         .success();
@@ -257,7 +259,8 @@ async fn canister_create_with_settings_cmdline_override() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Running"))
-                .and(contains("Compute allocation: 2")),
+                .and(contains("Compute allocation: 2"))
+                .and(contains("Reserved cycles limit: 5_000_000_000_000")),
         );
 }
 

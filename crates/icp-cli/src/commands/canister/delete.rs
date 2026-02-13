@@ -3,6 +3,7 @@ use icp::context::{CanisterSelection, Context};
 
 use crate::commands::args;
 
+/// Delete a canister from a network
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
     #[command(flatten)]

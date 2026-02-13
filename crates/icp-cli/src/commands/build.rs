@@ -6,6 +6,7 @@ use icp::context::{Context, EnvironmentSelection};
 
 use crate::{operations::build::build_many_with_progress_bar, options::EnvironmentOpt};
 
+/// Build canisters
 #[derive(Debug, Args)]
 pub(crate) struct BuildArgs {
     /// Canister names (if empty, build all canisters in environment)

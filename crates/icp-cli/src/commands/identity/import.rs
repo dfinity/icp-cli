@@ -23,6 +23,7 @@ use icp::context::Context;
 
 use crate::commands::identity::StorageMode;
 
+/// Import a new identity
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("import-from").required(true)))]
 pub(crate) struct ImportArgs {

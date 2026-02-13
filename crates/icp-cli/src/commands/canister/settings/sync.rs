@@ -5,6 +5,7 @@ use icp::context::{CanisterSelection, Context};
 
 use crate::commands::args::CanisterCommandArgs;
 
+/// Synchronize a canister's settings with those defined in the project
 #[derive(Debug, Args)]
 pub(crate) struct SyncArgs {
     #[command(flatten)]

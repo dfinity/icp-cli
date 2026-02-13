@@ -12,6 +12,7 @@ use crate::operations::snapshot_transfer::{
     upload_blob_from_file, upload_snapshot_metadata, upload_wasm_chunk,
 };
 
+/// Upload a snapshot from local disk
 #[derive(Debug, Args)]
 pub(crate) struct UploadArgs {
     #[command(flatten)]

@@ -684,7 +684,7 @@ async fn canister_settings_update_miscellaneous() {
             "--subnet",
             common::SUBNET_ID,
             "--cycles",
-            &format!("{}", 120 * TRILLION), // 120T cycles because compute allocation is expensive
+            "120t", // 120T cycles because compute allocation is expensive
             "--environment",
             "random-environment",
         ])
@@ -730,7 +730,7 @@ async fn canister_settings_update_miscellaneous() {
             "--freezing-threshold",
             "8640000",
             "--reserved-cycles-limit",
-            "6000000000000",
+            "6t",
             "--wasm-memory-limit",
             "4GiB",
             "--wasm-memory-threshold",

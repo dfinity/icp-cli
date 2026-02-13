@@ -103,7 +103,8 @@ pub(crate) struct UpdateArgs {
     #[arg(long, value_parser = freezing_threshold_parser)]
     freezing_threshold: Option<u64>,
 
-    /// Reserved cycles limit for the canister.
+    /// Upper limit on cycles reserved for future resource payments.
+    /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
     #[arg(long, value_parser = parse_cycles_amount)]
     reserved_cycles_limit: Option<u128>,

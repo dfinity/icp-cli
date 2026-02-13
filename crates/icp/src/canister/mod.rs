@@ -213,7 +213,8 @@ pub struct Settings {
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     pub freezing_threshold: Option<u64>,
 
-    /// Reserved cycles limit. If set, the canister cannot consume more than this many cycles.
+    /// Upper limit on cycles reserved for future resource payments.
+    /// Memory allocations that would push the reserved balance above this limit will fail.
     pub reserved_cycles_limit: Option<u64>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.

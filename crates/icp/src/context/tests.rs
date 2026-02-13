@@ -348,7 +348,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                     NetworkAccess {
                         root_key: None,
                         api_url: Url::parse("http://localhost:8000").unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 )
                 .with_network(
@@ -356,7 +356,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                     NetworkAccess {
                         root_key: Some(staging_root_key.clone()),
                         api_url: Url::parse("http://staging:9000").unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 ),
         ),
@@ -429,7 +429,7 @@ async fn test_get_agent_for_network_success() {
             NetworkAccess {
                 root_key: Some(root_key.clone()),
                 api_url: Url::parse("http://localhost:8000").unwrap(),
-                gateway_url: None,
+                http_gateway_url: None,
             },
         )),
         ..Context::mocked()
@@ -639,7 +639,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
             NetworkAccess {
                 root_key: Some(local_root_key.clone()),
                 api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                gateway_url: None,
+                http_gateway_url: None,
             },
         )),
         ..Context::mocked()
@@ -708,7 +708,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
             NetworkAccess {
                 root_key: Some(custom_root_key.clone()),
                 api_url: Url::parse("http://localhost:9000").unwrap(), // Custom port
-                gateway_url: None,
+                http_gateway_url: None,
             },
         )),
         ..Context::mocked()
@@ -800,7 +800,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                     NetworkAccess {
                         root_key: None,
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 )
                 .with_network(
@@ -808,7 +808,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                     NetworkAccess {
                         root_key: Some(custom_root_key.clone()),
                         api_url: Url::parse("http://localhost:7000").unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 ),
         ),
@@ -841,7 +841,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                     NetworkAccess {
                         root_key: None,
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 )
                 .with_network(
@@ -849,7 +849,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                     NetworkAccess {
                         root_key: Some(staging_root_key.clone()),
                         api_url: Url::parse("http://localhost:8001").unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 ),
         ),
@@ -883,7 +883,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                     NetworkAccess {
                         root_key: None,
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 )
                 .with_network(
@@ -891,7 +891,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                     NetworkAccess {
                         root_key: Some(staging_root_key.clone()),
                         api_url: Url::parse("http://localhost:8001").unwrap(),
-                        gateway_url: None,
+                        http_gateway_url: None,
                     },
                 ),
         ),

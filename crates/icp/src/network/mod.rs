@@ -158,7 +158,7 @@ pub struct Connected {
     pub api_url: Url,
 
     /// The URL this network's HTTP gateway can be reached at.
-    pub gateway_url: Option<Url>,
+    pub http_gateway_url: Option<Url>,
 
     /// The root key of this network
     pub root_key: Option<Vec<u8>>,
@@ -208,15 +208,15 @@ impl From<ManifestConnected> for Connected {
         match value.endpoints {
             Endpoints::Implicit { url } => Connected {
                 api_url: url.clone(),
-                gateway_url: Some(url),
+                http_gateway_url: Some(url),
                 root_key: value.root_key.map(|rk| rk.0),
             },
             Endpoints::Explicit {
                 api_url,
-                gateway_url,
+                http_gateway_url,
             } => Connected {
                 api_url,
-                gateway_url,
+                http_gateway_url,
                 root_key: value.root_key.map(|rk| rk.0),
             },
         }

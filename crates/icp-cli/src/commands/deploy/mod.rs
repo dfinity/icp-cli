@@ -363,15 +363,15 @@ async fn print_canister_urls(
     let env = ctx.get_environment(environment_selection).await?;
 
     // Get the network URL
-    let gateway_url = match &env.network.configuration {
+    let http_gateway_url = match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
             // For managed networks, construct localhost URL
             let access = ctx.network.access(&env.network).await?;
-            access.gateway_url.clone()
+            access.http_gateway_url.clone()
         }
         NetworkConfiguration::Connected { connected } => {
             // For connected networks, use the configured URL
-            connected.gateway_url.clone()
+            connected.http_gateway_url.clone()
         }
     };
 
@@ -389,12 +389,12 @@ async fn print_canister_urls(
             Err(_) => continue,
         };
 
-        if let Some(gateway_url) = &gateway_url {
+        if let Some(http_gateway_url) = &http_gateway_url {
             // Check if canister has http_request
             let has_http = has_http_request(&agent, canister_id).await;
-            let domain = if let Some(domain) = gateway_url.domain() {
+            let domain = if let Some(domain) = http_gateway_url.domain() {
                 Some(domain)
-            } else if let Some(host) = gateway_url.host_str()
+            } else if let Some(host) = http_gateway_url.host_str()
                 && (host == "127.0.0.1" || host == "[::1]")
             {
                 Some("localhost")
@@ -403,7 +403,7 @@ async fn print_canister_urls(
             };
 
             if has_http {
-                let mut canister_url = gateway_url.clone();
+                let mut canister_url = http_gateway_url.clone();
                 if let Some(domain) = domain {
                     canister_url
                         .set_host(Some(&format!("{canister_id}.{domain}")))
@@ -417,7 +417,7 @@ async fn print_canister_urls(
             } else {
                 // For canisters without http_request, show the Candid UI URL
                 if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
-                    let mut candid_url = gateway_url.clone();
+                    let mut candid_url = http_gateway_url.clone();
                     if let Some(domain) = domain {
                         candid_url
                             .set_host(Some(&format!("{ui_id}.{domain}",)))

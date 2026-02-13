@@ -9,8 +9,8 @@
               "format": "uri",
               "type": "string"
             },
-            "gateway-url": {
-              "description": "The URL of the gateway endpoint. Should support prefixing canister IDs as subdomains,\notherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.\n\nIf no gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
+            "http-gateway-url": {
+              "description": "The URL of the HTTP gateway endpoint. Should support prefixing canister IDs as subdomains,\notherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.\n\nIf no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
               "format": "uri",
               "type": [
                 "string",

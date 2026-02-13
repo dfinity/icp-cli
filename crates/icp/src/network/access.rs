@@ -14,15 +14,15 @@ pub struct NetworkAccess {
     /// Routing configuration
     pub api_url: Url,
 
-    pub gateway_url: Option<Url>,
+    pub http_gateway_url: Option<Url>,
 }
 
 impl NetworkAccess {
-    pub fn new(api_url: &Url, gateway_url: Option<&Url>) -> Self {
+    pub fn new(api_url: &Url, http_gateway_url: Option<&Url>) -> Self {
         Self {
             root_key: None,
             api_url: api_url.clone(),
-            gateway_url: gateway_url.cloned(),
+            http_gateway_url: http_gateway_url.cloned(),
         }
     }
 }
@@ -86,11 +86,11 @@ pub async fn get_managed_network_access(
             .fail();
         }
     }
-    let gateway_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
+    let http_gateway_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
     Ok(NetworkAccess {
         root_key: Some(desc.root_key),
-        api_url: gateway_url.clone(),
-        gateway_url: Some(gateway_url),
+        api_url: http_gateway_url.clone(),
+        http_gateway_url: Some(http_gateway_url),
     })
 }
 
@@ -102,6 +102,6 @@ pub async fn get_connected_network_access(
     Ok(NetworkAccess {
         root_key,
         api_url: connected.api_url.clone(),
-        gateway_url: connected.gateway_url.clone(),
+        http_gateway_url: connected.http_gateway_url.clone(),
     })
 }

@@ -164,7 +164,9 @@ impl Context {
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
                                 api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
-                                gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
+                                http_gateway_url: Some(
+                                    IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap(),
+                                ),
                                 root_key: None,
                             },
                         },
@@ -181,7 +183,7 @@ impl Context {
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
                         api_url: url.clone(),
-                        gateway_url: Some(url.clone()),
+                        http_gateway_url: Some(url.clone()),
                         root_key: None,
                     },
                 },

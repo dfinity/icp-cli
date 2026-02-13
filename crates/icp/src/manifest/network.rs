@@ -101,11 +101,11 @@ pub struct Connected {
 #[serde(untagged, rename_all_fields = "kebab-case")]
 pub enum Endpoints {
     Explicit {
-        /// The URL of the gateway endpoint. Should support prefixing canister IDs as subdomains,
+        /// The URL of the HTTP gateway endpoint. Should support prefixing canister IDs as subdomains,
         /// otherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.
         ///
-        /// If no gateway endpoint is provided, canister URLs will not be printed in deploy operations.
-        gateway_url: Option<Url>,
+        /// If no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.
+        http_gateway_url: Option<Url>,
         /// The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).
         api_url: Url,
     },

@@ -6,7 +6,7 @@ use serde::{Deserialize, de::Error as _};
 /// Represents the accepted values for a recipe type in
 /// the canister manifest
 #[derive(Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "lowercase", from = "String")]
+#[schemars(from = "String")]
 pub enum RecipeType {
     /// path to a locally defined recipe
     File(String),

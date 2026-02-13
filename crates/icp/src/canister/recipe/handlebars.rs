@@ -16,7 +16,10 @@ use crate::{
         canister::{BuildSteps, SyncSteps},
         recipe::{Recipe, RecipeType},
     },
-    package::{PackageCache, cache_recipe, read_cached_recipe},
+    package::{
+        PackageCache, cache_registry_recipe, cache_uri_recipe, read_cached_registry_recipe,
+        read_cached_uri_recipe,
+    },
     prelude::*,
 };
 
@@ -78,12 +81,6 @@ pub enum HandlebarsError {
 
     #[snafu(display("failed to acquire lock on package cache"))]
     LockCache { source: crate::fs::lock::LockError },
-
-    #[snafu(display("failed to resolve git tag '{tag}' for recipe"))]
-    ResolveGitTag { source: reqwest::Error, tag: String },
-
-    #[snafu(display("failed to parse git tag response for '{tag}'"))]
-    ParseGitTag { tag: String },
 }
 
 impl Handlebars {
@@ -92,7 +89,7 @@ impl Handlebars {
         recipe: &Recipe,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
         // Determine the template source
-        let tmpl = match &recipe.recipe_type {
+        let tmpl_source = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
             RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
             RecipeType::Registry {
@@ -103,18 +100,30 @@ impl Handlebars {
         };
 
         // Retrieve the template, using cache for remote/registry sources
-        let tmpl = match tmpl {
+        let (tmpl, should_cache) = match &tmpl_source {
             TemplateSource::LocalPath(path) => {
-                let bytes = read(&path).context(ReadFileSnafu)?;
-                if let Some(expected) = &recipe.sha256 {
-                    verify_checksum(&bytes, expected)?;
-                }
-                parse_bytes_to_string(bytes)?
+                let bytes = read(path).context(ReadFileSnafu)?;
+                (parse_bytes_to_string(bytes)?, false)
             }
 
             TemplateSource::RemoteUrl(u) => {
-                self.fetch_remote_template(&u, recipe.sha256.as_deref())
-                    .await?
+                // Check cache
+                let maybe_cached = self
+                    .pkg_cache
+                    .with_read(async |r| {
+                        read_cached_uri_recipe(r, u, recipe.sha256.as_deref())
+                            .context(ReadCacheSnafu)
+                    })
+                    .await
+                    .context(LockCacheSnafu)?;
+                if let Some(cached) = maybe_cached? {
+                    debug!("Using cached recipe template for {u}");
+                    (parse_bytes_to_string(cached)?, false)
+                } else {
+                    // Download the template
+                    let tmpl = self.fetch_remote_bytes(u).await?;
+                    (parse_bytes_to_string(tmpl)?, true)
+                }
             }
 
             // TMP(or.ricon): Temporarily hardcode a dfinity registry
@@ -130,13 +139,13 @@ impl Handlebars {
                 let maybe_cached = self
                     .pkg_cache
                     .with_read(async |r| {
-                        read_cached_recipe(r, &package, &version).context(ReadCacheSnafu)
+                        read_cached_registry_recipe(r, &package, version).context(ReadCacheSnafu)
                     })
                     .await
                     .context(LockCacheSnafu)?;
                 if let Some(cached) = maybe_cached? {
                     debug!("Using cached recipe template for {package}@{version}");
-                    parse_bytes_to_string(cached)?
+                    (parse_bytes_to_string(cached)?, false)
                 } else {
                     // Download the template
                     let url = format!(
@@ -144,27 +153,15 @@ impl Handlebars {
                     );
                     let bytes = self.fetch_remote_bytes(&url).await?;
 
-                    if let Some(expected) = &recipe.sha256 {
-                        verify_checksum(&bytes, expected)?;
-                    }
-
-                    // Resolve the git tag to a commit SHA for caching
-                    let git_sha = self
-                        .resolve_git_tag_sha("dfinity", "icp-cli-recipes", &release_tag)
-                        .await?;
-
-                    // Cache the template keyed by the git SHA
-                    self.pkg_cache
-                        .with_write(async |w| {
-                            cache_recipe(w, &package, &version, &git_sha, &bytes)
-                                .context(CacheRecipeSnafu)
-                        })
-                        .await
-                        .context(LockCacheSnafu)??;
-
-                    parse_bytes_to_string(bytes)?
+                    (parse_bytes_to_string(bytes)?, true)
                 }
             }
+        };
+
+        let hash = if let Some(sha256) = &recipe.sha256 {
+            verify_checksum(tmpl.as_bytes(), sha256)?
+        } else {
+            Sha256::digest(tmpl.as_bytes()).into()
         };
 
         // Load the template via handlebars
@@ -204,8 +201,8 @@ impl Handlebars {
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        match insts {
-            Ok(helper) => Ok((helper.build, helper.sync)),
+        let (build, sync) = match insts {
+            Ok(helper) => (helper.build, helper.sync),
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
@@ -217,7 +214,41 @@ impl Handlebars {
                 ------
             "#, recipe.recipe_type}
             ),
+        };
+
+        // The template is verified good - now cache it if it was remote
+        if should_cache {
+            match tmpl_source {
+                TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
+                TemplateSource::RemoteUrl(u) => {
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_uri_recipe(w, &u, &hex::encode(hash), tmpl.as_bytes())
+                                .context(CacheRecipeSnafu)?;
+                            Ok(())
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                }
+                TemplateSource::Registry(registry, recipe_name, version) => {
+                    let package = format!("@{registry}/{recipe_name}");
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_registry_recipe(
+                                w,
+                                &package,
+                                &version,
+                                &hex::encode(hash),
+                                tmpl.as_bytes(),
+                            )
+                            .context(CacheRecipeSnafu)
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                }
+            }
         }
+        Ok((build, sync))
     }
 
     /// Fetch raw bytes from a remote URL.
@@ -240,80 +271,6 @@ impl Handlebars {
         }
 
         Ok(resp.bytes().await.context(HttpRequestSnafu)?.to_vec())
-    }
-
-    /// Fetch a remote template, verifying checksum if provided.
-    async fn fetch_remote_template(
-        &self,
-        url: &str,
-        sha256: Option<&str>,
-    ) -> Result<String, HandlebarsError> {
-        let bytes = self.fetch_remote_bytes(url).await?;
-        if let Some(expected) = sha256 {
-            verify_checksum(&bytes, expected)?;
-        }
-        parse_bytes_to_string(bytes)
-    }
-
-    /// Resolve a GitHub release tag to its underlying git commit SHA.
-    async fn resolve_git_tag_sha(
-        &self,
-        owner: &str,
-        repo: &str,
-        tag: &str,
-    ) -> Result<String, HandlebarsError> {
-        let ref_response = self
-            .github_api_get(
-                &format!("https://api.github.com/repos/{owner}/{repo}/git/ref/tags/{tag}"),
-                tag,
-            )
-            .await?;
-
-        let obj_type = ref_response["object"]["type"]
-            .as_str()
-            .ok_or_else(|| ParseGitTagSnafu { tag }.build())?;
-        let obj_sha = ref_response["object"]["sha"]
-            .as_str()
-            .ok_or_else(|| ParseGitTagSnafu { tag }.build())?;
-
-        match obj_type {
-            // Lightweight tag — points directly at the commit
-            "commit" => Ok(obj_sha.to_owned()),
-            // Annotated tag — dereference through the tag object to get the commit
-            "tag" => {
-                let tag_response = self
-                    .github_api_get(
-                        &format!("https://api.github.com/repos/{owner}/{repo}/git/tags/{obj_sha}"),
-                        tag,
-                    )
-                    .await?;
-                tag_response["object"]["sha"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .ok_or_else(|| ParseGitTagSnafu { tag }.build())
-            }
-            _ => ParseGitTagSnafu { tag }.fail(),
-        }
-    }
-
-    /// Make an authenticated GET request to the GitHub API.
-    async fn github_api_get(
-        &self,
-        url: &str,
-        tag: &str,
-    ) -> Result<serde_json::Value, HandlebarsError> {
-        let mut req = self.http_client.get(url).header("User-Agent", "icp-cli");
-        if let Ok(token) = std::env::var("ICP_CLI_GITHUB_TOKEN") {
-            req = req.bearer_auth(token);
-        }
-        req.send()
-            .await
-            .context(ResolveGitTagSnafu { tag })?
-            .error_for_status()
-            .context(ResolveGitTagSnafu { tag })?
-            .json()
-            .await
-            .context(ResolveGitTagSnafu { tag })
     }
 }
 
@@ -353,13 +310,13 @@ impl HelperDef for ReplaceHelper {
 }
 
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> {
-    let actual = hex::encode({
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], HandlebarsError> {
+    let actual_hash = {
         let mut h = Sha256::new();
         h.update(bytes);
         h.finalize()
-    });
-
+    };
+    let actual = hex::encode(actual_hash);
     if actual != expected {
         return ChecksumMismatchSnafu {
             expected: expected.to_string(),
@@ -367,8 +324,7 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> 
         }
         .fail();
     }
-
-    Ok(())
+    Ok(actual_hash.into())
 }
 
 /// Helper function to parse bytes into a UTF-8 string

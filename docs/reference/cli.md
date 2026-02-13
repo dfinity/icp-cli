@@ -192,7 +192,7 @@ Create a canister on a network
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
-* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
@@ -367,7 +367,7 @@ Change a canister's settings to specified values
 * `--compute-allocation <COMPUTE_ALLOCATION>`
 * `--memory-allocation <MEMORY_ALLOCATION>`
 * `--freezing-threshold <FREEZING_THRESHOLD>`
-* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Reserved cycles limit for the canister. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--wasm-memory-limit <WASM_MEMORY_LIMIT>`
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>`
 * `--log-visibility <LOG_VISIBILITY>`
@@ -697,7 +697,7 @@ Deploy a project to an environment
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
-* `--cycles <CYCLES>` — Cycles to fund canister creation (in cycles)
+* `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
 * `--identity <IDENTITY>` — The user identity to run this command as

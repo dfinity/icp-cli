@@ -16,7 +16,10 @@ use crate::{
         canister::{BuildSteps, SyncSteps},
         recipe::{Recipe, RecipeType},
     },
-    package::{PackageCache, cache_recipe, read_cached_recipe},
+    package::{
+        PackageCache, cache_registry_recipe, cache_uri_recipe, read_cached_registry_recipe,
+        read_cached_uri_recipe,
+    },
     prelude::*,
 };
 
@@ -106,15 +109,36 @@ impl Handlebars {
         let tmpl = match tmpl {
             TemplateSource::LocalPath(path) => {
                 let bytes = read(&path).context(ReadFileSnafu)?;
-                if let Some(expected) = &recipe.sha256 {
-                    verify_checksum(&bytes, expected)?;
-                }
                 parse_bytes_to_string(bytes)?
             }
 
             TemplateSource::RemoteUrl(u) => {
-                self.fetch_remote_template(&u, recipe.sha256.as_deref())
-                    .await?
+                // Check cache
+                let maybe_cached = self
+                    .pkg_cache
+                    .with_read(async |r| {
+                        read_cached_uri_recipe(r, &u, recipe.sha256.as_deref())
+                            .context(ReadCacheSnafu)
+                    })
+                    .await
+                    .context(LockCacheSnafu)?;
+                if let Some(cached) = maybe_cached? {
+                    debug!("Using cached recipe template for {u}");
+                    parse_bytes_to_string(cached)?
+                } else {
+                    // Download the template
+                    let tmpl = self.fetch_remote_bytes(&u).await?;
+                    // Cache the template keyed by the URL and checksum
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_uri_recipe(w, &u, &hex::encode(Sha256::digest(&tmpl)), &tmpl)
+                                .context(CacheRecipeSnafu)?;
+                            Ok(())
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                    parse_bytes_to_string(tmpl)?
+                }
             }
 
             // TMP(or.ricon): Temporarily hardcode a dfinity registry
@@ -130,7 +154,7 @@ impl Handlebars {
                 let maybe_cached = self
                     .pkg_cache
                     .with_read(async |r| {
-                        read_cached_recipe(r, &package, &version).context(ReadCacheSnafu)
+                        read_cached_registry_recipe(r, &package, &version).context(ReadCacheSnafu)
                     })
                     .await
                     .context(LockCacheSnafu)?;
@@ -144,10 +168,6 @@ impl Handlebars {
                     );
                     let bytes = self.fetch_remote_bytes(&url).await?;
 
-                    if let Some(expected) = &recipe.sha256 {
-                        verify_checksum(&bytes, expected)?;
-                    }
-
                     // Resolve the git tag to a commit SHA for caching
                     let git_sha = self
                         .resolve_git_tag_sha("dfinity", "icp-cli-recipes", &release_tag)
@@ -156,7 +176,7 @@ impl Handlebars {
                     // Cache the template keyed by the git SHA
                     self.pkg_cache
                         .with_write(async |w| {
-                            cache_recipe(w, &package, &version, &git_sha, &bytes)
+                            cache_registry_recipe(w, &package, &version, &git_sha, &bytes)
                                 .context(CacheRecipeSnafu)
                         })
                         .await
@@ -166,6 +186,10 @@ impl Handlebars {
                 }
             }
         };
+
+        if let Some(sha256) = &recipe.sha256 {
+            verify_checksum(tmpl.as_bytes(), sha256)?;
+        }
 
         // Load the template via handlebars
         let mut reg = handlebars::Handlebars::new();
@@ -240,19 +264,6 @@ impl Handlebars {
         }
 
         Ok(resp.bytes().await.context(HttpRequestSnafu)?.to_vec())
-    }
-
-    /// Fetch a remote template, verifying checksum if provided.
-    async fn fetch_remote_template(
-        &self,
-        url: &str,
-        sha256: Option<&str>,
-    ) -> Result<String, HandlebarsError> {
-        let bytes = self.fetch_remote_bytes(url).await?;
-        if let Some(expected) = sha256 {
-            verify_checksum(&bytes, expected)?;
-        }
-        parse_bytes_to_string(bytes)
     }
 
     /// Resolve a GitHub release tag to its underlying git commit SHA.

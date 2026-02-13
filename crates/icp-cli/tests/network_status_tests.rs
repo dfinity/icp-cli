@@ -154,7 +154,7 @@ fn status_when_network_not_running() {
         .args(["network", "status", "random-network"])
         .assert()
         .failure()
-        .stderr(contains("network 'random-network' is not running"));
+        .stderr(contains("unable to access network 'random-network', is it running"));
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn status_nonexistent_network() {
 }
 
 #[test]
-fn status_connected_network_fails() {
+fn status_connected_network() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -197,9 +197,9 @@ networks:
         .current_dir(&project_dir)
         .args(["network", "status", "connected-network"])
         .assert()
-        .failure()
-        .stderr(contains(
-            "network 'connected-network' is not a managed network",
+        .success()
+        .stdout(contains(
+            "Url: https://ic0.app",
         ));
 }
 

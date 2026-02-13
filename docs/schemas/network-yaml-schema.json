@@ -193,6 +193,13 @@
                 "array",
                 "null"
               ]
+            },
+            "version": {
+              "description": "The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "type": "object"

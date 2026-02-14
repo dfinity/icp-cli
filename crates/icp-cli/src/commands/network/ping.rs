@@ -53,7 +53,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
 
     // Agent
     let agent = ctx
-        .get_agent_for_url(&IdentitySelection::Anonymous, &access.url)
+        .get_agent_for_url(&IdentitySelection::Anonymous, &access.api_url)
         .await?;
 
     if let Some(k) = access.root_key {

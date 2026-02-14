@@ -2,7 +2,7 @@ use indoc::formatdoc;
 use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::IC_MAINNET_NETWORK_URL};
+use icp::{fs::write_string, prelude::IC_MAINNET_NETWORK_API_URL};
 
 mod common;
 
@@ -175,7 +175,7 @@ async fn cycles_mint_on_ic() {
             "--icp",
             "1",
             "--network",
-            IC_MAINNET_NETWORK_URL,
+            IC_MAINNET_NETWORK_API_URL,
         ])
         .assert()
         .stderr(contains(

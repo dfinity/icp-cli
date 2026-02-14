@@ -487,7 +487,7 @@ pub enum WaitForPortError {
 ///
 /// Returns a tuple of (candid_ui_canister_id, proxy_canister_id)
 pub async fn initialize_network(
-    gateway_url: &Url,
+    api_url: &Url,
     root_key: &[u8],
     all_identities: Vec<Principal>,
     default_identity: Option<Principal>,
@@ -496,11 +496,11 @@ pub async fn initialize_network(
 ) -> Result<(Option<Principal>, Option<Principal>), InitializeNetworkError> {
     eprintln!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
-        .with_url(gateway_url.as_str())
+        .with_url(api_url.as_str())
         .with_identity(AnonymousIdentity)
         .build()
         .context(BuildAgentSnafu {
-            url: gateway_url.as_str(),
+            url: api_url.as_str(),
         })?;
     agent.set_root_key(root_key.to_vec());
 

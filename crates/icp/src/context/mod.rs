@@ -165,7 +165,10 @@ impl Context {
                         name: IC.to_string(),
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
-                                url: IC_MAINNET_NETWORK_URL.to_string(),
+                                api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
+                                http_gateway_url: Some(
+                                    IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap(),
+                                ),
                                 root_key: IC_ROOT_KEY.to_vec(),
                             },
                         },
@@ -181,7 +184,8 @@ impl Context {
                 name: url.to_string(),
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
-                        url: url.to_string(),
+                        api_url: url.clone(),
+                        http_gateway_url: Some(url.clone()),
                         root_key: IC_ROOT_KEY.to_vec(),
                     },
                 },
@@ -370,7 +374,10 @@ impl Context {
         id: Arc<dyn Identity>,
         network_access: NetworkAccess,
     ) -> Result<Agent, CreateAgentError> {
-        let agent = self.agent.create(id, network_access.url.as_str()).await?;
+        let agent = self
+            .agent
+            .create(id, network_access.api_url.as_str())
+            .await?;
         agent.set_root_key(network_access.root_key);
         Ok(agent)
     }

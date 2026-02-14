@@ -23,7 +23,7 @@ pub(crate) struct TestContext {
     asset_dir: PathBuf,
     mock_cred_dir: PathBuf,
     os_path: OsString,
-    gateway_url: OnceCell<Url>,
+    http_gateway_url: OnceCell<Url>,
     config_url: OnceCell<Option<Url>>,
     time_offset: Cell<Option<Duration>>,
     root_key: OnceCell<Vec<u8>>,
@@ -62,7 +62,7 @@ impl TestContext {
             asset_dir,
             mock_cred_dir,
             os_path,
-            gateway_url: OnceCell::new(),
+            http_gateway_url: OnceCell::new(),
             config_url: OnceCell::new(),
             root_key: OnceCell::new(),
             softhsm: OnceCell::new(),
@@ -258,7 +258,7 @@ impl TestContext {
         self.root_key
             .set(network_descriptor.root_key.clone())
             .expect("Root key should not be already initialized");
-        self.gateway_url
+        self.http_gateway_url
             .set(
                 format!("http://localhost:{}", network_descriptor.gateway_port)
                     .parse()
@@ -394,7 +394,7 @@ impl TestContext {
 
     pub(crate) fn agent(&self) -> Agent {
         let agent = Agent::builder()
-            .with_url(self.gateway_url.get().unwrap().as_str())
+            .with_url(self.http_gateway_url.get().unwrap().as_str())
             .build()
             .unwrap();
         agent.set_root_key(self.root_key.get().unwrap().clone());

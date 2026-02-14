@@ -22,7 +22,7 @@ Manifests are YAML files that define project structure. The system supports:
 - **Path references**: Reference external manifest files
 - **Glob patterns**: For canisters, use globs like `canisters/*` to auto-discover
 
-The `consolidate_manifest` function in `crates/icp/src/project.rs` transforms raw manifests into the final `Project` structure.
+The `consolidate_manifest` function in `crates/icp/src/project.rs` transforms raw manifests into the final `Project` structure. The serde structs in the `icp::manifest` module represent the format that the user's YAML files can be written in, while the serde structs with identical meaning outside `icp::manifest` are instead the canonical form, with defaults filled in and normalizations applied. Code should always deal with the canonical form.
 
 ## Build Adapters
 

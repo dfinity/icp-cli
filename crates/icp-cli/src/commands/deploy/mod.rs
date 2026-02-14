@@ -363,20 +363,17 @@ async fn print_canister_urls(
     let env = ctx.get_environment(environment_selection).await?;
 
     // Get the network URL
-    let network_url = match &env.network.configuration {
+    let http_gateway_url = match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
             // For managed networks, construct localhost URL
             let access = ctx.network.access(&env.network).await?;
-            access.url.to_string()
+            access.http_gateway_url.clone()
         }
         NetworkConfiguration::Connected { connected } => {
             // For connected networks, use the configured URL
-            connected.url.clone()
+            connected.http_gateway_url.clone()
         }
     };
-
-    // Remove trailing slash if present
-    let base_url = network_url.trim_end_matches('/');
 
     let _ = ctx.term.write_line("\n\nDeployed canisters:");
 
@@ -392,72 +389,60 @@ async fn print_canister_urls(
             Err(_) => continue,
         };
 
-        // Check if canister has http_request
-        let has_http = has_http_request(&agent, canister_id).await;
-
-        if has_http {
-            // For canisters with http_request, show the direct canister URL
-            let canister_url = if base_url.contains("localhost") || base_url.contains("127.0.0.1") {
-                // Local network format: extract port from base_url
-                let port = base_url.split(':').next_back().unwrap_or("8000");
-                format!("http://{}.localhost:{}", canister_id, port)
+        if let Some(http_gateway_url) = &http_gateway_url {
+            // Check if canister has http_request
+            let has_http = has_http_request(&agent, canister_id).await;
+            let domain = if let Some(domain) = http_gateway_url.domain() {
+                Some(domain)
+            } else if let Some(host) = http_gateway_url.host_str()
+                && (host == "127.0.0.1" || host == "[::1]")
+            {
+                Some("localhost")
             } else {
-                // IC network format: extract scheme and domain from base_url
-                // base_url is like "https://icp0.io" -> "https://<canister_id>.icp0.io"
-                if let Some(domain) = base_url
-                    .strip_prefix("https://")
-                    .or_else(|| base_url.strip_prefix("http://"))
-                {
-                    let scheme = if base_url.starts_with("https://") {
-                        "https"
-                    } else {
-                        "http"
-                    };
-                    format!("{}://{}.{}", scheme, canister_id, domain)
-                } else {
-                    // Fallback if URL doesn't have a recognized scheme
-                    format!("https://{}.{}", canister_id, base_url)
-                }
+                None
             };
-            let _ = ctx
-                .term
-                .write_line(&format!("  {}: {}", name, canister_url));
-        } else {
-            // For canisters without http_request, show the Candid UI URL
-            if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
-                let candid_url = if base_url.contains("localhost") || base_url.contains("127.0.0.1")
-                {
-                    // Local network format: extract port from base_url
-                    let port = base_url.split(':').next_back().unwrap_or("8000");
-                    format!("http://{}.localhost:{}/?id={}", ui_id, port, canister_id)
+
+            if has_http {
+                let mut canister_url = http_gateway_url.clone();
+                if let Some(domain) = domain {
+                    canister_url
+                        .set_host(Some(&format!("{canister_id}.{domain}")))
+                        .unwrap();
                 } else {
-                    // IC network format: extract scheme and domain from base_url
-                    // base_url is like "https://icp0.io" -> "https://<candid_ui_id>.raw.icp0.io/?id=<canister_id>"
-                    if let Some(domain) = base_url
-                        .strip_prefix("https://")
-                        .or_else(|| base_url.strip_prefix("http://"))
-                    {
-                        let scheme = if base_url.starts_with("https://") {
-                            "https"
-                        } else {
-                            "http"
-                        };
-                        format!("{}://{}.raw.{}/?id={}", scheme, ui_id, domain, canister_id)
-                    } else {
-                        // Fallback if URL doesn't have a recognized scheme
-                        format!("https://{}.raw.{}/?id={}", ui_id, base_url, canister_id)
-                    }
-                };
+                    canister_url.set_query(Some(&format!("canisterId={canister_id}")));
+                }
                 let _ = ctx
                     .term
-                    .write_line(&format!("  {} (Candid UI): {}", name, candid_url));
+                    .write_line(&format!("  {}: {}", name, canister_url));
             } else {
-                // No Candid UI available - just show the canister ID
-                let _ = ctx.term.write_line(&format!(
-                    "  {}: {} (Candid UI not available)",
-                    name, canister_id
-                ));
+                // For canisters without http_request, show the Candid UI URL
+                if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                    let mut candid_url = http_gateway_url.clone();
+                    if let Some(domain) = domain {
+                        candid_url
+                            .set_host(Some(&format!("{ui_id}.{domain}",)))
+                            .unwrap();
+                        candid_url.set_query(Some(&format!("id={canister_id}")));
+                    } else {
+                        candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
+                    }
+                    let _ = ctx
+                        .term
+                        .write_line(&format!("  {} (Candid UI): {}", name, candid_url));
+                } else {
+                    // No Candid UI available - just show the canister ID
+                    let _ = ctx.term.write_line(&format!(
+                        "  {}: {} (Candid UI not available)",
+                        name, canister_id
+                    ));
+                }
             }
+        } else {
+            // No gateway subdomains available - just show the canister ID
+            let _ = ctx.term.write_line(&format!(
+                "  {}: {} (No gateway URL available)",
+                name, canister_id
+            ));
         }
     }
 

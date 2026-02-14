@@ -396,7 +396,8 @@ impl MockProjectLoader {
             name: "ic".to_string(),
             configuration: Configuration::Connected {
                 connected: Connected {
-                    url: "https://ic0.app".to_string(),
+                    api_url: "https://icp-api.io".parse().unwrap(),
+                    http_gateway_url: Some("https://icp0.io".parse().unwrap()),
                     root_key: IC_ROOT_KEY.to_vec(),
                 },
             },

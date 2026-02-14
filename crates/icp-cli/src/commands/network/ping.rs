@@ -55,7 +55,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
     // TODO We might want to expose the ctx.create_agent function that takes a NetworkAccess
     // instead of doing this
     let agent = ctx
-        .get_agent_for_url(&IdentitySelection::Anonymous, &access.url)
+        .get_agent_for_url(&IdentitySelection::Anonymous, &access.api_url)
         .await?;
 
     agent.set_root_key(access.root_key);

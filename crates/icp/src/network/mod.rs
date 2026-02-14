@@ -8,12 +8,13 @@ use snafu::prelude::*;
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 use strum::EnumString;
+use url::Url;
 
 use crate::{
     CACHE_DIR, ICP_BASE, Network,
     manifest::{
         ProjectRootLocate, ProjectRootLocateError,
-        network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
+        network::{Connected as ManifestConnected, Endpoints, Gateway as ManifestGateway, Mode},
     },
     network::access::{
         GetNetworkAccessError, NetworkAccess, get_connected_network_access,
@@ -153,8 +154,11 @@ pub struct ManagedImageConfig {
 #[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
-    /// The URL this network can be reached at.
-    pub url: String,
+    /// The URL this network's API can be reached at.
+    pub api_url: Url,
+
+    /// The URL this network's HTTP gateway can be reached at.
+    pub http_gateway_url: Option<Url>,
 
     /// The root key of this network
     #[serde(with = "hex::serde")]
@@ -203,11 +207,24 @@ impl From<ManifestGateway> for Gateway {
 
 impl From<ManifestConnected> for Connected {
     fn from(value: ManifestConnected) -> Self {
-        let url = value.url.clone();
         let root_key = value
             .root_key
             .map_or_else(|| crate::context::IC_ROOT_KEY.to_vec(), |rk| rk.0);
-        Connected { url, root_key }
+        match value.endpoints {
+            Endpoints::Implicit { url } => Connected {
+                api_url: url.clone(),
+                http_gateway_url: Some(url),
+                root_key,
+            },
+            Endpoints::Explicit {
+                api_url,
+                http_gateway_url,
+            } => Connected {
+                api_url,
+                http_gateway_url,
+                root_key,
+            },
+        }
     }
 }
 

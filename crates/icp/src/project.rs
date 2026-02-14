@@ -240,7 +240,8 @@ pub async fn consolidate_manifest(
             name: IC.to_string(),
             configuration: Configuration::Connected {
                 connected: Connected {
-                    url: IC_MAINNET_NETWORK_URL.to_string(),
+                    api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
+                    http_gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
                     root_key: IC_ROOT_KEY.to_vec(),
                 },
             },

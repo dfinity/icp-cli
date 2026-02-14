@@ -8,6 +8,7 @@ use ic_agent::Agent;
 use icp::context::Context;
 use icp::prelude::*;
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
+use idl2json::{Idl2JsonOptions, idl2json};
 use std::io::{self, Write};
 use tracing::warn;
 
@@ -52,6 +53,10 @@ pub(crate) struct CallArgs {
     /// Only used when --proxy is specified. Defaults to 0.
     #[arg(long, requires = "proxy", value_parser = parse_cycles_amount, default_value = "0")]
     pub(crate) cycles: u128,
+
+    /// Format output as JSON
+    #[arg(long = "json")]
+    pub(crate) json_format: bool,
 
     /// Sends a query request to a canister instead of an update request.
     ///
@@ -180,8 +185,13 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         None => IDLArgs::from_bytes(&res[..]).context("failed to decode candid response")?,
     };
 
-    print_candid_for_term(&mut Term::buffered_stdout(), &ret)
-        .context("failed to print candid return value")?;
+    if args.json_format {
+        let json = idl_args_to_json(&ret).context("failed to convert candid response to JSON")?;
+        println!("{json}");
+    } else {
+        print_candid_for_term(&mut Term::buffered_stdout(), &ret)
+            .context("failed to print candid return value")?;
+    }
 
     Ok(())
 }
@@ -206,6 +216,20 @@ pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Resu
     Ok(())
 }
 
+/// Converts `IDLArgs` to a pretty-printed JSON string.
+fn idl_args_to_json(args: &IDLArgs) -> Result<String, anyhow::Error> {
+    let options = Idl2JsonOptions::default();
+    let json_values: Vec<String> = args
+        .args
+        .iter()
+        .map(|v| {
+            let json = idl2json(v, &options);
+            serde_json::to_string_pretty(&json).context("failed to serialize JSON")
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(json_values.join("\n"))
+}
+
 /// Gets the Candid type of a method on a canister by fetching its Candid interface.
 ///
 /// This is a best effort function: it will succeed if
@@ -228,6 +252,27 @@ async fn get_candid_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idl_args_to_json_converts_record() {
+        let args =
+            candid_parser::parse_idl_args(r#"(record { name = "Alice"; age = 30 })"#).unwrap();
+        let json = idl_args_to_json(&args).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["name"], "Alice");
+        // Candid nat is converted to a JSON string (nats can exceed JS safe integer range)
+        assert_eq!(parsed["age"], "30");
+    }
+
+    #[test]
+    fn idl_args_to_json_converts_multiple_values() {
+        let args = candid_parser::parse_idl_args(r#"(42, "hello")"#).unwrap();
+        let json = idl_args_to_json(&args).unwrap();
+        let parts: Vec<&str> = json.split('\n').collect();
+        // Candid nat becomes a JSON string; text stays a string
+        assert_eq!(parts[0].trim(), r#""42""#);
+        assert_eq!(parts[1].trim(), r#""hello""#);
+    }
 
     #[test]
     fn typed_decoding_preserves_record_field_names() {

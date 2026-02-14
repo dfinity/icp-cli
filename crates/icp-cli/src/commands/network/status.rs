@@ -40,7 +40,9 @@ pub(crate) struct StatusArgs {
 #[derive(Debug, Serialize)]
 struct NetworkStatus {
     managed: bool,
-    url: String,
+    api_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gateway_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     candid_ui_principal: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,7 +76,8 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             // Build status structure
             NetworkStatus {
                 managed: true,
-                url: network_access.url.to_string(),
+                api_url: network_access.api_url.to_string(),
+                gateway_url: network_access.http_gateway_url.map(|u| u.to_string()),
                 root_key: hex::encode(network_access.root_key),
                 candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
                 proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
@@ -82,7 +85,8 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         }
         Configuration::Connected { connected: _ } => NetworkStatus {
             managed: false,
-            url: network_access.url.to_string(),
+            api_url: network_access.api_url.to_string(),
+            gateway_url: network_access.http_gateway_url.map(|u| u.to_string()),
             candid_ui_principal: None,
             proxy_canister_principal: None,
             root_key: hex::encode(network_access.root_key),
@@ -94,7 +98,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         serde_json::to_string_pretty(&status).expect("Serializing network status to JSON failed")
     } else {
         let mut output = String::new();
-        output.push_str(&format!("Url: {}\n", status.url));
+        output.push_str(&format!("Api Url: {}\n", status.api_url));
+        if let Some(gateway_url) = status.gateway_url {
+            output.push_str(&format!("Gateway Url: {}\n", gateway_url));
+        }
         output.push_str(&format!("Root Key: {}\n", status.root_key));
         if let Some(ref principal) = status.candid_ui_principal {
             output.push_str(&format!("Candid UI Principal: {}\n", principal));

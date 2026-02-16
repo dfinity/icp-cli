@@ -292,6 +292,7 @@ mod tests {
                             subnets: None,
                             bitcoind_addr: None,
                             dogecoind_addr: None,
+                            version: None,
                         }),
                     }),
                 })],

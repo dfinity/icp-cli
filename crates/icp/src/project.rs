@@ -239,7 +239,8 @@ pub async fn consolidate_manifest(
             name: IC.to_string(),
             configuration: Configuration::Connected {
                 connected: Connected {
-                    url: IC_MAINNET_NETWORK_URL.to_string(),
+                    api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
+                    http_gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
                     // Will use the IC Root key hard coded in agent-rs.
                     // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
                     root_key: None,
@@ -320,6 +321,7 @@ pub async fn consolidate_manifest(
                             subnets: None,
                             bitcoind_addr: None,
                             dogecoind_addr: None,
+                            version: None,
                         })),
                     },
                 },

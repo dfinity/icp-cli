@@ -170,6 +170,7 @@ pub async fn stop_launcher(pid: Pid) {
 pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     let ManagedLauncherConfig {
         gateway: _,
+        version: _,
         artificial_delay_ms,
         ii,
         nns,

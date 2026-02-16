@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
+use url::Url;
 
 use crate::network::SubnetKind;
 
@@ -71,6 +72,8 @@ pub enum ManagedMode {
         bitcoind_addr: Option<Vec<String>>,
         /// Dogecoin P2P node addresses to connect to
         dogecoind_addr: Option<Vec<String>>,
+        /// The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.
+        version: Option<String>,
     },
 }
 
@@ -84,6 +87,7 @@ impl Default for ManagedMode {
             subnets: None,
             bitcoind_addr: None,
             dogecoind_addr: None,
+            version: None,
         }
     }
 }
@@ -91,12 +95,32 @@ impl Default for ManagedMode {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
-    /// The URL this network can be reached at.
-    pub url: String,
+    #[serde(flatten)]
+    pub endpoints: Endpoints,
 
     /// The root key of this network
     #[schemars(with = "Option<String>", regex(pattern = "^[0-9a-f]{266}$"))]
     pub root_key: Option<RootKey>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(untagged, rename_all_fields = "kebab-case")]
+pub enum Endpoints {
+    Explicit {
+        /// The URL of the HTTP gateway endpoint. Should support prefixing canister IDs as subdomains,
+        /// otherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.
+        ///
+        /// If no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.
+        http_gateway_url: Option<Url>,
+        /// The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).
+        api_url: Url,
+    },
+    Implicit {
+        /// The URL this network can be reached at.
+        ///
+        /// Assumed to be the URL of both the HTTP gateway (canister-id.domain.com) and API (domain.com/api/v3).
+        url: Url,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -166,7 +190,9 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
+                    endpoints: Endpoints::Implicit {
+                        url: "https://ic0.app".parse().unwrap(),
+                    },
                     root_key: None
                 }),
             },
@@ -206,7 +232,9 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
+                    endpoints: Endpoints::Implicit {
+                        url: "https://ic0.app".parse().unwrap(),
+                    },
                     root_key: Some(
                         RootKey::try_from(
                             "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010\
@@ -240,6 +268,7 @@ mod tests {
                         subnets: None,
                         bitcoind_addr: None,
                         dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },
@@ -269,6 +298,7 @@ mod tests {
                         subnets: None,
                         bitcoind_addr: None,
                         dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },
@@ -299,6 +329,7 @@ mod tests {
                         subnets: None,
                         bitcoind_addr: None,
                         dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },
@@ -325,6 +356,7 @@ mod tests {
                         subnets: None,
                         bitcoind_addr: None,
                         dogecoind_addr: Some(vec!["127.0.0.1:22556".to_string()]),
+                        version: None,
                     })
                 })
             },
@@ -351,6 +383,7 @@ mod tests {
                         subnets: None,
                         bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
                         dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },

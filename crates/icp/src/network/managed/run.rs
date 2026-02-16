@@ -320,9 +320,10 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         }]),
     )]
     .into();
+    let version = config.version.as_deref().unwrap_or("latest");
 
     ManagedImageOptions {
-        image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+        image: format!("ghcr.io/dfinity/icp-cli-network-launcher:{version}"),
         port_bindings,
         rm_on_exit: true,
         args,
@@ -499,7 +500,7 @@ pub enum WaitForPortError {
 ///
 /// Returns a tuple of (candid_ui_canister_id, proxy_canister_id)
 pub async fn initialize_network(
-    gateway_url: &Url,
+    api_url: &Url,
     root_key: &[u8],
     all_identities: Vec<Principal>,
     default_identity: Option<Principal>,
@@ -508,11 +509,11 @@ pub async fn initialize_network(
 ) -> Result<(Option<Principal>, Option<Principal>), InitializeNetworkError> {
     eprintln!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
-        .with_url(gateway_url.as_str())
+        .with_url(api_url.as_str())
         .with_identity(AnonymousIdentity)
         .build()
         .context(BuildAgentSnafu {
-            url: gateway_url.as_str(),
+            url: api_url.as_str(),
         })?;
     agent.set_root_key(root_key.to_vec());
 
@@ -903,6 +904,7 @@ mod tests {
             subnets: None,
             bitcoind_addr: None,
             dogecoind_addr: None,
+            version: None,
         };
         let opts = transform_native_launcher_to_container(&config);
         assert_eq!(
@@ -935,6 +937,7 @@ mod tests {
             subnets: None,
             bitcoind_addr: None,
             dogecoind_addr: None,
+            version: None,
         };
         let opts = transform_native_launcher_to_container(&config);
         let binding = opts
@@ -956,6 +959,7 @@ mod tests {
             subnets: None,
             bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
             dogecoind_addr: None,
+            version: None,
         };
         let opts = transform_native_launcher_to_container(&config);
         assert!(opts.args.contains(&"--ii".to_string()));
@@ -979,6 +983,7 @@ mod tests {
             subnets: None,
             bitcoind_addr: None,
             dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
+            version: None,
         };
         let opts = transform_native_launcher_to_container(&config);
         assert!(opts.args.contains(&"--nns".to_string()));
@@ -1003,6 +1008,7 @@ mod tests {
             subnets: None,
             bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
             dogecoind_addr: None,
+            version: None,
         };
         let opts = transform_native_launcher_to_container(&config);
         assert!(

@@ -4,9 +4,10 @@ use clap::Args;
 use icp::context::Context;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::commands::parsers::{parse_cycles_amount, parse_token_amount};
+use crate::commands::parsers::{parse_cycles_amount, parse_subaccount, parse_token_amount};
 use crate::operations::token::mint::mint_cycles;
 
+/// Convert icp to cycles
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
     /// Amount of ICP to mint to cycles.
@@ -18,6 +19,14 @@ pub(crate) struct MintArgs {
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
     #[arg(long, conflicts_with = "icp", value_parser = parse_cycles_amount)]
     pub(crate) cycles: Option<u128>,
+
+    /// Subaccount to withdraw the ICP from.
+    #[arg(long, value_parser = parse_subaccount)]
+    pub(crate) from_subaccount: Option<[u8; 32]>,
+
+    /// Subaccount to deposit the cycles to.
+    #[arg(long, value_parser = parse_subaccount)]
+    pub(crate) to_subaccount: Option<[u8; 32]>,
 
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
@@ -41,7 +50,14 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
         .await?;
 
     // Execute mint operation
-    let mint_info = mint_cycles(&agent, args.icp.as_ref(), args.cycles).await?;
+    let mint_info = mint_cycles(
+        &agent,
+        args.icp.as_ref(),
+        args.cycles,
+        args.from_subaccount,
+        args.to_subaccount,
+    )
+    .await?;
 
     // Display results
     let _ = ctx.term.write_line(&format!(

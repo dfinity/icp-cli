@@ -1,10 +1,14 @@
 # Unreleased
 
+* feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
+* feat: Allow specifying a version of the network launcher to use
+* feat: Support subaccounts and ICRC-1 IDs in `icp token`, `icp cycles`, and `icp identity account-id`
 * feat!: Recipes are now specified `@registry/recipe@version`, the version component is required. The `latest` version is no longer assumed and the version tags will be removed soon.
 * feat: Recipes and prebuilt canisters are now cached locally
 * feat: `icp settings autocontainerize true`, always use a docker container for all networks
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets
 * feat: install proxy canister when starting managed networks with all identities as controllers (or anonymous + default if more than 10 identities)
+  * `icp network status` displays the proxy canister principal
 
 # v0.1.0
 

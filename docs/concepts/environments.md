@@ -30,6 +30,7 @@ Unless a custom Docker image is used, the following settings can be specified:
 * `nns` (bool): Enable the NNS and SNS system
 * `artificial-delay-ms` (int): Add artificial latency to update calls to simulate mainnet conditions
 * `subnets` ([]string): Configure the subnet layout (by default, one application subnet is created). See [Deploying to Specific Subnets](../guides/deploying-to-specific-subnets.md) for mainnet subnet selection.
+* `version` (string): Select a specific version for the network launcher
 
 Use managed networks for local development and testing.
 
@@ -45,6 +46,8 @@ networks:
 ```
 
 Use connected networks for shared testnets and production.
+
+Note: There are two URLs associated with connected networks, `api-url` and `http-gateway-url`. The API URL is where tools like icp-cli and agent-rs programmatically talk to canisters, while the HTTP gateway URL is where you can access canisters' webpages in your browser. A HTTP gateway URL can be used as an API URL, and for most custom connected networks there isn't a difference, so you can specify both just using `url`. But for the ICP mainnet, the API url is at `icp-api.io` and the HTTP gateway is `icp0.io`.
 
 ### Implicit Networks
 

@@ -3,6 +3,7 @@ use icp::context::Context;
 
 use crate::options::IdentityOpt;
 
+/// Display the principal for the current identity
 #[derive(Debug, Args)]
 pub(crate) struct PrincipalArgs {
     #[command(flatten)]

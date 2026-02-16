@@ -42,6 +42,8 @@ struct NetworkStatus {
     port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     candid_ui_principal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proxy_canister_principal: Option<String>,
     root_key: String,
 }
 
@@ -72,6 +74,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         port: descriptor.gateway.port,
         root_key: hex::encode(&descriptor.root_key),
         candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
+        proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
     };
 
     // Display
@@ -83,6 +86,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         output.push_str(&format!("Root Key: {}\n", status.root_key));
         if let Some(ref principal) = status.candid_ui_principal {
             output.push_str(&format!("Candid UI Principal: {}\n", principal));
+        }
+        if let Some(ref principal) = status.proxy_canister_principal {
+            output.push_str(&format!("Proxy Canister Principal: {}\n", principal));
         }
         output
     };

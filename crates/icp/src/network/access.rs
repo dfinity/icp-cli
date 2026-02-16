@@ -12,14 +12,17 @@ pub struct NetworkAccess {
     pub root_key: Option<Vec<u8>>,
 
     /// Routing configuration
-    pub url: Url,
+    pub api_url: Url,
+
+    pub http_gateway_url: Option<Url>,
 }
 
 impl NetworkAccess {
-    pub fn new(url: &Url) -> Self {
+    pub fn new(api_url: &Url, http_gateway_url: Option<&Url>) -> Self {
         Self {
             root_key: None,
-            url: url.clone(),
+            api_url: api_url.clone(),
+            http_gateway_url: http_gateway_url.cloned(),
         }
     }
 }
@@ -49,11 +52,6 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("failed to load network descriptor"))]
     LoadNetworkDescriptor { source: LoadNetworkFileError },
-    #[snafu(display("failed to parse URL {url}"))]
-    ParseUrl {
-        url: String,
-        source: url::ParseError,
-    },
 }
 
 pub async fn get_managed_network_access(
@@ -88,10 +86,11 @@ pub async fn get_managed_network_access(
             .fail();
         }
     }
-
+    let http_gateway_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
     Ok(NetworkAccess {
         root_key: Some(desc.root_key),
-        url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
+        api_url: http_gateway_url.clone(),
+        http_gateway_url: Some(http_gateway_url),
     })
 }
 
@@ -102,8 +101,7 @@ pub async fn get_connected_network_access(
 
     Ok(NetworkAccess {
         root_key,
-        url: Url::parse(&connected.url).context(ParseUrlSnafu {
-            url: connected.url.clone(),
-        })?,
+        api_url: connected.api_url.clone(),
+        http_gateway_url: connected.http_gateway_url.clone(),
     })
 }

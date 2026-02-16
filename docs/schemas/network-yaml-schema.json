@@ -1,6 +1,42 @@
 {
   "$defs": {
     "Connected": {
+      "anyOf": [
+        {
+          "properties": {
+            "api-url": {
+              "description": "The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).",
+              "format": "uri",
+              "type": "string"
+            },
+            "http-gateway-url": {
+              "description": "The URL of the HTTP gateway endpoint. Should support prefixing canister IDs as subdomains,\notherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.\n\nIf no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
+              "format": "uri",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "api-url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "url": {
+              "description": "The URL this network can be reached at.\n\nAssumed to be the URL of both the HTTP gateway (canister-id.domain.com) and API (domain.com/api/v3).",
+              "format": "uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
       "properties": {
         "root-key": {
           "description": "The root key of this network",
@@ -9,15 +45,8 @@
             "string",
             "null"
           ]
-        },
-        "url": {
-          "description": "The URL this network can be reached at.",
-          "type": "string"
         }
       },
-      "required": [
-        "url"
-      ],
       "type": "object"
     },
     "Gateway": {
@@ -211,6 +240,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "version": {
+              "description": "The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.",
+              "type": [
+                "string",
                 "null"
               ]
             }

@@ -2,7 +2,7 @@ use indoc::formatdoc;
 use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::IC_MAINNET_NETWORK_URL};
+use icp::{fs::write_string, prelude::IC_MAINNET_NETWORK_API_URL};
 
 mod common;
 
@@ -175,7 +175,7 @@ async fn cycles_mint_on_ic() {
             "--icp",
             "1",
             "--network",
-            IC_MAINNET_NETWORK_URL,
+            IC_MAINNET_NETWORK_API_URL,
         ])
         .assert()
         .stderr(contains(
@@ -253,5 +253,169 @@ async fn cycles_transfer() {
         .args(["cycles", "balance", "--environment", "random-environment"])
         .assert()
         .stdout(contains("Balance: 2_000_000_000_000 cycles"))
+        .success();
+}
+
+#[tokio::test]
+async fn cycles_transfer_to_subaccount() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
+
+    let subaccount_hex = format!("{:0>64}", "01");
+
+    // Fund alice with cycles
+    icp_client.use_identity("alice");
+    clients::ledger(&ctx)
+        .acquire_icp(alice_principal, None, 1_000_000_000_u128)
+        .await;
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "5",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Transfer cycles to bob's subaccount using --to-subaccount
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "transfer",
+            "1t",
+            &bob_principal.to_string(),
+            "--to-subaccount",
+            &subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Bob's default account should be empty
+    icp_client.use_identity("bob");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["cycles", "balance", "--environment", "random-environment"])
+        .assert()
+        .stdout(contains("Balance: 0 cycles"))
+        .success();
+
+    // Bob's subaccount should have the cycles
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "balance",
+            "--subaccount",
+            &subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Balance: 1_000_000_000_000 cycles"))
+        .success();
+}
+
+#[tokio::test]
+async fn cycles_mint_to_subaccount() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    let identity = icp_client.use_new_random_identity();
+
+    let icp_subaccount_hex = format!("{:0>64}", "01");
+    let cycles_subaccount_hex = format!("{:0>64}", "02");
+
+    let icp_subaccount: [u8; 32] = {
+        let mut s = [0u8; 32];
+        s[31] = 1;
+        s
+    };
+
+    // Fund ICP into a subaccount
+    clients::ledger(&ctx)
+        .acquire_icp(identity, Some(icp_subaccount), 1_000_000_000_u128)
+        .await;
+
+    // Mint cycles from ICP subaccount into a cycles subaccount
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "mint",
+            "--icp",
+            "1",
+            "--from-subaccount",
+            &icp_subaccount_hex,
+            "--to-subaccount",
+            &cycles_subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Minted 3_519_900_000_000 cycles"))
+        .success();
+
+    // Default cycles account should be empty
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["cycles", "balance", "--environment", "random-environment"])
+        .assert()
+        .stdout(contains("Balance: 0 cycles"))
+        .success();
+
+    // Cycles subaccount should have the minted cycles
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "balance",
+            "--subaccount",
+            &cycles_subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Balance: 3_519_900_000_000 cycles"))
         .success();
 }

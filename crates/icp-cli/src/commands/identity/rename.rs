@@ -2,6 +2,7 @@ use clap::Args;
 use icp::context::Context;
 use icp::identity::key::rename_identity;
 
+/// Rename an identity
 #[derive(Debug, Args)]
 pub(crate) struct RenameArgs {
     /// Current name of the identity

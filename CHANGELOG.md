@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Add `bitcoind-addr` and `dogecoind-addr` options for managed networks to connect to Bitcoin and Dogecoin nodes
 * feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
 * feat: Allow specifying a version of the network launcher to use
 * feat: Support subaccounts and ICRC-1 IDs in `icp token`, `icp cycles`, and `icp identity account-id`

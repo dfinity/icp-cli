@@ -31,7 +31,7 @@ async fn status_when_network_running() {
         .args(["network", "status", "random-network"])
         .assert()
         .success()
-        .stdout(contains("Port:"))
+        .stdout(contains("Url:"))
         .stdout(contains("Root Key:"))
         .stdout(contains("Candid UI Principal:"))
         .stdout(contains("Proxy Canister Principal:"));
@@ -81,7 +81,7 @@ async fn status_with_json() {
         serde_json::from_str(&json_str).expect("output should be valid JSON");
 
     // Verify JSON structure
-    assert!(json.get("port").is_some());
+    assert!(json.get("api_url").is_some());
     assert!(json.get("root_key").is_some());
     assert!(json.get("candid_ui_principal").is_some());
     assert!(json.get("proxy_canister_principal").is_some());
@@ -129,7 +129,7 @@ networks:
         .args(["network", "status", "fixed-network"])
         .assert()
         .success()
-        .stdout(contains("Port: 8123"));
+        .stdout(contains("Url: http://localhost:8123"));
 
     // Stop network
     ctx.icp()
@@ -154,7 +154,9 @@ fn status_when_network_not_running() {
         .args(["network", "status", "random-network"])
         .assert()
         .failure()
-        .stderr(contains("network 'random-network' is not running"));
+        .stderr(contains(
+            "unable to access network 'random-network', is it running",
+        ));
 }
 
 #[test]
@@ -177,7 +179,7 @@ fn status_nonexistent_network() {
 }
 
 #[test]
-fn status_connected_network_fails() {
+fn status_connected_network() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -197,10 +199,8 @@ networks:
         .current_dir(&project_dir)
         .args(["network", "status", "connected-network"])
         .assert()
-        .failure()
-        .stderr(contains(
-            "network 'connected-network' is not a managed network",
-        ));
+        .success()
+        .stdout(contains("Url: https://ic0.app"));
 }
 
 #[test]

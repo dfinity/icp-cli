@@ -7,6 +7,7 @@ use icp::fs::write_string;
 
 mod common;
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_logs_single_fetch() {
     let ctx = TestContext::new();
@@ -86,6 +87,7 @@ async fn canister_logs_single_fetch() {
         .stdout(contains("Test message 2"));
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_logs_follow_mode() {
     let ctx = TestContext::new();

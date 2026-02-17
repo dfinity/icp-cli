@@ -26,8 +26,7 @@ export default defineConfig(({ command }) => {
     execSync(`icp network status -e ${environment} --json`, { encoding: "utf-8" })
   );
   const rootKey: string = networkStatus.root_key;
-  // TODO: Use networkStatus.api_url when CLI supports it
-  const proxyTarget: string = `http://localhost:8000`;
+  const proxyTarget: string = networkStatus.api_url;
 
   // Backend must be deployed before starting dev server
   let canisterId: string;

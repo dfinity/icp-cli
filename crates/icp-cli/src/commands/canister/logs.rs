@@ -211,6 +211,9 @@ mod tests {
             content: b"Test message".to_vec(),
         };
         let formatted = format_log(&log);
-        assert_eq!(formatted, "[42. 2024-01-01T10:00:00.123456789Z]: Test message");
+        assert_eq!(
+            formatted,
+            "[42. 2024-01-01T10:00:00.123456789Z]: Test message"
+        );
     }
 }

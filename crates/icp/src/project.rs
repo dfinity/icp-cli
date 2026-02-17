@@ -1,13 +1,16 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
+use candid_parser::parse_idl_args;
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, Network, Project,
+    Canister, Environment, InitArgs, Network, Project,
     canister::recipe,
+    fs,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
-        NetworkManifest, ProjectManifest, ProjectRootLocateError,
+        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, Item,
+        LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
+        ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
@@ -66,7 +69,8 @@ pub enum ConsolidateManifestError {
 
     #[snafu(display("failed to resolve canister recipe: {recipe_type:?}"))]
     Recipe {
-        source: recipe::ResolveError,
+        #[snafu(source(from(recipe::ResolveError, Box::new)))]
+        source: Box<recipe::ResolveError>,
         recipe_type: RecipeType,
     },
 
@@ -79,8 +83,121 @@ pub enum ConsolidateManifestError {
     #[snafu(display("could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
+    #[snafu(display("failed to read init_args file for canister '{canister}'"))]
+    ReadInitArgs {
+        source: fs::IoError,
+        canister: String,
+    },
+
+    #[snafu(display(
+        "init_args file '{path}' for canister '{canister}' is neither valid UTF-8 text nor binary candid (DIDL)"
+    ))]
+    InvalidInitArgs { canister: String, path: PathBuf },
+
+    #[snafu(display(
+        "init_args '{value}' for canister '{canister}' is not valid hex, Candid, or a file path"
+    ))]
+    InitArgsNotFound {
+        canister: String,
+        value: String,
+        path: PathBuf,
+    },
+
+    #[snafu(display(
+        "init_args for canister '{canister}' uses format 'bin' with inline content; \
+         binary format requires a file path"
+    ))]
+    BinFormatInlineContent { canister: String },
+
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
+}
+
+/// Resolve a [`ManifestInitArgs`] into a canonical [`InitArgs`] by reading
+/// any file references relative to `base_path`.
+fn resolve_manifest_init_args(
+    manifest_init_args: &ManifestInitArgs,
+    base_path: &Path,
+    canister: &str,
+) -> Result<InitArgs, ConsolidateManifestError> {
+    match manifest_init_args {
+        // String form: detect format, fall back to file path if not valid content.
+        ManifestInitArgs::Inline(s) => {
+            let detected = InitArgs::detect(s.clone().into_bytes())
+                .expect("inline string is always valid UTF-8");
+            match &detected {
+                InitArgs::Text {
+                    format: InitArgsFormat::Hex,
+                    ..
+                } => Ok(detected),
+                InitArgs::Text {
+                    content,
+                    format: InitArgsFormat::Idl,
+                } => {
+                    if parse_idl_args(content.trim()).is_ok() {
+                        Ok(detected)
+                    } else if base_path.join(s).is_file() {
+                        resolve_manifest_init_args(
+                            &ManifestInitArgs::Path {
+                                path: s.clone(),
+                                format: None,
+                            },
+                            base_path,
+                            canister,
+                        )
+                    } else {
+                        InitArgsNotFoundSnafu {
+                            canister,
+                            value: s,
+                            path: base_path.join(s),
+                        }
+                        .fail()
+                    }
+                }
+                _ => Ok(detected),
+            }
+        }
+
+        // Explicit file reference.
+        ManifestInitArgs::Path { path, format } => {
+            let file_path = base_path.join(path);
+            match format.as_ref() {
+                Some(InitArgsFormat::Bin) => {
+                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    Ok(InitArgs::Binary(bytes))
+                }
+                Some(fmt) => {
+                    let content =
+                        fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    Ok(InitArgs::Text {
+                        content: content.trim().to_owned(),
+                        format: fmt.clone(),
+                    })
+                }
+                None => {
+                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    InitArgs::detect(bytes).map_err(|_| {
+                        InvalidInitArgsSnafu {
+                            canister,
+                            path: file_path,
+                        }
+                        .build()
+                    })
+                }
+            }
+        }
+
+        // Explicit inline content.
+        ManifestInitArgs::Content { content, format } => match format {
+            Some(InitArgsFormat::Bin) => BinFormatInlineContentSnafu { canister }.fail(),
+            Some(fmt) => Ok(InitArgs::Text {
+                content: content.trim().to_owned(),
+                format: fmt.clone(),
+            }),
+            None => Ok(InitArgs::detect(content.clone().into_bytes())
+                .expect("inline content string is always valid UTF-8")),
+        },
+    }
 }
 
 fn is_glob(s: &str) -> bool {
@@ -210,6 +327,12 @@ pub async fn consolidate_manifest(
 
                 // Ok
                 Entry::Vacant(e) => {
+                    let init_args = m
+                        .init_args
+                        .as_ref()
+                        .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                        .transpose()?;
+
                     e.insert((
                         //
                         // Canister root
@@ -221,7 +344,7 @@ pub async fn consolidate_manifest(
                             settings: m.settings.to_owned(),
                             build,
                             sync,
-                            init_args: m.init_args.to_owned(),
+                            init_args,
                         },
                     ));
                 }
@@ -416,9 +539,13 @@ pub async fn consolidate_manifest(
 
                         // Apply init_args overrides if specified
                         if let Some(ref init_args_overrides) = m.init_args {
-                            for (canister_name, init_args) in init_args_overrides {
-                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
-                                    canister.init_args = Some(init_args.clone());
+                            for (canister_name, manifest_init_args) in init_args_overrides {
+                                if let Some((canister_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.init_args = Some(resolve_manifest_init_args(
+                                        manifest_init_args,
+                                        canister_path,
+                                        canister_name,
+                                    )?);
                                 }
                             }
                         }

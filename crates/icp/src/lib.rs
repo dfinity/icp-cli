@@ -6,10 +6,13 @@ use snafu::prelude::*;
 use tokio::sync::Mutex;
 use tracing::debug;
 
+use candid_parser::parse_idl_args;
+
 use crate::{
     canister::{Settings, recipe::Resolve},
     manifest::{
-        LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
+        InitArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
+        ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
         load_manifest_from_path,
     },
@@ -36,6 +39,83 @@ const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";
 const DATA_DIR: &str = "data";
 
+/// DIDL magic bytes that start all Candid binary-encoded values.
+const DIDL_MAGIC: &[u8] = b"DIDL";
+/// Hex-encoded DIDL magic prefix (case-insensitive check done separately).
+const DIDL_MAGIC_HEX: &str = "4449444c";
+
+/// Resolved initialization arguments, with any file references already loaded.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum InitArgs {
+    /// Text content (inline or loaded from file). Format is always known.
+    Text {
+        content: String,
+        format: InitArgsFormat,
+    },
+    /// Raw binary bytes (from a file with `format: bin`, or auto-detected
+    /// via DIDL magic bytes). Used directly.
+    Binary(Vec<u8>),
+}
+
+#[derive(Debug, Snafu)]
+pub enum DetectInitArgsError {
+    #[snafu(display("bytes are neither valid UTF-8 text nor binary Candid (DIDL)"))]
+    Unrecognized,
+}
+
+#[derive(Debug, Snafu)]
+pub enum InitArgsToBytesError {
+    #[snafu(display("failed to decode hex init args"))]
+    HexDecode { source: hex::FromHexError },
+
+    #[snafu(display("failed to parse Candid init args"))]
+    CandidParse { source: candid_parser::Error },
+
+    #[snafu(display("failed to encode Candid init args to bytes"))]
+    CandidEncode { source: candid::Error },
+}
+
+impl InitArgs {
+    /// Classify raw bytes into an `InitArgs` by inspecting their content
+    pub fn detect(bytes: Vec<u8>) -> Result<Self, DetectInitArgsError> {
+        if bytes.starts_with(DIDL_MAGIC) {
+            return Ok(InitArgs::Binary(bytes));
+        }
+        match String::from_utf8(bytes) {
+            Ok(s) => {
+                let format = if s
+                    .trim()
+                    .get(..DIDL_MAGIC_HEX.len())
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case(DIDL_MAGIC_HEX))
+                {
+                    InitArgsFormat::Hex
+                } else {
+                    InitArgsFormat::Idl
+                };
+                Ok(InitArgs::Text { content: s, format })
+            }
+            Err(_) => UnrecognizedSnafu.fail(),
+        }
+    }
+
+    /// Resolve to raw bytes according to the format.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, InitArgsToBytesError> {
+        match self {
+            InitArgs::Binary(bytes) => Ok(bytes.clone()),
+            InitArgs::Text { content, format } => match format {
+                InitArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
+                InitArgsFormat::Idl => {
+                    let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
+                    args.to_bytes().context(CandidEncodeSnafu)
+                }
+                InitArgsFormat::Bin => {
+                    unreachable!("binary format cannot appear in InitArgs::Text")
+                }
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Canister {
     pub name: String,
@@ -51,8 +131,8 @@ pub struct Canister {
     pub sync: SyncSteps,
 
     /// Initialization arguments passed to the canister during installation.
-    /// Can be hex-encoded bytes or Candid text format.
-    pub init_args: Option<String>,
+    /// Resolved from the manifest — file contents are already loaded.
+    pub init_args: Option<InitArgs>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

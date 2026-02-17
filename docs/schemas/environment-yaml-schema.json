@@ -1,5 +1,25 @@
 {
   "$defs": {
+    "InitArgsFormat": {
+      "description": "Format specifier for init args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "idl",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
+    },
     "LogVisibility": {
       "description": "Controls who can read canister logs.",
       "oneOf": [
@@ -30,6 +50,63 @@
           "type": "object"
         }
       ]
+    },
+    "ManifestInitArgs": {
+      "anyOf": [
+        {
+          "description": "String value — auto-detected as hex, Candid text, or file path at resolution time.",
+          "type": "string"
+        },
+        {
+          "description": "Explicit file reference with optional format.",
+          "properties": {
+            "format": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/InitArgsFormat"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How to interpret the file contents. If omitted, auto-detected."
+            },
+            "path": {
+              "description": "Relative path to the file.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Explicit inline content with optional format.",
+          "properties": {
+            "content": {
+              "description": "The init args content.",
+              "type": "string"
+            },
+            "format": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/InitArgsFormat"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How to interpret the content. If omitted, auto-detected as hex or Candid text."
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is auto-detected as hex, Candid text, or a file path:\n```yaml\ninit_args: \"(42)\"\ninit_args: \"args.txt\"\n```\n\nAn object with `path` is an explicit file reference:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n\nAn object with `content` is explicit inline content:\n```yaml\ninit_args:\n  content: \"(42)\"\n  format: idl\n```"
     },
     "Settings": {
       "description": "Canister settings, such as compute and memory allocation.",
@@ -129,7 +206,7 @@
     },
     "init_args": {
       "additionalProperties": {
-        "type": "string"
+        "$ref": "#/$defs/ManifestInitArgs"
       },
       "description": "Override init args for specific canisters in this environment",
       "type": [

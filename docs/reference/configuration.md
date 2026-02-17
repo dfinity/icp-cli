@@ -56,7 +56,7 @@ canisters:
 | `build` | object | Yes | Build configuration |
 | `sync` | object | No | Post-deployment sync configuration |
 | `settings` | object | No | Canister settings |
-| `init_args` | string | No | Initialization arguments (Candid or hex) |
+| `init_args` | string or object | No | Initialization arguments (inline or file reference) |
 | `recipe` | object | No | Recipe reference (alternative to build) |
 
 ## Build Steps
@@ -281,7 +281,7 @@ environments:
 | `network` | string | Yes | Network to deploy to |
 | `canisters` | array | No | Canisters to include (default: all) |
 | `settings` | object | No | Per-canister setting overrides |
-| `init_args` | object | No | Per-canister init arg overrides |
+| `init_args` | object | No | Per-canister init arg overrides (string or file reference) |
 
 ## Canister Settings
 
@@ -302,17 +302,48 @@ settings:
 
 ## Init Args
 
-Candid text format:
+String form — auto-detected as hex, Candid text, or file path:
 
 ```yaml
 init_args: "(record { owner = principal \"aaaaa-aa\" })"
 ```
 
-Hex-encoded bytes:
+```yaml
+init_args: "4449444c0000"
+```
 
 ```yaml
-init_args: "4449444c016d7b0100010203"
+init_args: "./args.candid"
 ```
+
+Object form with explicit file path:
+
+```yaml
+init_args:
+  path: ./args.bin
+  format: bin
+```
+
+Object form with explicit inline content:
+
+```yaml
+init_args:
+  content: "(record { owner = principal \"aaaaa-aa\" })"
+  format: idl
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | No | Relative path to file containing init args |
+| `content` | string | No | Inline init args content |
+| `format` | string | No | `hex`, `idl`, or `bin` (auto-detected if omitted) |
+
+Exactly one of `path` or `content` must be specified in the object form.
+
+Supported formats:
+- **`hex`** — Hex-encoded bytes (inline or file)
+- **`idl`** — Candid text format (inline or file)
+- **`bin`** — Raw binary bytes; only valid with `path` (e.g. output of `didc encode`)
 
 ## Implicit Defaults
 

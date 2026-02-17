@@ -245,6 +245,16 @@ Install a built WASM to a canister on a network
    - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
 
    - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
+* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments. When specified, skips auto-detection. Use `hex` for hex-encoded, `idl` for Candid text, or `bin` for a raw binary file
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `idl`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
@@ -824,6 +834,9 @@ Import a new identity
 * `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
 
 
 

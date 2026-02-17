@@ -7,6 +7,67 @@ use crate::canister::Settings;
 
 use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
+/// Format specifier for init args content.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(rename_all = "lowercase")]
+pub enum InitArgsFormat {
+    /// Hex-encoded bytes
+    Hex,
+    /// Candid text format
+    Idl,
+    /// Raw binary (only valid for file references)
+    Bin,
+}
+
+/// Init args as specified in a manifest file (canister.yaml or icp.yaml).
+///
+/// A plain string is auto-detected as hex, Candid text, or a file path:
+/// ```yaml
+/// init_args: "(42)"
+/// init_args: "args.txt"
+/// ```
+///
+/// An object with `path` is an explicit file reference:
+/// ```yaml
+/// init_args:
+///   path: ./args.bin
+///   format: bin
+/// ```
+///
+/// An object with `content` is explicit inline content:
+/// ```yaml
+/// init_args:
+///   content: "(42)"
+///   format: idl
+/// ```
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ManifestInitArgs {
+    /// String value — auto-detected as hex, Candid text, or file path at resolution time.
+    Inline(String),
+
+    /// Explicit file reference with optional format.
+    Path {
+        /// Relative path to the file.
+        path: String,
+
+        /// How to interpret the file contents. If omitted, auto-detected.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        format: Option<InitArgsFormat>,
+    },
+
+    /// Explicit inline content with optional format.
+    Content {
+        /// The init args content.
+        content: String,
+
+        /// How to interpret the content. If omitted, auto-detected as hex or Candid text.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        format: Option<InitArgsFormat>,
+    },
+}
+
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
@@ -21,8 +82,8 @@ pub struct CanisterManifest {
     pub settings: Settings,
 
     /// Initialization arguments passed to the canister during installation.
-    /// Can be hex-encoded bytes or Candid text format.
-    pub init_args: Option<String>,
+    /// Can be an inline string (hex or Candid text) or a file reference.
+    pub init_args: Option<ManifestInitArgs>,
 
     #[serde(flatten)]
     pub instructions: Instructions,
@@ -85,14 +146,13 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                     };
 
                 // Extract init_args (optional)
-                let init_args: Option<String> =
+                let init_args: Option<ManifestInitArgs> =
                     if let Some(init_args_value) = temp_map.remove(&init_args_key) {
-                        Some(
-                            init_args_value
-                                .as_str()
-                                .ok_or_else(|| Error::custom("'init_args' must be a string"))?
-                                .to_string(),
-                        )
+                        Some(serde_yaml::from_value(init_args_value).map_err(|e| {
+                            Error::custom(format!(
+                                "Failed to parse init_args for canister `{name}`: {e}"
+                            ))
+                        })?)
                     } else {
                         None
                     };
@@ -701,6 +761,74 @@ mod tests {
                     }),
                 },
             },
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_inline() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(r#""(42)""#).unwrap();
+        assert_eq!(ia, ManifestInitArgs::Inline("(42)".to_string()));
+    }
+
+    #[test]
+    fn manifest_init_args_path_with_format() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            path: ./args.bin
+            format: bin
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Path {
+                path: "./args.bin".to_string(),
+                format: Some(InitArgsFormat::Bin),
+            }
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_path_without_format() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            path: ./args.candid
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Path {
+                path: "./args.candid".to_string(),
+                format: None,
+            }
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_content_with_format() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            content: "(42)"
+            format: idl
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Content {
+                content: "(42)".to_string(),
+                format: Some(InitArgsFormat::Idl),
+            }
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_content_without_format() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            content: "4449444c00"
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Content {
+                content: "4449444c00".to_string(),
+                format: None,
+            }
         );
     }
 }

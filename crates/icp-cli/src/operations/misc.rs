@@ -1,9 +1,9 @@
 //! Miscellaneous utilities that don't belong to specific commands.
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use candid::IDLArgs;
 use candid_parser::parse_idl_args;
-use icp::{fs, prelude::*};
+use icp::{fs, manifest::InitArgsFormat, prelude::*};
 use time::{OffsetDateTime, macros::format_description};
 
 pub async fn fetch_canister_metadata(
@@ -35,7 +35,10 @@ pub(crate) enum ParsedArguments {
 /// - Hex-encoded bytes (if valid hex)
 /// - Candid text format (if valid Candid)
 /// - File path (if neither hex nor Candid)
-pub(crate) fn parse_args<P: AsRef<Path>>(args_str: &str, base_path: &P) -> Result<ParsedArguments> {
+pub(crate) fn parse_args<P: AsRef<Path> + ?Sized>(
+    args_str: &str,
+    base_path: &P,
+) -> Result<ParsedArguments> {
     // Try to decode as hex first
     if let Ok(bytes) = hex::decode(args_str) {
         return Ok(ParsedArguments::Hex(bytes));
@@ -60,6 +63,47 @@ pub(crate) fn parse_args<P: AsRef<Path>>(args_str: &str, base_path: &P) -> Resul
         "Failed to parse arguments as hex, Candid literal, or as path to existing file: '{}'",
         args_str
     )
+}
+
+/// Resolve CLI-provided args (from `--args` / `--args-format` flags) into raw bytes.
+pub(crate) fn resolve_cli_args(
+    args_str: &str,
+    format: Option<&InitArgsFormat>,
+    base_path: &Path,
+) -> Result<Vec<u8>> {
+    match format {
+        None => match parse_args(args_str, base_path)? {
+            ParsedArguments::Hex(bytes) => Ok(bytes),
+            ParsedArguments::Candid(args) => args
+                .to_bytes()
+                .context("Failed to encode Candid args to bytes"),
+        },
+        Some(InitArgsFormat::Bin) => {
+            let file_path = base_path.join(args_str);
+            Ok(fs::read(&file_path)?)
+        }
+        Some(InitArgsFormat::Hex) => {
+            if let Ok(bytes) = hex::decode(args_str) {
+                return Ok(bytes);
+            }
+            let file_path = base_path.join(args_str);
+            let contents = fs::read_to_string(&file_path)?;
+            hex::decode(contents.trim()).context("Failed to decode hex from file")
+        }
+        Some(InitArgsFormat::Idl) => {
+            if let Ok(args) = parse_idl_args(args_str) {
+                return args
+                    .to_bytes()
+                    .context("Failed to encode Candid args to bytes");
+            }
+            let file_path = base_path.join(args_str);
+            let contents = fs::read_to_string(&file_path)?;
+            let args =
+                parse_idl_args(contents.trim()).context("Failed to parse Candid from file")?;
+            args.to_bytes()
+                .context("Failed to encode Candid args to bytes")
+        }
+    }
 }
 
 /// Format a nanosecond timestamp as a human-readable UTC datetime string.
@@ -262,6 +306,36 @@ mod tests {
             ParsedArguments::Hex(bytes) => bytes,
             ParsedArguments::Candid(args) => args.to_bytes().unwrap(),
         };
+        assert_eq!(result, vec![0x44, 0x49, 0x44, 0x4c, 0x00]);
+    }
+
+    // --- resolve_cli_args tests ---
+
+    #[test]
+    fn test_resolve_cli_args_auto_detect() {
+        let temp_dir = Utf8TempDir::new().unwrap();
+        let result = resolve_cli_args("(42)", None, temp_dir.path()).unwrap();
+        assert_eq!(result, hex::decode("4449444c00017c2a").unwrap());
+    }
+
+    #[test]
+    fn test_resolve_cli_args_bin_file() {
+        let temp_dir = Utf8TempDir::new().unwrap();
+        let raw_bytes = vec![0x44, 0x49, 0x44, 0x4c, 0x00];
+        std::fs::write(temp_dir.path().join("args.bin").as_std_path(), &raw_bytes).unwrap();
+
+        let result =
+            resolve_cli_args("args.bin", Some(&InitArgsFormat::Bin), temp_dir.path()).unwrap();
+        assert_eq!(result, raw_bytes);
+    }
+
+    #[test]
+    fn test_resolve_cli_args_explicit_format_file_fallback() {
+        let temp_dir = Utf8TempDir::new().unwrap();
+        std::fs::write(temp_dir.path().join("args.hex").as_std_path(), "4449444c00").unwrap();
+
+        let result =
+            resolve_cli_args("args.hex", Some(&InitArgsFormat::Hex), temp_dir.path()).unwrap();
         assert_eq!(result, vec![0x44, 0x49, 0x44, 0x4c, 0x00]);
     }
 }

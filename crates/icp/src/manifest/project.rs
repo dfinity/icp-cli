@@ -30,6 +30,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
+            ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -446,8 +447,14 @@ mod tests {
                     canisters: CanisterSelection::Everything,
                     settings: None,
                     init_args: Some(HashMap::from([
-                        ("canister-1".to_string(), "(42)".to_string()),
-                        ("canister-2".to_string(), "4449444c0000".to_string()),
+                        (
+                            "canister-1".to_string(),
+                            ManifestInitArgs::Inline("(42)".to_string())
+                        ),
+                        (
+                            "canister-2".to_string(),
+                            ManifestInitArgs::Inline("4449444c0000".to_string())
+                        ),
                     ])),
                 })],
             },

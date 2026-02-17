@@ -5,13 +5,15 @@ use serde::{Deserialize, Deserializer};
 
 use crate::{canister::Settings, prelude::LOCAL};
 
+use super::canister::ManifestInitArgs;
+
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 pub struct EnvironmentInner {
     pub name: String,
     pub network: Option<String>,
     pub canisters: Option<Vec<String>>,
     pub settings: Option<HashMap<String, Settings>>,
-    pub init_args: Option<HashMap<String, String>>,
+    pub init_args: Option<HashMap<String, ManifestInitArgs>>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
@@ -48,7 +50,7 @@ pub struct EnvironmentManifest {
     pub settings: Option<HashMap<String, Settings>>,
 
     /// Override init args for specific canisters in this environment
-    pub init_args: Option<HashMap<String, String>>,
+    pub init_args: Option<HashMap<String, ManifestInitArgs>>,
 }
 
 impl From<EnvironmentInner> for EnvironmentManifest {

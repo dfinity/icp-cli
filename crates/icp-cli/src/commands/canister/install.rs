@@ -2,14 +2,12 @@ use anyhow::{Context as _, anyhow};
 use clap::Args;
 use icp::context::{CanisterSelection, Context};
 use icp::fs;
+use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
 
 use crate::{
     commands::args,
-    operations::{
-        install::install_canister,
-        misc::{ParsedArguments, parse_args},
-    },
+    operations::{install::install_canister, misc::resolve_cli_args},
 };
 
 /// Install a built WASM to a canister on a network
@@ -34,6 +32,11 @@ pub(crate) struct InstallArgs {
     ///   The file should contain either hex or Candid format arguments.
     #[arg(long)]
     pub(crate) args: Option<String>,
+
+    /// Format of the initialization arguments. When specified, skips auto-detection.
+    /// Use `hex` for hex-encoded, `idl` for Candid text, or `bin` for a raw binary file.
+    #[arg(long, requires = "args")]
+    pub(crate) args_format: Option<InitArgsFormat>,
 
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
@@ -84,12 +87,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                 dunce::canonicalize(".").context("Failed to get current working directory")?;
             let cwd =
                 PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
-            match parse_args(s, &cwd)? {
-                ParsedArguments::Hex(bytes) => Ok(bytes),
-                ParsedArguments::Candid(args) => args
-                    .to_bytes()
-                    .context("Failed to encode Candid args to bytes"),
-            }
+            resolve_cli_args(s, args.args_format.as_ref(), &cwd)
         })
         .transpose()?;
 

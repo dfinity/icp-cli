@@ -44,4 +44,4 @@ Complete technical specifications:
 ## Additional Resources
 
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
-- [Examples](../examples/) — Sample projects for various use cases
+- [Examples](https://github.com/dfinity/icp-cli/tree/main/examples) — Sample projects for various use cases

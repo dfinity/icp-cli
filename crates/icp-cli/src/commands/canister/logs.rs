@@ -1,6 +1,7 @@
 use anyhow::{Context as _, anyhow};
 use clap::Args;
 use ic_management_canister_types::{CanisterLogRecord, FetchCanisterLogsResult};
+use ic_utils::interfaces::ManagementCanister;
 use icp::context::Context;
 use icp::signal::stop_signal;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -47,7 +48,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
+    let mgmt = ManagementCanister::create(&agent);
 
     if args.follow {
         // Follow mode: continuously fetch and display new logs
@@ -60,7 +61,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
 
 async fn fetch_and_display_logs(
     ctx: &Context,
-    mgmt: &ic_utils::interfaces::ManagementCanister<'_>,
+    mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
 ) -> Result<(), anyhow::Error> {
     let (result,): (FetchCanisterLogsResult,) = mgmt
@@ -78,7 +79,7 @@ async fn fetch_and_display_logs(
 
 async fn follow_logs(
     ctx: &Context,
-    mgmt: &ic_utils::interfaces::ManagementCanister<'_>,
+    mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     interval_seconds: u64,
 ) -> Result<(), anyhow::Error> {
@@ -135,13 +136,11 @@ fn format_log(log: &CanisterLogRecord) -> String {
 }
 
 fn format_timestamp(timestamp_nanos: u64) -> String {
-    // Convert nanoseconds since Unix epoch to RFC3339 format
     let seconds = (timestamp_nanos / 1_000_000_000) as i64;
     let nanos = (timestamp_nanos % 1_000_000_000) as u32;
 
     match OffsetDateTime::from_unix_timestamp(seconds) {
         Ok(dt) => {
-            // Create a new datetime with nanoseconds
             let dt_with_nanos = dt.replace_nanosecond(nanos).unwrap_or(dt);
             dt_with_nanos
                 .format(&Rfc3339)
@@ -154,14 +153,16 @@ fn format_timestamp(timestamp_nanos: u64) -> String {
 fn format_content(content: &[u8]) -> String {
     // Try to decode as UTF-8
     if let Ok(text) = std::str::from_utf8(content) {
-        // Check if the debug representation contains problematic Unicode escapes
-        let debug_repr = format!("{:?}", text);
-        if debug_repr.contains("\\u{") {
-            // Contains problematic Unicode, treat as binary
-            format!("(bytes) 0x{}", hex::encode(content))
-        } else {
-            // Valid UTF-8 text
+        // Check if all characters are printable (excluding control characters)
+        if text
+            .chars()
+            .all(|c| !c.is_control() || c == '\n' || c == '\t')
+        {
+            // Valid UTF-8 text with only printable characters
             text.to_string()
+        } else {
+            // Contains control characters, treat as binary
+            format!("(bytes) 0x{}", hex::encode(content))
         }
     } else {
         // Invalid UTF-8, display as hex

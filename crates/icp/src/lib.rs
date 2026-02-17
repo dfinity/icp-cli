@@ -29,6 +29,7 @@ pub mod package;
 pub mod prelude;
 pub mod project;
 pub mod settings;
+pub mod signal;
 pub mod store_artifact;
 pub mod store_id;
 

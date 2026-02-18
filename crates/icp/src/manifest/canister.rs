@@ -16,12 +16,12 @@ pub enum InitArgsFormat {
     Hex,
     /// Candid text format
     #[default]
-    Idl,
+    Candid,
     /// Raw binary (only valid for file references)
     Bin,
 }
 
-/// Init args source: either a file path or inline content.
+/// Init args source: either a file path or an inline value.
 ///
 /// ```yaml
 /// init_args:
@@ -31,41 +31,41 @@ pub enum InitArgsFormat {
 ///
 /// ```yaml
 /// init_args:
-///   content: "(42)"
-///   format: idl
+///   value: "(42)"
+///   format: candid
 /// ```
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 pub enum InitArgsSource {
     /// Relative path to a file containing init args.
     #[serde(rename = "path")]
     Path(String),
-    /// Inline init args content.
-    #[serde(rename = "content")]
-    Content(String),
+    /// Inline init args value.
+    #[serde(rename = "value")]
+    Value(String),
 }
 
 /// Init args as specified in a manifest file (canister.yaml or icp.yaml).
 ///
-/// A plain string is shorthand for inline Candid content:
+/// A plain string is shorthand for inline Candid:
 /// ```yaml
 /// init_args: "(42)"
 /// # equivalent to:
 /// init_args:
-///   content: "(42)"
-///   format: idl
+///   value: "(42)"
+///   format: candid
 /// ```
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct ManifestInitArgs {
     /// Where the init args come from.
     #[serde(flatten)]
     pub source: InitArgsSource,
-    /// How to interpret the init args. Defaults to Candid text (`idl`) if omitted.
+    /// How to interpret the init args. Defaults to Candid if omitted.
     #[serde(default, skip_serializing_if = "is_default_format")]
     pub format: InitArgsFormat,
 }
 
 fn is_default_format(f: &InitArgsFormat) -> bool {
-    *f == InitArgsFormat::Idl
+    *f == InitArgsFormat::Candid
 }
 
 impl<'de> Deserialize<'de> for ManifestInitArgs {
@@ -87,8 +87,8 @@ impl<'de> Deserialize<'de> for ManifestInitArgs {
 
         match StringOrObject::deserialize(deserializer)? {
             StringOrObject::String(s) => Ok(ManifestInitArgs {
-                source: InitArgsSource::Content(s),
-                format: InitArgsFormat::Idl,
+                source: InitArgsSource::Value(s),
+                format: InitArgsFormat::Candid,
             }),
             StringOrObject::Object(obj) => Ok(ManifestInitArgs {
                 source: obj.source,
@@ -810,32 +810,32 @@ mod tests {
     }
 
     #[test]
-    fn manifest_init_args_content() {
+    fn manifest_init_args_value() {
         let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
-            content: "(42)"
-            format: idl
+            value: "(42)"
+            format: candid
         "#})
         .unwrap();
         assert_eq!(
             ia,
             ManifestInitArgs {
-                source: InitArgsSource::Content("(42)".to_string()),
-                format: InitArgsFormat::Idl,
+                source: InitArgsSource::Value("(42)".to_string()),
+                format: InitArgsFormat::Candid,
             }
         );
     }
 
     #[test]
-    fn manifest_init_args_content_default_format() {
+    fn manifest_init_args_value_default_format() {
         let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
-            content: "(42)"
+            value: "(42)"
         "#})
         .unwrap();
         assert_eq!(
             ia,
             ManifestInitArgs {
-                source: InitArgsSource::Content("(42)".to_string()),
-                format: InitArgsFormat::Idl,
+                source: InitArgsSource::Value("(42)".to_string()),
+                format: InitArgsFormat::Candid,
             }
         );
     }
@@ -846,8 +846,8 @@ mod tests {
         assert_eq!(
             ia,
             ManifestInitArgs {
-                source: InitArgsSource::Content("(42)".to_string()),
-                format: InitArgsFormat::Idl,
+                source: InitArgsSource::Value("(42)".to_string()),
+                format: InitArgsFormat::Candid,
             }
         );
     }

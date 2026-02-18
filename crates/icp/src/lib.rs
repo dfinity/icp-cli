@@ -70,7 +70,7 @@ impl InitArgs {
             InitArgs::Binary(bytes) => Ok(bytes.clone()),
             InitArgs::Text { content, format } => match format {
                 InitArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
-                InitArgsFormat::Idl => {
+                InitArgsFormat::Candid => {
                     let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
                     args.to_bytes().context(CandidEncodeSnafu)
                 }

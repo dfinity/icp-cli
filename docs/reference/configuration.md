@@ -36,9 +36,7 @@ canisters:
           dir: www
     settings:
       compute_allocation: 5
-    init_args:
-      content: "()"
-      format: idl
+    init_args: "()"
 ```
 
 ### External Reference
@@ -274,9 +272,7 @@ environments:
         environment_variables:
           LOG_LEVEL: "info"
     init_args:
-      backend:
-        content: "(record { mode = \"staging\" })"
-        format: idl
+      backend: "(record { mode = \"staging\" })"
 ```
 
 | Property | Type | Required | Description |
@@ -320,25 +316,25 @@ init_args:
   format: bin
 ```
 
-Inline content (explicit):
+Inline value (explicit):
 
 ```yaml
 init_args:
-  content: "(record { owner = principal \"aaaaa-aa\" })"
-  format: idl
+  value: "(record { owner = principal \"aaaaa-aa\" })"
+  format: candid
 ```
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
 | `path` | string | Yes* | Relative path to file containing init args |
-| `content` | string | Yes* | Inline init args content |
-| `format` | string | No | `hex`, `idl`, or `bin` (default: `idl`) |
+| `value` | string | Yes* | Inline init args value |
+| `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
 
-*Exactly one of `path` or `content` must be specified.
+*Exactly one of `path` or `value` must be specified.
 
 Supported formats:
 - **`hex`** — Hex-encoded bytes (inline or file)
-- **`idl`** — Candid text format (inline or file)
+- **`candid`** — Candid text format (inline or file)
 - **`bin`** — Raw binary bytes; only valid with `path` (e.g. output of `didc encode`)
 
 ## Implicit Defaults
@@ -379,8 +375,7 @@ canisters:
     settings:
       compute_allocation: 5
     init_args:
-      content: "(record { admin = principal \"aaaaa-aa\" })"
-      format: idl
+      value: "(record { admin = principal \"aaaaa-aa\" })"
 
 networks:
   - name: local
@@ -410,9 +405,7 @@ environments:
         environment_variables:
           ENV: "production"
     init_args:
-      backend:
-        content: "(record { admin = principal \"xxxx-xxxx\" })"
-        format: idl
+      backend: "(record { admin = principal \"xxxx-xxxx\" })"
 ```
 
 ## Schema

@@ -222,9 +222,7 @@ async fn canister_install_with_init_args_candid() {
               configuration:
                 main: main.mo
                 args: ""
-            init_args:
-              content: "(opt 42 : opt nat8)"
-              format: idl
+            init_args: "(opt 42 : opt nat8)"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -290,7 +288,7 @@ async fn canister_install_with_init_args_hex() {
                 main: main.mo
                 args: ""
             init_args:
-              content: "4449444c016e7b01000164"
+              value: "4449444c016e7b01000164"
               format: hex
 
         {NETWORK_RANDOM_PORT}
@@ -355,9 +353,7 @@ async fn canister_install_with_environment_init_args_override() {
               configuration:
                 main: main.mo
                 args: ""
-            init_args:
-              content: "(opt 1 : opt nat8)"
-              format: idl
+            init_args: "(opt 1 : opt nat8)"
 
         {NETWORK_RANDOM_PORT}
 
@@ -365,9 +361,7 @@ async fn canister_install_with_environment_init_args_override() {
           - name: random-environment
             network: random-network
             init_args:
-              my-canister:
-                content: "(opt 200 : opt nat8)"
-                format: idl
+              my-canister: "(opt 200 : opt nat8)"
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
@@ -428,9 +422,7 @@ async fn canister_install_with_invalid_init_args() {
               configuration:
                 main: main.mo
                 args: ""
-            init_args:
-              content: "this is not valid hex or candid"
-              format: idl
+            init_args: "this is not valid hex or candid"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -750,7 +742,7 @@ async fn deploy_with_init_args_from_file_in_manifest() {
         name: my-canister
         init_args:
           path: init.txt
-          format: idl
+          format: candid
         recipe:
           type: "@dfinity/motoko@v4.0.0"
           configuration:
@@ -904,7 +896,7 @@ async fn deploy_with_init_args_file_idl_format() {
         name: my-canister
         init_args:
           path: args.candid
-          format: idl
+          format: candid
         recipe:
           type: "@dfinity/motoko@v4.0.0"
           configuration:

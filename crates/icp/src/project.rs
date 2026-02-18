@@ -124,7 +124,7 @@ fn resolve_manifest_init_args(
                 }
             }
         }
-        InitArgsSource::Content(content) => match manifest_init_args.format {
+        InitArgsSource::Value(content) => match manifest_init_args.format {
             InitArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
             ref fmt => Ok(InitArgs::Text {
                 content: content.trim().to_owned(),

@@ -250,7 +250,7 @@ Install a built WASM to a canister on a network
   Possible values:
   - `hex`:
     Hex-encoded bytes
-  - `idl`:
+  - `candid`:
     Candid text format
   - `bin`:
     Raw binary (only valid for file references)

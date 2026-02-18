@@ -90,7 +90,7 @@ pub(crate) fn resolve_cli_args(
             let contents = fs::read_to_string(&file_path)?;
             hex::decode(contents.trim()).context("Failed to decode hex from file")
         }
-        Some(InitArgsFormat::Idl) => {
+        Some(InitArgsFormat::Candid) => {
             if let Ok(args) = parse_idl_args(args_str) {
                 return args
                     .to_bytes()

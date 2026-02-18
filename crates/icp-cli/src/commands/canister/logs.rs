@@ -16,7 +16,7 @@ pub(crate) struct LogsArgs {
     pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// Continuously fetch and display new logs until interrupted with Ctrl+C
-    #[arg(long)]
+    #[arg(short, long)]
     pub(crate) follow: bool,
 
     /// Polling interval in seconds when following logs (requires --follow)

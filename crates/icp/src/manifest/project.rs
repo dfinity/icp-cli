@@ -30,6 +30,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
+            InitArgsFormat, ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -422,6 +423,44 @@ mod tests {
                         )
                     ])),
                     init_args: None,
+                })],
+            },
+        );
+    }
+
+    #[test]
+    fn environment_init_args() {
+        assert_eq!(
+            validate_project_yaml(indoc! {r#"
+                    environments:
+                      - name: my-environment
+                        init_args:
+                          canister-1: "(42)"
+                          canister-2:
+                            value: "4449444c0000"
+                            format: hex
+                "#}),
+            ProjectManifest {
+                canisters: vec![],
+                networks: vec![],
+                environments: vec![Item::Manifest(EnvironmentManifest {
+                    name: "my-environment".to_string(),
+                    network: "local".to_string(),
+                    canisters: CanisterSelection::Everything,
+                    settings: None,
+                    init_args: Some(HashMap::from([
+                        (
+                            "canister-1".to_string(),
+                            ManifestInitArgs::String("(42)".to_string()),
+                        ),
+                        (
+                            "canister-2".to_string(),
+                            ManifestInitArgs::Value {
+                                value: "4449444c0000".to_string(),
+                                format: InitArgsFormat::Hex,
+                            },
+                        ),
+                    ])),
                 })],
             },
         );

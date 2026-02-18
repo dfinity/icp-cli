@@ -8,8 +8,8 @@ use crate::{
     context::IC_ROOT_KEY,
     fs,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, InitArgsSource,
-        Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
+        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, Item,
+        LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
         ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
@@ -106,15 +106,19 @@ fn resolve_manifest_init_args(
     base_path: &Path,
     canister: &str,
 ) -> Result<InitArgs, ConsolidateManifestError> {
-    match &manifest_init_args.source {
-        InitArgsSource::Path(path) => {
+    match manifest_init_args {
+        ManifestInitArgs::String(content) => Ok(InitArgs::Text {
+            content: content.trim().to_owned(),
+            format: InitArgsFormat::Candid,
+        }),
+        ManifestInitArgs::Path { path, format } => {
             let file_path = base_path.join(path);
-            match manifest_init_args.format {
+            match format {
                 InitArgsFormat::Bin => {
                     let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Binary(bytes))
                 }
-                ref fmt => {
+                fmt => {
                     let content =
                         fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Text {
@@ -124,10 +128,10 @@ fn resolve_manifest_init_args(
                 }
             }
         }
-        InitArgsSource::Value(content) => match manifest_init_args.format {
+        ManifestInitArgs::Value { value, format } => match format {
             InitArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
-            ref fmt => Ok(InitArgs::Text {
-                content: content.trim().to_owned(),
+            fmt => Ok(InitArgs::Text {
+                content: value.trim().to_owned(),
                 format: fmt.clone(),
             }),
         },

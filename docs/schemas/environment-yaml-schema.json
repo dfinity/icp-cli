@@ -52,11 +52,18 @@
       ]
     },
     "ManifestInitArgs": {
-      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n# equivalent to:\ninit_args:\n  value: \"(42)\"\n  format: candid\n```",
-      "oneOf": [
+      "anyOf": [
         {
-          "description": "Relative path to a file containing init args.",
+          "description": "Plain string shorthand — treated as Candid.",
+          "type": "string"
+        },
+        {
+          "description": "File reference with explicit format.",
           "properties": {
+            "format": {
+              "$ref": "#/$defs/InitArgsFormat",
+              "default": "candid"
+            },
             "path": {
               "type": "string"
             }
@@ -67,8 +74,12 @@
           "type": "object"
         },
         {
-          "description": "Inline init args value.",
+          "description": "Inline value with explicit format.",
           "properties": {
+            "format": {
+              "$ref": "#/$defs/InitArgsFormat",
+              "default": "candid"
+            },
             "value": {
               "type": "string"
             }
@@ -79,13 +90,7 @@
           "type": "object"
         }
       ],
-      "properties": {
-        "format": {
-          "$ref": "#/$defs/InitArgsFormat",
-          "description": "How to interpret the init args. Defaults to Candid if omitted."
-        }
-      },
-      "type": "object"
+      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
     },
     "Settings": {
       "description": "Canister settings, such as compute and memory allocation.",

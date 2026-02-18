@@ -39,11 +39,6 @@ const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";
 const DATA_DIR: &str = "data";
 
-/// DIDL magic bytes that start all Candid binary-encoded values.
-const DIDL_MAGIC: &[u8] = b"DIDL";
-/// Hex-encoded DIDL magic prefix (case-insensitive check done separately).
-const DIDL_MAGIC_HEX: &str = "4449444c";
-
 /// Resolved initialization arguments, with any file references already loaded.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum InitArgs {
@@ -52,15 +47,8 @@ pub enum InitArgs {
         content: String,
         format: InitArgsFormat,
     },
-    /// Raw binary bytes (from a file with `format: bin`, or auto-detected
-    /// via DIDL magic bytes). Used directly.
+    /// Raw binary bytes (from a file with `format: bin`). Used directly.
     Binary(Vec<u8>),
-}
-
-#[derive(Debug, Snafu)]
-pub enum DetectInitArgsError {
-    #[snafu(display("bytes are neither valid UTF-8 text nor binary Candid (DIDL)"))]
-    Unrecognized,
 }
 
 #[derive(Debug, Snafu)]
@@ -76,26 +64,21 @@ pub enum InitArgsToBytesError {
 }
 
 impl InitArgs {
-    /// Classify raw bytes into an `InitArgs` by inspecting their content
-    pub fn detect(bytes: Vec<u8>) -> Result<Self, DetectInitArgsError> {
-        if bytes.starts_with(DIDL_MAGIC) {
-            return Ok(InitArgs::Binary(bytes));
+    /// Try to interpret a string as hex, falling back to Candid text.
+    /// On failure, surfaces the Candid parse error.
+    pub fn detect(s: &str) -> Result<Self, candid_parser::Error> {
+        let trimmed = s.trim();
+        if hex::decode(trimmed).is_ok() {
+            return Ok(InitArgs::Text {
+                content: trimmed.to_owned(),
+                format: InitArgsFormat::Hex,
+            });
         }
-        match String::from_utf8(bytes) {
-            Ok(s) => {
-                let format = if s
-                    .trim()
-                    .get(..DIDL_MAGIC_HEX.len())
-                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case(DIDL_MAGIC_HEX))
-                {
-                    InitArgsFormat::Hex
-                } else {
-                    InitArgsFormat::Idl
-                };
-                Ok(InitArgs::Text { content: s, format })
-            }
-            Err(_) => UnrecognizedSnafu.fail(),
-        }
+        parse_idl_args(trimmed)?;
+        Ok(InitArgs::Text {
+            content: trimmed.to_owned(),
+            format: InitArgsFormat::Idl,
+        })
     }
 
     /// Resolve to raw bytes according to the format.

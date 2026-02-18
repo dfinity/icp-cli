@@ -89,6 +89,12 @@ pub enum ConsolidateManifestError {
         canister: String,
     },
 
+    #[snafu(display("init_args for canister '{canister}' are not valid hex or Candid"))]
+    InvalidInlineInitArgs {
+        source: candid_parser::Error,
+        canister: String,
+    },
+
     #[snafu(display(
         "init_args for canister '{canister}' uses format 'bin' with inline content; \
          binary format requires a file path"
@@ -108,8 +114,9 @@ fn resolve_manifest_init_args(
 ) -> Result<InitArgs, ConsolidateManifestError> {
     match manifest_init_args {
         // String form: auto-detect as hex or Candid text.
-        ManifestInitArgs::Inline(s) => Ok(InitArgs::detect(s.clone().into_bytes())
-            .expect("inline string is always valid UTF-8")),
+        ManifestInitArgs::Inline(s) => {
+            InitArgs::detect(s).context(InvalidInlineInitArgsSnafu { canister })
+        }
 
         // Explicit file reference.
         ManifestInitArgs::Path { path, format } => {

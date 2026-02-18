@@ -695,7 +695,7 @@ async fn canister_install_with_args_from_file() {
             "my-canister",
             "--environment",
             "random-environment",
-            "--args",
+            "--args-file",
             "args.txt",
         ])
         .assert()

@@ -1,20 +1,22 @@
 use anyhow::{Context as _, bail};
 use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
+use candid_parser::parse_idl_args;
 use candid_parser::utils::CandidSource;
 use clap::Args;
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
+use icp::fs;
+use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use std::io::{self, Write};
 use tracing::warn;
 
 use crate::{
-    commands::args,
-    commands::parsers::parse_cycles_amount,
-    operations::misc::{ParsedArguments, fetch_canister_metadata, parse_args},
+    commands::args, commands::parsers::parse_cycles_amount,
+    operations::misc::fetch_canister_metadata,
 };
 
 /// Make a canister call
@@ -26,18 +28,18 @@ pub(crate) struct CallArgs {
     /// Name of canister method to call into
     pub(crate) method: String,
 
-    /// Canister call arguments.
-    /// Can be:
-    ///
-    /// - Hex-encoded bytes (e.g., `4449444c00`)
-    ///
-    /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-    ///
-    /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
-    ///   The file should contain either hex or Candid format arguments.
-    ///
-    /// If not provided, an interactive prompt will be launched to help build the arguments.
+    /// Call arguments, interpreted per `--args-format` (Candid by default).
+    /// If not provided, an interactive prompt will be launched.
+    #[arg(conflicts_with = "args_file")]
     pub(crate) args: Option<String>,
+
+    /// Path to a file containing call arguments.
+    #[arg(long, conflicts_with = "args")]
+    pub(crate) args_file: Option<PathBuf>,
+
+    /// Format of the call arguments.
+    #[arg(long, default_value = "candid")]
+    pub(crate) args_format: InitArgsFormat,
 
     /// Principal of a proxy canister to route the call through.
     ///
@@ -81,24 +83,57 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
 
     let candid_types = get_candid_type(&agent, cid, &args.method).await;
 
-    let parsed_args = args
-        .args
-        .as_ref()
-        .map(|s| {
-            let cwd =
-                dunce::canonicalize(".").context("Failed to get current working directory")?;
-            let cwd =
-                PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
-            parse_args(s, &cwd)
-        })
-        .transpose()?;
+    enum ResolvedArgs {
+        Candid(IDLArgs),
+        Bytes(Vec<u8>),
+    }
 
-    let arg_bytes = match (&candid_types, parsed_args) {
+    let resolved_args = match (&args.args, &args.args_file) {
+        (Some(value), None) => {
+            if args.args_format == InitArgsFormat::Bin {
+                bail!("--args-format bin requires --args-file, not a positional argument");
+            }
+            Some(match args.args_format {
+                InitArgsFormat::Candid => ResolvedArgs::Candid(
+                    parse_idl_args(value).context("failed to parse Candid arguments")?,
+                ),
+                InitArgsFormat::Hex => ResolvedArgs::Bytes(
+                    hex::decode(value).context("failed to decode hex arguments")?,
+                ),
+                InitArgsFormat::Bin => unreachable!(),
+            })
+        }
+        (None, Some(file_path)) => Some(match args.args_format {
+            InitArgsFormat::Bin => {
+                let bytes = fs::read(file_path).context("failed to read args file")?;
+                ResolvedArgs::Bytes(bytes)
+            }
+            InitArgsFormat::Hex => {
+                let content = fs::read_to_string(file_path).context("failed to read args file")?;
+                ResolvedArgs::Bytes(
+                    hex::decode(content.trim()).context("failed to decode hex from file")?,
+                )
+            }
+            InitArgsFormat::Candid => {
+                let content = fs::read_to_string(file_path).context("failed to read args file")?;
+                ResolvedArgs::Candid(
+                    parse_idl_args(content.trim()).context("failed to parse Candid from file")?,
+                )
+            }
+        }),
+        (None, None) => None,
+        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
+    };
+
+    let arg_bytes = match (&candid_types, resolved_args) {
+        (_, None) if args.args_format != InitArgsFormat::Candid => {
+            bail!("arguments must be provided when --args-format is not candid");
+        }
         (None, None) => bail!(
             "arguments was not provided and could not fetch candid type to assist building arguments"
         ),
-        (None, Some(ParsedArguments::Hex(bytes))) => bytes,
-        (None, Some(ParsedArguments::Candid(arguments))) => {
+        (None, Some(ResolvedArgs::Bytes(bytes))) => bytes,
+        (None, Some(ResolvedArgs::Candid(arguments))) => {
             warn!("could not fetch candid type, serializing arguments with inferred types.");
             arguments
                 .to_bytes()
@@ -121,11 +156,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                 .to_bytes()
                 .context("failed to serialize candid arguments")?
         }
-        (Some(_), Some(ParsedArguments::Hex(bytes))) => {
-            // Hex bytes are already encoded, use as-is
-            bytes
-        }
-        (Some((type_env, func)), Some(ParsedArguments::Candid(arguments))) => arguments
+        (Some(_), Some(ResolvedArgs::Bytes(bytes))) => bytes,
+        (Some((type_env, func)), Some(ResolvedArgs::Candid(arguments))) => arguments
             .to_bytes_with_types(type_env, &func.args)
             .context("failed to serialize candid arguments with specific types")?,
     };

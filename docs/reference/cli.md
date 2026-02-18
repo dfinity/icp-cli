@@ -144,21 +144,26 @@ Make a canister call
 
 * `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
 * `<METHOD>` — Name of canister method to call into
-* `<ARGS>` — Canister call arguments. Can be:
-
-   - Hex-encoded bytes (e.g., `4449444c00`)
-
-   - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-
-   - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
-
-   If not provided, an interactive prompt will be launched to help build the arguments.
+* `<ARGS>` — Call arguments, interpreted per `--args-format` (Candid by default). If not provided, an interactive prompt will be launched
 
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--args-file <ARGS_FILE>` — Path to a file containing call arguments
+* `--args-format <ARGS_FORMAT>` — Format of the call arguments
+
+  Default value: `candid`
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 * `--proxy <PROXY>` — Principal of a proxy canister to route the call through.
 
    When specified, instead of calling the target canister directly, the call will be sent to the proxy canister's `proxy` method, which forwards it to the target canister.
@@ -238,14 +243,11 @@ Install a built WASM to a canister on a network
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
-* `--args <ARGS>` — Initialization arguments for the canister. Can be:
+* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
+* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
 
-   - Hex-encoded bytes (e.g., `4449444c00`)
-
-   - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-
-   - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
-* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments. When specified, skips auto-detection. Use `hex` for hex-encoded, `idl` for Candid text, or `bin` for a raw binary file
+  Default value: `candid`
 
   Possible values:
   - `hex`:

@@ -1,14 +1,11 @@
-use anyhow::{Context as _, anyhow};
+use anyhow::{Context as _, anyhow, bail};
 use clap::Args;
 use icp::context::{CanisterSelection, Context};
-use icp::fs;
 use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
+use icp::{InitArgs, fs};
 
-use crate::{
-    commands::args,
-    operations::{install::install_canister, misc::resolve_cli_args},
-};
+use crate::{commands::args, operations::install::install_canister};
 
 /// Install a built WASM to a canister on a network
 #[derive(Debug, Args)]
@@ -21,22 +18,17 @@ pub(crate) struct InstallArgs {
     #[arg(long)]
     pub(crate) wasm: Option<PathBuf>,
 
-    /// Initialization arguments for the canister.
-    /// Can be:
-    ///
-    /// - Hex-encoded bytes (e.g., `4449444c00`)
-    ///
-    /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-    ///
-    /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
-    ///   The file should contain either hex or Candid format arguments.
-    #[arg(long)]
+    /// Inline initialization arguments, interpreted per `--args-format` (Candid by default).
+    #[arg(long, conflicts_with = "args_file")]
     pub(crate) args: Option<String>,
 
-    /// Format of the initialization arguments. When specified, skips auto-detection.
-    /// Use `hex` for hex-encoded, `idl` for Candid text, or `bin` for a raw binary file.
-    #[arg(long, requires = "args")]
-    pub(crate) args_format: Option<InitArgsFormat>,
+    /// Path to a file containing initialization arguments.
+    #[arg(long, conflicts_with = "args")]
+    pub(crate) args_file: Option<PathBuf>,
+
+    /// Format of the initialization arguments.
+    #[arg(long, default_value = "candid")]
+    pub(crate) args_format: InitArgsFormat,
 
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
@@ -79,16 +71,37 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         )
         .await?;
 
-    let init_args_bytes = args
-        .args
+    let init_args = match (&args.args, &args.args_file) {
+        (Some(value), None) => {
+            if args.args_format == InitArgsFormat::Bin {
+                bail!("--args-format bin requires --args-file, not --args");
+            }
+            Some(InitArgs::Text {
+                content: value.clone(),
+                format: args.args_format.clone(),
+            })
+        }
+        (None, Some(file_path)) => Some(match args.args_format {
+            InitArgsFormat::Bin => {
+                let bytes = fs::read(file_path).context("failed to read init args file")?;
+                InitArgs::Binary(bytes)
+            }
+            ref fmt => {
+                let content =
+                    fs::read_to_string(file_path).context("failed to read init args file")?;
+                InitArgs::Text {
+                    content: content.trim().to_owned(),
+                    format: fmt.clone(),
+                }
+            }
+        }),
+        (None, None) => None,
+        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
+    };
+
+    let init_args_bytes = init_args
         .as_ref()
-        .map(|s| {
-            let cwd =
-                dunce::canonicalize(".").context("Failed to get current working directory")?;
-            let cwd =
-                PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
-            resolve_cli_args(s, args.args_format.as_ref(), &cwd)
-        })
+        .map(|ia| ia.to_bytes().context("failed to encode init args"))
         .transpose()?;
 
     let canister_display = args.cmd_args.canister.to_string();

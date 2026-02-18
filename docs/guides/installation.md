@@ -35,7 +35,7 @@ npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
 **Motoko:**
 
 ```bash
-npm install -g ic-mops && mops toolchain init
+npm install -g ic-mops
 ```
 
 **Rust** (if not already installed):
@@ -118,7 +118,7 @@ Learn more: [ic-wasm repository](https://github.com/dfinity/ic-wasm)
 **Motoko:**
 
 ```bash
-curl -fsSL cli.mops.one/install.sh | sh && mops toolchain init
+curl -fsSL cli.mops.one/install.sh | sh
 ```
 
 > **Note:** Requires [Node.js](https://nodejs.org/) and a package manager (npm, pnpm, or bun). The shell script installs the latest Mops version stored onchain on ICP.

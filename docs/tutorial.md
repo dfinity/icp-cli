@@ -25,7 +25,7 @@ Install the required tools:
 npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
 
 # Motoko toolchain (for Motoko projects)
-npm install -g ic-mops && mops toolchain init
+npm install -g ic-mops
 ```
 
 This installs:

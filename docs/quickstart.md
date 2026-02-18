@@ -13,7 +13,7 @@ Deploy a full-stack app to a local network in under 5 minutes.
 npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
 
 # Motoko toolchain (for Motoko projects)
-npm install -g ic-mops && mops toolchain init
+npm install -g ic-mops
 ```
 
 > **Alternative methods:** See the [Installation Guide](guides/installation.md) for Homebrew, shell script, or other options.

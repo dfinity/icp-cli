@@ -214,6 +214,12 @@ async fn main() -> Result<(), Error> {
                     .await?
             }
 
+            commands::canister::Command::Logs(args) => {
+                commands::canister::logs::exec(&ctx, &args)
+                    .instrument(trace_span)
+                    .await?
+            }
+
             commands::canister::Command::Metadata(args) => {
                 commands::canister::metadata::exec(&ctx, &args)
                     .instrument(trace_span)

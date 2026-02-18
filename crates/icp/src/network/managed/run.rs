@@ -27,7 +27,7 @@ use k256::SecretKey;
 use rand::{RngCore, rng};
 use snafu::prelude::*;
 use std::{io::Write, process::ExitStatus, time::Duration};
-use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
+use tokio::{process::Child, select, time::sleep};
 use tracing::debug;
 use url::Url;
 use uuid::Uuid;
@@ -47,6 +47,7 @@ use crate::{
         },
     },
     prelude::*,
+    signal::stop_signal,
 };
 
 pub async fn run_network(
@@ -431,28 +432,6 @@ async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
                 }
             )
         }
-    }
-}
-
-#[cfg(unix)]
-async fn stop_signal() {
-    use tokio::signal::unix::{SignalKind, signal};
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
-    select! {
-        _ = ctrl_c() => {},
-        _ = sigterm.recv() => {},
-    }
-}
-
-#[cfg(windows)]
-async fn stop_signal() {
-    use tokio::signal::windows::{ctrl_break, ctrl_close};
-    let mut ctrl_break = ctrl_break().unwrap();
-    let mut ctrl_close = ctrl_close().unwrap();
-    select! {
-        _ = ctrl_c() => {},
-        _ = ctrl_break.recv() => {},
-        _ = ctrl_close.recv() => {},
     }
 }
 

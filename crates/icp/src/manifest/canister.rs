@@ -47,24 +47,22 @@ pub enum ManifestInitArgs {
     /// String value — auto-detected as hex, Candid text, or file path at resolution time.
     Inline(String),
 
-    /// Explicit file reference with optional format.
+    /// Explicit file reference with format.
     Path {
         /// Relative path to the file.
         path: String,
 
-        /// How to interpret the file contents. If omitted, auto-detected.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        format: Option<InitArgsFormat>,
+        /// How to interpret the file contents.
+        format: InitArgsFormat,
     },
 
-    /// Explicit inline content with optional format.
+    /// Explicit inline content with format.
     Content {
         /// The init args content.
         content: String,
 
-        /// How to interpret the content. If omitted, auto-detected as hex or Candid text.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        format: Option<InitArgsFormat>,
+        /// How to interpret the content.
+        format: InitArgsFormat,
     },
 }
 
@@ -771,7 +769,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_init_args_path_with_format() {
+    fn manifest_init_args_path() {
         let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
             path: ./args.bin
             format: bin
@@ -781,28 +779,13 @@ mod tests {
             ia,
             ManifestInitArgs::Path {
                 path: "./args.bin".to_string(),
-                format: Some(InitArgsFormat::Bin),
+                format: InitArgsFormat::Bin,
             }
         );
     }
 
     #[test]
-    fn manifest_init_args_path_without_format() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
-            path: ./args.candid
-        "#})
-        .unwrap();
-        assert_eq!(
-            ia,
-            ManifestInitArgs::Path {
-                path: "./args.candid".to_string(),
-                format: None,
-            }
-        );
-    }
-
-    #[test]
-    fn manifest_init_args_content_with_format() {
+    fn manifest_init_args_content() {
         let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
             content: "(42)"
             format: idl
@@ -812,22 +795,7 @@ mod tests {
             ia,
             ManifestInitArgs::Content {
                 content: "(42)".to_string(),
-                format: Some(InitArgsFormat::Idl),
-            }
-        );
-    }
-
-    #[test]
-    fn manifest_init_args_content_without_format() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
-            content: "4449444c00"
-        "#})
-        .unwrap();
-        assert_eq!(
-            ia,
-            ManifestInitArgs::Content {
-                content: "4449444c00".to_string(),
-                format: None,
+                format: InitArgsFormat::Idl,
             }
         );
     }

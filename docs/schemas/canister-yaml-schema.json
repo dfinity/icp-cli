@@ -207,18 +207,11 @@
           "type": "string"
         },
         {
-          "description": "Explicit file reference with optional format.",
+          "description": "Explicit file reference with format.",
           "properties": {
             "format": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/InitArgsFormat"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "How to interpret the file contents. If omitted, auto-detected."
+              "$ref": "#/$defs/InitArgsFormat",
+              "description": "How to interpret the file contents."
             },
             "path": {
               "description": "Relative path to the file.",
@@ -226,31 +219,26 @@
             }
           },
           "required": [
-            "path"
+            "path",
+            "format"
           ],
           "type": "object"
         },
         {
-          "description": "Explicit inline content with optional format.",
+          "description": "Explicit inline content with format.",
           "properties": {
             "content": {
               "description": "The init args content.",
               "type": "string"
             },
             "format": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/InitArgsFormat"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "How to interpret the content. If omitted, auto-detected as hex or Candid text."
+              "$ref": "#/$defs/InitArgsFormat",
+              "description": "How to interpret the content."
             }
           },
           "required": [
-            "content"
+            "content",
+            "format"
           ],
           "type": "object"
         }

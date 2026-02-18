@@ -334,11 +334,11 @@ init_args:
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `path` | string | No | Relative path to file containing init args |
-| `content` | string | No | Inline init args content |
-| `format` | string | No | `hex`, `idl`, or `bin` (auto-detected if omitted) |
+| `path` | string | Yes* | Relative path to file containing init args |
+| `content` | string | Yes* | Inline init args content |
+| `format` | string | Yes | `hex`, `idl`, or `bin` |
 
-Exactly one of `path` or `content` must be specified in the object form.
+*Exactly one of `path` or `content` must be specified. `format` is always required in the object form.
 
 Supported formats:
 - **`hex`** — Hex-encoded bytes (inline or file)

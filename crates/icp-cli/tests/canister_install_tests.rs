@@ -742,6 +742,7 @@ async fn deploy_with_init_args_from_file_in_manifest() {
         name: my-canister
         init_args:
           path: init.txt
+          format: idl
         recipe:
           type: "@dfinity/motoko@v4.0.0"
           configuration:

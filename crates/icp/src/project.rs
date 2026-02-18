@@ -91,11 +91,6 @@ pub enum ConsolidateManifestError {
     },
 
     #[snafu(display(
-        "init_args file '{path}' for canister '{canister}' is neither valid UTF-8 text nor binary candid (DIDL)"
-    ))]
-    InvalidInitArgs { canister: String, path: PathBuf },
-
-    #[snafu(display(
         "init_args '{value}' for canister '{canister}' is not valid hex, Candid, or a file path"
     ))]
     InitArgsNotFound {
@@ -137,16 +132,20 @@ fn resolve_manifest_init_args(
                 } => {
                     if parse_idl_args(content.trim()).is_ok() {
                         Ok(detected)
-                    } else if base_path.join(s).is_file() {
-                        resolve_manifest_init_args(
-                            &ManifestInitArgs::Path {
-                                path: s.clone(),
-                                format: None,
-                            },
-                            base_path,
-                            canister,
-                        )
                     } else {
+                        let file_path = base_path.join(s);
+                        if file_path.is_file() {
+                            let bytes =
+                                fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
+                            return InitArgs::detect(bytes).map_err(|_| {
+                                InitArgsNotFoundSnafu {
+                                    canister,
+                                    value: s,
+                                    path: file_path,
+                                }
+                                .build()
+                            });
+                        }
                         InitArgsNotFoundSnafu {
                             canister,
                             value: s,
@@ -162,12 +161,12 @@ fn resolve_manifest_init_args(
         // Explicit file reference.
         ManifestInitArgs::Path { path, format } => {
             let file_path = base_path.join(path);
-            match format.as_ref() {
-                Some(InitArgsFormat::Bin) => {
+            match format {
+                InitArgsFormat::Bin => {
                     let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Binary(bytes))
                 }
-                Some(fmt) => {
+                fmt => {
                     let content =
                         fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Text {
@@ -175,28 +174,16 @@ fn resolve_manifest_init_args(
                         format: fmt.clone(),
                     })
                 }
-                None => {
-                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
-                    InitArgs::detect(bytes).map_err(|_| {
-                        InvalidInitArgsSnafu {
-                            canister,
-                            path: file_path,
-                        }
-                        .build()
-                    })
-                }
             }
         }
 
         // Explicit inline content.
         ManifestInitArgs::Content { content, format } => match format {
-            Some(InitArgsFormat::Bin) => BinFormatInlineContentSnafu { canister }.fail(),
-            Some(fmt) => Ok(InitArgs::Text {
+            InitArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
+            fmt => Ok(InitArgs::Text {
                 content: content.trim().to_owned(),
                 format: fmt.clone(),
             }),
-            None => Ok(InitArgs::detect(content.clone().into_bytes())
-                .expect("inline content string is always valid UTF-8")),
         },
     }
 }

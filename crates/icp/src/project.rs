@@ -8,8 +8,8 @@ use crate::{
     context::IC_ROOT_KEY,
     fs,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, Item,
-        LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
+        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, InitArgsSource,
+        Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
         ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
@@ -89,12 +89,6 @@ pub enum ConsolidateManifestError {
         canister: String,
     },
 
-    #[snafu(display("init_args for canister '{canister}' are not valid hex or Candid"))]
-    InvalidInlineInitArgs {
-        source: candid_parser::Error,
-        canister: String,
-    },
-
     #[snafu(display(
         "init_args for canister '{canister}' uses format 'bin' with inline content; \
          binary format requires a file path"
@@ -112,21 +106,15 @@ fn resolve_manifest_init_args(
     base_path: &Path,
     canister: &str,
 ) -> Result<InitArgs, ConsolidateManifestError> {
-    match manifest_init_args {
-        // String form: auto-detect as hex or Candid text.
-        ManifestInitArgs::Inline(s) => {
-            InitArgs::detect(s).context(InvalidInlineInitArgsSnafu { canister })
-        }
-
-        // Explicit file reference.
-        ManifestInitArgs::Path { path, format } => {
+    match &manifest_init_args.source {
+        InitArgsSource::Path(path) => {
             let file_path = base_path.join(path);
-            match format {
+            match manifest_init_args.format {
                 InitArgsFormat::Bin => {
                     let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Binary(bytes))
                 }
-                fmt => {
+                ref fmt => {
                     let content =
                         fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Text {
@@ -136,11 +124,9 @@ fn resolve_manifest_init_args(
                 }
             }
         }
-
-        // Explicit inline content.
-        ManifestInitArgs::Content { content, format } => match format {
+        InitArgsSource::Content(content) => match manifest_init_args.format {
             InitArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
-            fmt => Ok(InitArgs::Text {
+            ref fmt => Ok(InitArgs::Text {
                 content: content.trim().to_owned(),
                 format: fmt.clone(),
             }),

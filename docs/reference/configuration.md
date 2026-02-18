@@ -36,7 +36,9 @@ canisters:
           dir: www
     settings:
       compute_allocation: 5
-    init_args: "()"
+    init_args:
+      content: "()"
+      format: idl
 ```
 
 ### External Reference
@@ -56,7 +58,7 @@ canisters:
 | `build` | object | Yes | Build configuration |
 | `sync` | object | No | Post-deployment sync configuration |
 | `settings` | object | No | Canister settings |
-| `init_args` | string or object | No | Initialization arguments (inline or file reference) |
+| `init_args` | string or object | No | Initialization arguments (see [Init Args](#init-args)) |
 | `recipe` | object | No | Recipe reference (alternative to build) |
 
 ## Build Steps
@@ -272,7 +274,9 @@ environments:
         environment_variables:
           LOG_LEVEL: "info"
     init_args:
-      backend: "(record { mode = \"staging\" })"
+      backend:
+        content: "(record { mode = \"staging\" })"
+        format: idl
 ```
 
 | Property | Type | Required | Description |
@@ -281,7 +285,7 @@ environments:
 | `network` | string | Yes | Network to deploy to |
 | `canisters` | array | No | Canisters to include (default: all) |
 | `settings` | object | No | Per-canister setting overrides |
-| `init_args` | object | No | Per-canister init arg overrides (string or file reference) |
+| `init_args` | object | No | Per-canister init arg overrides (see [Init Args](#init-args)) |
 
 ## Canister Settings
 
@@ -302,17 +306,13 @@ settings:
 
 ## Init Args
 
-String form — auto-detected as Candid text or hex:
+A plain string is shorthand for inline Candid content:
 
 ```yaml
 init_args: "(record { owner = principal \"aaaaa-aa\" })"
 ```
 
-```yaml
-init_args: "4449444c0000"
-```
-
-Object form with explicit file path:
+File reference:
 
 ```yaml
 init_args:
@@ -320,7 +320,7 @@ init_args:
   format: bin
 ```
 
-Object form with explicit inline content:
+Inline content (explicit):
 
 ```yaml
 init_args:
@@ -332,9 +332,9 @@ init_args:
 |----------|------|----------|-------------|
 | `path` | string | Yes* | Relative path to file containing init args |
 | `content` | string | Yes* | Inline init args content |
-| `format` | string | Yes | `hex`, `idl`, or `bin` |
+| `format` | string | No | `hex`, `idl`, or `bin` (default: `idl`) |
 
-*Exactly one of `path` or `content` must be specified. `format` is always required in the object form.
+*Exactly one of `path` or `content` must be specified.
 
 Supported formats:
 - **`hex`** — Hex-encoded bytes (inline or file)
@@ -378,7 +378,9 @@ canisters:
             - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
-    init_args: "(record { admin = principal \"aaaaa-aa\" })"
+    init_args:
+      content: "(record { admin = principal \"aaaaa-aa\" })"
+      format: idl
 
 networks:
   - name: local
@@ -408,7 +410,9 @@ environments:
         environment_variables:
           ENV: "production"
     init_args:
-      backend: "(record { admin = principal \"xxxx-xxxx\" })"
+      backend:
+        content: "(record { admin = principal \"xxxx-xxxx\" })"
+        format: idl
 ```
 
 ## Schema

@@ -64,23 +64,6 @@ pub enum InitArgsToBytesError {
 }
 
 impl InitArgs {
-    /// Try to interpret a string as hex, falling back to Candid text.
-    /// On failure, surfaces the Candid parse error.
-    pub fn detect(s: &str) -> Result<Self, candid_parser::Error> {
-        let trimmed = s.trim();
-        if hex::decode(trimmed).is_ok() {
-            return Ok(InitArgs::Text {
-                content: trimmed.to_owned(),
-                format: InitArgsFormat::Hex,
-            });
-        }
-        parse_idl_args(trimmed)?;
-        Ok(InitArgs::Text {
-            content: trimmed.to_owned(),
-            format: InitArgsFormat::Idl,
-        })
-    }
-
     /// Resolve to raw bytes according to the format.
     pub fn to_bytes(&self) -> Result<Vec<u8>, InitArgsToBytesError> {
         match self {

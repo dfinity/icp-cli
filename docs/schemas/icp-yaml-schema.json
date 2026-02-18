@@ -185,7 +185,7 @@
               "type": "null"
             }
           ],
-          "description": "Initialization arguments passed to the canister during installation.\nCan be an inline string (hex or Candid text) or a file reference."
+          "description": "Initialization arguments passed to the canister during installation."
         },
         "name": {
           "description": "The unique name of the canister as defined in this manifest.",
@@ -602,49 +602,40 @@
       "type": "object"
     },
     "ManifestInitArgs": {
-      "anyOf": [
+      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid content:\n```yaml\ninit_args: \"(42)\"\n# equivalent to:\ninit_args:\n  content: \"(42)\"\n  format: idl\n```",
+      "oneOf": [
         {
-          "description": "String value — auto-detected as hex, Candid text, or file path at resolution time.",
-          "type": "string"
-        },
-        {
-          "description": "Explicit file reference with format.",
+          "description": "Relative path to a file containing init args.",
           "properties": {
-            "format": {
-              "$ref": "#/$defs/InitArgsFormat",
-              "description": "How to interpret the file contents."
-            },
             "path": {
-              "description": "Relative path to the file.",
               "type": "string"
             }
           },
           "required": [
-            "path",
-            "format"
+            "path"
           ],
           "type": "object"
         },
         {
-          "description": "Explicit inline content with format.",
+          "description": "Inline init args content.",
           "properties": {
             "content": {
-              "description": "The init args content.",
               "type": "string"
-            },
-            "format": {
-              "$ref": "#/$defs/InitArgsFormat",
-              "description": "How to interpret the content."
             }
           },
           "required": [
-            "content",
-            "format"
+            "content"
           ],
           "type": "object"
         }
       ],
-      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is auto-detected as hex, Candid text, or a file path:\n```yaml\ninit_args: \"(42)\"\ninit_args: \"args.txt\"\n```\n\nAn object with `path` is an explicit file reference:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n\nAn object with `content` is explicit inline content:\n```yaml\ninit_args:\n  content: \"(42)\"\n  format: idl\n```"
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/InitArgsFormat",
+          "description": "How to interpret the init args. Defaults to Candid text (`idl`) if omitted."
+        }
+      },
+      "type": "object"
     },
     "NetworkManifest": {
       "description": "A network definition for the project",

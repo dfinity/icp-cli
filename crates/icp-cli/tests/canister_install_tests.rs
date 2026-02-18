@@ -222,7 +222,9 @@ async fn canister_install_with_init_args_candid() {
               configuration:
                 main: main.mo
                 args: ""
-            init_args: "(opt 42 : opt nat8)"
+            init_args:
+              content: "(opt 42 : opt nat8)"
+              format: idl
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -287,7 +289,9 @@ async fn canister_install_with_init_args_hex() {
               configuration:
                 main: main.mo
                 args: ""
-            init_args: "4449444c016e7b01000164"
+            init_args:
+              content: "4449444c016e7b01000164"
+              format: hex
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -351,7 +355,9 @@ async fn canister_install_with_environment_init_args_override() {
               configuration:
                 main: main.mo
                 args: ""
-            init_args: "(opt 1 : opt nat8)"
+            init_args:
+              content: "(opt 1 : opt nat8)"
+              format: idl
 
         {NETWORK_RANDOM_PORT}
 
@@ -359,7 +365,9 @@ async fn canister_install_with_environment_init_args_override() {
           - name: random-environment
             network: random-network
             init_args:
-              my-canister: "(opt 200 : opt nat8)"
+              my-canister:
+                content: "(opt 200 : opt nat8)"
+                format: idl
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");

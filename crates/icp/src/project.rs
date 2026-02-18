@@ -5,6 +5,7 @@ use snafu::prelude::*;
 use crate::{
     Canister, Environment, Network, Project,
     canister::recipe,
+    context::IC_ROOT_KEY,
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
         NetworkManifest, ProjectManifest, ProjectRootLocateError,
@@ -241,9 +242,7 @@ pub async fn consolidate_manifest(
                 connected: Connected {
                     api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
                     http_gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
-                    // Will use the IC Root key hard coded in agent-rs.
-                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
-                    root_key: None,
+                    root_key: IC_ROOT_KEY.to_vec(),
                 },
             },
         },

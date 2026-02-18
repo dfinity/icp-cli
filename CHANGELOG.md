@@ -9,6 +9,7 @@
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets
 * feat: install proxy canister when starting managed networks with all identities as controllers (or anonymous + default if more than 10 identities)
   * `icp network status` displays the proxy canister principal
+* feat: `icp network status` display more information about networks
 * feat: `icp canister logs` to display the current canister logs
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 

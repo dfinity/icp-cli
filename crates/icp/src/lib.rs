@@ -297,6 +297,7 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
+            context::IC_ROOT_KEY,
             manifest::{
                 adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
                 canister::{BuildStep, BuildSteps, SyncSteps},
@@ -398,7 +399,7 @@ impl MockProjectLoader {
                 connected: Connected {
                     api_url: "https://icp-api.io".parse().unwrap(),
                     http_gateway_url: Some("https://icp0.io".parse().unwrap()),
-                    root_key: None,
+                    root_key: IC_ROOT_KEY.to_vec(),
                 },
             },
         };

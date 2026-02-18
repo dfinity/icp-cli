@@ -280,7 +280,7 @@ Fetch and display canister logs
 * `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
+* `-f`, `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
 * `--interval <INTERVAL>` — Polling interval in seconds when following logs (requires --follow)
 
   Default value: `2`

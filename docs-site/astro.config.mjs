@@ -67,6 +67,8 @@ export default defineConfig({
             { label: 'Local Development', slug: 'guides/local-development' },
             { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
             { label: 'Deploying to Specific Subnets', slug: 'guides/deploying-to-specific-subnets' },
+            { label: 'Canister Snapshots', slug: 'guides/canister-snapshots' },
+            { label: 'Canister Migration', slug: 'guides/canister-migration' },
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
             { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },

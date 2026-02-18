@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
-use candid_parser::parse_idl_args;
 use snafu::prelude::*;
 
 use crate::{
@@ -91,15 +90,6 @@ pub enum ConsolidateManifestError {
     },
 
     #[snafu(display(
-        "init_args '{value}' for canister '{canister}' is not valid hex, Candid, or a file path"
-    ))]
-    InitArgsNotFound {
-        canister: String,
-        value: String,
-        path: PathBuf,
-    },
-
-    #[snafu(display(
         "init_args for canister '{canister}' uses format 'bin' with inline content; \
          binary format requires a file path"
     ))]
@@ -117,46 +107,9 @@ fn resolve_manifest_init_args(
     canister: &str,
 ) -> Result<InitArgs, ConsolidateManifestError> {
     match manifest_init_args {
-        // String form: detect format, fall back to file path if not valid content.
-        ManifestInitArgs::Inline(s) => {
-            let detected = InitArgs::detect(s.clone().into_bytes())
-                .expect("inline string is always valid UTF-8");
-            match &detected {
-                InitArgs::Text {
-                    format: InitArgsFormat::Hex,
-                    ..
-                } => Ok(detected),
-                InitArgs::Text {
-                    content,
-                    format: InitArgsFormat::Idl,
-                } => {
-                    if parse_idl_args(content.trim()).is_ok() {
-                        Ok(detected)
-                    } else {
-                        let file_path = base_path.join(s);
-                        if file_path.is_file() {
-                            let bytes =
-                                fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
-                            return InitArgs::detect(bytes).map_err(|_| {
-                                InitArgsNotFoundSnafu {
-                                    canister,
-                                    value: s,
-                                    path: file_path,
-                                }
-                                .build()
-                            });
-                        }
-                        InitArgsNotFoundSnafu {
-                            canister,
-                            value: s,
-                            path: base_path.join(s),
-                        }
-                        .fail()
-                    }
-                }
-                _ => Ok(detected),
-            }
-        }
+        // String form: auto-detect as hex or Candid text.
+        ManifestInitArgs::Inline(s) => Ok(InitArgs::detect(s.clone().into_bytes())
+            .expect("inline string is always valid UTF-8")),
 
         // Explicit file reference.
         ManifestInitArgs::Path { path, format } => {

@@ -302,7 +302,7 @@ settings:
 
 ## Init Args
 
-String form — auto-detected as hex, Candid text, or file path:
+String form — auto-detected as Candid text or hex:
 
 ```yaml
 init_args: "(record { owner = principal \"aaaaa-aa\" })"
@@ -310,10 +310,6 @@ init_args: "(record { owner = principal \"aaaaa-aa\" })"
 
 ```yaml
 init_args: "4449444c0000"
-```
-
-```yaml
-init_args: "./args.candid"
 ```
 
 Object form with explicit file path:

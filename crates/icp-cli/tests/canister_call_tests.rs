@@ -74,6 +74,8 @@ async fn canister_call_with_arguments() {
             "call",
             "--environment",
             "random-environment",
+            "--args-format",
+            "hex",
             "my-canister",
             "greet",
             "4449444c00017105776f726c64",

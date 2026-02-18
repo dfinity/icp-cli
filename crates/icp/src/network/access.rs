@@ -9,22 +9,12 @@ use crate::{
 #[derive(Clone)]
 pub struct NetworkAccess {
     /// Network's root-key
-    pub root_key: Option<Vec<u8>>,
+    pub root_key: Vec<u8>,
 
     /// Routing configuration
     pub api_url: Url,
 
     pub http_gateway_url: Option<Url>,
-}
-
-impl NetworkAccess {
-    pub fn new(api_url: &Url, http_gateway_url: Option<&Url>) -> Self {
-        Self {
-            root_key: None,
-            api_url: api_url.clone(),
-            http_gateway_url: http_gateway_url.cloned(),
-        }
-    }
 }
 
 #[derive(Debug, Snafu)]
@@ -88,7 +78,7 @@ pub async fn get_managed_network_access(
     }
     let http_gateway_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
     Ok(NetworkAccess {
-        root_key: Some(desc.root_key),
+        root_key: desc.root_key,
         api_url: http_gateway_url.clone(),
         http_gateway_url: Some(http_gateway_url),
     })

@@ -83,7 +83,8 @@
           ]
         },
         "reserved_cycles_limit": {
-          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.",
+          "default": null,
+          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes: k, m, b, t (e.g. \"4.3t\" for 4.3 trillion).",
           "format": "uint64",
           "minimum": 0,
           "type": [

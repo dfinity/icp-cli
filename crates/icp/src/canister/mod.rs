@@ -198,6 +198,34 @@ impl From<LogVisibility> for icp_canister_interfaces::cycles_ledger::LogVisibili
     }
 }
 
+/// Deserializes reserved_cycles_limit from either a number or a string (e.g. "4t") in YAML.
+/// OneOf is needed because YAML can give us a number token or a string token; we then
+/// always parse via parse_cycles_amount so bare numbers and suffix strings are handled in one place.
+fn deserialize_reserved_cycles_limit<'de, D>(d: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOf {
+        Number(u64),
+        Str(String),
+    }
+
+    let opt: Option<OneOf> = Option::deserialize(d)?;
+    opt.map(|v| {
+        let s = match &v {
+            OneOf::Number(n) => n.to_string(),
+            OneOf::Str(s) => s.clone(),
+        };
+        let n128 = crate::parsers::parse_cycles_amount(&s).map_err(serde::de::Error::custom)?;
+        u64::try_from(n128).map_err(|_| {
+            serde::de::Error::custom(format!("reserved_cycles_limit too large: '{s}'"))
+        })
+    })
+    .transpose()
+}
+
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
@@ -215,6 +243,8 @@ pub struct Settings {
 
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
+    /// Supports suffixes: k, m, b, t (e.g. "4.3t" for 4.3 trillion).
+    #[serde(default, deserialize_with = "deserialize_reserved_cycles_limit")]
     pub reserved_cycles_limit: Option<u64>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
@@ -332,6 +362,20 @@ allowed_viewers:
         assert!(yaml.contains("allowed_viewers"));
         assert!(yaml.contains("aaaaa-aa"));
         assert!(yaml.contains("2vxsx-fae"));
+    }
+
+    #[test]
+    fn settings_reserved_cycles_limit_parses_suffix() {
+        let yaml = "reserved_cycles_limit: 4.3t";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(settings.reserved_cycles_limit, Some(4_300_000_000_000));
+    }
+
+    #[test]
+    fn settings_reserved_cycles_limit_parses_number() {
+        let yaml = "reserved_cycles_limit: 5000000000000";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(settings.reserved_cycles_limit, Some(5_000_000_000_000));
     }
 
     #[test]

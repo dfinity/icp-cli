@@ -8,7 +8,6 @@ use icp_canister_interfaces::cycles_ledger::{
 };
 
 use crate::commands::args;
-use crate::commands::parsers::parse_cycles_amount;
 use crate::operations::token::TokenAmount;
 
 /// Top up a canister with cycles
@@ -16,7 +15,7 @@ use crate::operations::token::TokenAmount;
 pub(crate) struct TopUpArgs {
     /// Amount of cycles to top up.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = parse_cycles_amount)]
+    #[arg(long, value_parser = icp::parsers::parse_cycles_amount)]
     pub(crate) amount: u128,
 
     #[command(flatten)]

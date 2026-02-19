@@ -185,6 +185,71 @@ async fn canister_create_with_settings() {
 }
 
 #[tokio::test]
+async fn canister_create_with_settings_reserved_cycles_suffix_in_yaml() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // reserved_cycles_limit with suffix
+    let pm = formatdoc! {r#"
+            canisters:
+              - name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: cp {path} "$ICP_WASM_OUTPUT_PATH"
+                settings:
+                  compute_allocation: 1
+                  reserved_cycles_limit: 1.2t
+
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--cycles",
+            "70t",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            starts_with("Canister Id:")
+                .and(contains("Status: Running"))
+                .and(contains("Reserved cycles limit: 1_200_000_000_000")),
+        );
+}
+
+#[tokio::test]
 async fn canister_create_with_settings_cmdline_override() {
     let ctx = TestContext::new();
 

@@ -11,7 +11,6 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use crate::commands::args;
-use crate::commands::parsers::parse_cycles_amount;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -106,7 +105,7 @@ pub(crate) struct UpdateArgs {
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = parse_cycles_amount)]
+    #[arg(long, value_parser = icp::parsers::parse_cycles_amount)]
     reserved_cycles_limit: Option<u128>,
 
     #[arg(long, value_parser = memory_parser)]

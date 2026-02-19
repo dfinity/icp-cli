@@ -19,6 +19,7 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
+pub mod parsers;
 pub mod context;
 pub mod directories;
 pub mod fs;

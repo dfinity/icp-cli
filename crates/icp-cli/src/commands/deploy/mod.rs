@@ -13,7 +13,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use crate::{
-    commands::{canister::create, parsers::parse_cycles_amount},
+    commands::canister::create,
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
@@ -47,7 +47,7 @@ pub(crate) struct DeployArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
+    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES, value_parser = icp::parsers::parse_cycles_amount)]
     pub(crate) cycles: u128,
 
     #[command(flatten)]

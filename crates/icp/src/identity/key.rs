@@ -831,8 +831,10 @@ pub fn export_identity(
     export_format: ExportFormat,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<String, ExportIdentityError> {
+    // Load the identity list
     let identity_list = IdentityList::load_from(dirs)?;
 
+    // Check the identity exists
     let spec = identity_list
         .identities
         .get(name)
@@ -843,6 +845,7 @@ pub fn export_identity(
             format: storage_format,
             ..
         } => {
+            // Read the PEM file
             let pem_path = dirs.key_pem_path(name);
             let pem_contents = fs::read_to_string(&pem_path).context(ReadPemFileForExportSnafu)?;
             let pem = pem_contents
@@ -850,17 +853,21 @@ pub fn export_identity(
                 .context(ParsePemForExportSnafu)?;
 
             match storage_format {
+                // Already plaintext, return as-is
                 PemFormat::Plaintext => pem_contents,
                 PemFormat::Pbes2 => {
+                    // Decrypt the PEM
                     let password = password_func()
                         .map_err(|message| ExportIdentityError::GetPasswordForExport { message })?;
 
+                    // Decrypt to get the plaintext private key info
                     let encrypted = EncryptedPrivateKeyInfo::from_der(pem.contents())
                         .context(ParseDecryptedForExportSnafu)?;
                     let decrypted: SecretDocument = encrypted
                         .decrypt(&password)
                         .context(DecryptPemForExportSnafu)?;
 
+                    // Convert to plaintext PEM string
                     decrypted
                         .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
                         .expect("infallible PEM encoding")
@@ -869,6 +876,7 @@ pub fn export_identity(
             }
         }
         IdentitySpec::Keyring { .. } => {
+            // Read from keyring (already stored as plaintext PEM)
             let entry =
                 Entry::new(SERVICE_NAME, name).context(LoadKeyringEntryForExportSnafu { name })?;
             entry
@@ -887,6 +895,7 @@ pub fn export_identity(
                 .expect("internal error: exported PEM is invalid");
             let pki = PrivateKeyInfo::from_der(pem.contents())
                 .expect("internal error: exported key is not valid PKCS#8");
+            // Encrypt the key with the provided password
             Ok(encrypt_pki(&pki, &password).to_string())
         }
     }

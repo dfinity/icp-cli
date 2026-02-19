@@ -77,13 +77,13 @@ Snapshots capture WASM module and memory, but **not** canister settings. Check y
 icp canister status my-canister -e ic
 
 # Example: copy non-default settings
-icp canister update-settings <target-id> \
+icp canister settings update <target-id> \
   --compute-allocation 10 \
   --freezing-threshold 604800 \
   -n ic
 ```
 
-Run `icp canister update-settings --help` for a full list of available settings. Common ones include compute allocation, memory allocation, and freezing threshold.
+Run `icp canister settings update --help` for a full list of available settings. Common ones include compute allocation, memory allocation, and freezing threshold.
 
 ### 4. Switch Over
 
@@ -207,14 +207,14 @@ If any settings differ from the defaults, apply them to the target canister:
 
 ```bash
 # Example: copy non-default settings to the target canister
-icp canister update-settings <target-id> \
+icp canister settings update <target-id> \
   --compute-allocation 10 \
   --freezing-threshold 604800 \
   --wasm-memory-limit 2GiB \
   -n ic
 ```
 
-Run `icp canister update-settings --help` for a full list of available settings. Common ones include compute allocation, memory allocation, and freezing threshold. You do **not** need to copy controllers — those are restored automatically.
+Run `icp canister settings update --help` for a full list of available settings. Common ones include compute allocation, memory allocation, and freezing threshold. You do **not** need to copy controllers — those are restored automatically.
 
 ### 4. Stop the Target Canister
 
@@ -274,7 +274,7 @@ icp canister call rwlgt-iiaaa-aaaaa-aaaaa-cai get_subnet_for_canister \
 icp canister status my-canister -e ic
 
 # Remove the NNS migration canister as controller
-icp canister update-settings my-canister --remove-controller sbzkb-zqaaa-aaaaa-aaaiq-cai -e ic
+icp canister settings update my-canister --remove-controller sbzkb-zqaaa-aaaaa-aaaiq-cai -e ic
 ```
 
 **Delete local snapshot files** — remove the `./migration-snapshot` directory once you've verified the migration succeeded.

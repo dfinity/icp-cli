@@ -13,6 +13,8 @@ Step-by-step instructions for common tasks:
 - [Local Development](guides/local-development.md) — The edit-build-deploy cycle
 - [Deploying to Mainnet](guides/deploying-to-mainnet.md) — Go live on the Internet Computer
 - [Deploying to Specific Subnets](guides/deploying-to-specific-subnets.md) — Target specific subnets
+- [Canister Snapshots](guides/canister-snapshots.md) — Back up and restore canister state
+- [Canister Migration](guides/canister-migration.md) — Move canisters between subnets
 - [Managing Environments](guides/managing-environments.md) — Dev, staging, production workflows
 - [Managing Identities](guides/managing-identities.md) — Keys and authentication reference
 - [Tokens and Cycles](guides/tokens-and-cycles.md) — ICP tokens and cycles command reference
@@ -44,4 +46,4 @@ Complete technical specifications:
 ## Additional Resources
 
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
-- [Examples](../examples/) — Sample projects for various use cases
+- [Examples](https://github.com/dfinity/icp-cli/tree/main/examples) — Sample projects for various use cases

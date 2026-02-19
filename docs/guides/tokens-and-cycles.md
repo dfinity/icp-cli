@@ -289,7 +289,7 @@ icp cycles transfer 1T rrkah-fqaaa-aaaaa-aaaaq-cai --to-subaccount 1 -n ic
 
 Alternatively, you can use the ICRC-1 account format, which embeds the subaccount directly in the address. This format appends a CRC32 checksum to the principal, followed by the subaccount hex after a `.` separator. For example, `2vxsx-fae-22yutvy.1` is the anonymous principal (`2vxsx-fae`) with checksum `22yutvy` and subaccount `1`.
 
-Use `icp identity account-id --of-subaccount <hex>` to get a correctly formatted ICRC-1 address rather than constructing it manually.
+Use `icp identity account-id --of-subaccount <hex>` to get both the ICP ledger account ID and the ICRC-1 account format for a subaccount, rather than constructing them manually.
 
 ### Receiver Address Formats
 

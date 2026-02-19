@@ -12,6 +12,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister delete`↴](#icp-canister-delete)
 * [`icp canister install`↴](#icp-canister-install)
 * [`icp canister list`↴](#icp-canister-list)
+* [`icp canister logs`↴](#icp-canister-logs)
 * [`icp canister metadata`↴](#icp-canister-metadata)
 * [`icp canister migrate-id`↴](#icp-canister-migrate-id)
 * [`icp canister settings`↴](#icp-canister-settings)
@@ -123,6 +124,7 @@ Perform canister operations against a network
 * `delete` — Delete a canister from a network
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
+* `logs` — Fetch and display canister logs
 * `metadata` — Read a metadata section from a canister
 * `migrate-id` — Migrate a canister ID from one subnet to another
 * `settings` — Commands to manage canister settings
@@ -260,6 +262,28 @@ List the canisters in an environment
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+
+
+
+## `icp canister logs`
+
+Fetch and display canister logs
+
+**Usage:** `icp canister logs [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-f`, `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
+* `--interval <INTERVAL>` — Polling interval in seconds when following logs (requires --follow)
+
+  Default value: `2`
 
 
 

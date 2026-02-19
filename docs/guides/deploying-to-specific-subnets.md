@@ -58,14 +58,12 @@ Verify the subnet ID is correct and the subnet accepts new canisters. Some subne
 
 **Canister on wrong subnet**
 
-The IC supports [canister migration](https://forum.dfinity.org/t/canister-migrations-available-now/63181) between subnets, but icp-cli does not yet support this feature. For now, you can delete and redeploy:
+See the [Canister Migration](canister-migration.md) guide for detailed instructions. Your options depend on whether you need to preserve the canister ID:
 
-```bash
-icp canister delete my-canister -e ic
-icp deploy my-canister -e ic --subnet <correct-subnet>
-```
+- **New ID is acceptable** — Transfer state via [snapshots](canister-snapshots.md) to a new canister on the correct subnet
+- **ID must be preserved** — Transfer state via snapshots, copy settings, then run `icp canister migrate-id` to move the canister ID
 
-Note: Deleting a canister permanently destroys its state. Canister migration support in icp-cli is planned.
+Note that assigning a new canister ID means losing access to any threshold signature keys (tECDSA/tSchnorr) or vetKeys derived by the canister.
 
 ## Next Steps
 

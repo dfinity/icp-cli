@@ -805,6 +805,74 @@ fn identity_export_keyring() {
 }
 
 #[test]
+fn identity_export_encrypted() {
+    let ctx = TestContext::new();
+
+    // Import a plaintext identity
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice",
+            "--storage",
+            "plaintext",
+            "--from-pem",
+        ])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    let password_file = ctx.home_path().join("encrypt-password.txt");
+    std::fs::write(&password_file, "export-password-123").unwrap();
+
+    // Export with encryption
+    let output = ctx
+        .icp()
+        .args([
+            "identity",
+            "export",
+            "alice",
+            "--encrypt",
+            "--encryption-password-file",
+        ])
+        .arg(&password_file)
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&output.get_output().stdout).unwrap();
+
+    // Verify it's an encrypted PEM
+    assert!(stdout.contains("-----BEGIN ENCRYPTED PRIVATE KEY-----"));
+    assert!(stdout.contains("-----END ENCRYPTED PRIVATE KEY-----"));
+    assert!(!stdout.contains("-----BEGIN PRIVATE KEY-----"));
+
+    // Re-import the encrypted export and verify same principal
+    let export_file = ctx.home_path().join("exported-encrypted.pem");
+    std::fs::write(&export_file, stdout).unwrap();
+
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "alice-reimported",
+            "--storage",
+            "plaintext",
+            "--from-pem",
+        ])
+        .arg(&export_file)
+        .arg("--decryption-password-from-file")
+        .arg(&password_file)
+        .assert()
+        .success();
+
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice-reimported"])
+        .assert()
+        .success()
+        .stdout(eq("5upke-tazvi-6ufqc-i3v6r-j4gpu-dpwti-obhal-yb5xj-ue32x-ktkql-rqe").trim());
+}
+
+#[test]
 fn identity_export_cannot_export_anonymous() {
     let ctx = TestContext::new();
 

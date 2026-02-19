@@ -50,6 +50,12 @@ pub enum CreateFormat {
     Keyring,
 }
 
+#[derive(Debug, Clone)]
+pub enum ExportFormat {
+    Plaintext,
+    Encrypted { password: Zeroizing<String> },
+}
+
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
@@ -739,8 +745,7 @@ pub fn link_hsm_identity(
     Ok(())
 }
 
-fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
-    let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
+fn encrypt_pki(pki: &PrivateKeyInfo<'_>, password: &str) -> Zeroizing<String> {
     let mut salt = [0; 16];
     let mut iv = [0; 16];
 
@@ -763,6 +768,11 @@ fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<S
     encrypted_doc
         .to_pem(EncryptedPrivateKeyInfo::PEM_LABEL, Default::default())
         .expect("infallible EPKI encoding")
+}
+
+fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
+    let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
+    encrypt_pki(&pki, password)
 }
 
 #[derive(Debug, Snafu)]
@@ -810,71 +820,74 @@ pub enum ExportIdentityError {
     },
 }
 
-/// Exports an identity as a plaintext PEM string.
+/// Exports an identity as a PEM string, optionally encrypted.
 ///
 /// This function loads the identity from either a PEM file or keyring,
-/// decrypts it if necessary (prompting for a password), and returns the
-/// decrypted PEM string. The anonymous identity cannot be exported.
+/// decrypts it if necessary (prompting for a password via `password_func`),
+/// and returns the PEM string in the requested [`ExportFormat`].
 pub fn export_identity(
     dirs: LRead<&IdentityPaths>,
     name: &str,
+    export_format: ExportFormat,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<String, ExportIdentityError> {
-    // Load the identity list
     let identity_list = IdentityList::load_from(dirs)?;
 
-    // Check the identity exists
     let spec = identity_list
         .identities
         .get(name)
         .context(NoSuchIdentityToExportSnafu { name })?;
 
-    match spec {
-        IdentitySpec::Pem { format, .. } => {
-            // Read the PEM file
+    let plaintext_pem = match spec {
+        IdentitySpec::Pem {
+            format: storage_format,
+            ..
+        } => {
             let pem_path = dirs.key_pem_path(name);
             let pem_contents = fs::read_to_string(&pem_path).context(ReadPemFileForExportSnafu)?;
             let pem = pem_contents
                 .parse::<Pem>()
                 .context(ParsePemForExportSnafu)?;
 
-            match format {
-                PemFormat::Plaintext => {
-                    // Already plaintext, return as-is
-                    Ok(pem_contents)
-                }
+            match storage_format {
+                PemFormat::Plaintext => pem_contents,
                 PemFormat::Pbes2 => {
-                    // Decrypt the PEM
                     let password = password_func()
                         .map_err(|message| ExportIdentityError::GetPasswordForExport { message })?;
 
-                    // Decrypt to get the plaintext private key info
                     let encrypted = EncryptedPrivateKeyInfo::from_der(pem.contents())
                         .context(ParseDecryptedForExportSnafu)?;
                     let decrypted: SecretDocument = encrypted
                         .decrypt(&password)
                         .context(DecryptPemForExportSnafu)?;
 
-                    // Convert to plaintext PEM string
-                    let plaintext_pem = decrypted
+                    decrypted
                         .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
-                        .expect("infallible PEM encoding");
-
-                    Ok(plaintext_pem.to_string())
+                        .expect("infallible PEM encoding")
+                        .to_string()
                 }
             }
         }
         IdentitySpec::Keyring { .. } => {
-            // Read from keyring (already stored as plaintext PEM)
             let entry =
                 Entry::new(SERVICE_NAME, name).context(LoadKeyringEntryForExportSnafu { name })?;
-            let pem = entry
+            entry
                 .get_password()
-                .context(ReadKeyringEntryForExportSnafu { name })?;
-
-            Ok(pem)
+                .context(ReadKeyringEntryForExportSnafu { name })?
         }
-        IdentitySpec::Anonymous => CannotExportAnonymousSnafu.fail(),
-        IdentitySpec::Hsm { .. } => CannotExportHsmSnafu.fail(),
+        IdentitySpec::Anonymous => return CannotExportAnonymousSnafu.fail(),
+        IdentitySpec::Hsm { .. } => return CannotExportHsmSnafu.fail(),
+    };
+
+    match export_format {
+        ExportFormat::Plaintext => Ok(plaintext_pem),
+        ExportFormat::Encrypted { password } => {
+            let pem: Pem = plaintext_pem
+                .parse()
+                .expect("internal error: exported PEM is invalid");
+            let pki = PrivateKeyInfo::from_der(pem.contents())
+                .expect("internal error: exported key is not valid PKCS#8");
+            Ok(encrypt_pki(&pki, &password).to_string())
+        }
     }
 }

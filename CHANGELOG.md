@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: `icp identity export` now takes an `--encrypt` flag to avoid rendering the key in plaintext
 * feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
 * feat: Allow specifying a version of the network launcher to use
 * feat: Support subaccounts and ICRC-1 IDs in `icp token`, `icp cycles`, and `icp identity account-id`

@@ -54,6 +54,24 @@ Example:
 icp canister call backend get_user '("alice")'
 ```
 
+For read-only methods, use `--query` for faster uncertified responses:
+
+```bash
+icp canister call backend get_user '("alice")' --query
+```
+
+### Forwarding Cycles with the Proxy Canister
+
+Managed networks include a proxy canister that forwards calls with cycles attached. This is useful for testing methods that require cycles:
+
+```bash
+icp canister call my-canister method '(args)' \
+  --proxy $(icp network status --json | jq -r .proxy_canister_principal) \
+  --cycles 1T
+```
+
+The proxy canister's principal is shown in `icp network status` output.
+
 ### Viewing Project State
 
 List canisters configured in this environment (the `local` environment is the default, targeting your local network):
@@ -225,6 +243,30 @@ View network details as JSON:
 ```bash
 icp network status --json
 ```
+
+Example output for a local managed network:
+
+```json
+{
+  "managed": true,
+  "api_url": "http://localhost:8000",
+  "gateway_url": "http://localhost:8000",
+  "candid_ui_principal": "be2us-64aaa-aaaaa-qaabq-cai",
+  "proxy_canister_principal": "bd3sg-teaaa-aaaaa-qaaba-cai",
+  "root_key": "308182..."
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `managed` | Whether icp-cli controls this network's lifecycle |
+| `api_url` | Endpoint for canister calls |
+| `gateway_url` | Endpoint for browser access to canisters |
+| `candid_ui_principal` | Candid UI canister for testing (managed networks only) |
+| `proxy_canister_principal` | Proxy canister for forwarding calls with cycles (managed networks only) |
+| `root_key` | Network's root key for verifying responses |
+
+For connected networks (like `ic`), `candid_ui_principal` and `proxy_canister_principal` are omitted.
 
 Stop the network when done:
 

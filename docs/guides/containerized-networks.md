@@ -174,6 +174,36 @@ networks:
 
 Useful for CI/CD or temporary testing.
 
+### Pinning a Launcher Version
+
+Pin the native network launcher to a specific version for reproducible environments across your team and CI:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    version: "v1.0.0"
+```
+
+If omitted, the latest released version is used. To update the launcher when no version is pinned:
+
+```bash
+icp network update
+```
+
+When `autocontainerize` is enabled (see [Always Use Containers](#always-use-containers)), the launcher `version` is used as the Docker image tag.
+
+For explicit Docker image configurations, specify the version as part of the image tag:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher:v1.0.0
+    port-mapping:
+      - "8000:4943"
+```
+
 ## Image Contract
 
 When using a containerized network, the Docker image must fulfill a specific contract with icp-cli. The official `ghcr.io/dfinity/icp-cli-network-launcher` image implements this contract. If you're building a custom image, see [Advanced: Custom Images](#advanced-custom-images) for full details.
@@ -283,7 +313,7 @@ All available configuration options for containerized networks:
 |----------------|----------|----------|--------------------------------------------------------------------------------|
 | `name`         | string   | Yes      | Unique network identifier                                                      |
 | `mode`         | string   | Yes      | Must be `managed`                                                              |
-| `image`        | string   | Yes      | Docker image to use                                                            |
+| `image`        | string   | Yes      | Docker image to use (append `:tag` for version pinning)                        |
 | `port-mapping` | string[] | Yes      | Port mappings in `[host-ip:]host-port:container-port` format                   |
 | `rm-on-exit`   | bool     | No       | Delete container when stopped (default: `false`)                               |
 | `volumes`      | string[] | No       | Docker volumes in `name:container_path[:options]` format                       |

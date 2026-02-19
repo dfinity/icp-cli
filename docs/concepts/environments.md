@@ -47,7 +47,17 @@ networks:
 
 Use connected networks for shared testnets and production.
 
-Note: There are two URLs associated with connected networks, `api-url` and `http-gateway-url`. The API URL is where tools like icp-cli and agent-rs programmatically talk to canisters, while the HTTP gateway URL is where you can access canisters' webpages in your browser. A HTTP gateway URL can be used as an API URL, and for most custom connected networks there isn't a difference, so you can specify both just using `url`. But for the ICP mainnet, the API url is at `icp-api.io` and the HTTP gateway is `icp0.io`.
+There are two URLs associated with connected networks, `api-url` and `http-gateway-url`. The API URL is where tools like icp-cli and agent-rs programmatically talk to canisters, while the HTTP gateway URL is where you can access canisters' webpages in your browser. For most custom connected networks there isn't a difference, so you can specify both using `url`. But when they differ (as on ICP mainnet where the API is at `icp-api.io` and the HTTP gateway at `icp0.io`), specify them separately:
+
+```yaml
+networks:
+  - name: custom-testnet
+    mode: connected
+    api-url: https://api.testnet.example.com
+    http-gateway-url: https://testnet.example.com
+```
+
+If `http-gateway-url` is omitted, canister URLs will not be printed during deploy operations.
 
 ### Implicit Networks
 

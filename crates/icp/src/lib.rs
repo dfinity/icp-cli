@@ -19,7 +19,6 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
-pub mod parsers;
 pub mod context;
 pub mod directories;
 pub mod fs;
@@ -27,6 +26,7 @@ pub mod identity;
 pub mod manifest;
 pub mod network;
 pub mod package;
+pub mod parsers;
 pub mod prelude;
 pub mod project;
 pub mod settings;

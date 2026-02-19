@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use candid::{Nat, Principal};
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::parse_cycles_amount;
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
@@ -30,7 +31,7 @@ pub(crate) struct CanisterSettings {
     /// Optional upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = icp::parsers::parse_cycles_amount)]
+    #[arg(long, value_parser = parse_cycles_amount)]
     pub(crate) reserved_cycles_limit: Option<u128>,
 }
 
@@ -54,7 +55,7 @@ pub(crate) struct CreateArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES, value_parser = icp::parsers::parse_cycles_amount)]
+    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
     pub(crate) cycles: u128,
 
     /// The subnet to create canisters on.

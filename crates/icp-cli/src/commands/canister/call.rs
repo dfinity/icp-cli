@@ -6,6 +6,7 @@ use clap::Args;
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
+use icp::parsers::parse_cycles_amount;
 use icp::prelude::*;
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use std::io::{self, Write};
@@ -49,7 +50,7 @@ pub(crate) struct CallArgs {
     /// Cycles to forward with the proxied call.
     ///
     /// Only used when --proxy is specified. Defaults to 0.
-    #[arg(long, requires = "proxy", value_parser = icp::parsers::parse_cycles_amount, default_value = "0")]
+    #[arg(long, requires = "proxy", value_parser = parse_cycles_amount, default_value = "0")]
     pub(crate) cycles: u128,
 
     /// Sends a query request to a canister instead of an update request.

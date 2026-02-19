@@ -126,8 +126,17 @@ mod tests {
     #[test]
     fn parse_token_amount_plain_and_suffixes() {
         use std::str::FromStr;
-        assert_eq!(parse_token_amount("1").unwrap(), BigDecimal::from_str("1").unwrap());
-        assert_eq!(parse_token_amount("1k").unwrap(), BigDecimal::from_str("1000").unwrap());
-        assert_eq!(parse_token_amount("0.5t").unwrap(), BigDecimal::from_str("500000000000").unwrap());
+        assert_eq!(
+            parse_token_amount("1").unwrap(),
+            BigDecimal::from_str("1").unwrap()
+        );
+        assert_eq!(
+            parse_token_amount("1k").unwrap(),
+            BigDecimal::from_str("1000").unwrap()
+        );
+        assert_eq!(
+            parse_token_amount("0.5t").unwrap(),
+            BigDecimal::from_str("500000000000").unwrap()
+        );
     }
 }

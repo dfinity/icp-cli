@@ -3,6 +3,7 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::parse_cycles_amount;
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
 };
@@ -15,7 +16,7 @@ use crate::operations::token::TokenAmount;
 pub(crate) struct TopUpArgs {
     /// Amount of cycles to top up.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = icp::parsers::parse_cycles_amount)]
+    #[arg(long, value_parser = parse_cycles_amount)]
     pub(crate) amount: u128,
 
     #[command(flatten)]

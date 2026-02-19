@@ -3,6 +3,7 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
+use icp::parsers::parse_cycles_amount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
@@ -47,7 +48,7 @@ pub(crate) struct DeployArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES, value_parser = icp::parsers::parse_cycles_amount)]
+    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
     pub(crate) cycles: u128,
 
     #[command(flatten)]

@@ -1,6 +1,7 @@
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::parse_token_amount;
 
 use crate::commands::args::{FlexibleAccountId, TokenCommandArgs};
 use crate::commands::parsers::parse_subaccount;
@@ -12,7 +13,7 @@ use crate::operations::token::transfer::transfer;
 pub(crate) struct TransferArgs {
     /// Token amount to transfer.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(value_parser = icp::parsers::parse_token_amount)]
+    #[arg(value_parser = parse_token_amount)]
     pub(crate) amount: BigDecimal,
 
     /// The receiver of the token transfer.

@@ -2,6 +2,7 @@ use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::{parse_cycles_amount, parse_token_amount};
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
@@ -12,12 +13,12 @@ use crate::operations::token::mint::mint_cycles;
 pub(crate) struct MintArgs {
     /// Amount of ICP to mint to cycles.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, conflicts_with = "cycles", value_parser = icp::parsers::parse_token_amount)]
+    #[arg(long, conflicts_with = "cycles", value_parser = parse_token_amount)]
     pub(crate) icp: Option<BigDecimal>,
 
     /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, conflicts_with = "icp", value_parser = icp::parsers::parse_cycles_amount)]
+    #[arg(long, conflicts_with = "icp", value_parser = parse_cycles_amount)]
     pub(crate) cycles: Option<u128>,
 
     /// Subaccount to withdraw the ICP from.

@@ -1,6 +1,7 @@
 use anyhow::ensure;
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::parse_cycles_amount;
 use icp_canister_interfaces::cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -13,7 +14,7 @@ use crate::operations::token::transfer::icrc1_transfer;
 pub(crate) struct TransferArgs {
     /// Cycles amount to transfer.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(value_parser = icp::parsers::parse_cycles_amount)]
+    #[arg(value_parser = parse_cycles_amount)]
     pub(crate) amount: u128,
 
     /// The receiver of the cycles transfer

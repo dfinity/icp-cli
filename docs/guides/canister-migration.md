@@ -22,7 +22,7 @@ Move a canister to a different subnet. Depending on your needs, you can preserve
 
 - **Threshold signatures (tECDSA / tSchnorr):** The IC derives signing keys by cryptographically binding them to the calling canister's principal. A canister's derived keys — and any addresses or public keys derived from them — are permanently tied to its ID. Losing the ID means losing access to those keys and any assets they control, whether those are addresses on other blockchains (Bitcoin, Ethereum, etc.) or ICP principals controlled by the canister.
 - **VetKeys:** VetKey derivation similarly includes the canister's principal. A new ID produces entirely different decryption keys, making previously encrypted data inaccessible.
-- **External references:** Other canisters, frontends, or off-chain systems that reference the canister by ID would break.
+- **External references:** Other canisters, frontends, or off-chain systems that reference the canister by ID would break. This includes Internet Identity — users who authenticated via a canister-ID-based domain (e.g., `<canister-id>.icp0.io`) will lose access to their sessions.
 
 See [Migrating With the Canister ID](#migrating-with-the-canister-id) below for the full workflow.
 
@@ -83,7 +83,7 @@ icp canister update-settings <target-id> \
   -n ic
 ```
 
-Settings you may need to copy: `--compute-allocation`, `--memory-allocation`, `--freezing-threshold`, `--reserved-cycles-limit`, `--wasm-memory-limit`, `--wasm-memory-threshold`, `--log-visibility`.
+Run `icp canister update-settings --help` for a full list of available settings. Common ones include compute allocation, memory allocation, and freezing threshold.
 
 ### 4. Switch Over
 
@@ -214,7 +214,7 @@ icp canister update-settings <target-id> \
   -n ic
 ```
 
-Settings you may need to copy: `--compute-allocation`, `--memory-allocation`, `--freezing-threshold`, `--reserved-cycles-limit`, `--wasm-memory-limit`, `--wasm-memory-threshold`, `--log-visibility`. You do **not** need to copy controllers — those are restored automatically.
+Run `icp canister update-settings --help` for a full list of available settings. Common ones include compute allocation, memory allocation, and freezing threshold. You do **not** need to copy controllers — those are restored automatically.
 
 ### 4. Stop the Target Canister
 
@@ -262,8 +262,6 @@ Verify the canister is on the expected subnet by querying the NNS Registry canis
 icp canister call rwlgt-iiaaa-aaaaa-aaaaa-cai get_subnet_for_canister \
   '(record { "principal" = opt principal "<canister-id>" })' --query -n ic
 ```
-
-You can also verify on the [ICP Dashboard](https://dashboard.internetcomputer.org) — search for your canister ID to confirm its subnet.
 
 ### 8. Clean Up
 

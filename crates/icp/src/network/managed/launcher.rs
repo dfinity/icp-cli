@@ -169,7 +169,7 @@ pub async fn stop_launcher(pid: Pid) {
 
 pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     let ManagedLauncherConfig {
-        gateway: _,
+        gateway,
         version: _,
         artificial_delay_ms,
         ii,
@@ -190,6 +190,9 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
         for subnet in subnets {
             flags.push(format!("--subnet={subnet}"));
         }
+    }
+    for domain in &gateway.domains {
+        flags.push(format!("--domain={domain}"));
     }
     flags
 }

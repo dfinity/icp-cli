@@ -138,7 +138,11 @@ impl From<RootKey> for String {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Gateway {
+    /// Network interface for the gateway. Defaults to 127.0.0.1
     pub host: Option<String>,
+    /// Domains the gateway should respond to. localhost is always included.
+    pub domains: Option<Vec<String>>,
+    /// Port for the gateway to listen on. Defaults to 8000
     pub port: Option<u16>,
 }
 
@@ -282,6 +286,7 @@ mod tests {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
                             host: Some("localhost".to_string()),
+                            domains: None,
                             port: None,
                         }),
                         artificial_delay_ms: None,
@@ -311,6 +316,7 @@ mod tests {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
                             host: Some("localhost".to_string()),
+                            domains: None,
                             port: Some(8000)
                         }),
                         artificial_delay_ms: None,

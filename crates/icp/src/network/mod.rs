@@ -60,6 +60,9 @@ pub struct Gateway {
 
     #[serde(default)]
     pub port: Port,
+
+    #[serde(default)]
+    pub domains: Vec<String>,
 }
 
 impl Default for Gateway {
@@ -67,6 +70,7 @@ impl Default for Gateway {
         Self {
             host: default_host(),
             port: Default::default(),
+            domains: Default::default(),
         }
     }
 }
@@ -125,6 +129,7 @@ impl ManagedMode {
                 } else {
                     Port::Fixed(port)
                 },
+                domains: vec![],
             },
             artificial_delay_ms: None,
             ii: false,
@@ -195,13 +200,22 @@ impl Default for Configuration {
 
 impl From<ManifestGateway> for Gateway {
     fn from(value: ManifestGateway) -> Self {
-        let host = value.host.unwrap_or("localhost".to_string());
-        let port = match value.port {
+        let ManifestGateway {
+            host,
+            domains,
+            port,
+        } = value;
+        let host = host.unwrap_or("localhost".to_string());
+        let port = match port {
             Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };
-        Gateway { host, port }
+        Gateway {
+            host,
+            port,
+            domains: domains.unwrap_or_default(),
+        }
     }
 }
 

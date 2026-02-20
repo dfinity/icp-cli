@@ -66,7 +66,8 @@ async fn canister_call_with_url_and_root_key() {
         .stdout(eq("(\"Hello, world!\")").trim());
 
     // Get the network information so we can call the network directly
-    let assert = ctx.icp()
+    let assert = ctx
+        .icp()
         .current_dir(&project_dir)
         .args([
             "network",
@@ -83,9 +84,9 @@ async fn canister_call_with_url_and_root_key() {
     let gateway_url = json["gateway_url"].as_str().expect("Should be a string");
     let root_key = json["root_key"].as_str().expect("Should be a string");
 
-
     // Get the canister information so we can call the network directly
-    let assert = ctx.icp()
+    let assert = ctx
+        .icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -99,7 +100,8 @@ async fn canister_call_with_url_and_root_key() {
         .success();
 
     let output = assert.get_output();
-    let canister_id = String::from_utf8(output.stdout.clone()).expect("canister id should be a valid string");
+    let canister_id =
+        String::from_utf8(output.stdout.clone()).expect("canister id should be a valid string");
     let canister_id = canister_id.trim();
 
     // Test calling with with url from external directory
@@ -127,7 +129,7 @@ async fn canister_call_with_url_and_root_key() {
             "--network",
             gateway_url,
             "--root-key",
-            "badbadbad",  // This is an invalid root key
+            "badbadbad", // This is an invalid root key
             canister_id,
             "greet",
             "(\"world\")",
@@ -135,5 +137,4 @@ async fn canister_call_with_url_and_root_key() {
         .assert()
         .failure()
         .stderr(contains("invalid value 'badbadbad' for '--root-key"));
-
 }

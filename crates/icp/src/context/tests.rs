@@ -601,7 +601,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(8000),
                         domains: vec![],
                     },
@@ -669,7 +669,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(9000),
                         domains: vec![],
                     },
@@ -739,7 +739,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(8000),
                         domains: vec![],
                     },
@@ -759,7 +759,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(7000),
                         domains: vec![],
                     },

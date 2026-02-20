@@ -49,14 +49,14 @@ impl<'de> Deserialize<'de> for Port {
     }
 }
 
-fn default_host() -> String {
-    "localhost".to_string()
+fn default_bind() -> String {
+    "127.0.0.1".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Gateway {
-    #[serde(default = "default_host")]
-    pub host: String,
+    #[serde(default = "default_bind")]
+    pub bind: String,
 
     #[serde(default)]
     pub port: Port,
@@ -68,7 +68,7 @@ pub struct Gateway {
 impl Default for Gateway {
     fn default() -> Self {
         Self {
-            host: default_host(),
+            bind: default_bind(),
             port: Default::default(),
             domains: Default::default(),
         }
@@ -123,7 +123,7 @@ impl ManagedMode {
     pub fn default_for_port(port: u16) -> Self {
         ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
             gateway: Gateway {
-                host: default_host(),
+                bind: default_bind(),
                 port: if port == 0 {
                     Port::Random
                 } else {
@@ -201,18 +201,18 @@ impl Default for Configuration {
 impl From<ManifestGateway> for Gateway {
     fn from(value: ManifestGateway) -> Self {
         let ManifestGateway {
-            host,
+            bind,
             domains,
             port,
         } = value;
-        let host = host.unwrap_or("localhost".to_string());
+        let bind = bind.unwrap_or("localhost".to_string());
         let port = match port {
             Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };
         Gateway {
-            host,
+            bind,
             port,
             domains: domains.unwrap_or_default(),
         }

@@ -139,7 +139,7 @@ impl From<RootKey> for String {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Gateway {
     /// Network interface for the gateway. Defaults to 127.0.0.1
-    pub host: Option<String>,
+    pub bind: Option<String>,
     /// Domains the gateway should respond to. localhost is always included.
     pub domains: Option<Vec<String>>,
     /// Port for the gateway to listen on. Defaults to 8000
@@ -272,20 +272,20 @@ mod tests {
     }
 
     #[test]
-    fn managed_network_with_host() {
+    fn managed_network_with_bind() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
                     name: my-network
                     mode: managed
                     gateway:
-                      host: localhost
+                      bind: 127.0.0.1
                 "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
-                            host: Some("localhost".to_string()),
+                            bind: Some("127.0.0.1".to_string()),
                             domains: None,
                             port: None,
                         }),
@@ -307,7 +307,7 @@ mod tests {
                     name: my-network
                     mode: managed
                     gateway:
-                      host: localhost
+                      bind: 127.0.0.1
                       port: 8000
                 "#}),
             NetworkManifest {
@@ -315,7 +315,7 @@ mod tests {
                 configuration: Mode::Managed(Managed {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
-                            host: Some("localhost".to_string()),
+                            bind: Some("127.0.0.1".to_string()),
                             domains: None,
                             port: Some(8000)
                         }),

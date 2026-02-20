@@ -126,7 +126,17 @@ pub(crate) fn parse_cycles_amount(input: &str) -> Result<u128, String> {
 }
 
 pub(crate) fn parse_root_key(input: &str) -> Result<Vec<u8>, String> {
-    hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"))
+    let res = hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"));
+    if let Ok(v) = &res
+        && v.len() != 133
+    {
+        Err(format!(
+            "Invalid root key. Expected 133 bytes but got {}",
+            v.len()
+        ))
+    } else {
+        res
+    }
 }
 
 pub(crate) fn parse_subaccount(input: &str) -> Result<[u8; 32], String> {

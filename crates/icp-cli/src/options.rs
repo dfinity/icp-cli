@@ -1,5 +1,6 @@
-use clap::{ArgGroup, Args};
-use icp::context::{EnvironmentSelection, IC_ROOT_KEY, NetworkSelection};
+use clap::error::ErrorKind;
+use clap::{ArgGroup, ArgMatches, Args, FromArgMatches};
+use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::prelude::LOCAL;
 use url::Url;
@@ -64,7 +65,7 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
 }
 
 #[derive(Clone, Debug)]
-struct RootKey(pub Vec<u8>);
+pub(crate) struct RootKey(pub Vec<u8>);
 
 fn parse_root_key(input: &str) -> Result<RootKey, String> {
     let v = hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"))?;
@@ -93,30 +94,78 @@ fn parse_network_target(input: &str) -> Result<NetworkTarget, String> {
 
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
-pub(crate) struct NetworkOpt {
+pub(crate) struct NetworkOptInner {
     /// Name or URL of the network to target, conflicts with environment argument
     #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_network_target)]
     network: Option<NetworkTarget>,
 
     /// The root key to use if connecting to a network by URL.
+    /// Required when using `--network <URL>`.
     #[arg(long, short = 'k', requires = "network", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
     root_key: Option<RootKey>,
 }
 
+// This is wrapper around NetworkOptInner that will do some additional
+// validation to only allow --root-key when the network is a url.
+#[derive(Clone, Debug, Default)]
+pub(crate) enum NetworkOpt {
+    Url(Url, RootKey),
+
+    Name(String),
+
+    #[default]
+    None,
+}
+
+impl FromArgMatches for NetworkOpt {
+    fn from_arg_matches(matches: &ArgMatches) -> Result<Self, clap::Error> {
+        let inner = NetworkOptInner::from_arg_matches(matches)?;
+
+        match (inner.network, inner.root_key) {
+            // Case: We have a URL, so we REQUIRE the root key
+            (Some(NetworkTarget::Url(url)), Some(key)) => Ok(NetworkOpt::Url(url, key)),
+
+            // ERROR Case: URL provided but missing root key
+            (Some(NetworkTarget::Url(_)), None) => Err(clap::Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "`--root-key` is required when the `--network` is a URL.\n",
+            )),
+
+            // Case: Named network (root key is ignored or should be empty)
+            (Some(NetworkTarget::Named(name)), _) => Ok(NetworkOpt::Name(name)),
+
+            // Case: No network specified
+            (None, None) => Ok(NetworkOpt::None),
+
+            // Case: Should be impossible, --root-key is passed without a network argument
+            (None, Some(_)) => {
+                panic!("Invalid cli arg combination: --root-key without a --network <NETWORK>")
+            }
+        }
+    }
+
+    fn update_from_arg_matches(&mut self, matches: &ArgMatches) -> Result<(), clap::Error> {
+        // For simple wrappers, we can just replace the current state
+        *self = Self::from_arg_matches(matches)?;
+        Ok(())
+    }
+}
+
+impl Args for NetworkOpt {
+    fn augment_args(cmd: clap::Command) -> clap::Command {
+        NetworkOptInner::augment_args(cmd)
+    }
+    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+        NetworkOptInner::augment_args_for_update(cmd)
+    }
+}
+
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
-        match v.network {
-            Some(target) => match target {
-                NetworkTarget::Url(url) => {
-                    let root_key = match v.root_key {
-                        Some(RootKey(k)) => k,
-                        None => IC_ROOT_KEY.to_vec(),
-                    };
-                    NetworkSelection::Url(url, root_key)
-                }
-                NetworkTarget::Named(name) => NetworkSelection::Named(name),
-            },
-            None => NetworkSelection::Default,
+        match v {
+            NetworkOpt::Url(url, RootKey(key)) => NetworkSelection::Url(url, key),
+            NetworkOpt::Name(name) => NetworkSelection::Named(name),
+            NetworkOpt::None => NetworkSelection::Default,
         }
     }
 }

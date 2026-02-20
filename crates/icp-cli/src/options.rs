@@ -73,8 +73,7 @@ pub(crate) struct NetworkOpt {
 
     /// An optional root key to use when connecting to a network by URL.
     /// This setting is ignored when connecting to a network defined in icp.yaml.
-    /// Defaults to the IC_ROOT_KEY if not set.
-    #[arg(long, short = 'k', env = "ICP_ROOT_KEY", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
+    #[arg(long, short = 'k', help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
     root_key: Option<RootKey>,
 }
 

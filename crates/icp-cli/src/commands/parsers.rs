@@ -125,17 +125,18 @@ pub(crate) fn parse_cycles_amount(input: &str) -> Result<u128, String> {
         .ok_or_else(|| format!("Cycles amount too large: '{}'", input))
 }
 
-pub(crate) fn parse_root_key(input: &str) -> Result<Vec<u8>, String> {
-    let res = hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"));
-    if let Ok(v) = &res
-        && v.len() != 133
-    {
+#[derive(Clone, Debug)]
+pub(crate) struct RootKey(pub Vec<u8>);
+
+pub(crate) fn parse_root_key(input: &str) -> Result<RootKey, String> {
+    let v = hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"))?;
+    if v.len() != 133 {
         Err(format!(
             "Invalid root key. Expected 133 bytes but got {}",
             v.len()
         ))
     } else {
-        res
+        Ok(RootKey(v))
     }
 }
 

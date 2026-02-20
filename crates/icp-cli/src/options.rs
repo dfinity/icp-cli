@@ -1,4 +1,4 @@
-use crate::commands::parsers::parse_root_key;
+use crate::commands::parsers::{RootKey, parse_root_key};
 use clap::{ArgGroup, Args};
 use icp::context::{EnvironmentSelection, IC_ROOT_KEY, NetworkSelection};
 use icp::identity::IdentitySelection;
@@ -74,8 +74,8 @@ pub(crate) struct NetworkOpt {
     /// An optional root key to use when connecting to a network by URL.
     /// This setting is ignored when connecting to a network defined in icp.yaml.
     /// Defaults to the IC_ROOT_KEY if not set.
-    #[arg(long, short = 'k', env = "ICP_ROOT_KEY", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
-    root_key: Option<Vec<u8>>,
+    #[arg(long, short = 'k', env = "ICP_ROOT_KEY", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
+    root_key: Option<RootKey>,
 }
 
 impl From<NetworkOpt> for NetworkSelection {
@@ -84,7 +84,7 @@ impl From<NetworkOpt> for NetworkSelection {
             Some(network) => match Url::parse(&network) {
                 Ok(url) => {
                     let root_key = match v.root_key {
-                        Some(k) => k,
+                        Some(RootKey(k)) => k,
                         None => IC_ROOT_KEY.to_vec(),
                     };
                     NetworkSelection::Url(url, root_key)

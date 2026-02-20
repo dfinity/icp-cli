@@ -137,13 +137,17 @@ async fn run_network_launcher(
 
     // Resolve the bind address to an IP and a URL host
     let resolved = match &config.mode {
-        ManagedMode::Launcher(launcher_config) => resolve_bind(&launcher_config.gateway.bind)
-            .context(ResolveBindSnafu {
-                bind: &launcher_config.gateway.bind,
-            })?,
+        ManagedMode::Launcher(launcher_config) => resolve_bind(
+            &launcher_config.gateway.bind,
+            &launcher_config.gateway.domains,
+        )
+        .context(ResolveBindSnafu {
+            bind: &launcher_config.gateway.bind,
+        })?,
         ManagedMode::Image(_) => crate::network::ResolvedBind {
             ip: std::net::Ipv4Addr::LOCALHOST.into(),
             host: "localhost".to_string(),
+            extra_domains: vec![],
         },
     };
 
@@ -314,7 +318,7 @@ fn transform_native_launcher_to_container(
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
-    let args = launcher_settings_flags(config);
+    let args = launcher_settings_flags(config, resolved);
     let args = translate_launcher_args_for_docker(args);
 
     let all_addrs: Vec<String> = config
@@ -893,13 +897,13 @@ async fn install_proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::{Gateway, ManagedLauncherConfig, Port};
+    use crate::network::{Gateway, ManagedLauncherConfig, Port, ResolvedBind};
 
     #[test]
     fn transform_native_launcher_default_config() {
         let config = ManagedLauncherConfig {
             gateway: Gateway {
-                host: "localhost".to_string(),
+                bind: "localhost".to_string(),
                 port: Port::Fixed(8000),
                 domains: vec![],
             },
@@ -911,7 +915,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
         assert_eq!(
             opts.image,
             "ghcr.io/dfinity/icp-cli-network-launcher:latest"
@@ -933,7 +937,7 @@ mod tests {
     fn transform_native_launcher_random_port() {
         let config = ManagedLauncherConfig {
             gateway: Gateway {
-                host: "localhost".to_string(),
+                bind: "127.0.0.1".to_string(),
                 port: Port::Random,
                 domains: vec![],
             },
@@ -945,7 +949,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
         let binding = opts
             .port_bindings
             .get("4943/tcp")
@@ -967,7 +971,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
         assert!(opts.args.contains(&"--ii".to_string()));
         assert!(
             opts.args
@@ -991,7 +995,7 @@ mod tests {
             dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
         assert!(opts.args.contains(&"--nns".to_string()));
         assert!(opts.args.contains(&"--artificial-delay-ms=50".to_string()));
         assert!(
@@ -1016,7 +1020,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
         assert!(
             opts.args
                 .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
@@ -1036,7 +1040,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
         assert!(
             opts.args
                 .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())

@@ -38,14 +38,22 @@ pub struct ResolvedBind {
     /// `"localhost"` when the IP is one that `localhost` resolves to,
     /// otherwise the original bind string (preserving domain names).
     pub host: String,
+    /// Additional domains to pass to the launcher beyond those already
+    /// configured in `gateway.domains`. Populated when the bind is a bare
+    /// non-loopback IP with no configured domains, so the gateway knows
+    /// to respond on that IP.
+    pub extra_domains: Vec<String>,
 }
 
 /// Resolve a bind address string to an IP and a URL host.
 ///
 /// Uses DNS resolution to turn the bind string into an IP. The URL host is
-/// `"localhost"` if the resolved IP matches one of `localhost`'s addresses,
-/// otherwise the original bind string is preserved (keeping domain names intact).
-pub fn resolve_bind(bind: &str) -> std::io::Result<ResolvedBind> {
+/// determined as follows:
+/// 1. `"localhost"` if the resolved IP matches one of `localhost`'s addresses
+/// 2. The original bind string if it was a domain name (preserving it for URLs)
+/// 3. The first entry from `domains` if the bind was a bare IP and domains are configured
+/// 4. The bare IP as a last resort
+pub fn resolve_bind(bind: &str, domains: &[String]) -> std::io::Result<ResolvedBind> {
     let ip = (bind, 0u16)
         .to_socket_addrs()?
         .next()
@@ -59,13 +67,22 @@ pub fn resolve_bind(bind: &str) -> std::io::Result<ResolvedBind> {
         .map(|a| a.ip())
         .collect();
 
-    let host = if localhost_ips.contains(&ip) {
-        "localhost".to_string()
+    let (host, extra_domains) = if localhost_ips.contains(&ip) {
+        ("localhost".to_string(), vec![])
+    } else if bind.parse::<IpAddr>().is_err() {
+        // bind was a domain name — preserve it
+        (bind.to_string(), vec![])
+    } else if let Some(domain) = domains.first() {
+        (domain.clone(), vec![])
     } else {
-        bind.to_string()
+        (bind.to_string(), vec![bind.to_string()])
     };
 
-    Ok(ResolvedBind { ip, host })
+    Ok(ResolvedBind {
+        ip,
+        host,
+        extra_domains,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]

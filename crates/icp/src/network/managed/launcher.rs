@@ -88,7 +88,7 @@ pub async fn spawn_network_launcher(
     }
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     cmd.args(["--status-dir", status_dir.path().as_str()]);
-    cmd.args(launcher_settings_flags(launcher_config));
+    cmd.args(launcher_settings_flags(launcher_config, resolved_bind));
     if background {
         eprintln!("For background mode, network output will be redirected:");
         eprintln!("  stdout: {}", stdout_file);
@@ -169,7 +169,10 @@ pub async fn stop_launcher(pid: Pid) {
     }
 }
 
-pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
+pub fn launcher_settings_flags(
+    config: &ManagedLauncherConfig,
+    resolved_bind: &ResolvedBind,
+) -> Vec<String> {
     let ManagedLauncherConfig {
         gateway,
         version: _,
@@ -193,7 +196,7 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
             flags.push(format!("--subnet={subnet}"));
         }
     }
-    for domain in &gateway.domains {
+    for domain in gateway.domains.iter().chain(&resolved_bind.extra_domains) {
         flags.push(format!("--domain={domain}"));
     }
     flags

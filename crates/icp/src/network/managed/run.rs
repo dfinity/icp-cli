@@ -137,13 +137,16 @@ async fn run_network_launcher(
 
     // Resolve the bind address to an IP and a URL host
     let resolved = match &config.mode {
-        ManagedMode::Launcher(launcher_config) => resolve_bind(&launcher_config.gateway.bind)
-            .context(ResolveBindSnafu {
-                bind: &launcher_config.gateway.bind,
-            })?,
+        ManagedMode::Launcher(launcher_config) => {
+            resolve_bind(&launcher_config.gateway.bind, &launcher_config.gateway.domains)
+                .context(ResolveBindSnafu {
+                    bind: &launcher_config.gateway.bind,
+                })?
+        }
         ManagedMode::Image(_) => crate::network::ResolvedBind {
             ip: std::net::Ipv4Addr::LOCALHOST.into(),
             host: "localhost".to_string(),
+            extra_domains: vec![],
         },
     };
 
@@ -312,7 +315,7 @@ fn transform_native_launcher_to_container(
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
-    let args = launcher_settings_flags(config);
+    let args = launcher_settings_flags(config, resolved);
 
     let platform = if cfg!(target_arch = "aarch64") {
         "linux/arm64".to_string()

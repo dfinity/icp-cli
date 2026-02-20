@@ -313,13 +313,25 @@
     },
     "Gateway": {
       "properties": {
+        "domains": {
+          "description": "Domains the gateway should respond to. localhost is always included.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "host": {
+          "description": "Network interface for the gateway. Defaults to 127.0.0.1",
           "type": [
             "string",
             "null"
           ]
         },
         "port": {
+          "description": "Port for the gateway to listen on. Defaults to 8000",
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0,

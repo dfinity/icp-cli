@@ -45,6 +45,7 @@ use crate::{
             docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
             launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
+        resolve_bind,
     },
     prelude::*,
     signal::stop_signal,
@@ -134,6 +135,18 @@ async fn run_network_launcher(
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
 
+    // Resolve the bind address to an IP and a URL host
+    let resolved = match &config.mode {
+        ManagedMode::Launcher(launcher_config) => resolve_bind(&launcher_config.gateway.bind)
+            .context(ResolveBindSnafu {
+                bind: &launcher_config.gateway.bind,
+            })?,
+        ManagedMode::Image(_) => crate::network::ResolvedBind {
+            ip: std::net::Ipv4Addr::LOCALHOST.into(),
+            host: "localhost".to_string(),
+        },
+    };
+
     // Determine the image options and fixed ports to check before spawning
     #[allow(clippy::large_enum_variant)] // Only used inline, not moved
     enum LaunchMode<'a> {
@@ -147,7 +160,7 @@ async fn run_network_launcher(
             (LaunchMode::Image(options), fixed_ports)
         }
         ManagedMode::Launcher(launcher_config) if autocontainerize => {
-            let options = transform_native_launcher_to_container(launcher_config);
+            let options = transform_native_launcher_to_container(launcher_config, &resolved);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
@@ -191,6 +204,7 @@ async fn run_network_launcher(
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
+                        host: resolved.host.clone(),
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
@@ -209,12 +223,14 @@ async fn run_network_launcher(
                         background,
                         verbose,
                         launcher_config,
+                        &resolved,
                         &root.state_dir(),
                     )
                     .await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
+                        host: resolved.host.clone(),
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
                 }
@@ -228,7 +244,7 @@ async fn run_network_launcher(
     }
 
     let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
-        &format!("http://localhost:{}", instance.gateway_port)
+        &format!("http://{}:{}", resolved.host, instance.gateway_port)
             .parse()
             .unwrap(),
         &instance.root_key,
@@ -285,7 +301,10 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
+fn transform_native_launcher_to_container(
+    config: &ManagedLauncherConfig,
+    resolved: &crate::network::ResolvedBind,
+) -> ManagedImageOptions {
     use bollard::secret::PortBinding;
     use std::collections::HashMap;
 
@@ -304,7 +323,7 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
     let port_bindings: HashMap<String, Option<Vec<PortBinding>>> = [(
         "4943/tcp".to_string(),
         Some(vec![PortBinding {
-            host_ip: Some("127.0.0.1".to_string()),
+            host_ip: Some(resolved.ip.to_string()),
             host_port: Some(port.to_string()),
         }]),
     )]
@@ -351,6 +370,12 @@ impl ShutdownGuard {
 pub enum RunNetworkLauncherError {
     #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
     NoNetworkLauncherPath,
+
+    #[snafu(display("failed to resolve bind address '{bind}'"))]
+    ResolveBind {
+        source: std::io::Error,
+        bind: String,
+    },
 
     #[snafu(display("failed to create dir"))]
     CreateDirAll { source: crate::fs::IoError },

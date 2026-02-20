@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -27,6 +29,44 @@ pub mod access;
 pub mod config;
 pub mod directory;
 pub mod managed;
+
+/// A bind address resolved to an IP and a URL host.
+pub struct ResolvedBind {
+    /// The resolved IP address to pass as the bind address.
+    pub ip: IpAddr,
+    /// The host to use when constructing URLs to reach this address.
+    /// `"localhost"` when the IP is one that `localhost` resolves to,
+    /// otherwise the original bind string (preserving domain names).
+    pub host: String,
+}
+
+/// Resolve a bind address string to an IP and a URL host.
+///
+/// Uses DNS resolution to turn the bind string into an IP. The URL host is
+/// `"localhost"` if the resolved IP matches one of `localhost`'s addresses,
+/// otherwise the original bind string is preserved (keeping domain names intact).
+pub fn resolve_bind(bind: &str) -> std::io::Result<ResolvedBind> {
+    let ip = (bind, 0u16)
+        .to_socket_addrs()?
+        .next()
+        .expect("to_socket_addrs returned Ok but no addresses")
+        .ip();
+
+    let localhost_ips: HashSet<IpAddr> = ("localhost", 0u16)
+        .to_socket_addrs()
+        .into_iter()
+        .flatten()
+        .map(|a| a.ip())
+        .collect();
+
+    let host = if localhost_ips.contains(&ip) {
+        "localhost".to_string()
+    } else {
+        bind.to_string()
+    };
+
+    Ok(ResolvedBind { ip, host })
+}
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {

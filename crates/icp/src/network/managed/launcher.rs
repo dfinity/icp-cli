@@ -10,7 +10,7 @@ use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
 
 use crate::{
-    network::{ManagedLauncherConfig, Port, config::ChildLocator},
+    network::{ManagedLauncherConfig, Port, ResolvedBind, config::ChildLocator},
     prelude::*,
 };
 
@@ -65,6 +65,7 @@ pub async fn spawn_network_launcher(
     background: bool,
     verbose: bool,
     launcher_config: &ManagedLauncherConfig,
+    resolved_bind: &ResolvedBind,
     state_dir: &Path,
 ) -> Result<
     (
@@ -81,6 +82,7 @@ pub async fn spawn_network_launcher(
         "--state-dir",
         state_dir.as_str(),
     ]);
+    cmd.args(["--bind", &resolved_bind.ip.to_string()]);
     if let Port::Fixed(port) = launcher_config.gateway.port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }

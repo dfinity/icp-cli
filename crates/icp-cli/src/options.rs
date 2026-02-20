@@ -1,4 +1,3 @@
-use crate::commands::parsers::{RootKey, parse_root_key};
 use clap::{ArgGroup, Args};
 use icp::context::{EnvironmentSelection, IC_ROOT_KEY, NetworkSelection};
 use icp::identity::IdentitySelection;
@@ -64,12 +63,40 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
     }
 }
 
+#[derive(Clone, Debug)]
+struct RootKey(pub Vec<u8>);
+
+fn parse_root_key(input: &str) -> Result<RootKey, String> {
+    let v = hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"))?;
+    if v.len() != 133 {
+        Err(format!(
+            "Invalid root key. Expected 133 bytes but got {}",
+            v.len()
+        ))
+    } else {
+        Ok(RootKey(v))
+    }
+}
+
+#[derive(Clone, Debug)]
+enum NetworkTarget {
+    Url(Url),
+    Named(String),
+}
+
+fn parse_network_target(input: &str) -> Result<NetworkTarget, String> {
+    match Url::parse(input) {
+        Ok(url) => Ok(NetworkTarget::Url(url)),
+        Err(_) => Ok(NetworkTarget::Named(input.to_string())),
+    }
+}
+
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOpt {
     /// Name of the network to target, conflicts with environment argument
-    #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS)]
-    network: Option<String>,
+    #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_network_target)]
+    network: Option<NetworkTarget>,
 
     /// An optional root key to use when connecting to a network by URL.
     /// This setting is ignored when connecting to a network defined in icp.yaml.
@@ -80,15 +107,15 @@ pub(crate) struct NetworkOpt {
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
         match v.network {
-            Some(network) => match Url::parse(&network) {
-                Ok(url) => {
+            Some(target) => match target {
+                NetworkTarget::Url(url) => {
                     let root_key = match v.root_key {
                         Some(RootKey(k)) => k,
                         None => IC_ROOT_KEY.to_vec(),
                     };
                     NetworkSelection::Url(url, root_key)
                 }
-                Err(_) => NetworkSelection::Named(network),
+                NetworkTarget::Named(name) => NetworkSelection::Named(name),
             },
             None => NetworkSelection::Default,
         }

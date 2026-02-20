@@ -136,7 +136,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             canister_id: cid,
             method: args.method.clone(),
             args: arg_bytes,
-            cycles: Nat::from(args.cycles.0),
+            cycles: Nat::from(args.cycles.get()),
         };
         let proxy_arg_bytes =
             Encode!(&proxy_args).context("failed to encode proxy call arguments")?;

@@ -1,17 +1,17 @@
 {
   "$defs": {
     "CyclesAmount": {
-      "description": "Cycles amount. Accepts a number or a string with suffixes (k, m, b, t), e.g. \"4t\" or \"4.3t\".",
-      "oneOf": [
+      "anyOf": [
         {
+          "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         {
-          "description": "Amount with optional suffix: k, m, b, t",
           "type": "string"
         }
-      ]
+      ],
+      "description": "An amount of cycles.\n\nDeserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators."
     },
     "LogVisibility": {
       "description": "Controls who can read canister logs.",

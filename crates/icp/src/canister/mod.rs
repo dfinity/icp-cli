@@ -236,7 +236,7 @@ impl From<Settings> for CanisterSettingsArg {
         CanisterSettingsArg {
             freezing_threshold: settings.freezing_threshold.map(Nat::from),
             controllers: None,
-            reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.0)),
+            reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),
             memory_allocation: settings.memory_allocation.map(Nat::from),
             compute_allocation: settings.compute_allocation.map(Nat::from),
@@ -341,8 +341,8 @@ allowed_viewers:
         let yaml = "reserved_cycles_limit: 4.3t";
         let settings: Settings = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
-            settings.reserved_cycles_limit,
-            Some(crate::parsers::CyclesAmount(4_300_000_000_000))
+            settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
+            Some(4_300_000_000_000)
         );
     }
 
@@ -351,8 +351,8 @@ allowed_viewers:
         let yaml = "reserved_cycles_limit: 5000000000000";
         let settings: Settings = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
-            settings.reserved_cycles_limit,
-            Some(crate::parsers::CyclesAmount(5_000_000_000_000))
+            settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
+            Some(5_000_000_000_000)
         );
     }
 

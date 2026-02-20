@@ -237,13 +237,13 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
         update = update.with_freezing_threshold(freezing_threshold);
     }
-    if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
+    if let Some(reserved_cycles_limit) = &args.reserved_cycles_limit {
         if configured_settings.reserved_cycles_limit.is_some() {
             ctx.term.write_line(
                 "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
             )?
         }
-        update = update.with_reserved_cycles_limit(reserved_cycles_limit.0);
+        update = update.with_reserved_cycles_limit(reserved_cycles_limit.get());
     }
     if let Some(wasm_memory_limit) = args.wasm_memory_limit {
         if configured_settings.wasm_memory_limit.is_some() {

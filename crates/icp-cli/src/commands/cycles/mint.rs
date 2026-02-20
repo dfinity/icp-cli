@@ -54,7 +54,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
     let mint_info = mint_cycles(
         &agent,
         args.icp.as_ref(),
-        args.cycles.map(|c| c.0),
+        args.cycles.as_ref().map(|c| c.get()),
         args.from_subaccount,
         args.to_subaccount,
     )

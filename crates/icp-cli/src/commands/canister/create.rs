@@ -55,7 +55,7 @@ pub(crate) struct CreateArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = CyclesAmount(DEFAULT_CANISTER_CYCLES))]
+    #[arg(long, default_value_t = CyclesAmount::from(DEFAULT_CANISTER_CYCLES))]
     pub(crate) cycles: CyclesAmount,
 
     /// The subnet to create canisters on.
@@ -79,8 +79,9 @@ impl CreateArgs {
             reserved_cycles_limit: self
                 .settings
                 .reserved_cycles_limit
-                .or(default.settings.reserved_cycles_limit)
-                .map(|c| Nat::from(c.0)),
+                .clone()
+                .or(default.settings.reserved_cycles_limit.clone())
+                .map(|c| Nat::from(c.get())),
             log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self
                 .settings
@@ -134,7 +135,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .collect();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
     let create_operation =
-        CreateOperation::new(agent, args.subnet, args.cycles.0, existing_canisters);
+        CreateOperation::new(agent, args.subnet, args.cycles.get(), existing_canisters);
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
     let pb = progress_manager.create_progress_bar(&canister);

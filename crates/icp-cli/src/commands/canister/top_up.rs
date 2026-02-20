@@ -41,7 +41,7 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
         .await?;
 
     let cargs = WithdrawArgs {
-        amount: Nat::from(args.amount.0),
+        amount: Nat::from(args.amount.get()),
         from_subaccount: None,
         to: cid,
         created_at_time: None,
@@ -55,11 +55,11 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
 
     let response = Decode!(&bs, WithdrawResponse).context("failed to decode withdraw response")?;
     if let Err(err) = response {
-        bail!("failed to top up: {}", err.format_error(args.amount.0));
+        bail!("failed to top up: {}", err.format_error(args.amount.get()));
     }
 
     let amount = TokenAmount {
-        amount: BigDecimal::new(args.amount.0.into(), 0),
+        amount: BigDecimal::new(args.amount.get().into(), 0),
         symbol: "cycles".to_string(),
     };
 

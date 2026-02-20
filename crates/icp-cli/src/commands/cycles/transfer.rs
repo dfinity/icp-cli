@@ -56,7 +56,7 @@ pub(crate) async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), anyho
         &agent,
         args.from_subaccount,
         CYCLES_LEDGER_PRINCIPAL,
-        args.amount.0.into(),
+        args.amount.get().into(),
         receiver,
         CYCLES_LEDGER_BLOCK_FEE.into(),
         0,

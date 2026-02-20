@@ -48,7 +48,7 @@ pub(crate) struct DeployArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = CyclesAmount(create::DEFAULT_CANISTER_CYCLES))]
+    #[arg(long, default_value_t = CyclesAmount::from(create::DEFAULT_CANISTER_CYCLES))]
     pub(crate) cycles: CyclesAmount,
 
     #[command(flatten)]
@@ -123,7 +123,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         let create_operation = CreateOperation::new(
             agent.clone(),
             args.subnet,
-            args.cycles.0,
+            args.cycles.get(),
             existing_canisters.into_values().collect(),
         );
         let mut futs = FuturesOrdered::new();

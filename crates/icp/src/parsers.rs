@@ -82,34 +82,56 @@ pub fn to_token_unit_amount(
         .map_err(|_| "Token amount cannot be negative".to_string())
 }
 
+fn parse_cycles_str(s: &str) -> Result<u128, String> {
+    let token_amount = parse_token_amount(s)?;
+    let unit_amount = to_token_unit_amount(token_amount, 0)?;
+    unit_amount
+        .to_u128()
+        .ok_or_else(|| format!("Cycles amount too large: '{}'", s))
+}
+
 /// An amount of cycles.
 ///
-/// Deserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators. Serializes as a number.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CyclesAmount(pub u128);
+/// Deserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators.
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema)]
+#[schemars(untagged)]
+pub enum CyclesAmount {
+    Number(u64), // yaml only supports up to u64
+    Str(String),
+}
+
+impl CyclesAmount {
+    pub fn get(&self) -> u128 {
+        match self {
+            CyclesAmount::Number(n) => *n as u128,
+            CyclesAmount::Str(s) => parse_cycles_str(s)
+                .unwrap_or_else(|e| panic!("invalid cycles amount '{}': {}", s, e)),
+        }
+    }
+}
 
 impl<'de> Deserialize<'de> for CyclesAmount {
     fn deserialize<D>(d: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
+        // Identical enum to CyclesAmount. Needed to avoid a circular dependency.
         #[derive(Deserialize)]
         #[serde(untagged)]
-        enum OneOf {
-            // u128 is not supported by serde_yaml/serde_json; use u64 so numeric input deserializes.
+        enum Raw {
             Number(u64),
             Str(String),
         }
-
-        const HINT: &str = "cycles amount must be a number or a string with optional suffix (k, m, b, t), e.g. 1000 or \"4t\"";
-        let v = OneOf::deserialize(d).map_err(|_| serde::de::Error::custom(HINT))?;
-        let s = match &v {
-            OneOf::Number(n) => n.to_string(),
-            OneOf::Str(s) => s.clone(),
+        let v = Raw::deserialize(d).map_err(|_| {
+            serde::de::Error::custom("cycles amount must be a number or a string with optional suffix (k, m, b, t), e.g. 1000 or \"4t\"")
+        })?;
+        let c = match v {
+            Raw::Number(n) => CyclesAmount::Number(n),
+            Raw::Str(ref s) => {
+                parse_cycles_str(s).map_err(serde::de::Error::custom)?; // validate the string is a valid cycles amount
+                CyclesAmount::Str(s.clone())
+            }
         };
-        let c = s
-            .parse::<CyclesAmount>()
-            .map_err(serde::de::Error::custom)?;
         Ok(c)
     }
 }
@@ -119,24 +141,10 @@ impl Serialize for CyclesAmount {
     where
         S: serde::Serializer,
     {
-        // Serialize as string for readability of large numbers in JSON; u128 is not in JSON spec
-        serializer.serialize_str(&self.0.to_string())
-    }
-}
-
-impl JsonSchema for CyclesAmount {
-    fn schema_name() -> std::borrow::Cow<'static, str> {
-        std::borrow::Cow::Borrowed("CyclesAmount")
-    }
-
-    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "description": "Cycles amount. Accepts a number or a string with suffixes (k, m, b, t), e.g. \"4t\" or \"4.3t\".",
-            "oneOf": [
-                { "type": "integer", "minimum": 0 },
-                { "type": "string", "description": "Amount with optional suffix: k, m, b, t" }
-            ]
-        })
+        match self {
+            CyclesAmount::Number(n) => serializer.serialize_u64(*n),
+            CyclesAmount::Str(s) => serializer.serialize_str(s),
+        }
     }
 }
 
@@ -144,30 +152,30 @@ impl FromStr for CyclesAmount {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let token_amount = parse_token_amount(s)?;
-        let unit_amount = to_token_unit_amount(token_amount, 0)?;
-        let n = unit_amount
-            .to_u128()
-            .ok_or_else(|| format!("Cycles amount too large: '{}'", s))?;
-        Ok(CyclesAmount(n))
+        parse_cycles_str(s)?; // validate the string is a valid cycles amount
+        Ok(CyclesAmount::Str(s.to_string()))
     }
 }
 
 impl fmt::Display for CyclesAmount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        self.get().fmt(f)
     }
 }
 
 impl From<CyclesAmount> for u128 {
     fn from(c: CyclesAmount) -> Self {
-        c.0
+        c.get()
     }
 }
 
 impl From<u128> for CyclesAmount {
     fn from(n: u128) -> Self {
-        CyclesAmount(n)
+        if let Ok(n64) = u64::try_from(n) {
+            CyclesAmount::Number(n64)
+        } else {
+            CyclesAmount::Str(n.to_string())
+        }
     }
 }
 
@@ -177,21 +185,30 @@ mod tests {
 
     #[test]
     fn cycles_amount_from_str_plain() {
-        assert_eq!("1".parse::<CyclesAmount>().unwrap().0, 1);
-        assert_eq!("1000".parse::<CyclesAmount>().unwrap().0, 1000);
+        assert_eq!("1".parse::<CyclesAmount>().unwrap().get(), 1);
+        assert_eq!("1000".parse::<CyclesAmount>().unwrap().get(), 1000);
     }
 
     #[test]
     fn cycles_amount_from_str_suffixes() {
-        assert_eq!("1k".parse::<CyclesAmount>().unwrap().0, 1000);
-        assert_eq!("1t".parse::<CyclesAmount>().unwrap().0, 1_000_000_000_000);
-        assert_eq!("4t".parse::<CyclesAmount>().unwrap().0, 4_000_000_000_000);
-        assert_eq!("0.5t".parse::<CyclesAmount>().unwrap().0, 500_000_000_000);
+        assert_eq!("1k".parse::<CyclesAmount>().unwrap().get(), 1000);
+        assert_eq!(
+            "1t".parse::<CyclesAmount>().unwrap().get(),
+            1_000_000_000_000
+        );
+        assert_eq!(
+            "4t".parse::<CyclesAmount>().unwrap().get(),
+            4_000_000_000_000
+        );
+        assert_eq!(
+            "0.5t".parse::<CyclesAmount>().unwrap().get(),
+            500_000_000_000
+        );
     }
 
     #[test]
     fn cycles_amount_from_str_underscores() {
-        assert_eq!("1_000".parse::<CyclesAmount>().unwrap().0, 1000);
+        assert_eq!("1_000".parse::<CyclesAmount>().unwrap().get(), 1000);
     }
 
     #[test]
@@ -203,11 +220,11 @@ mod tests {
     fn cycles_amount_deserialize() {
         let yaml = "4t";
         let c: CyclesAmount = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(c.0, 4_000_000_000_000);
+        assert_eq!(c.get(), 4_000_000_000_000);
 
         let yaml = "5000000000000";
         let c: CyclesAmount = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(c.0, 5_000_000_000_000);
+        assert_eq!(c.get(), 5_000_000_000_000);
     }
 
     #[test]

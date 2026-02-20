@@ -137,12 +137,13 @@ async fn run_network_launcher(
 
     // Resolve the bind address to an IP and a URL host
     let resolved = match &config.mode {
-        ManagedMode::Launcher(launcher_config) => {
-            resolve_bind(&launcher_config.gateway.bind, &launcher_config.gateway.domains)
-                .context(ResolveBindSnafu {
-                    bind: &launcher_config.gateway.bind,
-                })?
-        }
+        ManagedMode::Launcher(launcher_config) => resolve_bind(
+            &launcher_config.gateway.bind,
+            &launcher_config.gateway.domains,
+        )
+        .context(ResolveBindSnafu {
+            bind: &launcher_config.gateway.bind,
+        })?,
         ManagedMode::Image(_) => crate::network::ResolvedBind {
             ip: std::net::Ipv4Addr::LOCALHOST.into(),
             host: "localhost".to_string(),

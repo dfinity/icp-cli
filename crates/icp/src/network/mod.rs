@@ -70,8 +70,13 @@ pub fn resolve_bind(bind: &str, domains: &[String]) -> std::io::Result<ResolvedB
     let (host, extra_domains) = if localhost_ips.contains(&ip) {
         ("localhost".to_string(), vec![])
     } else if bind.parse::<IpAddr>().is_err() {
-        // bind was a domain name — preserve it
-        (bind.to_string(), vec![])
+        // bind was a domain name — ensure the gateway responds to it
+        let extra = if domains.iter().any(|d| d == bind) {
+            vec![]
+        } else {
+            vec![bind.to_string()]
+        };
+        (bind.to_string(), extra)
     } else if let Some(domain) = domains.first() {
         (domain.clone(), vec![])
     } else {

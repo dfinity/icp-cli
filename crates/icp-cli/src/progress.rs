@@ -264,7 +264,10 @@ impl MultiStepProgressBar {
         let steps: &[StepOutput] = if all_steps {
             &self.finished_steps
         } else {
-            self.finished_steps.last().map(std::slice::from_ref).unwrap_or_default()
+            self.finished_steps
+                .last()
+                .map(std::slice::from_ref)
+                .unwrap_or_default()
         };
 
         for step_output in steps {

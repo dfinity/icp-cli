@@ -118,7 +118,7 @@ pub(crate) async fn sync_settings(
         && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
         && reserved_cycles_limit
             .as_ref()
-            .map_or(true, |s| s.get() == current_settings.reserved_cycles_limit)
+            .is_none_or(|s| s.get() == current_settings.reserved_cycles_limit)
         && wasm_memory_limit.is_none_or(|s| s == current_settings.wasm_memory_limit)
         && wasm_memory_threshold.is_none_or(|s| s == current_settings.wasm_memory_threshold)
         && environment_variable_setting

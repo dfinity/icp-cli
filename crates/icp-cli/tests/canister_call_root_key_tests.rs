@@ -1,6 +1,5 @@
 use indoc::formatdoc;
 use predicates::ord::eq;
-use predicates::prelude::PredicateBooleanExt;
 use predicates::str::{PredicateStrExt, contains};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext};

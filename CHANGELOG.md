@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: Init/call arg files now support raw binary without conversion to hex
+* feat!: Remove argument type inference in init/call args in commands and manifest. Args are always assumed Candid, new parameters allow specifying other formats like hex, and alternate parameters are used to specify loading from a file.
 * feat: `icp identity export` now takes an `--encrypt` flag to avoid rendering the key in plaintext
 * feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
 * feat: Allow specifying a version of the network launcher to use

@@ -3,12 +3,14 @@ use std::collections::{HashMap, HashSet, hash_map::Entry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, Network, Project,
+    Canister, Environment, InitArgs, Network, Project,
     canister::recipe,
     context::IC_ROOT_KEY,
+    fs,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
-        NetworkManifest, ProjectManifest, ProjectRootLocateError,
+        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, Item,
+        LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
+        ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
@@ -67,7 +69,8 @@ pub enum ConsolidateManifestError {
 
     #[snafu(display("failed to resolve canister recipe: {recipe_type:?}"))]
     Recipe {
-        source: recipe::ResolveError,
+        #[snafu(source(from(recipe::ResolveError, Box::new)))]
+        source: Box<recipe::ResolveError>,
         recipe_type: RecipeType,
     },
 
@@ -80,8 +83,59 @@ pub enum ConsolidateManifestError {
     #[snafu(display("could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
+    #[snafu(display("failed to read init_args file for canister '{canister}'"))]
+    ReadInitArgs {
+        source: fs::IoError,
+        canister: String,
+    },
+
+    #[snafu(display(
+        "init_args for canister '{canister}' uses format 'bin' with inline content; \
+         binary format requires a file path"
+    ))]
+    BinFormatInlineContent { canister: String },
+
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
+}
+
+/// Resolve a [`ManifestInitArgs`] into a canonical [`InitArgs`] by reading
+/// any file references relative to `base_path`.
+fn resolve_manifest_init_args(
+    manifest_init_args: &ManifestInitArgs,
+    base_path: &Path,
+    canister: &str,
+) -> Result<InitArgs, ConsolidateManifestError> {
+    match manifest_init_args {
+        ManifestInitArgs::String(content) => Ok(InitArgs::Text {
+            content: content.trim().to_owned(),
+            format: InitArgsFormat::Candid,
+        }),
+        ManifestInitArgs::Path { path, format } => {
+            let file_path = base_path.join(path);
+            match format {
+                InitArgsFormat::Bin => {
+                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    Ok(InitArgs::Binary(bytes))
+                }
+                fmt => {
+                    let content =
+                        fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    Ok(InitArgs::Text {
+                        content: content.trim().to_owned(),
+                        format: fmt.clone(),
+                    })
+                }
+            }
+        }
+        ManifestInitArgs::Value { value, format } => match format {
+            InitArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
+            fmt => Ok(InitArgs::Text {
+                content: value.trim().to_owned(),
+                format: fmt.clone(),
+            }),
+        },
+    }
 }
 
 fn is_glob(s: &str) -> bool {
@@ -211,6 +265,12 @@ pub async fn consolidate_manifest(
 
                 // Ok
                 Entry::Vacant(e) => {
+                    let init_args = m
+                        .init_args
+                        .as_ref()
+                        .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                        .transpose()?;
+
                     e.insert((
                         //
                         // Canister root
@@ -222,7 +282,7 @@ pub async fn consolidate_manifest(
                             settings: m.settings.to_owned(),
                             build,
                             sync,
-                            init_args: m.init_args.to_owned(),
+                            init_args,
                         },
                     ));
                 }
@@ -415,9 +475,13 @@ pub async fn consolidate_manifest(
 
                         // Apply init_args overrides if specified
                         if let Some(ref init_args_overrides) = m.init_args {
-                            for (canister_name, init_args) in init_args_overrides {
-                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
-                                    canister.init_args = Some(init_args.clone());
+                            for (canister_name, manifest_init_args) in init_args_overrides {
+                                if let Some((canister_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.init_args = Some(resolve_manifest_init_args(
+                                        manifest_init_args,
+                                        canister_path,
+                                        canister_name,
+                                    )?);
                                 }
                             }
                         }

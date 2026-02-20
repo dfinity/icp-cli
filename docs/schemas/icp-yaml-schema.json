@@ -177,11 +177,15 @@
       "description": "Represents the manifest describing a single canister.\nThis struct is typically loaded from a `canister.yaml` file and defines\nthe canister's name and how it should be built into WebAssembly.",
       "properties": {
         "init_args": {
-          "description": "Initialization arguments passed to the canister during installation.\nCan be hex-encoded bytes or Candid text format.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ManifestInitArgs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Initialization arguments passed to the canister during installation."
         },
         "name": {
           "description": "The unique name of the canister as defined in this manifest.",
@@ -277,7 +281,7 @@
         },
         "init_args": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/ManifestInitArgs"
           },
           "description": "Override init args for specific canisters in this environment",
           "type": [
@@ -330,6 +334,26 @@
         }
       },
       "type": "object"
+    },
+    "InitArgsFormat": {
+      "description": "Format specifier for init args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "candid",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
     },
     "Item": {
       "anyOf": [
@@ -576,6 +600,47 @@
         }
       ],
       "type": "object"
+    },
+    "ManifestInitArgs": {
+      "anyOf": [
+        {
+          "description": "Plain string shorthand — treated as Candid.",
+          "type": "string"
+        },
+        {
+          "description": "File reference with explicit format.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/InitArgsFormat",
+              "default": "candid"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Inline value with explicit format.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/InitArgsFormat",
+              "default": "candid"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
     },
     "NetworkManifest": {
       "description": "A network definition for the project",

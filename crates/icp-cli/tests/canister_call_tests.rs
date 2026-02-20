@@ -74,6 +74,8 @@ async fn canister_call_with_arguments() {
             "call",
             "--environment",
             "random-environment",
+            "--args-format",
+            "hex",
             "my-canister",
             "greet",
             "4449444c00017105776f726c64",
@@ -162,6 +164,7 @@ async fn canister_call_with_arguments_from_file() {
             "random-environment",
             "my-canister",
             "greet",
+            "--args-file",
             "args_candid.txt",
         ])
         .assert()
@@ -178,7 +181,10 @@ async fn canister_call_with_arguments_from_file() {
             "random-environment",
             "my-canister",
             "greet",
+            "--args-file",
             "args_hex.txt",
+            "--args-format",
+            "hex",
         ])
         .assert()
         .success()
@@ -195,6 +201,7 @@ async fn canister_call_with_arguments_from_file() {
             "random-environment",
             "my-canister",
             "greet",
+            "--args-file",
             abs_path.as_str(),
         ])
         .assert()

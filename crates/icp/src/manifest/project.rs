@@ -30,6 +30,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
+            InitArgsFormat, ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -435,7 +436,9 @@ mod tests {
                       - name: my-environment
                         init_args:
                           canister-1: "(42)"
-                          canister-2: "4449444c0000"
+                          canister-2:
+                            value: "4449444c0000"
+                            format: hex
                 "#}),
             ProjectManifest {
                 canisters: vec![],
@@ -446,8 +449,17 @@ mod tests {
                     canisters: CanisterSelection::Everything,
                     settings: None,
                     init_args: Some(HashMap::from([
-                        ("canister-1".to_string(), "(42)".to_string()),
-                        ("canister-2".to_string(), "4449444c0000".to_string()),
+                        (
+                            "canister-1".to_string(),
+                            ManifestInitArgs::String("(42)".to_string()),
+                        ),
+                        (
+                            "canister-2".to_string(),
+                            ManifestInitArgs::Value {
+                                value: "4449444c0000".to_string(),
+                                format: InitArgsFormat::Hex,
+                            },
+                        ),
                     ])),
                 })],
             },

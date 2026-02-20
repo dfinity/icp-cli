@@ -16,7 +16,9 @@ pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
 pub use {
-    canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
+    canister::{CanisterManifest, InitArgsFormat, ManifestInitArgs},
+    environment::EnvironmentManifest,
+    network::NetworkManifest,
     project::ProjectManifest,
 };
 

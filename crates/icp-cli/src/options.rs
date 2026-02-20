@@ -94,13 +94,12 @@ fn parse_network_target(input: &str) -> Result<NetworkTarget, String> {
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOpt {
-    /// Name of the network to target, conflicts with environment argument
+    /// Name or URL of the network to target, conflicts with environment argument
     #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_network_target)]
     network: Option<NetworkTarget>,
 
-    /// An optional root key to use when connecting to a network by URL.
-    /// This setting is ignored when connecting to a network defined in icp.yaml.
-    #[arg(long, short = 'k', help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
+    /// The root key to use if connecting to a network by URL.
+    #[arg(long, short = 'k', requires = "network", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
     root_key: Option<RootKey>,
 }
 

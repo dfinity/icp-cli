@@ -2,7 +2,7 @@ use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
-use icp::parsers::{parse_cycles_amount, parse_token_amount};
+use icp::parsers::{CyclesAmount, parse_token_amount};
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
@@ -18,8 +18,8 @@ pub(crate) struct MintArgs {
 
     /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, conflicts_with = "icp", value_parser = parse_cycles_amount)]
-    pub(crate) cycles: Option<u128>,
+    #[arg(long, conflicts_with = "icp")]
+    pub(crate) cycles: Option<CyclesAmount>,
 
     /// Subaccount to withdraw the ICP from.
     #[arg(long, value_parser = parse_subaccount)]
@@ -54,7 +54,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
     let mint_info = mint_cycles(
         &agent,
         args.icp.as_ref(),
-        args.cycles,
+        args.cycles.map(|c| c.0),
         args.from_subaccount,
         args.to_subaccount,
     )

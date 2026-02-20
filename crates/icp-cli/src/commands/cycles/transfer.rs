@@ -1,7 +1,7 @@
 use anyhow::ensure;
 use clap::Args;
 use icp::context::Context;
-use icp::parsers::parse_cycles_amount;
+use icp::parsers::CyclesAmount;
 use icp_canister_interfaces::cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -14,8 +14,7 @@ use crate::operations::token::transfer::icrc1_transfer;
 pub(crate) struct TransferArgs {
     /// Cycles amount to transfer.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(value_parser = parse_cycles_amount)]
-    pub(crate) amount: u128,
+    pub(crate) amount: CyclesAmount,
 
     /// The receiver of the cycles transfer
     pub(crate) receiver: Account,
@@ -57,7 +56,7 @@ pub(crate) async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), anyho
         &agent,
         args.from_subaccount,
         CYCLES_LEDGER_PRINCIPAL,
-        args.amount.into(),
+        args.amount.0.into(),
         receiver,
         CYCLES_LEDGER_BLOCK_FEE.into(),
         0,

@@ -6,7 +6,7 @@ use clap::Args;
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
-use icp::parsers::parse_cycles_amount;
+use icp::parsers::CyclesAmount;
 use icp::prelude::*;
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use std::io::{self, Write};
@@ -50,8 +50,8 @@ pub(crate) struct CallArgs {
     /// Cycles to forward with the proxied call.
     ///
     /// Only used when --proxy is specified. Defaults to 0.
-    #[arg(long, requires = "proxy", value_parser = parse_cycles_amount, default_value = "0")]
-    pub(crate) cycles: u128,
+    #[arg(long, requires = "proxy", default_value = "0")]
+    pub(crate) cycles: CyclesAmount,
 
     /// Sends a query request to a canister instead of an update request.
     ///
@@ -136,7 +136,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             canister_id: cid,
             method: args.method.clone(),
             args: arg_bytes,
-            cycles: Nat::from(args.cycles),
+            cycles: Nat::from(args.cycles.0),
         };
         let proxy_arg_bytes =
             Encode!(&proxy_args).context("failed to encode proxy call arguments")?;

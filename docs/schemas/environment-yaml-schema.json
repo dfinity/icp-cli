@@ -1,5 +1,18 @@
 {
   "$defs": {
+    "CyclesAmount": {
+      "description": "Cycles amount. Accepts a number or a string with suffixes (k, m, b, t), e.g. \"4t\" or \"4.3t\".",
+      "oneOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "description": "Amount with optional suffix: k, m, b, t",
+          "type": "string"
+        }
+      ]
+    },
     "LogVisibility": {
       "description": "Controls who can read canister logs.",
       "oneOf": [
@@ -83,14 +96,16 @@
           ]
         },
         "reserved_cycles_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CyclesAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": null,
-          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes: k, m, b, t (e.g. \"4.3t\" for 4.3 trillion).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
           "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",

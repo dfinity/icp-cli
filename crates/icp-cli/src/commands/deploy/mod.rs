@@ -3,7 +3,7 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
-use icp::parsers::parse_cycles_amount;
+use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
@@ -48,8 +48,8 @@ pub(crate) struct DeployArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
-    pub(crate) cycles: u128,
+    #[arg(long, default_value_t = CyclesAmount(create::DEFAULT_CANISTER_CYCLES))]
+    pub(crate) cycles: CyclesAmount,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -123,7 +123,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         let create_operation = CreateOperation::new(
             agent.clone(),
             args.subnet,
-            args.cycles,
+            args.cycles.0,
             existing_canisters.into_values().collect(),
         );
         let mut futs = FuturesOrdered::new();

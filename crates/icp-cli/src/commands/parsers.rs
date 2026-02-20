@@ -125,6 +125,10 @@ pub(crate) fn parse_cycles_amount(input: &str) -> Result<u128, String> {
         .ok_or_else(|| format!("Cycles amount too large: '{}'", input))
 }
 
+pub(crate) fn parse_root_key(input: &str) -> Result<Vec<u8>, String> {
+    hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"))
+}
+
 pub(crate) fn parse_subaccount(input: &str) -> Result<[u8; 32], String> {
     if input.len() > 64 {
         return Err(format!(

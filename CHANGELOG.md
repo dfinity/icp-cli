@@ -13,6 +13,7 @@
 * feat: `icp network status` display more information about networks
 * feat: `icp canister logs` to display the current canister logs
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
+* feat: Add an optional root-key argument to canister commands
 
 # v0.1.0
 

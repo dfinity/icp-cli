@@ -1,5 +1,6 @@
+use crate::commands::parsers::parse_root_key;
 use clap::{ArgGroup, Args};
-use icp::context::{EnvironmentSelection, NetworkSelection};
+use icp::context::{EnvironmentSelection, IC_ROOT_KEY, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::prelude::LOCAL;
 use url::Url;
@@ -69,13 +70,25 @@ pub(crate) struct NetworkOpt {
     /// Name of the network to target, conflicts with environment argument
     #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS)]
     network: Option<String>,
+
+    /// An optional root key to use when connecting to a network by URL.
+    /// This setting is ignored when connecting to a network defined in icp.yaml.
+    /// Defaults to the IC_ROOT_KEY if not set.
+    #[arg(long, short = 'k', env = "ICP_ROOT_KEY", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
+    root_key: Option<Vec<u8>>,
 }
 
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
         match v.network {
             Some(network) => match Url::parse(&network) {
-                Ok(url) => NetworkSelection::Url(url),
+                Ok(url) => {
+                    let root_key = match v.root_key {
+                        Some(k) => k,
+                        None => IC_ROOT_KEY.to_vec(),
+                    };
+                    NetworkSelection::Url(url, root_key)
+                }
                 Err(_) => NetworkSelection::Named(network),
             },
             None => NetworkSelection::Default,

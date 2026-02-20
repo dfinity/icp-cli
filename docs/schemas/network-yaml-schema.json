@@ -51,6 +51,13 @@
     },
     "Gateway": {
       "properties": {
+        "bind": {
+          "description": "Network interface for the gateway. Defaults to 127.0.0.1",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "domains": {
           "description": "Domains the gateway should respond to. localhost is always included.",
           "items": {
@@ -58,13 +65,6 @@
           },
           "type": [
             "array",
-            "null"
-          ]
-        },
-        "host": {
-          "description": "Network interface for the gateway. Defaults to 127.0.0.1",
-          "type": [
-            "string",
             "null"
           ]
         },

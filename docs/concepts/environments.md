@@ -18,7 +18,7 @@ networks:
     mode: managed
     ii: true
     gateway:
-      host: 127.0.0.1
+      bind: 127.0.0.1
       port: 8000
 ```
 

@@ -76,7 +76,7 @@ pub async fn get_managed_network_access(
             .fail();
         }
     }
-    let http_gateway_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
+    let http_gateway_url = Url::parse(&format!("http://{}:{port}", desc.gateway.host)).unwrap();
     Ok(NetworkAccess {
         root_key: desc.root_key,
         api_url: http_gateway_url.clone(),

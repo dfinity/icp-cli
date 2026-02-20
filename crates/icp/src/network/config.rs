@@ -16,6 +16,10 @@ use uuid::Uuid;
 
 use crate::prelude::*;
 
+fn default_gateway_host() -> String {
+    "localhost".to_string()
+}
+
 /// Gateway port configuration within a network descriptor.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -25,6 +29,9 @@ pub struct NetworkDescriptorGatewayPort {
     pub fixed: bool,
     /// The TCP port the gateway is listening on.
     pub port: u16,
+    /// The host to use when constructing URLs to reach the gateway.
+    #[serde(default = "default_gateway_host")]
+    pub host: String,
 }
 
 /// Runtime state of a running managed network, persisted as `descriptor.json`.

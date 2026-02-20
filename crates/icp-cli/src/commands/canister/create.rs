@@ -79,7 +79,10 @@ impl CreateArgs {
             reserved_cycles_limit: self
                 .settings
                 .reserved_cycles_limit
-                .or(default.settings.reserved_cycles_limit.map(u128::from))
+                .or(default
+                    .settings
+                    .reserved_cycles_limit
+                    .map(|r| u128::from(r.0)))
                 .map(Nat::from),
             log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self

@@ -2,6 +2,7 @@
 
 * feat: Init/call arg files now support raw binary without conversion to hex
 * feat!: Remove argument type inference in init/call args in commands and manifest. Args are always assumed Candid, new parameters allow specifying other formats like hex, and alternate parameters are used to specify loading from a file.
+* feat: `icp identity export` now takes an `--encrypt` flag to avoid rendering the key in plaintext
 * feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
 * feat: Allow specifying a version of the network launcher to use
 * feat: Support subaccounts and ICRC-1 IDs in `icp token`, `icp cycles`, and `icp identity account-id`
@@ -12,6 +13,8 @@
 * feat: install proxy canister when starting managed networks with all identities as controllers (or anonymous + default if more than 10 identities)
   * `icp network status` displays the proxy canister principal
 * feat: `icp network status` display more information about networks
+* feat: `icp canister logs` to display the current canister logs
+  * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 
 # v0.1.0
 

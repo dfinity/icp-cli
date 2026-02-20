@@ -13,7 +13,7 @@ A command-line tool for building and deploying applications on the [Internet Com
 npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
 
 # Motoko toolchain (for Motoko projects)
-npm install -g ic-mops && mops toolchain init
+npm install -g ic-mops
 ```
 
 > **Alternative methods:** See the [Installation Guide](docs/guides/installation.md) for Homebrew, shell script, Rust setup, or platform-specific instructions.

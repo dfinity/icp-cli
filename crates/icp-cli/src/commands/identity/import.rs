@@ -183,8 +183,28 @@ fn import_pkcs8(
 ) -> Result<IdentityKey, LoadKeyError> {
     // first, grab the actual key structure from the doc, which entails decrypting it if it's encrypted
     let decrypted_doc: SecretDocument;
+    let mut truncated: Vec<u8>;
     let pki = if section.tag() == PrivateKeyInfo::PEM_LABEL {
-        PrivateKeyInfo::from_der(section.contents()).context(BadPemContentSnafu { path })?
+        match PrivateKeyInfo::from_der(section.contents()) {
+            Ok(pki) => pki,
+            Err(e) => {
+                // Very old versions of dfx generated nonconforming PKCS#8 containers.
+                // They can only be imported if the extra data is removed.
+                // This code was copied from agent-rs@1e67be03
+                truncated = section.contents().to_vec();
+                if truncated.len() >= 52 && truncated[48..52] == *b"\xA1\x23\x03\x21" {
+                    // hatchet surgery
+                    truncated.truncate(48);
+                    truncated[1] = 46;
+                    truncated[4] = 0;
+                    PrivateKeyInfo::from_der(&truncated)
+                        .map_err(|_| e)
+                        .context(BadPemContentSnafu { path })?
+                } else {
+                    return Err(e).context(BadPemContentSnafu { path });
+                }
+            }
+        }
     } else {
         let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
             .context(BadPemContentSnafu { path })?;

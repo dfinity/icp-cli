@@ -122,12 +122,6 @@ fn build_adapter_display_failing_build_output() {
          ----- Failed to build canister 'my-canister' -----
         Error: 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
         [my-canister] Build output:
-        [my-canister] Building: step 1 of 3 (script):
-        [my-canister] echo "success 1":
-        [my-canister] > success 1
-        [my-canister] Building: step 2 of 3 (script):
-        [my-canister] echo "success 2":
-        [my-canister] > success 2
         [my-canister] Building: step 3 of 3 (script):
         [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
         [my-canister] > failing build step 1
@@ -143,7 +137,56 @@ fn build_adapter_display_failing_build_output() {
         .assert()
         .failure()
         .stdout(contains(expected_output))
-        .stdout(contains("hide this").not());
+        .stdout(contains("hide this").not())
+        .stdout(contains("success 1").not())
+        .stdout(contains("success 2").not());
+}
+
+#[test]
+fn build_adapter_display_failing_middle_step_output() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest: step 2 of 3 fails
+    let pm = indoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "step 1 ok"
+                - type: script
+                  command: echo "step 2 failing"; exit 1
+                - type: script
+                  command: echo "step 3 should not run"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Only step 2 output should be shown, not step 1 or step 3
+    let expected_output = indoc! {r#"
+         ----- Failed to build canister 'my-canister' -----
+        Error: 'command 'echo "step 2 failing"; exit 1' failed with status code 1'
+        [my-canister] Build output:
+        [my-canister] Building: step 2 of 3 (script):
+        [my-canister] echo "step 2 failing"; exit 1:
+        [my-canister] > step 2 failing
+    "#};
+
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .failure()
+        .stdout(contains(expected_output))
+        .stdout(contains("step 1 ok").not())
+        .stdout(contains("step 3 should not run").not());
 }
 
 #[test]
@@ -177,9 +220,6 @@ fn build_adapter_display_failing_prebuilt_output() {
          ----- Failed to build canister 'my-canister' -----
         Error: 'failed to read prebuilt canister file'
         [my-canister] Build output:
-        [my-canister] Building: step 1 of 2 (script):
-        [my-canister] echo "initial step succeeded":
-        [my-canister] > initial step succeeded
         [my-canister] Building: step 2 of 2 (pre-built):
         [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
         [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
@@ -223,9 +263,6 @@ fn build_adapter_display_failing_build_output_no_output() {
          ----- Failed to build canister 'my-canister' -----
         Error: 'command 'exit 1' failed with status code 1'
         [my-canister] Build output:
-        [my-canister] Building: step 1 of 2 (script):
-        [my-canister] echo "step 1 succeeded":
-        [my-canister] > step 1 succeeded
         [my-canister] Building: step 2 of 2 (script):
         [my-canister] exit 1:
         [my-canister] <no output>

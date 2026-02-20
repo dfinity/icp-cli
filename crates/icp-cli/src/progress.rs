@@ -251,7 +251,9 @@ impl MultiStepProgressBar {
         self.finished_steps.push(StepOutput { title, output });
     }
 
-    pub(crate) fn dump_output(&self) -> Vec<String> {
+    /// Dump captured build output. When `all_steps` is true, output from every
+    /// step is included; otherwise only the last (failing) step is shown.
+    pub(crate) fn dump_output(&self, all_steps: bool) -> Vec<String> {
         let mut lines = Vec::new();
 
         lines.push(format!(
@@ -259,7 +261,16 @@ impl MultiStepProgressBar {
             self.canister_name, self.output_label
         ));
 
-        for step_output in self.finished_steps.iter() {
+        let steps: &[StepOutput] = if all_steps {
+            &self.finished_steps
+        } else {
+            self.finished_steps
+                .last()
+                .map(std::slice::from_ref)
+                .unwrap_or_default()
+        };
+
+        for step_output in steps {
             for line in step_output.title.lines() {
                 if !line.is_empty() {
                     lines.push(format!("[{}] {}:", self.canister_name, line));

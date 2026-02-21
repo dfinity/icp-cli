@@ -81,7 +81,10 @@ pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, Reso
         .iter()
         .find(|a| a.is_ipv4())
         .ok_or_else(|| {
-            let ip = addrs.first().expect("to_socket_addrs returned Ok but no addresses").ip();
+            let ip = addrs
+                .first()
+                .expect("to_socket_addrs returned Ok but no addresses")
+                .ip();
             ResolveBindError::Ipv6Only {
                 bind: bind.to_string(),
                 ip,

@@ -128,11 +128,17 @@ impl FromArgMatches for NetworkOpt {
             // ERROR Case: URL provided but missing root key
             (Some(NetworkTarget::Url(_)), None) => Err(clap::Error::raw(
                 ErrorKind::MissingRequiredArgument,
-                "`--root-key` is required when the `--network` is a URL.\n",
+                "`--root-key` is required when `--network` is a URL.\n",
             )),
 
-            // Case: Named network (root key is ignored or should be empty)
-            (Some(NetworkTarget::Named(name)), _) => Ok(NetworkOpt::Name(name)),
+            // Case: Named network (root key should be empty)
+            (Some(NetworkTarget::Named(name)), None) => Ok(NetworkOpt::Name(name)),
+
+            // ERROR case: Name provided with a root key
+            (Some(NetworkTarget::Named(_)), Some(_)) => Err(clap::Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "`--root-key` is only valid when `--network` is a URL.\n",
+            )),
 
             // Case: No network specified
             (None, None) => Ok(NetworkOpt::None),

@@ -140,10 +140,7 @@ async fn run_network_launcher(
         ManagedMode::Launcher(launcher_config) => resolve_bind(
             &launcher_config.gateway.bind,
             &launcher_config.gateway.domains,
-        )
-        .context(ResolveBindSnafu {
-            bind: &launcher_config.gateway.bind,
-        })?,
+        )?,
         ManagedMode::Image(_) => crate::network::ResolvedBind {
             ip: std::net::Ipv4Addr::LOCALHOST.into(),
             host: "localhost".to_string(),
@@ -375,10 +372,9 @@ pub enum RunNetworkLauncherError {
     #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
     NoNetworkLauncherPath,
 
-    #[snafu(display("failed to resolve bind address '{bind}'"))]
+    #[snafu(transparent)]
     ResolveBind {
-        source: std::io::Error,
-        bind: String,
+        source: crate::network::ResolveBindError,
     },
 
     #[snafu(display("failed to create dir"))]

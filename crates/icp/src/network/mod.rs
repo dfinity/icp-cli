@@ -45,6 +45,22 @@ pub struct ResolvedBind {
     pub extra_domains: Vec<String>,
 }
 
+#[derive(Debug, Snafu)]
+pub enum ResolveBindError {
+    #[snafu(display("failed to resolve '{bind}'"))]
+    Resolve {
+        source: std::io::Error,
+        bind: String,
+    },
+
+    #[snafu(display(
+        "'{bind}' only resolves to IPv6 address {ip}; the network launcher \
+         requires an IPv4 bind address. Use an IPv4 address or a hostname \
+         that resolves to one"
+    ))]
+    Ipv6Only { bind: String, ip: IpAddr },
+}
+
 /// Resolve a bind address string to an IP and a URL host.
 ///
 /// Uses DNS resolution to turn the bind string into an IP. The URL host is
@@ -52,18 +68,32 @@ pub struct ResolvedBind {
 /// 1. `"localhost"` if the resolved IP matches one of `localhost`'s addresses
 /// 2. The original bind string if it was a domain name (preserving it for URLs)
 /// 3. The first entry from `domains` if the bind was a bare IP and domains are configured
-/// 4. The bare IP as a last resort
-pub fn resolve_bind(bind: &str, domains: &[String]) -> std::io::Result<ResolvedBind> {
-    let ip = (bind, 0u16)
-        .to_socket_addrs()?
-        .next()
-        .expect("to_socket_addrs returned Ok but no addresses")
+/// 4. Error if the result is a bare IPv6 address (cannot be used as an HTTP host
+///    without brackets, and PocketIC does not support IPv6 binding)
+/// 5. The bare IPv4 as a last resort
+pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, ResolveBindError> {
+    let addrs: Vec<_> = (bind, 0u16)
+        .to_socket_addrs()
+        .context(ResolveSnafu { bind })?
+        .collect();
+    // PocketIC does not support IPv6 binding.
+    let ip = addrs
+        .iter()
+        .find(|a| a.is_ipv4())
+        .ok_or_else(|| {
+            let ip = addrs.first().expect("to_socket_addrs returned Ok but no addresses").ip();
+            ResolveBindError::Ipv6Only {
+                bind: bind.to_string(),
+                ip,
+            }
+        })?
         .ip();
 
     let localhost_ips: HashSet<IpAddr> = ("localhost", 0u16)
         .to_socket_addrs()
         .into_iter()
         .flatten()
+        .filter(|a| a.is_ipv4())
         .map(|a| a.ip())
         .collect();
 

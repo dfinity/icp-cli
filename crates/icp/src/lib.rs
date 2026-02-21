@@ -361,7 +361,7 @@ impl MockProjectLoader {
                 managed: Managed {
                     mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                         gateway: Gateway {
-                            host: "localhost".to_string(),
+                            bind: "127.0.0.1".to_string(),
                             port: Port::Fixed(8000),
                             domains: vec![],
                         },
@@ -381,7 +381,7 @@ impl MockProjectLoader {
                 managed: Managed {
                     mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                         gateway: Gateway {
-                            host: "localhost".to_string(),
+                            bind: "127.0.0.1".to_string(),
                             port: Port::Fixed(8001),
                             domains: vec![],
                         },

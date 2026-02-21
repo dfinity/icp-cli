@@ -192,7 +192,7 @@ networks:
   - name: local-dev
     mode: managed
     gateway:
-      host: 127.0.0.1
+      bind: 127.0.0.1
       port: 4943
 ```
 
@@ -200,7 +200,7 @@ networks:
 |----------|------|----------|-------------|
 | `name` | string | Yes | Network identifier |
 | `mode` | string | Yes | `managed` |
-| `gateway.host` | string | No | Host address (default: localhost) |
+| `gateway.bind` | string | No | Bind address (default: 127.0.0.1) |
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
 | `artificial_delay_ms` | integer | No | Artificial delay to add to every update call (ms) |
 | `ii` | boolean | No | Set up Internet Identity canister (default: false) |

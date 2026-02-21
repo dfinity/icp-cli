@@ -1,3 +1,4 @@
+use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -28,6 +29,99 @@ pub mod config;
 pub mod directory;
 pub mod managed;
 
+/// A bind address resolved to an IP and a URL host.
+pub struct ResolvedBind {
+    /// The resolved IP address to pass as the bind address.
+    pub ip: IpAddr,
+    /// The host to use when constructing URLs to reach this address.
+    /// `"localhost"` when the IP is one that `localhost` resolves to,
+    /// otherwise the original bind string (preserving domain names).
+    pub host: String,
+    /// Additional domains to pass to the launcher beyond those already
+    /// configured in `gateway.domains`. Populated when the bind is a bare
+    /// non-loopback IP with no configured domains, so the gateway knows
+    /// to respond on that IP.
+    pub extra_domains: Vec<String>,
+}
+
+#[derive(Debug, Snafu)]
+pub enum ResolveBindError {
+    #[snafu(display("failed to resolve '{bind}'"))]
+    Resolve {
+        source: std::io::Error,
+        bind: String,
+    },
+
+    #[snafu(display(
+        "'{bind}' only resolves to IPv6 address {ip}; the network launcher \
+         requires an IPv4 bind address. Use an IPv4 address or a hostname \
+         that resolves to one"
+    ))]
+    Ipv6Only { bind: String, ip: IpAddr },
+
+    #[snafu(display(
+        "'{bind}' resolves to {ip}, which is not a supported bind address; \
+         the network launcher only supports 127.0.0.1 and 0.0.0.0"
+    ))]
+    UnsupportedBindAddress { bind: String, ip: IpAddr },
+}
+
+/// Resolve a bind address string to an IP and a URL host.
+///
+/// PocketIC makes hardcoded self-calls to 127.0.0.1, so only `127.0.0.1`
+/// (loopback) and `0.0.0.0` (all interfaces) are valid bind addresses.
+///
+/// The URL host is determined as follows:
+/// 1. The original bind string if it was a domain name (preserving it for URLs)
+/// 2. The first entry from `domains` if configured
+/// 3. `"localhost"` as a fallback (reachable for both valid bind addresses)
+pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, ResolveBindError> {
+    let addrs: Vec<_> = (bind, 0u16)
+        .to_socket_addrs()
+        .context(ResolveSnafu { bind })?
+        .collect();
+    let ip = addrs
+        .iter()
+        .find(|a| a.is_ipv4())
+        .ok_or_else(|| {
+            let ip = addrs
+                .first()
+                .expect("to_socket_addrs returned Ok but no addresses")
+                .ip();
+            ResolveBindError::Ipv6Only {
+                bind: bind.to_string(),
+                ip,
+            }
+        })?
+        .ip();
+
+    let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    let unspecified = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+    if ip != loopback && ip != unspecified {
+        return UnsupportedBindAddressSnafu { bind, ip }.fail();
+    }
+
+    let is_domain = bind.parse::<IpAddr>().is_err();
+    let (host, extra_domains) = if is_domain {
+        let extra = if domains.iter().any(|d| d == bind) {
+            vec![]
+        } else {
+            vec![bind.to_string()]
+        };
+        (bind.to_string(), extra)
+    } else if let Some(domain) = domains.first() {
+        (domain.clone(), vec![])
+    } else {
+        ("localhost".to_string(), vec![])
+    };
+
+    Ok(ResolvedBind {
+        ip,
+        host,
+        extra_domains,
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {
     Fixed(u16),
@@ -49,14 +143,14 @@ impl<'de> Deserialize<'de> for Port {
     }
 }
 
-fn default_host() -> String {
-    "localhost".to_string()
+fn default_bind() -> String {
+    "127.0.0.1".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Gateway {
-    #[serde(default = "default_host")]
-    pub host: String,
+    #[serde(default = "default_bind")]
+    pub bind: String,
 
     #[serde(default)]
     pub port: Port,
@@ -68,7 +162,7 @@ pub struct Gateway {
 impl Default for Gateway {
     fn default() -> Self {
         Self {
-            host: default_host(),
+            bind: default_bind(),
             port: Default::default(),
             domains: Default::default(),
         }
@@ -123,7 +217,7 @@ impl ManagedMode {
     pub fn default_for_port(port: u16) -> Self {
         ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
             gateway: Gateway {
-                host: default_host(),
+                bind: default_bind(),
                 port: if port == 0 {
                     Port::Random
                 } else {
@@ -201,18 +295,18 @@ impl Default for Configuration {
 impl From<ManifestGateway> for Gateway {
     fn from(value: ManifestGateway) -> Self {
         let ManifestGateway {
-            host,
+            bind,
             domains,
             port,
         } = value;
-        let host = host.unwrap_or("localhost".to_string());
+        let bind = bind.unwrap_or("localhost".to_string());
         let port = match port {
             Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };
         Gateway {
-            host,
+            bind,
             port,
             domains: domains.unwrap_or_default(),
         }

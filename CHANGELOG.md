@@ -14,6 +14,7 @@
 * feat: `icp canister logs` to display the current canister logs
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 * feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
+* feat: Add an optional root-key argument to canister commands
 
 # v0.1.0
 

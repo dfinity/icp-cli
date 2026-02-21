@@ -31,7 +31,7 @@ pub enum NetworkSelection {
     /// Use a named network
     Named(String),
     /// Use a network by URL
-    Url(Url),
+    Url(Url, Vec<u8>),
 }
 
 /// Selection type for environments - similar to IdentitySelection
@@ -180,13 +180,13 @@ impl Context {
                 }
             }
             NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(url) => Ok(crate::Network {
+            NetworkSelection::Url(url, root_key) => Ok(crate::Network {
                 name: url.to_string(),
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
                         api_url: url.clone(),
                         http_gateway_url: Some(url.clone()),
-                        root_key: IC_ROOT_KEY.to_vec(),
+                        root_key: root_key.to_vec(),
                     },
                 },
             }),
@@ -402,7 +402,7 @@ impl Context {
         match (environment, network) {
             // Error: Both environment and network specified
             (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
                 Err(GetAgentError::EnvironmentAndNetworkSpecified)
             }
 
@@ -428,7 +428,7 @@ impl Context {
 
             // Network specified
             (EnvironmentSelection::Default, NetworkSelection::Named(_))
-            | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+            | (EnvironmentSelection::Default, NetworkSelection::Url(_, _)) => {
                 Ok(self.get_agent_for_network(identity, network).await?)
             }
         }
@@ -446,13 +446,13 @@ impl Context {
                 match (environment, network) {
                     // Error: Both environment and network specified
                     (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
                         Err(GetCanisterIdError::CanisterEnvironmentAndNetworkSpecified)
                     }
 
                     // Error: Canister by name with explicit network but no environment
                     (EnvironmentSelection::Default, NetworkSelection::Named(_))
-                    | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                    | (EnvironmentSelection::Default, NetworkSelection::Url(_, _)) => {
                         Err(GetCanisterIdError::AmbiguousCanisterName)
                     }
 

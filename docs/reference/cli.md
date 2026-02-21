@@ -821,6 +821,8 @@ Print the PEM file for the identity
 ###### **Options:**
 
 * `--password-file <FILE>` — Read the password from a file instead of prompting (only required for identities created or imported with --storage password)
+* `--encrypt` — Encrypt the exported PEM with a password
+* `--encryption-password-file <FILE>` — Read the encryption password from a file instead of prompting
 
 
 

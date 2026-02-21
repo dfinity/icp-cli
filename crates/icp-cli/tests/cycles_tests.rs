@@ -175,7 +175,7 @@ async fn cycles_mint_on_ic() {
             "--icp",
             "1",
             "--network",
-            IC_MAINNET_NETWORK_API_URL,
+            "ic",
         ])
         .assert()
         .stderr(contains(

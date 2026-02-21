@@ -175,6 +175,8 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
         ii,
         nns,
         subnets,
+        bitcoind_addr,
+        dogecoind_addr,
     } = config;
     let mut flags = vec![];
     if *ii {
@@ -189,6 +191,16 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     if let Some(subnets) = &subnets {
         for subnet in subnets {
             flags.push(format!("--subnet={subnet}"));
+        }
+    }
+    if let Some(addrs) = &bitcoind_addr {
+        for addr in addrs {
+            flags.push(format!("--bitcoind-addr={addr}"));
+        }
+    }
+    if let Some(addrs) = &dogecoind_addr {
+        for addr in addrs {
+            flags.push(format!("--dogecoind-addr={addr}"));
         }
     }
     flags

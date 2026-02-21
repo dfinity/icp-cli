@@ -91,6 +91,8 @@ pub struct ManagedLauncherConfig {
     pub ii: bool,
     pub nns: bool,
     pub subnets: Option<Vec<SubnetKind>>,
+    pub bitcoind_addr: Option<Vec<String>>,
+    pub dogecoind_addr: Option<Vec<String>>,
     pub version: Option<String>,
 }
 
@@ -130,6 +132,8 @@ impl ManagedMode {
             ii: false,
             nns: false,
             subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
             version: None,
         }))
     }
@@ -238,6 +242,8 @@ impl From<Mode> for Configuration {
                     ii,
                     nns,
                     subnets,
+                    bitcoind_addr,
+                    dogecoind_addr,
                     version,
                 } => {
                     let gateway: Gateway = match gateway {
@@ -262,6 +268,8 @@ impl From<Mode> for Configuration {
                                 ii: ii.unwrap_or(false),
                                 nns: nns.unwrap_or(false),
                                 subnets,
+                                bitcoind_addr,
+                                dogecoind_addr,
                                 version,
                             })),
                         },
@@ -410,5 +418,52 @@ impl Access for MockNetworkAccessor {
                     network: network.name.clone(),
                 },
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::network::{
+        Gateway as ManifestGateway, Managed as ManifestManaged, ManagedMode as ManifestManagedMode,
+        Mode,
+    };
+
+    #[test]
+    fn from_mode_launcher_with_bitcoind_addr() {
+        let mode = Mode::Managed(ManifestManaged {
+            mode: Box::new(ManifestManagedMode::Launcher {
+                gateway: Some(ManifestGateway {
+                    host: None,
+                    port: Some(8000),
+                }),
+                artificial_delay_ms: None,
+                ii: None,
+                nns: None,
+                subnets: None,
+                bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+                dogecoind_addr: None,
+                version: None,
+            }),
+        });
+
+        let config: Configuration = mode.into();
+        match config {
+            Configuration::Managed {
+                managed:
+                    Managed {
+                        mode: ManagedMode::Launcher(launcher_config),
+                    },
+            } => {
+                assert_eq!(
+                    launcher_config.bitcoind_addr,
+                    Some(vec!["127.0.0.1:18444".to_string()])
+                );
+                assert_eq!(launcher_config.dogecoind_addr, None);
+                assert!(!launcher_config.ii);
+                assert!(!launcher_config.nns);
+            }
+            _ => panic!("expected ManagedMode::Launcher"),
+        }
     }
 }

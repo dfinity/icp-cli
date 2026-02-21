@@ -68,6 +68,10 @@ pub enum ManagedMode {
         nns: Option<bool>,
         /// Configure the list of subnets (one application subnet by default)
         subnets: Option<Vec<SubnetKind>>,
+        /// Bitcoin P2P node addresses to connect to (e.g. "127.0.0.1:18444")
+        bitcoind_addr: Option<Vec<String>>,
+        /// Dogecoin P2P node addresses to connect to
+        dogecoind_addr: Option<Vec<String>>,
         /// The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.
         version: Option<String>,
     },
@@ -81,6 +85,8 @@ impl Default for ManagedMode {
             ii: None,
             nns: None,
             subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
             version: None,
         }
     }
@@ -260,6 +266,8 @@ mod tests {
                         ii: None,
                         nns: None,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
                         version: None,
                     })
                 })
@@ -288,6 +296,8 @@ mod tests {
                         ii: None,
                         nns: None,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
                         version: None,
                     })
                 })
@@ -317,6 +327,62 @@ mod tests {
                         ii: None,
                         nns: None,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
+                        version: None,
+                    })
+                })
+            },
+        );
+    }
+
+    #[test]
+    fn managed_network_with_dogecoind_addr() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                    name: my-network
+                    mode: managed
+                    dogecoind-addr:
+                      - "127.0.0.1:22556"
+                "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: None,
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: Some(vec!["127.0.0.1:22556".to_string()]),
+                        version: None,
+                    })
+                })
+            },
+        );
+    }
+
+    #[test]
+    fn managed_network_with_bitcoind_addr() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                    name: my-network
+                    mode: managed
+                    bitcoind-addr:
+                      - "127.0.0.1:18444"
+                "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: None,
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None,
+                        bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+                        dogecoind_addr: None,
                         version: None,
                     })
                 })

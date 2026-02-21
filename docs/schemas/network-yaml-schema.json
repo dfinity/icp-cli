@@ -188,6 +188,26 @@
                 "null"
               ]
             },
+            "bitcoind-addr": {
+              "description": "Bitcoin P2P node addresses to connect to (e.g. \"127.0.0.1:18444\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "dogecoind-addr": {
+              "description": "Dogecoin P2P node addresses to connect to",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "gateway": {
               "anyOf": [
                 {

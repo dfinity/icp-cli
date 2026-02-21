@@ -52,6 +52,8 @@ pub struct ManagedImageOptions {
     pub status_dir: String,
     /// Parsed mounts (excluding the status directory mount, which is added at runtime).
     pub mounts: Vec<Mount>,
+    /// Extra hosts entries for Docker networking (e.g. "host.docker.internal:host-gateway").
+    pub extra_hosts: Vec<String>,
 }
 
 impl ManagedImageOptions {
@@ -160,6 +162,7 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             shm_size: config.shm_size,
             status_dir: config.status_dir.clone(),
             mounts,
+            extra_hosts: vec![],
         })
     }
 }
@@ -187,6 +190,52 @@ pub enum ManagedImageConversionError {
     WslPathConvert { source: WslPathConversionError },
 }
 
+/// Translates a host:port address for use inside a Docker container.
+/// Replaces `127.0.0.1`, `localhost`, and `::1` with `host.docker.internal`
+/// so the container can reach services running on the host machine.
+pub(super) fn translate_addr_for_docker(addr: &str) -> String {
+    if let Some((host, port)) = addr.rsplit_once(':') {
+        let translated = match host {
+            "127.0.0.1" | "localhost" | "::1" => "host.docker.internal",
+            _ => host,
+        };
+        format!("{translated}:{port}")
+    } else {
+        addr.to_string()
+    }
+}
+
+/// Returns extra_hosts entries needed for Docker to resolve `host.docker.internal`.
+/// On Linux, Docker Engine does not provide `host.docker.internal` by default,
+/// so we add `host.docker.internal:host-gateway` when any addresses reference localhost.
+pub(super) fn docker_extra_hosts_for_addrs(addrs: &[String]) -> Vec<String> {
+    let needs_host_gateway = addrs.iter().any(|addr| {
+        addr.rsplit_once(':')
+            .map(|(host, _)| matches!(host, "127.0.0.1" | "localhost" | "::1"))
+            .unwrap_or(false)
+    });
+    if needs_host_gateway {
+        vec!["host.docker.internal:host-gateway".to_string()]
+    } else {
+        vec![]
+    }
+}
+
+/// Translates localhost addresses in `--bitcoind-addr=` and `--dogecoind-addr=` flags
+/// for use inside a Docker container.
+pub(super) fn translate_launcher_args_for_docker(args: Vec<String>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| {
+            for prefix in ["--bitcoind-addr=", "--dogecoind-addr="] {
+                if let Some(addr) = arg.strip_prefix(prefix) {
+                    return format!("{prefix}{}", translate_addr_for_docker(addr));
+                }
+            }
+            arg
+        })
+        .collect()
+}
+
 pub async fn spawn_docker_launcher(
     options: &ManagedImageOptions,
 ) -> Result<
@@ -211,6 +260,7 @@ pub async fn spawn_docker_launcher(
         shm_size,
         status_dir,
         mounts,
+        extra_hosts,
     } = options;
 
     // Create status tmpdir and convert path for WSL2 if needed
@@ -320,6 +370,11 @@ pub async fn spawn_docker_launcher(
                     mounts: Some(all_mounts),
                     binds: Some(volumes.clone()),
                     shm_size: *shm_size,
+                    extra_hosts: if extra_hosts.is_empty() {
+                        None
+                    } else {
+                        Some(extra_hosts.clone())
+                    },
                     ..<_>::default()
                 }),
                 ..<_>::default()

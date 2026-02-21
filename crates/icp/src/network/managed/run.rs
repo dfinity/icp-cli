@@ -289,11 +289,23 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
     use bollard::secret::PortBinding;
     use std::collections::HashMap;
 
+    use super::docker::{docker_extra_hosts_for_addrs, translate_launcher_args_for_docker};
+
     let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
     let args = launcher_settings_flags(config);
+    let args = translate_launcher_args_for_docker(args);
+
+    let all_addrs: Vec<String> = config
+        .bitcoind_addr
+        .iter()
+        .chain(config.dogecoind_addr.iter())
+        .flatten()
+        .cloned()
+        .collect();
+    let extra_hosts = docker_extra_hosts_for_addrs(&all_addrs);
 
     let platform = if cfg!(target_arch = "aarch64") {
         "linux/arm64".to_string()
@@ -324,6 +336,7 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         shm_size: None,
         status_dir: "/app/status".to_string(),
         mounts: vec![],
+        extra_hosts,
     }
 }
 
@@ -850,4 +863,137 @@ async fn install_proxy(
     );
 
     Ok(canister_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::{Gateway, ManagedLauncherConfig, Port};
+
+    #[test]
+    fn transform_native_launcher_default_config() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                host: "localhost".to_string(),
+                port: Port::Fixed(8000),
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert_eq!(
+            opts.image,
+            "ghcr.io/dfinity/icp-cli-network-launcher:latest"
+        );
+        assert!(opts.args.is_empty());
+        assert!(opts.extra_hosts.is_empty());
+        assert!(opts.rm_on_exit);
+        assert_eq!(opts.status_dir, "/app/status");
+        let binding = opts
+            .port_bindings
+            .get("4943/tcp")
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert_eq!(binding[0].host_port.as_deref(), Some("8000"));
+    }
+
+    #[test]
+    fn transform_native_launcher_random_port() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                host: "localhost".to_string(),
+                port: Port::Random,
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        let binding = opts
+            .port_bindings
+            .get("4943/tcp")
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert_eq!(binding[0].host_port.as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn transform_native_launcher_with_bitcoind_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: true,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(opts.args.contains(&"--ii".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
+        );
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_with_dogecoind_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: Some(50),
+            ii: false,
+            nns: true,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(opts.args.contains(&"--nns".to_string()));
+        assert!(opts.args.contains(&"--artificial-delay-ms=50".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--dogecoind-addr=host.docker.internal:22556".to_string())
+        );
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_external_addr_no_extra_hosts() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
+        );
+        assert!(opts.extra_hosts.is_empty());
+    }
 }

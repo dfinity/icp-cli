@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::net::{IpAddr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -59,24 +58,28 @@ pub enum ResolveBindError {
          that resolves to one"
     ))]
     Ipv6Only { bind: String, ip: IpAddr },
+
+    #[snafu(display(
+        "'{bind}' resolves to {ip}, which is not a supported bind address; \
+         the network launcher only supports 127.0.0.1 and 0.0.0.0"
+    ))]
+    UnsupportedBindAddress { bind: String, ip: IpAddr },
 }
 
 /// Resolve a bind address string to an IP and a URL host.
 ///
-/// Uses DNS resolution to turn the bind string into an IP. The URL host is
-/// determined as follows:
-/// 1. `"localhost"` if the resolved IP matches one of `localhost`'s addresses
-/// 2. The original bind string if it was a domain name (preserving it for URLs)
-/// 3. The first entry from `domains` if the bind was a bare IP and domains are configured
-/// 4. Error if the result is a bare IPv6 address (cannot be used as an HTTP host
-///    without brackets, and PocketIC does not support IPv6 binding)
-/// 5. The bare IPv4 as a last resort
+/// PocketIC makes hardcoded self-calls to 127.0.0.1, so only `127.0.0.1`
+/// (loopback) and `0.0.0.0` (all interfaces) are valid bind addresses.
+///
+/// The URL host is determined as follows:
+/// 1. The original bind string if it was a domain name (preserving it for URLs)
+/// 2. The first entry from `domains` if configured
+/// 3. `"localhost"` as a fallback (reachable for both valid bind addresses)
 pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, ResolveBindError> {
     let addrs: Vec<_> = (bind, 0u16)
         .to_socket_addrs()
         .context(ResolveSnafu { bind })?
         .collect();
-    // PocketIC does not support IPv6 binding.
     let ip = addrs
         .iter()
         .find(|a| a.is_ipv4())
@@ -92,18 +95,14 @@ pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, Reso
         })?
         .ip();
 
-    let localhost_ips: HashSet<IpAddr> = ("localhost", 0u16)
-        .to_socket_addrs()
-        .into_iter()
-        .flatten()
-        .filter(|a| a.is_ipv4())
-        .map(|a| a.ip())
-        .collect();
+    let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    let unspecified = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+    if ip != loopback && ip != unspecified {
+        return UnsupportedBindAddressSnafu { bind, ip }.fail();
+    }
 
-    let (host, extra_domains) = if localhost_ips.contains(&ip) {
-        ("localhost".to_string(), vec![])
-    } else if bind.parse::<IpAddr>().is_err() {
-        // bind was a domain name — ensure the gateway responds to it
+    let is_domain = bind.parse::<IpAddr>().is_err();
+    let (host, extra_domains) = if is_domain {
         let extra = if domains.iter().any(|d| d == bind) {
             vec![]
         } else {
@@ -113,7 +112,7 @@ pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, Reso
     } else if let Some(domain) = domains.first() {
         (domain.clone(), vec![])
     } else {
-        (bind.to_string(), vec![bind.to_string()])
+        ("localhost".to_string(), vec![])
     };
 
     Ok(ResolvedBind {

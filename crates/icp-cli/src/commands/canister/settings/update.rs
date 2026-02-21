@@ -7,11 +7,11 @@ use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::ProjectLoadError;
 use icp::context::{CanisterSelection, Context, TermWriter};
+use icp::parsers::CyclesAmount;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use crate::commands::args;
-use crate::commands::parsers::parse_cycles_amount;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -106,8 +106,8 @@ pub(crate) struct UpdateArgs {
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = parse_cycles_amount)]
-    reserved_cycles_limit: Option<u128>,
+    #[arg(long)]
+    reserved_cycles_limit: Option<CyclesAmount>,
 
     #[arg(long, value_parser = memory_parser)]
     wasm_memory_limit: Option<Byte>,
@@ -237,13 +237,13 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
         update = update.with_freezing_threshold(freezing_threshold);
     }
-    if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
+    if let Some(reserved_cycles_limit) = &args.reserved_cycles_limit {
         if configured_settings.reserved_cycles_limit.is_some() {
             ctx.term.write_line(
                 "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
             )?
         }
-        update = update.with_reserved_cycles_limit(reserved_cycles_limit);
+        update = update.with_reserved_cycles_limit(reserved_cycles_limit.get());
     }
     if let Some(wasm_memory_limit) = args.wasm_memory_limit {
         if configured_settings.wasm_memory_limit.is_some() {

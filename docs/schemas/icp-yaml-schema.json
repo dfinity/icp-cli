@@ -263,6 +263,19 @@
       },
       "type": "object"
     },
+    "CyclesAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "An amount of cycles.\n\nDeserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators."
+    },
     "EnvironmentManifest": {
       "properties": {
         "canisters": {
@@ -708,13 +721,16 @@
           ]
         },
         "reserved_cycles_limit": {
-          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CyclesAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
           "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",

@@ -56,7 +56,7 @@ canisters:
 | `build` | object | Yes | Build configuration |
 | `sync` | object | No | Post-deployment sync configuration |
 | `settings` | object | No | Canister settings |
-| `init_args` | string | No | Initialization arguments (Candid or hex) |
+| `init_args` | string or object | No | Initialization arguments (see [Init Args](#init-args)) |
 | `recipe` | object | No | Recipe reference (alternative to build) |
 
 ## Build Steps
@@ -281,7 +281,7 @@ environments:
 | `network` | string | Yes | Network to deploy to |
 | `canisters` | array | No | Canisters to include (default: all) |
 | `settings` | object | No | Per-canister setting overrides |
-| `init_args` | object | No | Per-canister init arg overrides |
+| `init_args` | object | No | Per-canister init arg overrides (see [Init Args](#init-args)) |
 
 ## Canister Settings
 
@@ -302,17 +302,40 @@ settings:
 
 ## Init Args
 
-Candid text format:
+A plain string is shorthand for inline Candid content:
 
 ```yaml
 init_args: "(record { owner = principal \"aaaaa-aa\" })"
 ```
 
-Hex-encoded bytes:
+File reference:
 
 ```yaml
-init_args: "4449444c016d7b0100010203"
+init_args:
+  path: ./args.bin
+  format: bin
 ```
+
+Inline value (explicit):
+
+```yaml
+init_args:
+  value: "(record { owner = principal \"aaaaa-aa\" })"
+  format: candid
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | Yes* | Relative path to file containing init args |
+| `value` | string | Yes* | Inline init args value |
+| `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
+
+*Exactly one of `path` or `value` must be specified.
+
+Supported formats:
+- **`hex`** — Hex-encoded bytes (inline or file)
+- **`candid`** — Candid text format (inline or file)
+- **`bin`** — Raw binary bytes; only valid with `path` (e.g. output of `didc encode`)
 
 ## Implicit Defaults
 
@@ -351,7 +374,8 @@ canisters:
             - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
-    init_args: "(record { admin = principal \"aaaaa-aa\" })"
+    init_args:
+      value: "(record { admin = principal \"aaaaa-aa\" })"
 
 networks:
   - name: local

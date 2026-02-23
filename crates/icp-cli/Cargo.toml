@@ -37,7 +37,7 @@ ic-ledger-types.workspace = true
 ic-management-canister-types.workspace = true
 ic-utils.workspace = true
 icp-canister-interfaces.workspace = true
-icp.workspace = true
+icp = { workspace = true, features = ["clap"] }
 icrc-ledger-types.workspace = true
 indicatif.workspace = true
 itertools.workspace = true
@@ -77,7 +77,6 @@ assert_cmd = "2"
 camino-tempfile = "1"
 cryptoki.workspace = true
 indoc.workspace = true
-icp = { workspace = true }
 predicates = "3"
 rand.workspace = true
 send_ctrlc = "0.6"

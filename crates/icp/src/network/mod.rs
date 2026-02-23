@@ -450,6 +450,7 @@ mod tests {
                 gateway: Some(ManifestGateway {
                     host: None,
                     port: Some(8000),
+                    domains: None,
                 }),
                 artificial_delay_ms: None,
                 ii: None,

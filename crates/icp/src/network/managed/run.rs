@@ -876,6 +876,7 @@ mod tests {
             gateway: Gateway {
                 host: "localhost".to_string(),
                 port: Port::Fixed(8000),
+                domains: vec![],
             },
             artificial_delay_ms: None,
             ii: false,
@@ -909,6 +910,7 @@ mod tests {
             gateway: Gateway {
                 host: "localhost".to_string(),
                 port: Port::Random,
+                domains: vec![],
             },
             artificial_delay_ms: None,
             ii: false,

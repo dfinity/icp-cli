@@ -136,7 +136,7 @@ impl FromArgMatches for NetworkOpt {
 
             // ERROR case: Name provided with a root key
             (Some(NetworkTarget::Named(_)), Some(_)) => Err(clap::Error::raw(
-                ErrorKind::MissingRequiredArgument,
+                ErrorKind::ArgumentConflict,
                 "`--root-key` is only valid when `--network` is a URL.\n",
             )),
 

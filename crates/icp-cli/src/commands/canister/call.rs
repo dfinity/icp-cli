@@ -9,15 +9,13 @@ use ic_agent::Agent;
 use icp::context::Context;
 use icp::fs;
 use icp::manifest::InitArgsFormat;
+use icp::parsers::CyclesAmount;
 use icp::prelude::*;
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use std::io::{self, Write};
 use tracing::warn;
 
-use crate::{
-    commands::args, commands::parsers::parse_cycles_amount,
-    operations::misc::fetch_canister_metadata,
-};
+use crate::{commands::args, operations::misc::fetch_canister_metadata};
 
 /// Make a canister call
 #[derive(Args, Debug)]
@@ -52,8 +50,8 @@ pub(crate) struct CallArgs {
     /// Cycles to forward with the proxied call.
     ///
     /// Only used when --proxy is specified. Defaults to 0.
-    #[arg(long, requires = "proxy", value_parser = parse_cycles_amount, default_value = "0")]
-    pub(crate) cycles: u128,
+    #[arg(long, requires = "proxy", default_value = "0")]
+    pub(crate) cycles: CyclesAmount,
 
     /// Sends a query request to a canister instead of an update request.
     ///
@@ -168,7 +166,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             canister_id: cid,
             method: args.method.clone(),
             args: arg_bytes,
-            cycles: Nat::from(args.cycles),
+            cycles: Nat::from(args.cycles.get()),
         };
         let proxy_arg_bytes =
             Encode!(&proxy_args).context("failed to encode proxy call arguments")?;

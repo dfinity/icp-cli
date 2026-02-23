@@ -3,12 +3,12 @@ use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::CyclesAmount;
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
 };
 
 use crate::commands::args;
-use crate::commands::parsers::parse_cycles_amount;
 use crate::operations::token::TokenAmount;
 
 /// Top up a canister with cycles
@@ -16,8 +16,8 @@ use crate::operations::token::TokenAmount;
 pub(crate) struct TopUpArgs {
     /// Amount of cycles to top up.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = parse_cycles_amount)]
-    pub(crate) amount: u128,
+    #[arg(long)]
+    pub(crate) amount: CyclesAmount,
 
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
@@ -41,7 +41,7 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
         .await?;
 
     let cargs = WithdrawArgs {
-        amount: Nat::from(args.amount),
+        amount: Nat::from(args.amount.get()),
         from_subaccount: None,
         to: cid,
         created_at_time: None,
@@ -55,11 +55,11 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
 
     let response = Decode!(&bs, WithdrawResponse).context("failed to decode withdraw response")?;
     if let Err(err) = response {
-        bail!("failed to top up: {}", err.format_error(args.amount));
+        bail!("failed to top up: {}", err.format_error(args.amount.get()));
     }
 
     let amount = TokenAmount {
-        amount: BigDecimal::new(args.amount.into(), 0),
+        amount: BigDecimal::new(args.amount.get().into(), 0),
         symbol: "cycles".to_string(),
     };
 

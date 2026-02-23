@@ -133,7 +133,7 @@ pub(crate) async fn build_many_with_progress_bar(
             result.map_err(|error| BuildFailure {
                 canister_name: canister.name.clone(),
                 error,
-                progress_output: pb.dump_output(),
+                progress_output: pb.dump_output(debug),
             })
         };
         futs.push_back(fut);

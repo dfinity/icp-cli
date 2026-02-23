@@ -215,7 +215,9 @@ pub struct Settings {
 
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
-    pub reserved_cycles_limit: Option<u64>,
+    /// Supports suffixes in YAML: k, m, b, t (e.g. "4t" or "4.3t").
+    #[serde(default)]
+    pub reserved_cycles_limit: Option<crate::parsers::CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
     pub wasm_memory_limit: Option<u64>,
@@ -234,7 +236,7 @@ impl From<Settings> for CanisterSettingsArg {
         CanisterSettingsArg {
             freezing_threshold: settings.freezing_threshold.map(Nat::from),
             controllers: None,
-            reserved_cycles_limit: settings.reserved_cycles_limit.map(Nat::from),
+            reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),
             memory_allocation: settings.memory_allocation.map(Nat::from),
             compute_allocation: settings.compute_allocation.map(Nat::from),
@@ -332,6 +334,26 @@ allowed_viewers:
         assert!(yaml.contains("allowed_viewers"));
         assert!(yaml.contains("aaaaa-aa"));
         assert!(yaml.contains("2vxsx-fae"));
+    }
+
+    #[test]
+    fn settings_reserved_cycles_limit_parses_suffix() {
+        let yaml = "reserved_cycles_limit: 4.3t";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
+            Some(4_300_000_000_000)
+        );
+    }
+
+    #[test]
+    fn settings_reserved_cycles_limit_parses_number() {
+        let yaml = "reserved_cycles_limit: 5000000000000";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
+            Some(5_000_000_000_000)
+        );
     }
 
     #[test]

@@ -364,6 +364,7 @@ impl MockProjectLoader {
                         gateway: Gateway {
                             host: "localhost".to_string(),
                             port: Port::Fixed(8000),
+                            domains: vec![],
                         },
                         artificial_delay_ms: None,
                         ii: false,
@@ -383,6 +384,7 @@ impl MockProjectLoader {
                         gateway: Gateway {
                             host: "localhost".to_string(),
                             port: Port::Fixed(8001),
+                            domains: vec![],
                         },
                         artificial_delay_ms: None,
                         ii: false,

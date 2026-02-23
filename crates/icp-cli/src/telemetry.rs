@@ -14,7 +14,6 @@ use icp::prelude::*;
 use icp::settings::Settings;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 
 use crate::commands::{self, Command};
 use crate::version::icp_cli_version_str;
@@ -83,7 +82,6 @@ pub(crate) struct TelemetryRecord {
     pub success: bool,
     pub duration_ms: u64,
     pub machine_id: String,
-    pub timestamp: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +119,6 @@ impl TelemetrySession {
         let duration_ms = self.start.elapsed().as_millis() as u64;
         let machine_id = get_or_create_machine_id(&self.telemetry_dir);
 
-        let timestamp = OffsetDateTime::now_utc()
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap_or_default();
-
         let record = TelemetryRecord {
             version: self.version.clone(),
             os: std::env::consts::OS,
@@ -134,7 +128,6 @@ impl TelemetrySession {
             success,
             duration_ms,
             machine_id,
-            timestamp,
         };
 
         append_record(&self.telemetry_dir, &record);

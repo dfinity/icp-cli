@@ -11,9 +11,13 @@ use std::{
 
 use clap::parser::ValueSource;
 use icp::prelude::*;
+use icp::settings::Settings;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+
+use crate::commands::{self, Command};
+use crate::version::icp_cli_version_str;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -139,11 +143,158 @@ impl TelemetrySession {
 }
 
 // ---------------------------------------------------------------------------
+// High-level setup — called from main.rs
+// ---------------------------------------------------------------------------
+
+/// Initialise a telemetry session unless telemetry is disabled.
+pub(crate) async fn setup(
+    ctx: &icp::context::Context,
+    command: &Command,
+    raw_args: &[String],
+    clap_command: &clap::Command,
+) -> Option<TelemetrySession> {
+    if is_disabled_by_env() {
+        return None;
+    }
+
+    let telemetry_dir = ctx.dirs.telemetry_data();
+
+    // Load settings to check the user preference (best-effort; default to enabled)
+    let enabled = async {
+        let dirs = ctx.dirs.settings().ok()?;
+        let settings = dirs
+            .with_read(async |dirs| Settings::load_from(dirs))
+            .await
+            .ok()?
+            .ok()?;
+        Some(settings.telemetry_enabled)
+    }
+    .await
+    .unwrap_or(true);
+
+    if !enabled {
+        return None;
+    }
+
+    show_notice_if_needed(&telemetry_dir);
+
+    let cmd_name = command_name(command).to_string();
+
+    // Re-parse raw args into ArgMatches for structured argument extraction.
+    // This never fails in practice since Cli::parse() already succeeded.
+    let arguments = clap_command
+        .clone()
+        .try_get_matches_from(raw_args)
+        .map(|m| collect_arguments(&m, clap_command))
+        .unwrap_or_default();
+
+    let version = icp_cli_version_str().to_string();
+
+    Some(TelemetrySession::begin(
+        telemetry_dir,
+        cmd_name,
+        arguments,
+        version,
+    ))
+}
+
+/// Map a parsed `Command` to its telemetry name string.
+///
+/// This is an exhaustive match rather than a runtime string extraction from
+/// argv so that adding a new `Command` variant causes a compile error here,
+/// forcing the author to assign an explicit telemetry name.
+///
+/// Deriving the name automatically from argv would risk leaking positional
+/// argument values (e.g. project names) into telemetry and would be fragile when
+/// flags appear before subcommands.
+fn command_name(cmd: &Command) -> &'static str {
+    use commands::{canister, cycles, environment, identity, network, project, token};
+    match cmd {
+        Command::Build(_) => "build",
+        Command::Deploy(_) => "deploy",
+        Command::New(_) => "new",
+        Command::Sync(_) => "sync",
+        Command::Settings(_) => "settings",
+
+        Command::Canister(sub) => match sub {
+            canister::Command::Call(_) => "canister call",
+            canister::Command::Create(_) => "canister create",
+            canister::Command::Delete(_) => "canister delete",
+            canister::Command::Install(_) => "canister install",
+            canister::Command::List(_) => "canister list",
+            canister::Command::Logs(_) => "canister logs",
+            canister::Command::Metadata(_) => "canister metadata",
+            canister::Command::MigrateId(_) => "canister migrate-id",
+            canister::Command::Settings(sub) => match sub {
+                canister::settings::Command::Show(_) => "canister settings show",
+                canister::settings::Command::Update(_) => "canister settings update",
+                canister::settings::Command::Sync(_) => "canister settings sync",
+            },
+            canister::Command::Snapshot(sub) => match sub {
+                canister::snapshot::Command::Create(_) => "canister snapshot create",
+                canister::snapshot::Command::Delete(_) => "canister snapshot delete",
+                canister::snapshot::Command::Download(_) => "canister snapshot download",
+                canister::snapshot::Command::List(_) => "canister snapshot list",
+                canister::snapshot::Command::Restore(_) => "canister snapshot restore",
+                canister::snapshot::Command::Upload(_) => "canister snapshot upload",
+            },
+            canister::Command::Start(_) => "canister start",
+            canister::Command::Status(_) => "canister status",
+            canister::Command::Stop(_) => "canister stop",
+            canister::Command::TopUp(_) => "canister top-up",
+        },
+
+        Command::Cycles(sub) => match sub {
+            cycles::Command::Balance(_) => "cycles balance",
+            cycles::Command::Mint(_) => "cycles mint",
+            cycles::Command::Transfer(_) => "cycles transfer",
+        },
+
+        Command::Environment(sub) => match sub {
+            environment::Command::List(_) => "environment list",
+        },
+
+        Command::Identity(sub) => match sub {
+            identity::Command::AccountId(_) => "identity account-id",
+            identity::Command::Default(_) => "identity default",
+            identity::Command::Delete(_) => "identity delete",
+            identity::Command::Export(_) => "identity export",
+            identity::Command::Import(_) => "identity import",
+            identity::Command::Link(sub) => match sub {
+                identity::link::Command::Hsm(_) => "identity link hsm",
+            },
+            identity::Command::List(_) => "identity list",
+            identity::Command::New(_) => "identity new",
+            identity::Command::Principal(_) => "identity principal",
+            identity::Command::Rename(_) => "identity rename",
+        },
+
+        Command::Network(sub) => match sub {
+            network::Command::List(_) => "network list",
+            network::Command::Ping(_) => "network ping",
+            network::Command::Start(_) => "network start",
+            network::Command::Status(_) => "network status",
+            network::Command::Stop(_) => "network stop",
+            network::Command::Update(_) => "network update",
+        },
+
+        Command::Project(sub) => match sub {
+            project::Command::Show(_) => "project show",
+        },
+
+        Command::Token(sub) => match sub.command {
+            token::Commands::Balance(_) => "token balance",
+            token::Commands::Transfer(_) => "token transfer",
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Opt-out checks
 // ---------------------------------------------------------------------------
 
 /// Returns `true` if any of the standard opt-out env vars are set.
-pub(crate) fn is_disabled_by_env() -> bool {
+fn is_disabled_by_env() -> bool {
     std::env::var_os("DO_NOT_TRACK").is_some()
         || std::env::var_os("ICP_TELEMETRY_DISABLED").is_some()
         || std::env::var_os("CI").is_some()
@@ -155,7 +306,7 @@ pub(crate) fn is_disabled_by_env() -> bool {
 
 /// Prints the first-run notice and creates the marker file if it has not been
 /// shown before.  Errors are silently swallowed.
-pub(crate) fn show_notice_if_needed(telemetry_dir: &Path) {
+fn show_notice_if_needed(telemetry_dir: &Path) {
     let marker = telemetry_dir.join(NOTICE_SHOWN_FILE);
     if marker.exists() {
         return;
@@ -483,10 +634,7 @@ fn get_deepest_subcommand<'a>(
 /// - Includes the value **only** when the argument has a constrained set of
 ///   `possible_values` and the actual value matches one of them, preventing
 ///   free-form user input (paths, principals, etc.) from leaking into telemetry.
-pub(crate) fn collect_arguments(
-    arg_matches: &clap::ArgMatches,
-    command: &clap::Command,
-) -> Vec<Argument> {
+fn collect_arguments(arg_matches: &clap::ArgMatches, command: &clap::Command) -> Vec<Argument> {
     let (deepest_matches, deepest_command) = get_deepest_subcommand(arg_matches, command);
 
     let mut arguments = Vec::new();

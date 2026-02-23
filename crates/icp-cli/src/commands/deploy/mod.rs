@@ -3,6 +3,7 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
+use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
@@ -13,7 +14,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use crate::{
-    commands::{canister::create, parsers::parse_cycles_amount},
+    commands::canister::create,
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
@@ -47,8 +48,8 @@ pub(crate) struct DeployArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = create::DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
-    pub(crate) cycles: u128,
+    #[arg(long, default_value_t = CyclesAmount::from(create::DEFAULT_CANISTER_CYCLES))]
+    pub(crate) cycles: CyclesAmount,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -122,7 +123,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         let create_operation = CreateOperation::new(
             agent.clone(),
             args.subnet,
-            args.cycles,
+            args.cycles.get(),
             existing_canisters.into_values().collect(),
         );
         let mut futs = FuturesOrdered::new();

@@ -169,7 +169,7 @@ pub async fn stop_launcher(pid: Pid) {
 
 pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     let ManagedLauncherConfig {
-        gateway: _,
+        gateway,
         version: _,
         artificial_delay_ms,
         ii,
@@ -202,6 +202,9 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
         for addr in addrs {
             flags.push(format!("--dogecoind-addr={addr}"));
         }
+    }
+    for domain in &gateway.domains {
+        flags.push(format!("--domain={domain}"));
     }
     flags
 }

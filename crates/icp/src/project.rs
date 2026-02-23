@@ -313,6 +313,7 @@ pub async fn consolidate_manifest(
                             gateway: Gateway {
                                 host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
                                 port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                                domains: vec![],
                             },
                             artificial_delay_ms: None,
                             ii: false,

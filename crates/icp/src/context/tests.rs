@@ -603,6 +603,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(8000),
+                        domains: vec![],
                     },
                     artificial_delay_ms: None,
                     ii: false,
@@ -672,6 +673,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(9000),
+                        domains: vec![],
                     },
                     artificial_delay_ms: None,
                     ii: false,
@@ -743,6 +745,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(8000),
+                        domains: vec![],
                     },
                     artificial_delay_ms: None,
                     ii: false,
@@ -764,6 +767,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                     gateway: Gateway {
                         host: "localhost".to_string(),
                         port: Port::Fixed(7000),
+                        domains: vec![],
                     },
                     artificial_delay_ms: None,
                     ii: false,

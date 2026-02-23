@@ -26,6 +26,7 @@ pub mod identity;
 pub mod manifest;
 pub mod network;
 pub mod package;
+pub mod parsers;
 pub mod prelude;
 pub mod project;
 pub mod settings;
@@ -363,6 +364,7 @@ impl MockProjectLoader {
                         gateway: Gateway {
                             host: "localhost".to_string(),
                             port: Port::Fixed(8000),
+                            domains: vec![],
                         },
                         artificial_delay_ms: None,
                         ii: false,
@@ -384,6 +386,7 @@ impl MockProjectLoader {
                         gateway: Gateway {
                             host: "localhost".to_string(),
                             port: Port::Fixed(8001),
+                            domains: vec![],
                         },
                         artificial_delay_ms: None,
                         ii: false,

@@ -112,7 +112,7 @@ pub(crate) async fn sync_many(
                     canister_name: canister_info.name.clone(),
                     canister_id: cid,
                     error,
-                    progress_output: pb.dump_output(),
+                    progress_output: pb.dump_output(debug),
                 })
             }
         };

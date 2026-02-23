@@ -40,6 +40,9 @@ itertools = { workspace = true }
 k256 = { workspace = true }
 keyring = { workspace = true }
 notify = { workspace = true }
+num-bigint = { workspace = true }
+num-integer = { workspace = true }
+num-traits = { workspace = true }
 p256 = { workspace = true }
 pem = { workspace = true }
 pkcs8 = { workspace = true }

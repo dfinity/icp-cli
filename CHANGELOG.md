@@ -1,6 +1,7 @@
 # Unreleased
 
 * feat: Add `bitcoind-addr` and `dogecoind-addr` options for managed networks to connect to Bitcoin and Dogecoin nodes
+* feat: Network gateway now supports a `domains` key
 * feat: `icp identity export` now takes an `--encrypt` flag to avoid rendering the key in plaintext
 * feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
 * feat: Allow specifying a version of the network launcher to use
@@ -9,11 +10,12 @@
 * feat: Recipes and prebuilt canisters are now cached locally
 * feat: `icp settings autocontainerize true`, always use a docker container for all networks
 * feat: `icp canister migrate-id` - initiate canister ID migration across subnets
-* feat: install proxy canister when starting managed networks with all identities as controllers (or anonymous + default if more than 10 identities)
+* feat: Install proxy canister when starting managed networks with all identities as controllers (or anonymous + default if more than 10 identities)
   * `icp network status` displays the proxy canister principal
 * feat: `icp network status` display more information about networks
 * feat: `icp canister logs` to display the current canister logs
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
+* feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
 
 # v0.1.0
 

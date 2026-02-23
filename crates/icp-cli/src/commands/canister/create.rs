@@ -21,7 +21,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) compute_allocation: Option<u64>,
 
     /// Optional memory allocation. If unset, memory is allocated dynamically.
-    /// Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
+    /// Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     #[arg(long)]
     pub(crate) memory_allocation: Option<MemoryAmount>,
 

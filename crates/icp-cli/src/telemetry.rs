@@ -328,13 +328,27 @@ fn spawn_send_batch(batch_path: &Path, _version: &str) {
     let Ok(exe) = std::env::current_exe() else {
         return;
     };
-    let _ = std::process::Command::new(exe)
-        .arg("__telemetry-send-batch")
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("__telemetry-send-batch")
         .arg(batch_path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+        .stderr(std::process::Stdio::null());
+
+    // Detach the child from the parent's process group / console so it
+    // survives if the parent is killed or the terminal is closed.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let _ = cmd.spawn();
 }
 
 /// Entry point for the hidden `__telemetry-send-batch <path>` mode.

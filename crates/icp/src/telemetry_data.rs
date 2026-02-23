@@ -18,6 +18,9 @@ use crate::identity::manifest::IdentitySpec;
 #[derive(Default)]
 pub struct TelemetryData {
     identity_type: Mutex<Option<IdentityStorageType>>,
+    /// Type of the network accessed during the command (managed or connected).
+    /// Set the first time any command resolves a network or environment.
+    network_type: Mutex<Option<NetworkType>>,
 }
 
 impl TelemetryData {
@@ -27,6 +30,14 @@ impl TelemetryData {
 
     pub fn identity_type(&self) -> Option<IdentityStorageType> {
         *self.identity_type.lock().unwrap()
+    }
+
+    pub fn set_network_type(&self, t: NetworkType) {
+        *self.network_type.lock().unwrap() = Some(t);
+    }
+
+    pub fn network_type(&self) -> Option<NetworkType> {
+        *self.network_type.lock().unwrap()
     }
 }
 
@@ -38,6 +49,15 @@ pub enum IdentityStorageType {
     Keyring,
     Hsm,
     Anonymous,
+}
+
+/// Whether the network accessed by the command is managed locally or a remote
+/// connected network.
+#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NetworkType {
+    Managed,
+    Connected,
 }
 
 impl From<&IdentitySpec> for IdentityStorageType {

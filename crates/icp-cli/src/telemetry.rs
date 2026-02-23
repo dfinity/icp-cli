@@ -12,7 +12,7 @@ use std::{
 use clap::parser::ValueSource;
 use icp::prelude::*;
 use icp::settings::Settings;
-use icp::telemetry_data::{IdentityStorageType, TelemetryData};
+use icp::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
@@ -85,6 +85,10 @@ pub(crate) struct TelemetryRecord {
     pub machine_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity_type: Option<IdentityStorageType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_type: Option<NetworkType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub autocontainerize: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +102,7 @@ pub(crate) struct TelemetrySession {
     command: String,
     arguments: Vec<Argument>,
     version: String,
+    autocontainerize: Option<bool>,
 }
 
 impl TelemetrySession {
@@ -107,6 +112,7 @@ impl TelemetrySession {
         command: String,
         arguments: Vec<Argument>,
         version: String,
+        autocontainerize: Option<bool>,
     ) -> Self {
         Self {
             start: Instant::now(),
@@ -114,6 +120,7 @@ impl TelemetrySession {
             command,
             arguments,
             version,
+            autocontainerize,
         }
     }
 
@@ -132,6 +139,8 @@ impl TelemetrySession {
             duration_ms,
             machine_id,
             identity_type: telemetry_data.identity_type(),
+            network_type: telemetry_data.network_type(),
+            autocontainerize: self.autocontainerize,
         };
 
         append_record(&self.telemetry_dir, &record);
@@ -156,18 +165,20 @@ pub(crate) async fn setup(
 
     let telemetry_dir = ctx.dirs.telemetry_data();
 
-    // Load settings to check the user preference (best-effort; default to enabled)
-    let enabled = async {
+    // Load settings to check the user preference (best-effort; default to enabled).
+    // Also capture `autocontainerize` while settings are in hand.
+    let (enabled, autocontainerize) = async {
         let dirs = ctx.dirs.settings().ok()?;
         let settings = dirs
             .with_read(async |dirs| Settings::load_from(dirs))
             .await
             .ok()?
             .ok()?;
-        Some(settings.telemetry_enabled)
+        Some((settings.telemetry_enabled, settings.autocontainerize))
     }
     .await
-    .unwrap_or(true);
+    .map(|(e, a)| (e, Some(a)))
+    .unwrap_or((true, None));
 
     if !enabled {
         return None;
@@ -192,6 +203,7 @@ pub(crate) async fn setup(
         cmd_name,
         arguments,
         version,
+        autocontainerize,
     ))
 }
 

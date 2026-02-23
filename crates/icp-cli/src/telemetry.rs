@@ -286,8 +286,11 @@ fn maybe_send(telemetry_dir: &Path, version: &str) {
         guard_until.to_string(),
     );
 
-    // Atomically rotate events.jsonl out of the write path
-    let batch_name = format!("events-sending-{}.jsonl", unix_now());
+    // Atomically rotate events.jsonl out of the write path.
+    // The filename encodes both a timestamp (for age-based cleanup) and a
+    // batch UUID (used to tag records on send for server-side deduplication).
+    let batch_id = uuid::Uuid::new_v4();
+    let batch_name = format!("batch-{}-{batch_id}.jsonl", unix_now());
     let batch_path = telemetry_dir.join(&batch_name);
     if std::fs::rename(&events_path, &batch_path).is_err() {
         return;
@@ -313,7 +316,7 @@ fn cleanup_stale_batches(telemetry_dir: &Path) {
         .filter_map(|e| {
             let name = e.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with("events-sending-") && name.ends_with(".jsonl") {
+            if name.starts_with("batch-") && name.ends_with(".jsonl") {
                 PathBuf::try_from(e.path()).ok()
             } else {
                 None
@@ -323,10 +326,11 @@ fn cleanup_stale_batches(telemetry_dir: &Path) {
 
     // Delete batches that are too old
     batches.retain(|p| {
+        // Extract timestamp from "batch-<timestamp>-<uuid>.jsonl"
         let ts: Option<u64> = p
             .file_name()
-            .and_then(|n| n.strip_prefix("events-sending-"))
-            .and_then(|n| n.strip_suffix(".jsonl"))
+            .and_then(|n| n.strip_prefix("batch-"))
+            .and_then(|n| n.split('-').next())
             .and_then(|n| n.parse().ok());
 
         if ts.map(|t| t < cutoff).unwrap_or(false) {
@@ -388,6 +392,16 @@ pub(crate) async fn handle_send_batch(batch_path_str: &str) {
         return;
     };
 
+    // Extract the batch UUID from the filename ("batch-<ts>-<uuid>.jsonl").
+    let batch_id = batch_path
+        .file_stem()
+        .and_then(|s| s.splitn(3, '-').nth(2))
+        .unwrap_or("unknown");
+
+    let Ok(payload) = add_batch_metadata(&contents, batch_id) else {
+        return;
+    };
+
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
@@ -399,7 +413,7 @@ pub(crate) async fn handle_send_batch(batch_path_str: &str) {
     let result = client
         .post(TELEMETRY_ENDPOINT)
         .header("Content-Type", "application/x-ndjson")
-        .body(contents)
+        .body(payload)
         .send()
         .await;
 
@@ -410,6 +424,22 @@ pub(crate) async fn handle_send_batch(batch_path_str: &str) {
         }
     }
     // On failure the batch file remains for retry on the next trigger.
+}
+
+/// Inject a shared `batch` UUID and per-line `sequence` number into each
+/// JSON record. This allows the server to deduplicate retried sends and
+/// reconstruct event ordering within a batch.
+fn add_batch_metadata(contents: &str, batch_id: &str) -> Result<String, serde_json::Error> {
+    let mut lines = Vec::new();
+
+    for (seq, line) in contents.lines().enumerate() {
+        let mut json: serde_json::Value = serde_json::from_str(line)?;
+        json["batch"] = serde_json::Value::String(batch_id.to_string());
+        json["sequence"] = serde_json::Value::Number(serde_json::Number::from(seq));
+        lines.push(serde_json::to_string(&json)?);
+    }
+
+    Ok(lines.join("\n"))
 }
 
 fn write_next_send_time(telemetry_dir: &Path) {

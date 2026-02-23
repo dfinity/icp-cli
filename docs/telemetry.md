@@ -104,7 +104,7 @@ telemetry/
   notice-shown                        # empty marker file, presence = notice was shown
   next-send-time                      # plain text UTC timestamp
   events.jsonl                        # active event log
-  events-sending-<timestamp>.jsonl    # in-flight/pending batch(es)
+  batch-<timestamp>-<uuid>.jsonl      # in-flight/pending batch(es)
 ```
 
 ### Transmission
@@ -116,10 +116,10 @@ A send is triggered at the end of a command if **either** threshold is met:
 
 When a send is triggered:
 
-1. The log file is renamed to `telemetry/events-sending-<timestamp>.jsonl` (atomically moves it out of the write path).
-2. A detached background process is spawned to POST the batch. This ensures sending never blocks the CLI.
+1. The log file is renamed to `telemetry/batch-<timestamp>-<uuid>.jsonl` (atomically moves it out of the write path). The UUID identifies the batch for server-side deduplication.
+2. A detached background process is spawned. It injects the batch UUID and a per-record sequence number into each JSON line, then POSTs the payload. This ensures sending never blocks the CLI.
 3. On success, the batch file is deleted and the next send time is randomized.
-4. On failure, the batch file remains for retry on the next trigger.
+4. On failure, the batch file remains for retry on the next trigger. Since the batch UUID is stable in the filename, retried sends use the same ID, allowing the server to deduplicate.
 
 Safeguards:
 
@@ -158,9 +158,10 @@ check send triggers:
   |
   v
 set next-send-time to now + 30 min (concurrent send guard)
-rename events.jsonl to events-sending-<timestamp>.jsonl
-delete stale batches (events-sending-*.jsonl >14 days old or >10 files)
+rename events.jsonl to batch-<timestamp>-<uuid>.jsonl
+delete stale batches (batch-*.jsonl >14 days old or >10 files)
 spawn detached background process:
+  inject batch UUID + sequence numbers into each JSON record
   POST batch to server (5s timeout)
   on success: delete batch file
   on failure: leave batch file for next retry

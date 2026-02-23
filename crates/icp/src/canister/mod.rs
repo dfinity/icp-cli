@@ -223,11 +223,11 @@ pub struct Settings {
     pub reserved_cycles_limit: Option<CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    /// Supports suffixes: kb, kib, mb, mib, gb, gib.
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
     pub wasm_memory_limit: Option<MemoryAmount>,
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    /// Supports suffixes: kb, kib, mb, mib, gb, gib.
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
     pub wasm_memory_threshold: Option<MemoryAmount>,
 
     /// Environment variables for the canister as key-value pairs.

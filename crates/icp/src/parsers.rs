@@ -1,9 +1,9 @@
 //! Parsing of token and cycle amounts with support for suffixes (k, m, b, t) and underscores.
 
 use bigdecimal::{BigDecimal, Signed};
-use num_bigint::{BigInt, BigUint};
+use num_bigint::BigUint;
 use num_integer::Integer;
-use num_traits::{ToPrimitive, Zero, pow::Pow};
+use num_traits::{ToPrimitive, Zero};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -179,8 +179,6 @@ impl From<u128> for CyclesAmount {
     }
 }
 
-// --- MemoryAmount (bytes) ---
-
 const KB: u64 = 1000;
 const KIB: u64 = 1024;
 const MB: u64 = 1_000_000;
@@ -210,32 +208,21 @@ fn parse_memory_str(s: &str) -> Result<u64, String> {
         (s, 1u64)
     };
     let cleaned = number_part.trim().replace('_', "");
-    let amount: BigDecimal =
+    let amount =
         BigDecimal::from_str(&cleaned).map_err(|_| format!("Invalid memory amount: '{}'", s))?;
     if amount.is_negative() {
         return Err(format!("Memory amount cannot be negative: '{}'", s));
     }
     let product = amount * BigDecimal::from(factor);
-    let (mantissa, exponent) = product.into_bigint_and_exponent();
-
-    let ten = BigInt::from(10);
-    let (integer_value, has_fraction) = if exponent <= 0 {
-        (mantissa * ten.pow((-exponent) as u32), false)
-    } else {
-        let divisor = ten.pow(exponent as u32);
-        let (quotient, remainder) = mantissa.div_rem(&divisor);
-        (quotient, !remainder.is_zero())
-    };
-
-    if has_fraction {
+    if !product.is_integer() {
         return Err(
             "Memory amount must be a whole number of bytes (fractional bytes not allowed)"
                 .to_string(),
         );
     }
-    integer_value
+    product
         .to_u64()
-        .ok_or_else(|| format!("Memory amount too large or negative: '{}'", s))
+        .ok_or_else(|| format!("Memory amount too large: '{}'", s))
 }
 
 /// An amount of memory in bytes.

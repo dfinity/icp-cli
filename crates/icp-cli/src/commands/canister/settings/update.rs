@@ -96,7 +96,7 @@ pub(crate) struct UpdateArgs {
     #[arg(long, value_parser = compute_allocation_parser)]
     compute_allocation: Option<u8>,
 
-    /// Memory allocation. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib").
+    /// Memory allocation. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
     #[arg(long)]
     memory_allocation: Option<MemoryAmount>,
 
@@ -109,11 +109,11 @@ pub(crate) struct UpdateArgs {
     #[arg(long)]
     reserved_cycles_limit: Option<CyclesAmount>,
 
-    /// Wasm memory limit. Supports suffixes: kb, kib, mb, mib, gb, gib.
+    /// Wasm memory limit. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
     #[arg(long)]
     wasm_memory_limit: Option<MemoryAmount>,
 
-    /// Wasm memory threshold. Supports suffixes: kb, kib, mb, mib, gb, gib.
+    /// Wasm memory threshold. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
     #[arg(long)]
     wasm_memory_threshold: Option<MemoryAmount>,
 

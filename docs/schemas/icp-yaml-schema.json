@@ -756,7 +756,7 @@
               "type": "null"
             }
           ],
-          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes: kb, kib, mb, mib, gb, gib."
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"1.5gib\")."
         },
         "wasm_memory_threshold": {
           "anyOf": [
@@ -767,7 +767,7 @@
               "type": "null"
             }
           ],
-          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes: kb, kib, mb, mib, gb, gib."
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"1.5gib\")."
         }
       },
       "type": "object"

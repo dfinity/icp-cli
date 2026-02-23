@@ -314,7 +314,7 @@ impl From<ManifestGateway> for Gateway {
             domains,
             port,
         } = value;
-        let bind = bind.unwrap_or("localhost".to_string());
+        let bind = bind.unwrap_or("127.0.0.1".to_string());
         let port = match port {
             Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),

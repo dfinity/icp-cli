@@ -71,6 +71,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         )
         .await?;
 
+    // If you add .did support to this code, consider extracting/unifying with the logic from call.rs
     let init_args = match (&args.args, &args.args_file) {
         (Some(value), None) => {
             if args.args_format == InitArgsFormat::Bin {

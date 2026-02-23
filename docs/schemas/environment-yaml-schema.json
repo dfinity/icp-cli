@@ -44,6 +44,19 @@
         }
       ]
     },
+    "MemoryAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "An amount of memory in bytes.\n\nDeserializes from a number or a string with suffixes (kb, kib, mb, mib, gb, gib),\noptional decimals, and optional underscore separators."
+    },
     "Settings": {
       "description": "Canister settings, such as compute and memory allocation.",
       "properties": {
@@ -87,13 +100,15 @@
           "description": "Controls who can read canister logs."
         },
         "memory_allocation": {
-          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"1.5gib\")."
         },
         "reserved_cycles_limit": {
           "anyOf": [
@@ -108,22 +123,26 @@
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
-          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes: kb, kib, mb, mib, gb, gib."
         },
         "wasm_memory_threshold": {
-          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes: kb, kib, mb, mib, gb, gib."
         }
       },
       "type": "object"

@@ -294,13 +294,16 @@ mod tests {
     use indoc::indoc;
     use std::collections::HashMap;
 
-    use crate::manifest::{
-        adapter::{
-            assets,
-            prebuilt::{self, RemoteSource, SourceField},
-            script,
+    use crate::{
+        manifest::{
+            adapter::{
+                assets,
+                prebuilt::{self, RemoteSource, SourceField},
+                script,
+            },
+            recipe::RecipeType,
         },
-        recipe::RecipeType,
+        parsers::MemoryAmount,
     };
 
     use super::*;
@@ -598,7 +601,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings {
                     compute_allocation: Some(3),
-                    memory_allocation: Some(4294967296),
+                    memory_allocation: Some(MemoryAmount::from(4294967296)),
                     ..Default::default()
                 },
                 init_args: None,

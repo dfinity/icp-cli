@@ -220,7 +220,7 @@
 <h6 id="arguments-1"><strong>Arguments:</strong></h6>
 <ul>
 <li>
-<p><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</p>
+<p><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</p>
 </li>
 <li>
 <p><code>&#x3C;METHOD></code> — Name of canister method to call into</p>
@@ -244,7 +244,10 @@
 <h6 id="options-2"><strong>Options:</strong></h6>
 <ul>
 <li>
-<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</p>
+<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</p>
+</li>
+<li>
+<p><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></p>
 </li>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</p>
@@ -271,12 +274,15 @@
 <p><strong>Usage:</strong> <code>icp canister create [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-2"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-3"><strong>Options:</strong></h6>
 <ul>
 <li>
-<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</p>
+<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</p>
+</li>
+<li>
+<p><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></p>
 </li>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</p>
@@ -315,11 +321,12 @@
 <p><strong>Usage:</strong> <code>icp canister delete [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-3"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-4"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -328,7 +335,7 @@
 <p><strong>Usage:</strong> <code>icp canister install [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-4"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-5"><strong>Options:</strong></h6>
 <ul>
@@ -355,7 +362,10 @@
 </ul>
 </li>
 <li>
-<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</p>
+<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</p>
+</li>
+<li>
+<p><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></p>
 </li>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</p>
@@ -376,12 +386,15 @@
 <p><strong>Usage:</strong> <code>icp canister logs [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-5"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-7"><strong>Options:</strong></h6>
 <ul>
 <li>
-<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</p>
+<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</p>
+</li>
+<li>
+<p><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></p>
 </li>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</p>
@@ -402,12 +415,13 @@
 <p><strong>Usage:</strong> <code>icp canister metadata [OPTIONS] &#x3C;CANISTER> &#x3C;METADATA_NAME></code></p>
 <h6 id="arguments-6"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 <li><code>&#x3C;METADATA_NAME></code> — The name of the metadata section to read</li>
 </ul>
 <h6 id="options-8"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -416,11 +430,12 @@
 <p><strong>Usage:</strong> <code>icp canister migrate-id [OPTIONS] --replace &#x3C;REPLACE> &#x3C;CANISTER></code></p>
 <h6 id="arguments-7"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-9"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--replace &#x3C;REPLACE></code> — The canister to replace with the source canister’s ID</li>
@@ -447,7 +462,8 @@
 </ul>
 <h6 id="options-10"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>-i</code>, <code>--id-only</code> — Only print the canister ids</li>
@@ -459,12 +475,15 @@
 <p><strong>Usage:</strong> <code>icp canister settings update [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-9"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-11"><strong>Options:</strong></h6>
 <ul>
 <li>
-<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</p>
+<p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</p>
+</li>
+<li>
+<p><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></p>
 </li>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</p>
@@ -528,11 +547,12 @@
 <p><strong>Usage:</strong> <code>icp canister settings sync [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-10"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-12"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -553,11 +573,12 @@
 <p><strong>Usage:</strong> <code>icp canister snapshot create [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-11"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-13"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--replace &#x3C;REPLACE></code> — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created</li>
@@ -567,12 +588,13 @@
 <p><strong>Usage:</strong> <code>icp canister snapshot delete [OPTIONS] &#x3C;CANISTER> &#x3C;SNAPSHOT_ID></code></p>
 <h6 id="arguments-12"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 <li><code>&#x3C;SNAPSHOT_ID></code> — The snapshot ID to delete (hex-encoded)</li>
 </ul>
 <h6 id="options-14"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -581,12 +603,13 @@
 <p><strong>Usage:</strong> <code>icp canister snapshot download [OPTIONS] --output &#x3C;OUTPUT> &#x3C;CANISTER> &#x3C;SNAPSHOT_ID></code></p>
 <h6 id="arguments-13"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 <li><code>&#x3C;SNAPSHOT_ID></code> — The snapshot ID to download (hex-encoded)</li>
 </ul>
 <h6 id="options-15"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>-o</code>, <code>--output &#x3C;OUTPUT></code> — Output directory for the snapshot files</li>
@@ -597,11 +620,12 @@
 <p><strong>Usage:</strong> <code>icp canister snapshot list [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-14"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-16"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -610,12 +634,13 @@
 <p><strong>Usage:</strong> <code>icp canister snapshot restore [OPTIONS] &#x3C;CANISTER> &#x3C;SNAPSHOT_ID></code></p>
 <h6 id="arguments-15"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 <li><code>&#x3C;SNAPSHOT_ID></code> — The snapshot ID to restore (hex-encoded)</li>
 </ul>
 <h6 id="options-17"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -624,11 +649,12 @@
 <p><strong>Usage:</strong> <code>icp canister snapshot upload [OPTIONS] --input &#x3C;INPUT> &#x3C;CANISTER></code></p>
 <h6 id="arguments-16"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-18"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>-i</code>, <code>--input &#x3C;INPUT></code> — Input directory containing the snapshot files</li>
@@ -640,11 +666,12 @@
 <p><strong>Usage:</strong> <code>icp canister start [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-17"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-19"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -658,7 +685,8 @@
 </ul>
 <h6 id="options-20"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>-i</code>, <code>--id-only</code> — Only print the canister ids</li>
@@ -670,11 +698,12 @@
 <p><strong>Usage:</strong> <code>icp canister stop [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-19"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-21"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -683,12 +712,13 @@
 <p><strong>Usage:</strong> <code>icp canister top-up [OPTIONS] --amount &#x3C;AMOUNT> &#x3C;CANISTER></code></p>
 <h6 id="arguments-20"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target When using a name an environment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-22"><strong>Options:</strong></h6>
 <ul>
 <li><code>--amount &#x3C;AMOUNT></code> — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -706,7 +736,8 @@
 <p><strong>Usage:</strong> <code>icp cycles balance [OPTIONS]</code></p>
 <h6 id="options-23"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--subaccount &#x3C;SUBACCOUNT></code> — The subaccount to check the balance for</li>
@@ -720,7 +751,8 @@
 <li><code>--cycles &#x3C;CYCLES></code> — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — Subaccount to withdraw the ICP from</li>
 <li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — Subaccount to deposit the cycles to</li>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -736,7 +768,8 @@
 <ul>
 <li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — The subaccount to transfer to (only if the receiver is a principal)</li>
 <li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code></li>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -1201,7 +1234,8 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p><strong>Usage:</strong> <code>icp token [TOKEN|LEDGER_ID] balance [OPTIONS]</code></p>
 <h6 id="options-39"><strong>Options:</strong></h6>
 <ul>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--subaccount &#x3C;SUBACCOUNT></code> — The subaccount to check the balance for</li>
@@ -1218,7 +1252,8 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <ul>
 <li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — The subaccount to transfer to (only if the receiver is a principal)</li>
 <li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — The subaccount to transfer from</li>
-<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name of the network to target, conflicts with environment argument</li>
+<li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>

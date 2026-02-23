@@ -78,7 +78,7 @@ pub async fn spawn_network_launcher(
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
-        "1.0.0",
+        "1.1.0",
         "--state-dir",
         state_dir.as_str(),
     ]);

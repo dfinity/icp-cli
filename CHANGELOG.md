@@ -1,5 +1,8 @@
 # Unreleased
 
+* feat: Init/call arg files now support raw binary without conversion to hex
+* feat!: Remove argument type inference in init/call args in commands and manifest. Args are always assumed Candid, new parameters allow specifying other formats like hex, and alternate parameters are used to specify loading from a file.
+* feat: Network gateway now supports a `domains` key
 * feat: `icp identity export` now takes an `--encrypt` flag to avoid rendering the key in plaintext
 * feat: Optionally split connected networks' `url` into `api-url` and `http-gateway-url`
 * feat: Allow specifying a version of the network launcher to use
@@ -15,6 +18,7 @@
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 * feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
 * feat: Support `kb`, `kib`, `mb`, `mib`, `gb`, `gib` suffixes in `.yaml` files and CLI arguments when specifying memory amounts
+* feat: Add an optional root-key argument to canister commands
 
 # v0.1.0
 

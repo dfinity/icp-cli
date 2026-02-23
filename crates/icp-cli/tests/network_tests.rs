@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use candid::Principal;
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
@@ -774,5 +776,56 @@ async fn network_autocontainerize_uses_docker() {
     assert!(
         output.status.success(),
         "Container should be running while network is active"
+    );
+}
+
+/// Test that a managed network configured with a custom domain accepts requests
+/// addressed to that domain. Uses reqwest's `resolve()` to map the domain to
+/// 127.0.0.1 without requiring any system DNS configuration.
+#[tokio::test]
+async fn network_gateway_responds_to_custom_domain() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("custom-domain");
+
+    let domain = "my-app.localhost";
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            networks:
+              - name: domain-network
+                mode: managed
+                gateway:
+                  port: 0
+                  domains:
+                    - {domain}
+            environments:
+              - name: domain-env
+                network: domain-network
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _guard = ctx.start_network_in(&project_dir, "domain-network").await;
+    ctx.ping_until_healthy(&project_dir, "domain-network");
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "domain-network");
+    let port = network.gateway_port;
+
+    let client = reqwest::Client::builder()
+        .resolve(domain, SocketAddr::from(([127, 0, 0, 1], port)))
+        .build()
+        .expect("failed to build reqwest client");
+
+    let resp = client
+        .get(format!("http://{domain}:{port}/api/v2/status"))
+        .send()
+        .await
+        .expect("request to custom domain failed");
+
+    assert!(
+        resp.status().is_success(),
+        "gateway should respond successfully on custom domain, got {}",
+        resp.status()
     );
 }

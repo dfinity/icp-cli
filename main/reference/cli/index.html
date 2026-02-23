@@ -219,27 +219,9 @@
 <p><strong>Usage:</strong> <code>icp canister call [OPTIONS] &#x3C;CANISTER> &#x3C;METHOD> [ARGS]</code></p>
 <h6 id="arguments-1"><strong>Arguments:</strong></h6>
 <ul>
-<li>
-<p><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</p>
-</li>
-<li>
-<p><code>&#x3C;METHOD></code> — Name of canister method to call into</p>
-</li>
-<li>
-<p><code>&#x3C;ARGS></code> — Canister call arguments. Can be:</p>
-<ul>
-<li>
-<p>Hex-encoded bytes (e.g., <code>4449444c00</code>)</p>
-</li>
-<li>
-<p>Candid text format (e.g., <code>(42)</code> or <code>(record { name = "Alice" })</code>)</p>
-</li>
-<li>
-<p>File path (e.g., <code>args.txt</code> or <code>./path/to/args.candid</code>) The file should contain either hex or Candid format arguments.</p>
-</li>
-</ul>
-<p>If not provided, an interactive prompt will be launched to help build the arguments.</p>
-</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
+<li><code>&#x3C;METHOD></code> — Name of canister method to call into</li>
+<li><code>&#x3C;ARGS></code> — Call arguments, interpreted per <code>--args-format</code> (Candid by default). If not provided, an interactive prompt will be launched</li>
 </ul>
 <h6 id="options-2"><strong>Options:</strong></h6>
 <ul>
@@ -254,6 +236,22 @@
 </li>
 <li>
 <p><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</p>
+</li>
+<li>
+<p><code>--args-file &#x3C;ARGS_FILE></code> — Path to a file containing call arguments</p>
+</li>
+<li>
+<p><code>--args-format &#x3C;ARGS_FORMAT></code> — Format of the call arguments</p>
+<p>Default value: <code>candid</code></p>
+<p>Possible values:</p>
+<ul>
+<li><code>hex</code>:
+Hex-encoded bytes</li>
+<li><code>candid</code>:
+Candid text format</li>
+<li><code>bin</code>:
+Raw binary (only valid for file references)</li>
+</ul>
 </li>
 <li>
 <p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the call through.</p>
@@ -348,17 +346,22 @@
 <p><code>--wasm &#x3C;WASM></code> — Path to the WASM file to install. Uses the build output if not explicitly provided</p>
 </li>
 <li>
-<p><code>--args &#x3C;ARGS></code> — Initialization arguments for the canister. Can be:</p>
+<p><code>--args &#x3C;ARGS></code> — Inline initialization arguments, interpreted per <code>--args-format</code> (Candid by default)</p>
+</li>
+<li>
+<p><code>--args-file &#x3C;ARGS_FILE></code> — Path to a file containing initialization arguments</p>
+</li>
+<li>
+<p><code>--args-format &#x3C;ARGS_FORMAT></code> — Format of the initialization arguments</p>
+<p>Default value: <code>candid</code></p>
+<p>Possible values:</p>
 <ul>
-<li>
-<p>Hex-encoded bytes (e.g., <code>4449444c00</code>)</p>
-</li>
-<li>
-<p>Candid text format (e.g., <code>(42)</code> or <code>(record { name = "Alice" })</code>)</p>
-</li>
-<li>
-<p>File path (e.g., <code>args.txt</code> or <code>./path/to/args.candid</code>) The file should contain either hex or Candid format arguments.</p>
-</li>
+<li><code>hex</code>:
+Hex-encoded bytes</li>
+<li><code>candid</code>:
+Candid text format</li>
+<li><code>bin</code>:
+Raw binary (only valid for file references)</li>
 </ul>
 </li>
 <li>
@@ -897,6 +900,7 @@
 </li>
 <li>
 <p><code>--assert-key-type &#x3C;ASSERT_KEY_TYPE></code> — Specify the key type when it cannot be detected from the PEM file (danger!)</p>
+<p>Possible values: <code>secp256k1</code>, <code>prime256v1</code>, <code>ed25519</code></p>
 </li>
 </ul>
 <h2 id="icp-identity-link"><code>icp identity link</code></h2>

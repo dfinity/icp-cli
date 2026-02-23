@@ -12,22 +12,39 @@ Each command invocation produces a single telemetry record with the following fi
 | `os` | `macos`, `linux`, `windows` | Platform distribution |
 | `arch` | `aarch64`, `x86_64` | Architecture distribution |
 | `command` | `build`, `deploy`, `canister status` | Feature usage |
-| `flags` | `["--network", "--yes", "--mode"]` | Flag usage (names only, no values) |
+| `arguments` | (see below) | Argument usage |
 | `success` | `true` / `false` | Error rates |
 | `duration_ms` | `4230` | Performance insights |
 | `machine_id` | `a1b2c3d4-...` | Count unique installations |
 | `timestamp` | `2026-02-23T12:00:00Z` | Usage trends |
 
+Each entry in `arguments` contains:
+
+| Field | Description |
+|---|---|
+| `name` | The argument identifier (e.g. `mode`, `environment`) |
+| `source` | How it was supplied: `command-line` or `environment` |
+| `value` | The value, **only** if the argument has a constrained set of allowed values (e.g. `--mode install` where `mode` accepts `auto`, `install`, `reinstall`, `upgrade`). Free-form values (paths, principals, canister names, etc.) are always `null`. |
+
+For example, `icp deploy --mode install --environment production` records:
+
+```json
+[
+  {"name": "mode", "value": "install", "source": "command-line"},
+  {"name": "environment", "value": null, "source": "command-line"}
+]
+```
+
 The `machine_id` is a random UUID generated on first run and stored locally. It is used solely to count unique installations and is not linked to any user identity.
 
-Additional fields may be introduced in future versions. This page will be updated accordingly. The same privacy principles apply: no personally identifiable information, no project data, no argument values.
+Additional fields may be introduced in future versions. This page will be updated accordingly. The same privacy principles apply: no personally identifiable information, no project data.
 
 ## What is not collected
 
 - IP addresses, usernames, or any personally identifiable information
 - Project names, file paths, or file contents
 - Canister IDs, wallet addresses, or cycle balances
-- Flag/argument values (only flag names are recorded)
+- Free-form argument values (only values from constrained `possible_values` sets are recorded)
 - Error messages or stack traces
 
 ## Opting out
@@ -159,4 +176,4 @@ New fields can be added to the record struct without migration. In the Rust stru
 1. **Never block the CLI.** Telemetry checks and writes are fast. Network sends happen in a detached background process.
 2. **Fail silently.** Any telemetry error (file I/O, network) is swallowed. Telemetry must never cause a command to fail.
 3. **Full transparency.** Users can inspect the local file, check status, and opt out at any time.
-4. **Minimal data.** Collect only what is listed above. No argument values, no PII, no project data.
+4. **Minimal data.** Collect only what is listed above. No free-form argument values, no PII, no project data.

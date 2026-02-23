@@ -221,13 +221,20 @@ async fn setup_telemetry(
     telemetry::show_notice_if_needed(&telemetry_dir);
 
     let cmd_name = command_telemetry_name(command).to_string();
-    let flags = telemetry::collect_flags(raw_args);
+
+    // Re-parse raw args into ArgMatches for structured argument extraction.
+    // This never fails in practice since Cli::parse() already succeeded.
+    let arguments = Cli::command()
+        .try_get_matches_from(raw_args)
+        .map(|m| telemetry::collect_arguments(&m, &Cli::command()))
+        .unwrap_or_default();
+
     let version = icp_cli_version_str().to_string();
 
     Some(telemetry::TelemetrySession::begin(
         telemetry_dir,
         cmd_name,
-        flags,
+        arguments,
         version,
     ))
 }

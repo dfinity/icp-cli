@@ -1,14 +1,15 @@
 //! Telemetry collection and submission for icp-cli.
 //!
-//! Collects anonymous usage data (command name, flags, duration, outcome) and
-//! periodically ships it in a detached background process. All I/O errors are
-//! silently ignored so telemetry never affects CLI behaviour.
+//! Collects anonymous usage data (command name, arguments, duration, outcome)
+//! and periodically ships it in a detached background process. All I/O errors
+//! are silently ignored so telemetry never affects CLI behaviour.
 
 use std::{
     io::Write as _,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use clap::parser::ValueSource;
 use icp::prelude::*;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,31 @@ const SEND_GUARD_SECS: u64 = 30 * 60;
 const TELEMETRY_ENDPOINT: &str = "https://telemetry.icp-cli.dev/v1/events";
 
 // ---------------------------------------------------------------------------
+// Argument types
+// ---------------------------------------------------------------------------
+
+/// How an argument was supplied.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ArgumentSource {
+    CommandLine,
+    Environment,
+}
+
+/// A single CLI argument recorded for telemetry.
+///
+/// `value` is only populated when the argument has a constrained set of
+/// `possible_values` in its clap definition and the actual value matches one
+/// of them. Free-form values (paths, principals, etc.) are always `None` to
+/// avoid leaking sensitive data.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct Argument {
+    pub name: String,
+    pub value: Option<String>,
+    pub source: ArgumentSource,
+}
+
+// ---------------------------------------------------------------------------
 // Record type
 // ---------------------------------------------------------------------------
 
@@ -49,7 +75,7 @@ pub(crate) struct TelemetryRecord {
     pub os: &'static str,
     pub arch: &'static str,
     pub command: String,
-    pub flags: Vec<String>,
+    pub arguments: Vec<Argument>,
     pub success: bool,
     pub duration_ms: u64,
     pub machine_id: String,
@@ -65,7 +91,7 @@ pub(crate) struct TelemetrySession {
     start: Instant,
     telemetry_dir: PathBuf,
     command: String,
-    flags: Vec<String>,
+    arguments: Vec<Argument>,
     version: String,
 }
 
@@ -74,14 +100,14 @@ impl TelemetrySession {
     pub(crate) fn begin(
         telemetry_dir: PathBuf,
         command: String,
-        flags: Vec<String>,
+        arguments: Vec<Argument>,
         version: String,
     ) -> Self {
         Self {
             start: Instant::now(),
             telemetry_dir,
             command,
-            flags,
+            arguments,
             version,
         }
     }
@@ -100,7 +126,7 @@ impl TelemetrySession {
             os: std::env::consts::OS,
             arch: std::env::consts::ARCH,
             command: self.command,
-            flags: self.flags,
+            arguments: self.arguments,
             success,
             duration_ms,
             machine_id,
@@ -393,21 +419,80 @@ fn write_next_send_time(telemetry_dir: &Path) {
 }
 
 // ---------------------------------------------------------------------------
-// Flag extraction from raw args
+// Argument extraction from clap
 // ---------------------------------------------------------------------------
 
-/// Collect flag names (e.g. `--network`, `-v`) from a raw argument list,
-/// discarding values.  Subcommand names and positional args are ignored.
-pub(crate) fn collect_flags(args: &[String]) -> Vec<String> {
-    args.iter()
-        .filter_map(|arg| {
-            if arg.starts_with('-') {
-                // Strip any `=value` suffix
-                let flag = arg.splitn(2, '=').next().unwrap_or(arg);
-                Some(flag.to_string())
-            } else {
-                None
+/// Walk `ArgMatches` / `Command` down to the leaf subcommand, returning the
+/// deepest matches and the corresponding command definition.
+fn get_deepest_subcommand<'a>(
+    matches: &'a clap::ArgMatches,
+    command: &'a clap::Command,
+) -> (&'a clap::ArgMatches, &'a clap::Command) {
+    let mut deepest_matches = matches;
+    let mut deepest_command = command;
+
+    while let Some((name, sub_matches)) = deepest_matches.subcommand() {
+        if let Some(sub_cmd) = deepest_command
+            .get_subcommands()
+            .find(|c| c.get_name() == name)
+        {
+            deepest_matches = sub_matches;
+            deepest_command = sub_cmd;
+        } else {
+            break;
+        }
+    }
+
+    (deepest_matches, deepest_command)
+}
+
+/// Extract sanitized arguments from clap's parsed state.
+///
+/// For each argument that was explicitly provided (not a default):
+/// - Records the argument name and how it was supplied (CLI vs env var).
+/// - Includes the value **only** when the argument has a constrained set of
+///   `possible_values` and the actual value matches one of them, preventing
+///   free-form user input (paths, principals, etc.) from leaking into telemetry.
+pub(crate) fn collect_arguments(
+    arg_matches: &clap::ArgMatches,
+    command: &clap::Command,
+) -> Vec<Argument> {
+    let (deepest_matches, deepest_command) = get_deepest_subcommand(arg_matches, command);
+
+    let mut arguments = Vec::new();
+
+    for id in deepest_matches.ids() {
+        let id_str = id.as_str();
+
+        let source = match deepest_matches.value_source(id_str) {
+            Some(ValueSource::CommandLine) => ArgumentSource::CommandLine,
+            Some(ValueSource::EnvVariable) => ArgumentSource::Environment,
+            _ => continue,
+        };
+
+        let possible_values = deepest_command
+            .get_arguments()
+            .find(|arg| arg.get_id() == id_str)
+            .map(|arg| arg.get_possible_values());
+
+        let sanitized_value = match (
+            possible_values,
+            deepest_matches.try_get_one::<String>(id_str),
+        ) {
+            (Some(possible_values), Ok(Some(s)))
+                if possible_values.iter().any(|pv| pv.matches(s, true)) =>
+            {
+                Some(s.clone())
             }
-        })
-        .collect()
+            _ => None,
+        };
+
+        arguments.push(Argument {
+            name: id_str.to_string(),
+            value: sanitized_value,
+            source,
+        });
+    }
+
+    arguments
 }

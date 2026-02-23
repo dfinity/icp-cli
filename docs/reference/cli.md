@@ -180,7 +180,7 @@ Make a canister call
 
 Create a canister on a network
 
-**Usage:** `icp canister create [OPTIONS] <CANISTER>`
+**Usage:** `icp canister create [OPTIONS] [CANISTER]`
 
 ###### **Arguments:**
 
@@ -202,6 +202,7 @@ Create a canister on a network
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `-i`, `--id-only` — Only print the canister id
 
 
 

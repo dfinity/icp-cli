@@ -6,11 +6,8 @@ use icp::parsers::CyclesAmount;
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
-use crate::{
-    commands::args,
-    operations::create::CreateOperation,
-    progress::{ProgressManager, ProgressManagerSettings},
-};
+use crate::commands::args::{CommandSelections, OptionalCanisterCommandSelections};
+use crate::{commands::args, operations::create::CreateOperation};
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -39,7 +36,7 @@ pub(crate) struct CanisterSettings {
 #[derive(Debug, Args)]
 pub(crate) struct CreateArgs {
     #[command(flatten)]
-    pub(crate) cmd_args: args::CanisterCommandArgs,
+    pub(crate) cmd_args: args::OptionalCanisterCommandArgs,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -61,6 +58,10 @@ pub(crate) struct CreateArgs {
     /// The subnet to create canisters on.
     #[arg(long)]
     pub(crate) subnet: Option<Principal>,
+
+    /// Only print the canister id
+    #[arg(short, long)]
+    pub id_only: bool,
 }
 
 impl CreateArgs {
@@ -82,6 +83,7 @@ impl CreateArgs {
                 .clone()
                 .or(default.settings.reserved_cycles_limit.clone())
                 .map(|c| Nat::from(c.get())),
+            // TODO This should be configurable from the CLI
             log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self
                 .settings
@@ -95,13 +97,80 @@ impl CreateArgs {
                 .map(Nat::from),
         }
     }
+
+    pub(crate) fn canister_settings(&self) -> CanisterSettingsArg {
+        CanisterSettingsArg {
+            freezing_threshold: self.settings.freezing_threshold.map(Nat::from),
+            controllers: if self.controller.is_empty() {
+                None
+            } else {
+                Some(self.controller.clone())
+            },
+            reserved_cycles_limit: self
+                .settings
+                .reserved_cycles_limit
+                .clone()
+                .map(|c| Nat::from(c.get())),
+            // TODO This should be configurable from the CLI
+            log_visibility: None,
+            memory_allocation: self.settings.memory_allocation.map(Nat::from),
+            compute_allocation: self.settings.compute_allocation.map(Nat::from),
+        }
+    }
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
-    let selections = args.cmd_args.selections();
+    if let Ok(selections) =
+        std::convert::TryInto::<CommandSelections>::try_into(args.cmd_args.selections())
+    {
+        create_project_canister(ctx, args, selections).await
+    } else {
+        create_canister(ctx, args, args.cmd_args.selections()).await
+    }
+}
+
+async fn create_canister(
+    ctx: &Context,
+    args: &CreateArgs,
+    selections: OptionalCanisterCommandSelections,
+) -> Result<(), anyhow::Error> {
+    assert!(
+        selections.canister.is_none(),
+        "This path should not be called if canister is_some()"
+    );
+
+    let agent = ctx
+        .get_agent_for_env(&selections.identity, &selections.environment)
+        .await?;
+
+    let create_operation = CreateOperation::new(agent, args.subnet, args.cycles.get(), vec![]);
+
+    let canister_settings = args.canister_settings();
+
+    let id = create_operation.create(&canister_settings).await?;
+
+    if args.id_only {
+        let _ = ctx.term.write_line(&format!("{id}"));
+    } else {
+        let _ = ctx
+            .term
+            .write_line(&format!("Created canister with ID {id}"));
+    }
+
+    Ok(())
+}
+
+// Creates canister(s) by asking the cycles ledger to create them.
+// The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
+// The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
+async fn create_project_canister(
+    ctx: &Context,
+    args: &CreateArgs,
+    selections: CommandSelections,
+) -> Result<(), anyhow::Error> {
     let canister = match selections.canister {
         CanisterSelection::Named(name) => name,
         CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
@@ -133,28 +202,23 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .map_err(|e| anyhow!(e))?
         .into_values()
         .collect();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+
     let create_operation =
         CreateOperation::new(agent, args.subnet, args.cycles.get(), existing_canisters);
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
-    let pb = progress_manager.create_progress_bar(&canister);
-    pb.set_message("Creating...");
-    let id = ProgressManager::execute_with_custom_progress(
-        &pb,
-        create_operation.create(&canister_settings),
-        || "Created successfully".to_string(),
-        |err: &_| err.to_string(),
-        |_| false,
-    )
-    .await?;
+    let id = create_operation.create(&canister_settings).await?;
 
     ctx.set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
-    let _ = ctx
-        .term
-        .write_line(&format!("Created canister {canister} with ID {id}"));
+    if args.id_only {
+        let _ = ctx.term.write_line(&format!("{id}"));
+    } else {
+        let _ = ctx
+            .term
+            .write_line(&format!("Created canister {canister} with ID {id}"));
+    }
 
     Ok(())
 }

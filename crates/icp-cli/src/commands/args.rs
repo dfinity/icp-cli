@@ -10,6 +10,14 @@ use icrc_ledger_types::icrc1::account::Account;
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
+/// Selections derived from CanisterCommandArgs
+pub(crate) struct CommandSelections {
+    pub(crate) canister: CanisterSelection,
+    pub(crate) environment: EnvironmentSelection,
+    pub(crate) network: NetworkSelection,
+    pub(crate) identity: IdentitySelection,
+}
+
 #[derive(Args, Debug)]
 pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
@@ -27,14 +35,6 @@ pub(crate) struct CanisterCommandArgs {
     pub(crate) identity: IdentityOpt,
 }
 
-/// Selections derived from CanisterCommandArgs
-pub(crate) struct CommandSelections {
-    pub(crate) canister: CanisterSelection,
-    pub(crate) environment: EnvironmentSelection,
-    pub(crate) network: NetworkSelection,
-    pub(crate) identity: IdentitySelection,
-}
-
 impl CanisterCommandArgs {
     /// Convert command arguments into selection enums
     pub(crate) fn selections(&self) -> CommandSelections {
@@ -50,6 +50,63 @@ impl CanisterCommandArgs {
             identity: identity_selection,
         }
     }
+}
+
+/// Selections derived from OptionalCanisterCommandArgs
+pub(crate) struct OptionalCanisterCommandSelections {
+    pub(crate) canister: Option<CanisterSelection>,
+    pub(crate) environment: EnvironmentSelection,
+    pub(crate) network: NetworkSelection,
+    pub(crate) identity: IdentitySelection,
+}
+
+impl OptionalCanisterCommandArgs {
+    /// Convert command arguments into selection enums
+    pub(crate) fn selections(&self) -> OptionalCanisterCommandSelections {
+        let canister_selection: Option<CanisterSelection> =
+            self.canister.as_ref().map(|c| c.clone().into());
+        let environment_selection: EnvironmentSelection = self.environment.clone().into();
+        let network_selection: NetworkSelection = self.network.clone().into();
+        let identity_selection: IdentitySelection = self.identity.clone().into();
+
+        OptionalCanisterCommandSelections {
+            canister: canister_selection,
+            environment: environment_selection,
+            network: network_selection,
+            identity: identity_selection,
+        }
+    }
+}
+
+impl TryFrom<OptionalCanisterCommandSelections> for CommandSelections {
+    type Error = String;
+
+    fn try_from(value: OptionalCanisterCommandSelections) -> Result<Self, Self::Error> {
+        let canister = value.canister.ok_or("canister is required")?;
+        Ok(Self {
+            canister,
+            environment: value.environment,
+            network: value.network,
+            identity: value.identity,
+        })
+    }
+}
+
+// Like the CanisterCommandArgs but canister is optional
+#[derive(Args, Debug)]
+pub(crate) struct OptionalCanisterCommandArgs {
+    /// Name or principal of canister to target.
+    /// When using a name an environment must be specified.
+    pub(crate) canister: Option<Canister>,
+
+    #[command(flatten)]
+    pub(crate) network: NetworkOpt,
+
+    #[command(flatten)]
+    pub(crate) environment: EnvironmentOpt,
+
+    #[command(flatten)]
+    pub(crate) identity: IdentityOpt,
 }
 
 // Common argument used for Token and Cycles commands

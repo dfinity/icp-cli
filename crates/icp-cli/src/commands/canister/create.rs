@@ -2,12 +2,12 @@ use anyhow::anyhow;
 use candid::{Nat, Principal};
 use clap::Args;
 use icp::context::Context;
-use icp::parsers::CyclesAmount;
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
 use crate::{
     commands::args,
+    commands::parsers::parse_cycles_amount,
     operations::create::CreateOperation,
     progress::{ProgressManager, ProgressManagerSettings},
 };
@@ -31,8 +31,8 @@ pub(crate) struct CanisterSettings {
     /// Optional upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long)]
-    pub(crate) reserved_cycles_limit: Option<CyclesAmount>,
+    #[arg(long, value_parser = parse_cycles_amount)]
+    pub(crate) reserved_cycles_limit: Option<u128>,
 }
 
 /// Create a canister on a network
@@ -55,8 +55,8 @@ pub(crate) struct CreateArgs {
 
     /// Cycles to fund canister creation.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, default_value_t = CyclesAmount::from(DEFAULT_CANISTER_CYCLES))]
-    pub(crate) cycles: CyclesAmount,
+    #[arg(long, default_value_t = DEFAULT_CANISTER_CYCLES, value_parser = parse_cycles_amount)]
+    pub(crate) cycles: u128,
 
     /// The subnet to create canisters on.
     #[arg(long)]
@@ -79,9 +79,8 @@ impl CreateArgs {
             reserved_cycles_limit: self
                 .settings
                 .reserved_cycles_limit
-                .clone()
-                .or(default.settings.reserved_cycles_limit.clone())
-                .map(|c| Nat::from(c.get())),
+                .or(default.settings.reserved_cycles_limit.map(u128::from))
+                .map(Nat::from),
             log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self
                 .settings
@@ -135,7 +134,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .collect();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
     let create_operation =
-        CreateOperation::new(agent, args.subnet, args.cycles.get(), existing_canisters);
+        CreateOperation::new(agent, args.subnet, args.cycles, existing_canisters);
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
     let pb = progress_manager.create_progress_bar(&canister);

@@ -26,7 +26,6 @@ pub mod identity;
 pub mod manifest;
 pub mod network;
 pub mod package;
-pub mod parsers;
 pub mod prelude;
 pub mod project;
 pub mod settings;

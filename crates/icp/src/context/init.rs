@@ -84,10 +84,14 @@ pub fn initialize(
     let pload = Lazy::new(pload);
     let pload = Arc::new(pload);
 
+    // Telemetry data bag (written by subsystems, read at session finish)
+    let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());
+
     // Identity loader
     let idload = Arc::new(identity::Loader {
         dir: dirs.identity().context(IdentityDirectorySnafu)?,
         password_func,
+        telemetry_data: telemetry_data.clone(),
     });
     if let Ok(mockdir) = std::env::var("ICP_CLI_KEYRING_MOCK_DIR") {
         keyring::set_default_credential_builder(Box::new(
@@ -119,5 +123,6 @@ pub fn initialize(
         builder,
         syncer,
         debug,
+        telemetry_data,
     })
 }

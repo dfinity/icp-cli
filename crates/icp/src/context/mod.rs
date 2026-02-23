@@ -103,6 +103,9 @@ pub struct Context {
 
     /// Whether debug is enabled
     pub debug: bool,
+
+    /// Telemetry data collected during command execution
+    pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
 }
 
 impl Context {
@@ -499,6 +502,7 @@ impl Context {
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
+            telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
         }
     }
 }

@@ -12,6 +12,7 @@ use std::{
 use clap::parser::ValueSource;
 use icp::prelude::*;
 use icp::settings::Settings;
+use icp::telemetry_data::{IdentityStorageType, TelemetryData};
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
@@ -82,6 +83,8 @@ pub(crate) struct TelemetryRecord {
     pub success: bool,
     pub duration_ms: u64,
     pub machine_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_type: Option<IdentityStorageType>,
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +118,7 @@ impl TelemetrySession {
     }
 
     /// Finish the session, record the event, and trigger a send if needed.
-    pub(crate) fn finish(self, success: bool) {
+    pub(crate) fn finish(self, success: bool, telemetry_data: &TelemetryData) {
         let duration_ms = self.start.elapsed().as_millis() as u64;
         let machine_id = get_or_create_machine_id(&self.telemetry_dir);
 
@@ -128,6 +131,7 @@ impl TelemetrySession {
             success,
             duration_ms,
             machine_id,
+            identity_type: telemetry_data.identity_type(),
         };
 
         append_record(&self.telemetry_dir, &record);
@@ -387,10 +391,10 @@ fn should_send(telemetry_dir: &Path) -> bool {
     let is_prerelease = env!("CARGO_PKG_VERSION").contains('-');
 
     // Size-based trigger
-    if let Ok(meta) = std::fs::metadata(telemetry_dir.join(EVENTS_FILE)) {
-        if meta.len() >= MAX_EVENTS_SIZE_BYTES {
-            return true;
-        }
+    if let Ok(meta) = std::fs::metadata(telemetry_dir.join(EVENTS_FILE))
+        && meta.len() >= MAX_EVENTS_SIZE_BYTES
+    {
+        return true;
     }
 
     // Time-based trigger

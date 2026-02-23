@@ -179,7 +179,7 @@ async fn main() -> Result<(), Error> {
     // Record the telemetry event
     // -----------------------------------------------------------------------
     if let Some(session) = telemetry_session {
-        session.finish(result.is_ok());
+        session.finish(result.is_ok(), &ctx.telemetry_data);
     }
 
     result?;

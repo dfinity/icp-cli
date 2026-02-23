@@ -33,6 +33,7 @@ pub mod settings;
 pub mod signal;
 pub mod store_artifact;
 pub mod store_id;
+pub mod telemetry_data;
 
 const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";

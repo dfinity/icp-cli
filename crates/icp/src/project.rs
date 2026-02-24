@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet, hash_map::Entry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, Network, Project,
+    Canister, CanisterSource, Environment, Network, Project,
     canister::recipe,
     context::IC_ROOT_KEY,
     manifest::{
@@ -180,6 +180,13 @@ pub async fn consolidate_manifest(
         };
 
         for (cdir, m) in ms {
+            let source = match &m.instructions {
+                Instructions::BuildSync { .. } => CanisterSource::BuildSync,
+                Instructions::Recipe { recipe } => {
+                    CanisterSource::Recipe(recipe.recipe_type.clone())
+                }
+            };
+
             let (build, sync) = match &m.instructions {
                 // Build/Sync
                 Instructions::BuildSync { build, sync } => (
@@ -223,6 +230,7 @@ pub async fn consolidate_manifest(
                             build,
                             sync,
                             init_args: m.init_args.to_owned(),
+                            source,
                         },
                     ));
                 }

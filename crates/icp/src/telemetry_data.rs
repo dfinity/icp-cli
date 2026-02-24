@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
-use crate::identity::manifest::IdentitySpec;
+use crate::{CanisterSource, identity::manifest::IdentitySpec, manifest::recipe::RecipeType};
 
 /// Data collected during command execution for telemetry.
 ///
@@ -21,6 +21,10 @@ pub struct TelemetryData {
     /// Type of the network accessed during the command (managed or connected).
     /// Set the first time any command resolves a network or environment.
     network_type: Mutex<Option<NetworkType>>,
+    /// Total number of canisters in the project manifest.
+    num_canisters: Mutex<Option<usize>>,
+    /// One `"registry/recipe"` string per canister defined via a registry recipe.
+    recipes: Mutex<Option<Vec<String>>>,
 }
 
 impl TelemetryData {
@@ -38,6 +42,27 @@ impl TelemetryData {
 
     pub fn network_type(&self) -> Option<NetworkType> {
         *self.network_type.lock().unwrap()
+    }
+
+    pub fn set_project(&self, project: &crate::Project) {
+        let mut recipes = Vec::new();
+        for (_, canister) in project.canisters.values() {
+            if let CanisterSource::Recipe(RecipeType::Registry { name, recipe, .. }) =
+                &canister.source
+            {
+                recipes.push(format!("{name}/{recipe}"));
+            }
+        }
+        *self.num_canisters.lock().unwrap() = Some(project.canisters.len());
+        *self.recipes.lock().unwrap() = Some(recipes);
+    }
+
+    pub fn num_canisters(&self) -> Option<usize> {
+        *self.num_canisters.lock().unwrap()
+    }
+
+    pub fn recipes(&self) -> Option<Vec<String>> {
+        self.recipes.lock().unwrap().clone()
     }
 }
 

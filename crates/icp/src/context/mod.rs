@@ -149,6 +149,7 @@ impl Context {
             NetworkConfiguration::Connected { .. } => NetworkType::Connected,
         };
         self.telemetry_data.set_network_type(network_type);
+        self.telemetry_data.set_project(&p);
 
         Ok(env.clone())
     }

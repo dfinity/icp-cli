@@ -56,6 +56,21 @@ pub struct Canister {
     /// Initialization arguments passed to the canister during installation.
     /// Can be hex-encoded bytes or Candid text format.
     pub init_args: Option<String>,
+
+    /// Records whether the canister was defined with a recipe or direct
+    /// build/sync instructions. Preserved so telemetry can report recipe usage
+    /// even after the recipe has been resolved into concrete build steps.
+    pub source: CanisterSource,
+}
+
+/// How the canister's build instructions were originally specified.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum CanisterSource {
+    /// Defined with explicit `build` (and optional `sync`) steps.
+    BuildSync,
+    /// Defined via a recipe reference. The [`RecipeType`] is retained so
+    /// telemetry can report which registry/recipe was used.
+    Recipe(crate::manifest::recipe::RecipeType),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -242,6 +257,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            source: CanisterSource::BuildSync,
         };
 
         let local_network = Network {
@@ -324,6 +340,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            source: CanisterSource::BuildSync,
         };
 
         let frontend_canister = Canister {
@@ -339,6 +356,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            source: CanisterSource::BuildSync,
         };
 
         let database_canister = Canister {
@@ -354,6 +372,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            source: CanisterSource::BuildSync,
         };
 
         // Create networks

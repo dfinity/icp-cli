@@ -89,6 +89,10 @@ pub(crate) struct TelemetryRecord {
     pub network_type: Option<NetworkType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub autocontainerize: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub num_canisters: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipes: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +145,8 @@ impl TelemetrySession {
             identity_type: telemetry_data.identity_type(),
             network_type: telemetry_data.network_type(),
             autocontainerize: self.autocontainerize,
+            num_canisters: telemetry_data.num_canisters(),
+            recipes: telemetry_data.recipes(),
         };
 
         append_record(&self.telemetry_dir, &record);

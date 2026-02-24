@@ -187,6 +187,21 @@ Create a canister on a network
 
 **Usage:** `icp canister create [OPTIONS] [CANISTER]`
 
+This command can be used to create canisters defined in a project
+or a "detached" canister on a network.
+
+Examples:
+
+    # Create on a network by url
+    icp canister create -n http://localhost:8000 -k $ROOT_KEY --detached
+
+    # Create on mainnet outside of a project context
+    icp canister create -n ic --detached
+
+    # Create a detached canister inside the scope of a project
+    icp canister create -n mynetwork --detached
+
+
 ###### **Arguments:**
 
 * `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
@@ -208,6 +223,7 @@ Create a canister on a network
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
 * `-i`, `--id-only` — Only print the canister id
+* `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
 
 
 

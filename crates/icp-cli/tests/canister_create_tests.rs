@@ -435,3 +435,75 @@ fn canister_create_with_valid_principal() {
         .failure()
         .stderr(contains("Cannot create a canister by principal"));
 }
+
+#[tokio::test]
+async fn canister_create_detached() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        {NETWORK_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Get the network information so we can call the network directly
+    let assert = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args(["network", "status", "random-network", "--json"])
+        .assert()
+        .success();
+    let output = assert.get_output();
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let gateway_url = json["gateway_url"].as_str().expect("Should be a string");
+    let root_key = json["root_key"].as_str().expect("Should be a string");
+
+    // Test creating outside a project
+    ctx.icp()
+        .args([
+            "canister",
+            "create",
+            "--network",
+            gateway_url,
+            "--root-key",
+            root_key,
+            "--detached",
+        ])
+        .assert()
+        .success()
+        .stdout(starts_with("Created canister with ID"));
+
+    // Test creating inside a project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "--network",
+            "random-network",
+            "--detached",
+        ])
+        .assert()
+        .success()
+        .stdout(starts_with("Created canister with ID"));
+
+    // Test it fails outside of a project
+    ctx.icp()
+        .args([
+            "canister",
+            "create",
+            "--network",
+            "random-network",
+            "--detached",
+        ])
+        .assert()
+        .failure();
+}

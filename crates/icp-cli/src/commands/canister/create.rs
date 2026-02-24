@@ -32,8 +32,23 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<CyclesAmount>,
 }
 
-/// Create a canister on a network
+/// Create a canister on a network.
 #[derive(Debug, Args)]
+#[command(after_long_help = "\
+This command can be used to create canisters defined in a project
+or a \"detached\" canister on a network.
+
+Examples:
+
+    # Create on a network by url
+    icp canister create -n http://localhost:8000 -k $ROOT_KEY --detached
+
+    # Create on mainnet outside of a project context
+    icp canister create -n ic --detached
+
+    # Create a detached canister inside the scope of a project
+    icp canister create -n mynetwork --detached
+")]
 pub(crate) struct CreateArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::OptionalCanisterCommandArgs,
@@ -62,6 +77,12 @@ pub(crate) struct CreateArgs {
     /// Only print the canister id
     #[arg(short, long)]
     pub id_only: bool,
+
+    /// Create a canister detached from any project configuration. The canister id will be
+    /// printed out but not recorded in the project configuration. Not valid if `Canister`
+    /// is provided.
+    #[arg(long, conflicts_with = "canister")]
+    pub detached: bool,
 }
 
 impl CreateArgs {
@@ -143,7 +164,11 @@ async fn create_canister(
     );
 
     let agent = ctx
-        .get_agent_for_env(&selections.identity, &selections.environment)
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
         .await?;
 
     let create_operation = CreateOperation::new(agent, args.subnet, args.cycles.get(), vec![]);

@@ -15,6 +15,7 @@ use icp::settings::Settings;
 use icp::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 use crate::version::icp_cli_version_str;
 
@@ -77,6 +78,9 @@ pub(crate) struct TelemetryRecord {
 
     pub version: String,
 
+    /// UTC date of the event in `YYYY-MM-DD` format, for timeseries analysis.
+    pub date: String,
+
     // --- About command itself
     pub command: String,
     pub arguments: Vec<Argument>,
@@ -131,6 +135,8 @@ impl TelemetrySession {
         let machine_id = get_or_create_machine_id(&self.telemetry_dir);
         let duration_ms = self.start.elapsed().as_millis() as u64;
 
+        let date = OffsetDateTime::now_utc().date().to_string();
+
         let record = TelemetryRecord {
             machine_id,
             platform: if cfg!(target_os = "linux") && std::env::var_os("WSL_DISTRO_NAME").is_some()
@@ -141,6 +147,7 @@ impl TelemetrySession {
             },
             arch: std::env::consts::ARCH,
             version: icp_cli_version_str().to_string(),
+            date,
             command: self.command,
             arguments: self.arguments,
             autocontainerize: self.autocontainerize,

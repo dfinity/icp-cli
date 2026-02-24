@@ -23,6 +23,7 @@ use httptest::{Expectation, Server, matchers::*, responders::*};
 use icp::prelude::*; // brings in camino Path / PathBuf
 use predicates::str as predstr;
 use serde_json::Value;
+use time::OffsetDateTime;
 
 mod common;
 use common::TestContext;
@@ -192,6 +193,13 @@ fn telemetry_record_appended_to_events_file() {
     assert!(
         !record["version"].as_str().unwrap_or("").is_empty(),
         "version must be present"
+    );
+    // date must be today's UTC date in YYYY-MM-DD format
+    let today = OffsetDateTime::now_utc().date().to_string();
+    assert_eq!(
+        record["date"].as_str().unwrap_or(""),
+        today,
+        "date must be today's UTC date in YYYY-MM-DD format"
     );
     // command is "settings telemetry" (subcommand path joined with spaces)
     assert_eq!(record["command"], "settings telemetry");

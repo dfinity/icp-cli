@@ -12,6 +12,7 @@ Each command invocation produces a single telemetry record with the following fi
 | `platform` | `macos`, `linux`, `windows`, `wsl` | Platform distribution |
 | `arch` | `aarch64`, `x86_64` | Architecture distribution |
 | `version` | `0.1.0` | Identify version adoption |
+| `date` | `2026-02-24` | UTC date of the event, for timeseries analysis |
 | `command` | `build`, `deploy`, `canister status` | Feature usage |
 | `arguments` | (see below) | Argument usage |
 | `autocontainerize` | `true` / `false` (optional) | Track adoption of autocontainerize setting |

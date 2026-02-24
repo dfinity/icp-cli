@@ -8,15 +8,19 @@ Each command invocation produces a single telemetry record with the following fi
 
 | Field | Example | Purpose |
 |---|---|---|
-| `version` | `0.1.0` | Identify version adoption |
-| `os` | `macos`, `linux`, `windows` | Platform distribution |
+| `machine_id` | `a1b2c3d4-...` | Count unique installations |
+| `platform` | `macos`, `linux`, `windows`, `wsl` | Platform distribution |
 | `arch` | `aarch64`, `x86_64` | Architecture distribution |
+| `version` | `0.1.0` | Identify version adoption |
 | `command` | `build`, `deploy`, `canister status` | Feature usage |
 | `arguments` | (see below) | Argument usage |
+| `autocontainerize` | `true` / `false` (optional) | Track adoption of autocontainerize setting |
 | `success` | `true` / `false` | Error rates |
 | `duration_ms` | `4230` | Performance insights |
-| `machine_id` | `a1b2c3d4-...` | Count unique installations |
-| `timestamp` | `2026-02-23T12:00:00Z` | Usage trends |
+| `identity_type` | `pem-file`, `keyring` (optional) | Identity storage method distribution |
+| `network_type` | `local`, `ic`, `playground` (optional) | Network target distribution |
+| `num_canisters` | `3` (optional) | Project size distribution |
+| `recipes` | `["@dfinity/motoko@v4.0.0", "@dfinity/rust@v3.1.0"]` (optional) | Registry recipe distribution |
 
 Each entry in `arguments` contains:
 

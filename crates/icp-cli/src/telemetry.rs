@@ -74,20 +74,30 @@ pub(crate) struct Argument {
 /// A single telemetry event appended to `events.jsonl`.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TelemetryRecord {
-    pub version: String,
-    pub os: &'static str,
+    // --- Metadata that is constant across all events on the same machine
+    pub machine_id: String,
+    pub platform: String,
     pub arch: &'static str,
+
+    pub version: String,
+
+    // --- About command itself
     pub command: String,
     pub arguments: Vec<Argument>,
+
+    // --- Global settings that may affect command behaviour
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub autocontainerize: Option<bool>,
+
+    // --- Basic outcome metrics
     pub success: bool,
     pub duration_ms: u64,
-    pub machine_id: String,
+
+    // --- From TelemetryData (set during the execution of the command)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity_type: Option<IdentityStorageType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network_type: Option<NetworkType>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub autocontainerize: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_canisters: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -104,7 +114,6 @@ pub(crate) struct TelemetrySession {
     telemetry_dir: PathBuf,
     command: String,
     arguments: Vec<Argument>,
-    version: String,
     autocontainerize: Option<bool>,
 }
 
@@ -114,7 +123,6 @@ impl TelemetrySession {
         telemetry_dir: PathBuf,
         command: String,
         arguments: Vec<Argument>,
-        version: String,
         autocontainerize: Option<bool>,
     ) -> Self {
         Self {
@@ -122,34 +130,38 @@ impl TelemetrySession {
             telemetry_dir,
             command,
             arguments,
-            version,
             autocontainerize,
         }
     }
 
     /// Finish the session, record the event, and trigger a send if needed.
     pub(crate) fn finish(self, success: bool, telemetry_data: &TelemetryData) {
-        let duration_ms = self.start.elapsed().as_millis() as u64;
         let machine_id = get_or_create_machine_id(&self.telemetry_dir);
+        let duration_ms = self.start.elapsed().as_millis() as u64;
 
         let record = TelemetryRecord {
-            version: self.version.clone(),
-            os: std::env::consts::OS,
+            machine_id,
+            platform: if cfg!(target_os = "linux") && std::env::var_os("WSL_DISTRO_NAME").is_some()
+            {
+                "wsl".to_string()
+            } else {
+                std::env::consts::OS.to_string()
+            },
             arch: std::env::consts::ARCH,
+            version: icp_cli_version_str().to_string(),
             command: self.command,
             arguments: self.arguments,
+            autocontainerize: self.autocontainerize,
             success,
             duration_ms,
-            machine_id,
             identity_type: telemetry_data.identity_type(),
             network_type: telemetry_data.network_type(),
-            autocontainerize: self.autocontainerize,
             num_canisters: telemetry_data.num_canisters(),
             recipes: telemetry_data.recipes(),
         };
 
         append_record(&self.telemetry_dir, &record);
-        maybe_send(&self.telemetry_dir, &self.version);
+        maybe_send(&self.telemetry_dir);
     }
 }
 
@@ -199,13 +211,10 @@ pub(crate) async fn setup(
         .map(|m| collect_command_and_arguments(&m, clap_command))
         .unwrap_or_default();
 
-    let version = icp_cli_version_str().to_string();
-
     Some(TelemetrySession::begin(
         telemetry_dir,
         cmd_name,
         arguments,
-        version,
         autocontainerize,
     ))
 }
@@ -341,7 +350,7 @@ fn should_send(telemetry_dir: &Path) -> bool {
 }
 
 /// Trigger a batch send if either threshold is met.
-fn maybe_send(telemetry_dir: &Path, version: &str) {
+fn maybe_send(telemetry_dir: &Path) {
     if !should_send(telemetry_dir) {
         return;
     }
@@ -369,7 +378,7 @@ fn maybe_send(telemetry_dir: &Path, version: &str) {
     }
 
     cleanup_stale_batches(telemetry_dir);
-    spawn_send_batch(&batch_path, version);
+    spawn_send_batch(&batch_path);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +435,7 @@ fn cleanup_stale_batches(telemetry_dir: &Path) {
 // ---------------------------------------------------------------------------
 
 /// Spawn a detached child process that sends the batch file.
-fn spawn_send_batch(batch_path: &Path, _version: &str) {
+fn spawn_send_batch(batch_path: &Path) {
     let Ok(exe) = std::env::current_exe() else {
         return;
     };

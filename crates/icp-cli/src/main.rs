@@ -92,7 +92,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // -----------------------------------------------------------------------
-    // Hidden telemetry-send-batch mode: spawned as a detached child process.
+    // Background telemetry-send-batch mode: spawned as a detached child process.
     // Handle it before any other setup and exit immediately after.
     // -----------------------------------------------------------------------
     let raw_args: Vec<String> = std::env::args().collect();
@@ -165,19 +165,9 @@ async fn main() -> Result<(), Error> {
     };
     let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug, password_func)?;
 
-    // -----------------------------------------------------------------------
-    // Telemetry setup
-    // -----------------------------------------------------------------------
     let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
-
-    // -----------------------------------------------------------------------
-    // Command dispatch
-    // -----------------------------------------------------------------------
     let result = dispatch(&ctx, command, trace_span).await;
 
-    // -----------------------------------------------------------------------
-    // Record the telemetry event
-    // -----------------------------------------------------------------------
     if let Some(session) = telemetry_session {
         session.finish(result.is_ok(), &ctx.telemetry_data);
     }

@@ -18,8 +18,8 @@ Each command invocation produces a single telemetry record with the following fi
 | `success` | `true` / `false` | Error rates |
 | `duration_ms` | `4230` | Performance insights |
 | `identity_type` | `pem-file`, `keyring` (optional) | Identity storage method distribution |
-| `network_type` | `local`, `ic`, `playground` (optional) | Network target distribution |
-| `num_canisters` | `3` (optional) | Project size distribution |
+| `network_type` | `managed`, `connected` (optional) | Network target distribution |
+| `num_canisters` | `3` (optional) | Number of canisters in the project |
 | `recipes` | `["@dfinity/motoko@v4.0.0", "@dfinity/rust@v3.1.0"]` (optional) | Registry recipe distribution |
 
 Each entry in `arguments` contains:

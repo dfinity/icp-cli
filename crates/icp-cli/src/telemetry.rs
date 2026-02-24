@@ -18,10 +18,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::version::icp_cli_version_str;
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const EVENTS_FILE: &str = "events.jsonl";
 const MACHINE_ID_FILE: &str = "machine-id";
 const NOTICE_SHOWN_FILE: &str = "notice-shown";
@@ -50,10 +46,6 @@ const SEND_GUARD_SECS: u64 = 30 * 60;
 /// (intended for integration tests only).
 const TELEMETRY_ENDPOINT: &str = "https://telemetry.invalid/v1/events";
 
-// ---------------------------------------------------------------------------
-// Argument types
-// ---------------------------------------------------------------------------
-
 /// How an argument was supplied.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -74,10 +66,6 @@ pub(crate) struct Argument {
     pub value: Option<String>,
     pub source: ArgumentSource,
 }
-
-// ---------------------------------------------------------------------------
-// Record type
-// ---------------------------------------------------------------------------
 
 /// A single telemetry event appended to `events.jsonl`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,10 +99,6 @@ pub(crate) struct TelemetryRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recipes: Option<Vec<String>>,
 }
-
-// ---------------------------------------------------------------------------
-// Session — wraps a single command invocation
-// ---------------------------------------------------------------------------
 
 /// Tracks the timing and metadata of one CLI invocation.
 pub(crate) struct TelemetrySession {
@@ -173,10 +157,6 @@ impl TelemetrySession {
     }
 }
 
-// ---------------------------------------------------------------------------
-// High-level setup — called from main.rs
-// ---------------------------------------------------------------------------
-
 /// Initialise a telemetry session unless telemetry is disabled.
 pub(crate) async fn setup(
     ctx: &icp::context::Context,
@@ -227,20 +207,12 @@ pub(crate) async fn setup(
     ))
 }
 
-// ---------------------------------------------------------------------------
-// Opt-out checks
-// ---------------------------------------------------------------------------
-
 /// Returns `true` if any of the standard opt-out env vars are set.
 fn is_disabled_by_env() -> bool {
     std::env::var_os("DO_NOT_TRACK").is_some()
         || std::env::var_os("ICP_TELEMETRY_DISABLED").is_some()
         || std::env::var_os("CI").is_some()
 }
-
-// ---------------------------------------------------------------------------
-// First-run notice
-// ---------------------------------------------------------------------------
 
 /// Prints the first-run notice and creates the marker file if it has not been
 /// shown before.  Errors are silently swallowed.
@@ -258,10 +230,6 @@ fn show_notice_if_needed(telemetry_dir: &Path) {
     let _ = std::fs::write(&marker, "");
 }
 
-// ---------------------------------------------------------------------------
-// Machine ID
-// ---------------------------------------------------------------------------
-
 fn get_or_create_machine_id(telemetry_dir: &Path) -> String {
     let path = telemetry_dir.join(MACHINE_ID_FILE);
     if let Ok(id) = std::fs::read_to_string(&path) {
@@ -275,10 +243,6 @@ fn get_or_create_machine_id(telemetry_dir: &Path) -> String {
     let _ = std::fs::write(&path, &id);
     id
 }
-
-// ---------------------------------------------------------------------------
-// Event log
-// ---------------------------------------------------------------------------
 
 fn append_record(telemetry_dir: &Path, record: &TelemetryRecord) {
     let Ok(line) = serde_json::to_string(record) else {
@@ -294,10 +258,6 @@ fn append_record(telemetry_dir: &Path, record: &TelemetryRecord) {
         let _ = writeln!(f, "{line}");
     }
 }
-
-// ---------------------------------------------------------------------------
-// Send triggering
-// ---------------------------------------------------------------------------
 
 fn unix_now() -> u64 {
     SystemTime::now()
@@ -389,10 +349,6 @@ fn maybe_send(telemetry_dir: &Path) {
     spawn_send_batch(&batch_path);
 }
 
-// ---------------------------------------------------------------------------
-// Stale batch cleanup
-// ---------------------------------------------------------------------------
-
 fn cleanup_stale_batches(telemetry_dir: &Path) {
     let Ok(entries) = std::fs::read_dir(telemetry_dir) else {
         return;
@@ -437,10 +393,6 @@ fn cleanup_stale_batches(telemetry_dir: &Path) {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Background send process
-// ---------------------------------------------------------------------------
 
 /// Spawn a detached child process that sends the batch file.
 fn spawn_send_batch(batch_path: &Path) {
@@ -539,10 +491,6 @@ fn write_next_send_time(telemetry_dir: &Path) {
     let next = unix_now() + random_send_interval(is_prerelease);
     let _ = std::fs::write(telemetry_dir.join(NEXT_SEND_TIME_FILE), next.to_string());
 }
-
-// ---------------------------------------------------------------------------
-// Argument extraction from clap
-// ---------------------------------------------------------------------------
 
 /// Walk `ArgMatches` / `Command` down to the leaf subcommand, collecting
 /// subcommand names along the way and returning the deepest matches and

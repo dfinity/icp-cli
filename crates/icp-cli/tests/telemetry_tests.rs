@@ -27,10 +27,6 @@ use serde_json::Value;
 mod common;
 use common::TestContext;
 
-// ---------------------------------------------------------------------------
-// Constants & shared helpers
-// ---------------------------------------------------------------------------
-
 /// A minimal, syntactically-valid NDJSON telemetry record.
 const FAKE_RECORD: &str = r#"{"machine_id":"test-machine","platform":"test","arch":"x86_64","version":"0.0.0","command":"version","arguments":[],"success":true,"duration_ms":42}"#;
 
@@ -91,10 +87,6 @@ macro_rules! icp_with_telemetry {
         (icp_home, cmd)
     }};
 }
-
-// ---------------------------------------------------------------------------
-// 1. Opt-out checks
-// ---------------------------------------------------------------------------
 
 /// Each of the three opt-out env vars must prevent any telemetry state from
 /// being written (the `telemetry/` directory should not be created at all).
@@ -158,10 +150,6 @@ fn telemetry_disabled_by_ci() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 2. Record append
-// ---------------------------------------------------------------------------
-
 /// A command invocation must append a JSON record to `events.jsonl` that
 /// contains all required fields with sensible values.
 #[test]
@@ -214,10 +202,6 @@ fn telemetry_record_appended_to_events_file() {
     // The command succeeds → success = true
     assert_eq!(record["success"], true);
 }
-
-// ---------------------------------------------------------------------------
-// 3. First-run notice
-// ---------------------------------------------------------------------------
 
 /// On the very first run (no `notice-shown` marker) the notice must be printed
 /// to stderr.  On subsequent runs it must be suppressed.
@@ -276,10 +260,6 @@ fn telemetry_notice_suppressed_when_marker_exists() {
         .stderr(predstr::is_empty());
 }
 
-// ---------------------------------------------------------------------------
-// 4. Send triggers
-// ---------------------------------------------------------------------------
-
 /// When `next-send-time` is in the past the event log must be rotated to a
 /// `batch-*.jsonl` file and `events.jsonl` must no longer exist.
 #[test]
@@ -327,10 +307,6 @@ fn telemetry_size_trigger_rotates_events() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 5. No rotation when triggers not met
-// ---------------------------------------------------------------------------
-
 /// When neither threshold is met (time in future, file small) the event log
 /// must not be rotated.
 #[test]
@@ -353,10 +329,6 @@ fn telemetry_no_rotation_when_send_not_due() {
         "no batch files must exist when no send is triggered"
     );
 }
-
-// ---------------------------------------------------------------------------
-// 6. Batch send (`__telemetry-send-batch`)
-// ---------------------------------------------------------------------------
 
 /// A failed batch send (default `.invalid` endpoint) must exit 0, produce no
 /// output, and leave the batch file in place for retry.
@@ -431,10 +403,6 @@ fn telemetry_send_batch_delivers_data() {
     // Server drop verifies the POST expectation was met exactly once.
 }
 
-// ---------------------------------------------------------------------------
-// 7. Stale batch cleanup
-// ---------------------------------------------------------------------------
-
 /// Batch files older than 14 days must be deleted when a new send is triggered.
 #[test]
 fn telemetry_stale_batches_deleted_on_trigger() {
@@ -504,10 +472,6 @@ fn telemetry_excess_batches_pruned_on_trigger() {
         "batch count must be pruned to ≤10; found {remaining}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// 8. Machine-id persistence
-// ---------------------------------------------------------------------------
 
 /// The same `machine_id` UUID must appear in all records produced by
 /// consecutive command invocations.

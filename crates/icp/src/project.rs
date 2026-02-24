@@ -234,6 +234,16 @@ pub async fn consolidate_manifest(
         };
 
         for (cdir, m) in ms {
+            let registry_recipe = match &m.instructions {
+                Instructions::BuildSync { .. } => None,
+                Instructions::Recipe { recipe } => match &recipe.recipe_type {
+                    crate::manifest::recipe::RecipeType::Registry { .. } => {
+                        Some(recipe.recipe_type.to_string())
+                    }
+                    _ => None,
+                },
+            };
+
             let (build, sync) = match &m.instructions {
                 // Build/Sync
                 Instructions::BuildSync { build, sync } => (
@@ -283,6 +293,7 @@ pub async fn consolidate_manifest(
                             build,
                             sync,
                             init_args,
+                            registry_recipe,
                         },
                     ));
                 }

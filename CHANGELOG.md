@@ -18,6 +18,10 @@
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 * feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
 * feat: Add an optional root-key argument to canister commands
+* feat: Anonymous usage telemetry — collects command name, arguments, duration, and outcome
+  * Enabled by default; opt out with `icp settings telemetry false`, `DO_NOT_TRACK=1`, or `ICP_TELEMETRY_DISABLED=1`
+  * Automatically disabled in CI environments (`CI` env var set)
+  * `icp settings telemetry` to view or change the current setting
 
 # v0.1.0
 

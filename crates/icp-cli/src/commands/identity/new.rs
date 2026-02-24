@@ -75,6 +75,12 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
         })
         .await??;
 
+    if matches!(args.storage, StorageMode::Plaintext) {
+        eprintln!(
+            "WARNING: This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
+        );
+    }
+
     match &args.output_seed {
         Some(path) => {
             write_string(path, mnemonic.as_ref()).context("failed to write seed file")?;

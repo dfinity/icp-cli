@@ -107,6 +107,12 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
 
     println!("Identity \"{}\" created", args.name);
 
+    if matches!(args.storage, StorageMode::Plaintext) {
+        eprintln!(
+            "WARNING: This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
+        );
+    }
+
     Ok(())
 }
 

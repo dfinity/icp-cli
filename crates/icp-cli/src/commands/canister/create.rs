@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use candid::{Nat, Principal};
 use clap::Args;
 use icp::context::Context;
-use icp::parsers::CyclesAmount;
+use icp::parsers::{CyclesAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
@@ -18,8 +18,9 @@ pub(crate) struct CanisterSettings {
     pub(crate) compute_allocation: Option<u64>,
 
     /// Optional memory allocation in bytes. If unset, memory is allocated dynamically.
+    /// Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     #[arg(long)]
-    pub(crate) memory_allocation: Option<u64>,
+    pub(crate) memory_allocation: Option<MemoryAmount>,
 
     /// Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     #[arg(long)]
@@ -109,8 +110,9 @@ impl CreateArgs {
             memory_allocation: self
                 .settings
                 .memory_allocation
-                .or(default.settings.memory_allocation)
-                .map(Nat::from),
+                .clone()
+                .or(default.settings.memory_allocation.clone())
+                .map(|m| Nat::from(m.get())),
             compute_allocation: self
                 .settings
                 .compute_allocation

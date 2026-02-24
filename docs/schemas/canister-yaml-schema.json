@@ -357,7 +357,7 @@
               "type": "null"
             }
           ],
-          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"1.5gib\")."
+          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         },
         "reserved_cycles_limit": {
           "anyOf": [
@@ -380,7 +380,7 @@
               "type": "null"
             }
           ],
-          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"1.5gib\")."
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         },
         "wasm_memory_threshold": {
           "anyOf": [
@@ -391,7 +391,7 @@
               "type": "null"
             }
           ],
-          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"1.5gib\")."
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         }
       },
       "type": "object"

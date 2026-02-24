@@ -295,6 +295,18 @@ async fn identity_storage_forms() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
+    // Reject password shorter than 8 characters
+    let mut short_password_file = NamedTempFile::new().unwrap();
+    short_password_file.write_all(b"1234567").unwrap();
+    let short_password_path = short_password_file.into_temp_path();
+    ctx.icp()
+        .args(["identity", "new", "id_short_pw", "--storage", "password"])
+        .arg("--storage-password-file")
+        .arg(&short_password_path)
+        .assert()
+        .failure()
+        .stderr(contains("password must be at least 8 characters"));
+
     // Create password file for the password-protected identity storage
     let mut storage_password_file = NamedTempFile::new().unwrap();
     storage_password_file
@@ -814,6 +826,25 @@ fn identity_export_keyring() {
 
     // Clean up keyring entry
     let _ = ctx.icp().args(["identity", "delete", "alice"]).assert();
+}
+
+#[test]
+fn identity_export_encrypted_rejects_short_password() {
+    let ctx = TestContext::new();
+    ctx.icp()
+        .args(["identity", "new", "bob", "--storage", "plaintext"])
+        .assert()
+        .success();
+    let mut short_pw = NamedTempFile::new().unwrap();
+    short_pw.write_all(b"1234567").unwrap();
+    let short_pw_path = short_pw.into_temp_path();
+    ctx.icp()
+        .args(["identity", "export", "bob", "--encrypt"])
+        .arg("--encryption-password-file")
+        .arg(&short_pw_path)
+        .assert()
+        .failure()
+        .stderr(contains("password must be at least 8 characters"));
 }
 
 #[test]

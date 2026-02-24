@@ -6,7 +6,7 @@ use elliptic_curve::zeroize::Zeroizing;
 use icp::{
     fs::write_string,
     identity::{
-        key::{CreateFormat, IdentityKey, create_identity},
+        key::{CreateFormat, IdentityKey, create_identity, validate_password},
         seed::derive_default_key_from_seed,
     },
     prelude::*,
@@ -56,6 +56,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
                     .interact()
                     .context("failed to read password from terminal")?
             };
+            validate_password(&password).map_err(anyhow::Error::msg)?;
             CreateFormat::Pbes2 {
                 password: Zeroizing::new(password),
             }

@@ -156,6 +156,17 @@
               "$ref": "#/$defs/BuildSteps",
               "description": "The build configuration specifying how to compile the canister's source\ncode into a WebAssembly module, including the adapter to use."
             },
+            "preinstall": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreinstallSteps"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preinstall validation steps that run before canister installation"
+            },
             "sync": {
               "anyOf": [
                 {
@@ -705,6 +716,38 @@
       "required": [
         "name"
       ],
+      "type": "object"
+    },
+    "PreinstallStep": {
+      "description": "Identifies the type of adapter used for preinstall checks,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: ./scripts/validate-wasm.sh\n```",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Adapter",
+          "description": "Represents a preinstall check using a custom script or command.\nThis variant allows for flexible validation processes defined by the user.",
+          "properties": {
+            "type": {
+              "const": "script",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PreinstallSteps": {
+      "description": "Describes the preinstall validation steps that run before canister installation.",
+      "properties": {
+        "steps": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PreinstallStep"
+          },
+          "type": "array"
+        }
+      },
       "type": "object"
     },
     "Recipe": {

@@ -13,7 +13,7 @@ use crate::{
     manifest::{
         InitArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
         ProjectRootLocateError,
-        canister::{BuildSteps, SyncSteps},
+        canister::{BuildSteps, PreinstallSteps, SyncSteps},
         load_manifest_from_path,
     },
     network::Configuration,
@@ -94,6 +94,9 @@ pub struct Canister {
     /// The build configuration specifying how to compile the canister's source
     /// code into a WebAssembly module, including the adapter to use.
     pub build: BuildSteps,
+
+    /// The preinstall validation steps that run before canister installation
+    pub preinstall: PreinstallSteps,
 
     /// The configuration specifying how to sync the canister
     pub sync: SyncSteps,
@@ -285,6 +288,7 @@ impl MockProjectLoader {
                     sha256: None,
                 })],
             },
+            preinstall: PreinstallSteps::default(),
             sync: SyncSteps::default(),
             init_args: None,
         };
@@ -367,6 +371,7 @@ impl MockProjectLoader {
                     sha256: None,
                 })],
             },
+            preinstall: PreinstallSteps::default(),
             sync: SyncSteps::default(),
             init_args: None,
         };
@@ -382,6 +387,7 @@ impl MockProjectLoader {
                     sha256: None,
                 })],
             },
+            preinstall: PreinstallSteps::default(),
             sync: SyncSteps::default(),
             init_args: None,
         };
@@ -397,6 +403,7 @@ impl MockProjectLoader {
                     sha256: None,
                 })],
             },
+            preinstall: PreinstallSteps::default(),
             sync: SyncSteps::default(),
             init_args: None,
         };
@@ -611,7 +618,10 @@ mod tests {
 
     #[async_trait]
     impl Resolve for MockRecipeResolver {
-        async fn resolve(&self, _recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+        async fn resolve(
+            &self,
+            _recipe: &Recipe,
+        ) -> Result<(BuildSteps, PreinstallSteps, SyncSteps), ResolveError> {
             use crate::manifest::adapter::prebuilt::{
                 Adapter as PrebuiltAdapter, LocalSource, SourceField,
             };
@@ -627,7 +637,11 @@ mod tests {
                 })],
             };
 
-            Ok((build_steps, SyncSteps::default()))
+            Ok((
+                build_steps,
+                PreinstallSteps::default(),
+                SyncSteps::default(),
+            ))
         }
     }
 

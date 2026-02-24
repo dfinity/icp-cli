@@ -10,11 +10,8 @@ use crate::{
     manifest::{
         CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, Item,
         LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
-        ProjectRootLocateError,
-        canister::{Instructions, SyncSteps},
-        environment::CanisterSelection,
-        load_manifest_from_path,
-        recipe::RecipeType,
+        ProjectRootLocateError, canister::Instructions, environment::CanisterSelection,
+        load_manifest_from_path, recipe::RecipeType,
     },
     network::{
         Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode, Port,
@@ -234,14 +231,16 @@ pub async fn consolidate_manifest(
         };
 
         for (cdir, m) in ms {
-            let (build, sync) = match &m.instructions {
+            let (build, preinstall, sync) = match &m.instructions {
                 // Build/Sync
-                Instructions::BuildSync { build, sync } => (
+                Instructions::BuildSync {
+                    build,
+                    preinstall,
+                    sync,
+                } => (
                     build.to_owned(),
-                    match sync {
-                        Some(sync) => sync.to_owned(),
-                        None => SyncSteps::default(),
-                    },
+                    preinstall.as_ref().cloned().unwrap_or_default(),
+                    sync.as_ref().cloned().unwrap_or_default(),
                 ),
 
                 // Recipe
@@ -281,6 +280,7 @@ pub async fn consolidate_manifest(
                             name: m.name.to_owned(),
                             settings: m.settings.to_owned(),
                             build,
+                            preinstall,
                             sync,
                             init_args,
                         },

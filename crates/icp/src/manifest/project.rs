@@ -145,6 +145,7 @@ mod tests {
                                 )
                             })]
                         },
+                        preinstall: None,
                         sync: None,
                     },
                 })],
@@ -226,6 +227,7 @@ mod tests {
                                 )
                             })]
                         },
+                        preinstall: None,
                         sync: None,
                     },
                 })],
@@ -261,6 +263,7 @@ mod tests {
                                     )
                                 })]
                             },
+                            preinstall: None,
                             sync: None,
                         },
                     }),

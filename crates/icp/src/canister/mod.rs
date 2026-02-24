@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub mod build;
+pub mod preinstall;
 pub mod recipe;
 pub mod sync;
 

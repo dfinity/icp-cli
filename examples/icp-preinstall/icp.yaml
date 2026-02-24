@@ -1,0 +1,6 @@
+environments:
+  local:
+    network: local
+
+canisters:
+  - ./canister.yaml

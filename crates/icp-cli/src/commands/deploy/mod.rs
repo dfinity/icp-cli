@@ -17,8 +17,8 @@ use crate::{
     commands::canister::create,
     operations::{
         binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
-        create::CreateOperation, install::install_many, settings::sync_settings_many,
-        sync::sync_many,
+        create::CreateOperation, install::install_many, preinstall::preinstall_many,
+        settings::sync_settings_many, sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
     progress::{ProgressManager, ProgressManagerSettings},
@@ -213,6 +213,46 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         agent.clone(),
         target_canisters,
         Arc::new(ctx.term.clone()),
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
+
+    // Run preinstall checks
+    let _ = ctx.term.write_line("\n\nRunning preinstall checks:");
+
+    let preinstall_data = try_join_all(cnames.iter().map(|name| {
+        let environment_selection = environment_selection.clone();
+        let ctx = ctx.clone();
+        async move {
+            let cid = ctx
+                .get_canister_id_for_env(
+                    &CanisterSelection::Named(name.clone()),
+                    &environment_selection,
+                )
+                .await
+                .map_err(|e| anyhow!(e))?;
+
+            let env = ctx.get_environment(&environment_selection).await?;
+            let (canister_path, canister_info) =
+                env.get_canister_info(name).map_err(|e| anyhow!(e))?;
+
+            Ok::<_, anyhow::Error>((
+                name.clone(),
+                cid,
+                canister_path.clone(),
+                canister_info.clone(),
+                environment_selection.name().to_string(),
+            ))
+        }
+    }))
+    .await?;
+
+    preinstall_many(
+        ctx.preinstaller.clone(),
+        ctx.artifacts.clone(),
+        Arc::new(ctx.term.clone()),
+        preinstall_data,
         ctx.debug,
     )
     .await

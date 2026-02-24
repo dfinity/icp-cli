@@ -3,6 +3,7 @@ use std::{env::current_dir, sync::Arc};
 use snafu::prelude::*;
 
 use crate::canister::build::Builder;
+use crate::canister::preinstall::Preinstaller;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::sync::Syncer;
 use crate::context::{Context, TermWriter};
@@ -75,6 +76,9 @@ pub fn initialize(
     // Canister syncer
     let syncer = Arc::new(Syncer);
 
+    // Canister preinstaller
+    let preinstaller = Arc::new(Preinstaller);
+
     // Project loader
     let pload = ProjectLoadImpl {
         project_root_locate: project_root_locate.clone(),
@@ -118,6 +122,7 @@ pub fn initialize(
         agent: agent_creator,
         builder,
         syncer,
+        preinstaller,
         debug,
     })
 }

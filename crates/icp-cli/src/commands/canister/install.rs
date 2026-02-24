@@ -1,4 +1,5 @@
 use anyhow::{Context as _, anyhow, bail};
+use camino_tempfile::tempdir;
 use clap::Args;
 use icp::context::{CanisterSelection, Context};
 use icp::manifest::InitArgsFormat;
@@ -104,6 +105,39 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .as_ref()
         .map(|ia| ia.to_bytes().context("failed to encode init args"))
         .transpose()?;
+
+    // Run preinstall checks if canister has preinstall steps
+    if let CanisterSelection::Named(ref name) = selections.canister {
+        if let Ok(env) = ctx.get_environment(&selections.environment).await {
+            if let Ok((canister_path, canister_info)) = env.get_canister_info(name) {
+                if !canister_info.preinstall.steps.is_empty() {
+                    let _ = ctx.term.write_line("Running preinstall checks...");
+
+                    // Write WASM to temp file for preinstall script
+                    let temp_dir = tempdir()?;
+                    let wasm_path = PathBuf::from(temp_dir.path()).join("canister.wasm");
+                    fs::write(&wasm_path, &wasm)?;
+
+                    for step in &canister_info.preinstall.steps {
+                        ctx.preinstaller
+                            .preinstall(
+                                step,
+                                &icp::canister::preinstall::Params {
+                                    path: canister_path.clone(),
+                                    wasm_path: wasm_path.clone(),
+                                    cid: canister_id,
+                                    environment: selections.environment.name().to_string(),
+                                },
+                                None,
+                            )
+                            .await?;
+                    }
+
+                    let _ = ctx.term.write_line("Preinstall checks passed.\n");
+                }
+            }
+        }
+    }
 
     let canister_display = args.cmd_args.canister.to_string();
     install_canister(

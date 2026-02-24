@@ -205,6 +205,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         #[serde(deny_unknown_fields)]
                         struct BuildSyncHelper {
                             build: BuildSteps,
+                            preinstall: Option<PreinstallSteps>,
                             sync: Option<SyncSteps>,
                         }
 
@@ -224,6 +225,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             init_args,
                             instructions: Instructions::BuildSync {
                                 build: helper.build,
+                                preinstall: helper.preinstall,
                                 sync: helper.sync,
                             },
                         })
@@ -247,6 +249,9 @@ pub enum Instructions {
         /// The build configuration specifying how to compile the canister's source
         /// code into a WebAssembly module, including the adapter to use.
         build: BuildSteps,
+
+        /// The preinstall validation steps that run before canister installation
+        preinstall: Option<PreinstallSteps>,
 
         /// The configuration specifying how to sync the canister
         sync: Option<SyncSteps>,
@@ -335,6 +340,39 @@ impl fmt::Display for SyncStep {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct SyncSteps {
     pub steps: Vec<SyncStep>,
+}
+
+/// Identifies the type of adapter used for preinstall checks,
+/// along with its configuration.
+///
+/// The adapter type is specified via the `type` field in the YAML file.
+/// For example:
+///
+/// ```yaml
+/// type: script
+/// command: ./scripts/validate-wasm.sh
+/// ```
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum PreinstallStep {
+    /// Represents a preinstall check using a custom script or command.
+    /// This variant allows for flexible validation processes defined by the user.
+    Script(adapter::script::Adapter),
+}
+
+impl fmt::Display for PreinstallStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PreinstallStep::Script(v) => write!(f, "script {v}"),
+        }
+    }
+}
+
+/// Describes the preinstall validation steps that run before canister installation.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
+pub struct PreinstallSteps {
+    #[serde(default)]
+    pub steps: Vec<PreinstallStep>,
 }
 
 #[cfg(test)]
@@ -689,6 +727,7 @@ mod tests {
                             )
                         }),]
                     },
+                    preinstall: None,
                     sync: None,
                 },
             },
@@ -743,6 +782,7 @@ mod tests {
                             command: script::CommandField::Command("dosomething.sh".to_string()),
                         })]
                     },
+                    preinstall: None,
                     sync: Some(SyncSteps {
                         steps: vec![SyncStep::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),

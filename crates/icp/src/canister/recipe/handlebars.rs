@@ -13,7 +13,7 @@ use url::ParseError;
 use crate::{
     fs::read,
     manifest::{
-        canister::{BuildSteps, SyncSteps},
+        canister::{BuildSteps, PreinstallSteps, SyncSteps},
         recipe::{Recipe, RecipeType},
     },
     package::{
@@ -87,7 +87,7 @@ impl Handlebars {
     async fn resolve_impl(
         &self,
         recipe: &Recipe,
-    ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
+    ) -> Result<(BuildSteps, PreinstallSteps, SyncSteps), HandlebarsError> {
         // Determine the template source
         let tmpl_source = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
@@ -197,12 +197,14 @@ impl Handlebars {
         struct BuildSyncHelper {
             build: BuildSteps,
             #[serde(default)]
+            preinstall: PreinstallSteps,
+            #[serde(default)]
             sync: SyncSteps,
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        let (build, sync) = match insts {
-            Ok(helper) => (helper.build, helper.sync),
+        let (build, preinstall, sync) = match insts {
+            Ok(helper) => (helper.build, helper.preinstall, helper.sync),
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
@@ -248,7 +250,7 @@ impl Handlebars {
                 }
             }
         }
-        Ok((build, sync))
+        Ok((build, preinstall, sync))
     }
 
     /// Fetch raw bytes from a remote URL.
@@ -276,7 +278,10 @@ impl Handlebars {
 
 #[async_trait]
 impl Resolve for Handlebars {
-    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+    async fn resolve(
+        &self,
+        recipe: &Recipe,
+    ) -> Result<(BuildSteps, PreinstallSteps, SyncSteps), ResolveError> {
         self.resolve_impl(recipe)
             .await
             .context(super::HandlebarsSnafu)

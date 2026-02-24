@@ -101,6 +101,9 @@ pub struct Context {
     /// Canister synchronizer
     pub syncer: Arc<dyn Synchronize>,
 
+    /// Canister preinstaller
+    pub preinstaller: Arc<dyn crate::canister::preinstall::Preinstall>,
+
     /// Whether debug is enabled
     pub debug: bool,
 }
@@ -498,6 +501,7 @@ impl Context {
             agent: Arc::new(crate::agent::Creator),
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
+            preinstaller: Arc::new(crate::canister::preinstall::UnimplementedMockPreinstaller),
             debug: false,
         }
     }

@@ -146,9 +146,9 @@ impl CreateArgs {
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
     if args.detached {
-        create_project_canister(ctx, args).await
-    } else {
         create_canister(ctx, args).await
+    } else {
+        create_project_canister(ctx, args).await
     }
 }
 

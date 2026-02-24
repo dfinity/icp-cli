@@ -40,80 +40,42 @@ fn maybe_decompress_gzip(data: &[u8]) -> Option<Cow<'_, [u8]>> {
 mod tests {
     use super::*;
 
-    /// Build a minimal valid WASM module with the given custom sections.
-    /// Each entry is (section_name, section_data).
-    fn build_wasm_with_custom_sections(sections: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut wasm = vec![
-            0x00, 0x61, 0x73, 0x6d, // magic: \0asm
-            0x01, 0x00, 0x00, 0x00, // version: 1
-        ];
-        for (name, data) in sections {
-            let name_bytes = name.as_bytes();
-            // Custom section: id=0, then LEB128 length, then name (LEB128 len + bytes), then data
-            let section_payload_len =
-                leb128_len(name_bytes.len() as u32) + name_bytes.len() + data.len();
-            wasm.push(0x00); // custom section id
-            write_leb128(&mut wasm, section_payload_len as u32);
-            write_leb128(&mut wasm, name_bytes.len() as u32);
-            wasm.extend_from_slice(name_bytes);
-            wasm.extend_from_slice(data);
-        }
-        wasm
-    }
-
-    fn write_leb128(buf: &mut Vec<u8>, mut value: u32) {
-        loop {
-            let mut byte = (value & 0x7f) as u8;
-            value >>= 7;
-            if value != 0 {
-                byte |= 0x80;
-            }
-            buf.push(byte);
-            if value == 0 {
-                break;
-            }
-        }
-    }
-
-    fn leb128_len(mut value: u32) -> usize {
-        let mut len = 0;
-        loop {
-            value >>= 7;
-            len += 1;
-            if value == 0 {
-                break;
-            }
-        }
-        len
-    }
+    // (module
+    //   (@custom "icp:public some_other" "irrelevant")
+    //   (@custom "icp:public candid:service" "service : {}")
+    //   (@custom "another_section" "more data")
+    // )
+    const UNRELATED_SECTIONS: &[u8] = b"\x00\x61\x73\x6d\x01\x00\x00\x00\x00\x20\x15\x69\x63\x70\x3a\x70\x75\x62\x6c\x69\x63\x20\x73\x6f\x6d\x65\x5f\x6f\x74\x68\x65\x72\x69\x72\x72\x65\x6c\x65\x76\x61\x6e\x74\x00\x26\x19\x69\x63\x70\x3a\x70\x75\x62\x6c\x69\x63\x20\x63\x61\x6e\x64\x69\x64\x3a\x73\x65\x72\x76\x69\x63\x65\x73\x65\x72\x76\x69\x63\x65\x20\x3a\x20\x7b\x7d\x00\x19\x0f\x61\x6e\x6f\x74\x68\x65\x72\x5f\x73\x65\x63\x74\x69\x6f\x6e\x6d\x6f\x72\x65\x20\x64\x61\x74\x61";
+    // (module (@custom "icp:public some_other" "data") )
+    const NO_CANDID_SECTION: &[u8] = b"\x00\x61\x73\x6d\x01\x00\x00\x00\x00\x1a\x15\x69\x63\x70\x3a\x70\x75\x62\x6c\x69\x63\x20\x73\x6f\x6d\x65\x5f\x6f\x74\x68\x65\x72\x64\x61\x74\x61";
+    // (module (@custom "icp:private candid:service" "service : { hello : () -> () }") )
+    const PRIVATE_SERVICE: &[u8] = b"\x00\x61\x73\x6d\x01\x00\x00\x00\x00\x39\x1a\x69\x63\x70\x3a\x70\x72\x69\x76\x61\x74\x65\x20\x63\x61\x6e\x64\x69\x64\x3a\x73\x65\x72\x76\x69\x63\x65\x73\x65\x72\x76\x69\x63\x65\x20\x3a\x20\x7b\x20\x68\x65\x6c\x6c\x6f\x20\x3a\x20\x28\x29\x20\x2d\x3e\x20\x28\x29\x20\x7d";
+    // (module (@custom "icp:public candid:service" "service : { greet : (text) -> (text) }") )
+    const PUBLIC_SERVICE: &[u8] = b"\x00\x61\x73\x6d\x01\x00\x00\x00\x00\x40\x19\x69\x63\x70\x3a\x70\x75\x62\x6c\x69\x63\x20\x63\x61\x6e\x64\x69\x64\x3a\x73\x65\x72\x76\x69\x63\x65\x73\x65\x72\x76\x69\x63\x65\x20\x3a\x20\x7b\x20\x67\x72\x65\x65\x74\x20\x3a\x20\x28\x74\x65\x78\x74\x29\x20\x2d\x3e\x20\x28\x74\x65\x78\x74\x29\x20\x7d";
 
     #[test]
     fn extracts_public_candid_service() {
-        let candid = b"service : { greet : (text) -> (text) }";
-        let wasm = build_wasm_with_custom_sections(&[("icp:public candid:service", candid)]);
-        let result = extract_candid_service(&wasm);
         assert_eq!(
-            result.as_deref(),
+            extract_candid_service(PUBLIC_SERVICE).as_deref(),
             Some("service : { greet : (text) -> (text) }")
         );
     }
 
     #[test]
     fn extracts_private_candid_service() {
-        let candid = b"service : { hello : () -> () }";
-        let wasm = build_wasm_with_custom_sections(&[("icp:private candid:service", candid)]);
-        let result = extract_candid_service(&wasm);
-        assert_eq!(result.as_deref(), Some("service : { hello : () -> () }"));
+        assert_eq!(
+            extract_candid_service(PRIVATE_SERVICE).as_deref(),
+            Some("service : { hello : () -> () }")
+        );
     }
 
     #[test]
     fn returns_none_when_no_candid_section() {
-        let wasm = build_wasm_with_custom_sections(&[("icp:public some_other", b"data")]);
-        assert!(extract_candid_service(&wasm).is_none());
+        assert!(extract_candid_service(NO_CANDID_SECTION).is_none());
     }
 
     #[test]
-    fn returns_none_for_empty_wasm() {
+    fn returns_none_for_empty_input() {
         assert!(extract_candid_service(&[]).is_none());
     }
 
@@ -127,29 +89,21 @@ mod tests {
         use flate2::write::GzEncoder;
         use std::io::Write;
 
-        let candid = b"service : { greet : (text) -> (text) }";
-        let wasm = build_wasm_with_custom_sections(&[("icp:public candid:service", candid)]);
-
         let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder.write_all(&wasm).unwrap();
+        encoder.write_all(PUBLIC_SERVICE).unwrap();
         let compressed = encoder.finish().unwrap();
 
-        let result = extract_candid_service(&compressed);
         assert_eq!(
-            result.as_deref(),
+            extract_candid_service(&compressed).as_deref(),
             Some("service : { greet : (text) -> (text) }")
         );
     }
 
     #[test]
     fn skips_unrelated_sections() {
-        let candid = b"service : {}";
-        let wasm = build_wasm_with_custom_sections(&[
-            ("icp:public some_other", b"irrelevant"),
-            ("icp:public candid:service", candid),
-            ("another_section", b"more data"),
-        ]);
-        let result = extract_candid_service(&wasm);
-        assert_eq!(result.as_deref(), Some("service : {}"));
+        assert_eq!(
+            extract_candid_service(UNRELATED_SECTIONS).as_deref(),
+            Some("service : {}")
+        );
     }
 }

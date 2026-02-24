@@ -270,7 +270,13 @@ Raw binary (only valid for file references)</li>
 </ul>
 <h2 id="icp-canister-create"><code>icp canister create</code></h2>
 <p>Create a canister on a network</p>
-<p><strong>Usage:</strong> <code>icp canister create [OPTIONS] &#x3C;CANISTER></code></p>
+<p><strong>Usage:</strong> <code>icp canister create [OPTIONS] &#x3C;CANISTER|--detached></code></p>
+<p>This command can be used to create canisters defined in a project
+or a “detached” canister on a network.</p>
+<p>Examples:</p>
+<div class="expressive-code"><link rel="stylesheet" href="/icp-cli/main/_astro/ec.v4551.css"><script type="module" src="/icp-cli/main/_astro/ec.0vx5m.js"></script><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Create on a network by url</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister create -n http://localhost:8000 -k $ROOT_KEY --detached</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Create on mainnet outside of a project context</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister create -n ic --detached</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Create a detached canister inside the scope of a project</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister create -n mynetwork --detached</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Create on a network by urlicp canister create -n http://localhost:8000 -k $ROOT_KEY --detached# Create on mainnet outside of a project contexticp canister create -n ic --detached# Create a detached canister inside the scope of a projecticp canister create -n mynetwork --detached"><div></div></button></div></figure></div>
 <h6 id="arguments-2"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
@@ -313,6 +319,9 @@ Raw binary (only valid for file references)</li>
 </li>
 <li>
 <p><code>--subnet &#x3C;SUBNET></code> — The subnet to create canisters on</p>
+</li>
+<li>
+<p><code>--detached</code> — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if <code>Canister</code> is provided</p>
 </li>
 </ul>
 <h2 id="icp-canister-delete"><code>icp canister delete</code></h2>
@@ -992,7 +1001,7 @@ Raw binary (only valid for file references)</li>
 <p>Try to connect to a network, and print out its status</p>
 <p><strong>Usage:</strong> <code>icp network ping [OPTIONS] [NAME]</code></p>
 <p>Examples:</p>
-<div class="expressive-code"><link rel="stylesheet" href="/icp-cli/main/_astro/ec.v4551.css"><script type="module" src="/icp-cli/main/_astro/ec.0vx5m.js"></script><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Ping default 'local' network</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network ping</span></div></div><div class="ec-line"><div class="code">
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Ping default 'local' network</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network ping</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Ping explicit network</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network ping mynetwork</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Ping using environment flag</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network ping -e staging</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Ping using ICP_ENVIRONMENT variable</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">ICP_ENVIRONMENT=staging icp network ping</span></div></div><div class="ec-line"><div class="code">

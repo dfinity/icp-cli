@@ -1057,7 +1057,7 @@ async fn canister_upgrade_rejects_incompatible_candid() {
         .failure()
         .stdout(contains("Candid interface compatibility check failed"));
 
-    // Upgrade with --skip-candid-check should succeed
+    // Upgrade with --yes should succeed
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -1065,7 +1065,7 @@ async fn canister_upgrade_rejects_incompatible_candid() {
             "my-canister",
             "--environment",
             "random-environment",
-            "--skip-candid-check",
+            "--yes",
         ])
         .assert()
         .success();

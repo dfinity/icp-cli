@@ -47,9 +47,9 @@ pub(crate) struct DeployArgs {
     #[arg(long, default_value_t = CyclesAmount::from(create::DEFAULT_CANISTER_CYCLES))]
     pub(crate) cycles: CyclesAmount,
 
-    /// Skip the Candid interface compatibility check when upgrading or reinstalling.
-    #[arg(long)]
-    pub(crate) skip_candid_check: bool,
+    /// Skip confirmation prompts, including the Candid interface compatibility check.
+    #[arg(long, short)]
+    pub(crate) yes: bool,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -258,7 +258,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         ctx.artifacts.clone(),
         Arc::new(ctx.term.clone()),
         ctx.debug,
-        args.skip_candid_check,
+        args.yes,
     )
     .await?;
 

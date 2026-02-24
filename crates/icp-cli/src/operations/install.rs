@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use candid::types::subtype::{OptReport, subtype_with_config};
 use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
@@ -13,6 +11,7 @@ use ic_utils::interfaces::{
 use icp::context::TermWriter;
 use sha2::{Digest, Sha256};
 use snafu::Snafu;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::debug;
 
@@ -34,7 +33,7 @@ pub enum InstallOperationError {
          You are making a BREAKING change. Other canisters or frontend clients \
          relying on your canister may stop working.\n\n\
          {details}\n\n\
-         Use --skip-candid-check to bypass this check."
+         Use --yes to bypass this check."
     ))]
     CandidIncompatible {
         canister_name: String,
@@ -142,7 +141,7 @@ pub(crate) async fn install_canister(
     wasm: &[u8],
     mode: &str,
     init_args: Option<&[u8]>,
-    skip_candid_check: bool,
+    yes: bool,
 ) -> Result<(), InstallOperationError> {
     let mgmt = ManagementCanister::create(agent);
     let install_mode = match mode {
@@ -186,7 +185,7 @@ pub(crate) async fn install_canister(
     };
 
     // Candid interface compatibility check for upgrades and reinstalls
-    if !skip_candid_check
+    if !yes
         && matches!(
             install_mode,
             CanisterInstallMode::Upgrade(_) | CanisterInstallMode::Reinstall
@@ -332,7 +331,7 @@ pub(crate) async fn install_many(
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
-    skip_candid_check: bool,
+    yes: bool,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -356,16 +355,7 @@ pub(crate) async fn install_many(
                     }
                 })?;
 
-                install_canister(
-                    &agent,
-                    &cid,
-                    &name,
-                    &wasm,
-                    &mode,
-                    init_args.as_deref(),
-                    skip_candid_check,
-                )
-                .await
+                install_canister(&agent, &cid, &name, &wasm, &mode, init_args.as_deref(), yes).await
             }
         };
 

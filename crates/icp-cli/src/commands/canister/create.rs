@@ -75,10 +75,6 @@ pub(crate) struct CreateArgs {
     #[arg(long)]
     pub(crate) subnet: Option<Principal>,
 
-    /// Only print the canister id
-    #[arg(short, long)]
-    pub id_only: bool,
-
     /// Create a canister detached from any project configuration. The canister id will be
     /// printed out but not recorded in the project configuration. Not valid if `Canister`
     /// is provided.
@@ -183,7 +179,7 @@ async fn create_canister(
 
     let id = create_operation.create(&canister_settings).await?;
 
-    if args.id_only {
+    if args.quiet {
         let _ = ctx.term.write_line(&format!("{id}"));
     } else {
         let _ = ctx
@@ -243,7 +239,7 @@ async fn create_project_canister(
     ctx.set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
-    if args.id_only {
+    if args.quiet {
         let _ = ctx.term.write_line(&format!("{id}"));
     } else {
         let _ = ctx

@@ -223,7 +223,6 @@ Examples:
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
-* `-i`, `--id-only` — Only print the canister id
 * `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
 
 

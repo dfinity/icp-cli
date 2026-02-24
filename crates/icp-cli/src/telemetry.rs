@@ -39,8 +39,16 @@ const MAX_BATCH_COUNT: usize = 10;
 /// How long to guard the send slot while a background send is in flight (seconds).
 const SEND_GUARD_SECS: u64 = 30 * 60;
 
-/// Telemetry ingestion endpoint. Replace with the real URL before GA.
-const TELEMETRY_ENDPOINT: &str = "https://telemetry.icp-cli.dev/v1/events";
+/// Telemetry ingestion endpoint.
+///
+/// Deliberately set to a non-resolvable placeholder until the real endpoint is
+/// confirmed.  The `.invalid` TLD is reserved by RFC 2606 and will never
+/// resolve, so any send attempt fails silently without reaching a third-party
+/// server.
+///
+/// Override at runtime with the `ICP_TELEMETRY_ENDPOINT` environment variable
+/// (intended for integration tests only).
+const TELEMETRY_ENDPOINT: &str = "https://telemetry.invalid/v1/events";
 
 // ---------------------------------------------------------------------------
 // Argument types
@@ -483,6 +491,9 @@ pub(crate) async fn handle_send_batch(batch_path_str: &str) {
         return;
     };
 
+    let endpoint =
+        std::env::var("ICP_TELEMETRY_ENDPOINT").unwrap_or_else(|_| TELEMETRY_ENDPOINT.to_string());
+
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
@@ -492,7 +503,7 @@ pub(crate) async fn handle_send_batch(batch_path_str: &str) {
     };
 
     let result = client
-        .post(TELEMETRY_ENDPOINT)
+        .post(&endpoint)
         .header("Content-Type", "application/x-ndjson")
         .body(payload)
         .send()

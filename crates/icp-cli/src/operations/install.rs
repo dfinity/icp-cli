@@ -185,12 +185,7 @@ pub(crate) async fn install_canister(
     };
 
     // Candid interface compatibility check for upgrades and reinstalls
-    if !yes
-        && matches!(
-            install_mode,
-            CanisterInstallMode::Upgrade(_) | CanisterInstallMode::Reinstall
-        )
-    {
+    if !yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
         match check_candid_compatibility(agent, canister_id, wasm).await {
             CandidCompatibility::Compatible => {}
             CandidCompatibility::Incompatible(details) => {

@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
-use crate::{CanisterSource, identity::manifest::IdentitySpec, manifest::recipe::RecipeType};
+use crate::identity::manifest::IdentitySpec;
 
 /// Data collected during command execution for telemetry.
 ///
@@ -45,14 +45,11 @@ impl TelemetryData {
     }
 
     pub fn set_project(&self, project: &crate::Project) {
-        let mut recipes = Vec::new();
-        for (_, canister) in project.canisters.values() {
-            if let CanisterSource::Recipe(RecipeType::Registry { name, recipe, .. }) =
-                &canister.source
-            {
-                recipes.push(format!("{name}/{recipe}"));
-            }
-        }
+        let recipes: Vec<String> = project
+            .canisters
+            .values()
+            .filter_map(|(_, canister)| canister.registry_recipe.clone())
+            .collect();
         *self.num_canisters.lock().unwrap() = Some(project.canisters.len());
         *self.recipes.lock().unwrap() = Some(recipes);
     }

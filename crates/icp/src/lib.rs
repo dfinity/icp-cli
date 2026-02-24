@@ -103,20 +103,10 @@ pub struct Canister {
     /// Resolved from the manifest — file contents are already loaded.
     pub init_args: Option<InitArgs>,
 
-    /// Records whether the canister was defined with a recipe or direct
-    /// build/sync instructions. Preserved so telemetry can report recipe usage
-    /// even after the recipe has been resolved into concrete build steps.
-    pub source: CanisterSource,
-}
-
-/// How the canister's build instructions were originally specified.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum CanisterSource {
-    /// Defined with explicit `build` (and optional `sync`) steps.
-    BuildSync,
-    /// Defined via a recipe reference. The [`RecipeType`] is retained so
-    /// telemetry can report which registry/recipe was used.
-    Recipe(crate::manifest::recipe::RecipeType),
+    /// If the canister was defined via a recipe reference, this holds the
+    /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
+    /// `None` when the canister uses explicit build/sync instructions.
+    pub registry_recipe: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -303,7 +293,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
-            source: CanisterSource::BuildSync,
+            registry_recipe: None,
         };
 
         let local_network = Network {
@@ -386,7 +376,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
-            source: CanisterSource::BuildSync,
+            registry_recipe: None,
         };
 
         let frontend_canister = Canister {
@@ -402,7 +392,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
-            source: CanisterSource::BuildSync,
+            registry_recipe: None,
         };
 
         let database_canister = Canister {
@@ -418,7 +408,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
-            source: CanisterSource::BuildSync,
+            registry_recipe: None,
         };
 
         // Create networks

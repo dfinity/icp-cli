@@ -1,4 +1,4 @@
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -948,4 +948,141 @@ async fn deploy_with_init_args_file_idl_format() {
         .assert()
         .success()
         .stdout(eq("(\"42\")").trim());
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_upgrade_rejects_incompatible_candid() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Write mops.toml for the Motoko toolchain
+    write_string(
+        &project_dir.join("mops.toml"),
+        indoc! {r#"
+            [dependencies]
+            base = "0.16.0"
+
+            [toolchain]
+            moc = "0.16.3"
+        "#},
+    )
+    .expect("failed to write mops.toml");
+
+    // Initial version: greet takes Text
+    write_string(
+        &project_dir.join("main.mo"),
+        indoc! {"
+            persistent actor {
+                public query func greet(name : Text) : async Text {
+                    return \"Hello, \" # name # \"!\";
+                };
+            };
+        "},
+    )
+    .expect("failed to write main.mo");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network and deploy initial version
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify initial version works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // Breaking change: greet now takes Nat instead of Text
+    write_string(
+        &project_dir.join("main.mo"),
+        indoc! {"
+            import Nat \"mo:base/Nat\";
+
+            persistent actor {
+                public query func greet(n : Nat) : async Text {
+                    return \"Hello, \" # Nat.toText(n) # \"!\";
+                };
+            };
+        "},
+    )
+    .expect("failed to write updated main.mo");
+
+    // Upgrade should fail with candid incompatibility error
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stdout(contains("Candid interface compatibility check failed"));
+
+    // Upgrade with --skip-candid-check should succeed
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--skip-candid-check",
+        ])
+        .assert()
+        .success();
+
+    // Verify updated version works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(42)",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, 42!\")").trim());
 }

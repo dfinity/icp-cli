@@ -78,20 +78,6 @@ impl OptionalCanisterCommandArgs {
     }
 }
 
-impl TryFrom<OptionalCanisterCommandSelections> for CommandSelections {
-    type Error = String;
-
-    fn try_from(value: OptionalCanisterCommandSelections) -> Result<Self, Self::Error> {
-        let canister = value.canister.ok_or("canister is required")?;
-        Ok(Self {
-            canister,
-            environment: value.environment,
-            network: value.network,
-            identity: value.identity,
-        })
-    }
-}
-
 // Like the CanisterCommandArgs but canister is optional
 #[derive(Args, Debug)]
 pub(crate) struct OptionalCanisterCommandArgs {

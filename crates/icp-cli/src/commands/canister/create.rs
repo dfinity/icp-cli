@@ -6,7 +6,6 @@ use icp::parsers::{CyclesAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
-use crate::commands::args::{CommandSelections, OptionalCanisterCommandSelections};
 use crate::{commands::args, operations::create::CreateOperation};
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -146,20 +145,16 @@ impl CreateArgs {
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
-    if let Ok(selections) =
-        std::convert::TryInto::<CommandSelections>::try_into(args.cmd_args.selections())
-    {
-        create_project_canister(ctx, args, selections).await
+    if args.detached {
+        create_project_canister(ctx, args).await
     } else {
-        create_canister(ctx, args, args.cmd_args.selections()).await
+        create_canister(ctx, args).await
     }
 }
 
-async fn create_canister(
-    ctx: &Context,
-    args: &CreateArgs,
-    selections: OptionalCanisterCommandSelections,
-) -> Result<(), anyhow::Error> {
+// Attemtps to create a canister on the target network without recording it in the project metadata
+async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
+    let selections = args.cmd_args.selections();
     assert!(
         selections.canister.is_none(),
         "This path should not be called if canister is_some()"
@@ -190,15 +185,14 @@ async fn create_canister(
     Ok(())
 }
 
-// Creates canister(s) by asking the cycles ledger to create them.
-// The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
-// The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
-async fn create_project_canister(
-    ctx: &Context,
-    args: &CreateArgs,
-    selections: CommandSelections,
-) -> Result<(), anyhow::Error> {
-    let canister = match selections.canister {
+// Attempts to create a canister and record it in the project metadata
+async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
+    let selections = args.cmd_args.selections();
+
+    let canister = match selections
+        .canister
+        .expect("Canister must be Some() when --detached is not used")
+    {
         CanisterSelection::Named(name) => name,
         CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
     };

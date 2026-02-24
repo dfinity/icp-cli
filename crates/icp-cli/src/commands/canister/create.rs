@@ -77,7 +77,7 @@ pub(crate) struct CreateArgs {
     /// Create a canister detached from any project configuration. The canister id will be
     /// printed out but not recorded in the project configuration. Not valid if `Canister`
     /// is provided.
-    #[arg(long, conflicts_with = "canister")]
+    #[arg(long, conflicts_with = "canister", required_unless_present = "canister")]
     pub detached: bool,
 }
 

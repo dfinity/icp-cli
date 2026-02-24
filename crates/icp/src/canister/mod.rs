@@ -5,6 +5,8 @@ use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::parsers::{CyclesAmount, MemoryAmount};
+
 pub mod build;
 pub mod recipe;
 pub mod sync;
@@ -208,7 +210,8 @@ pub struct Settings {
     pub compute_allocation: Option<u64>,
 
     /// Memory allocation in bytes. If unset, memory is allocated dynamically.
-    pub memory_allocation: Option<u64>,
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    pub memory_allocation: Option<MemoryAmount>,
 
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     pub freezing_threshold: Option<u64>,
@@ -217,13 +220,15 @@ pub struct Settings {
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes in YAML: k, m, b, t (e.g. "4t" or "4.3t").
     #[serde(default)]
-    pub reserved_cycles_limit: Option<crate::parsers::CyclesAmount>,
+    pub reserved_cycles_limit: Option<CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    pub wasm_memory_limit: Option<u64>,
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    pub wasm_memory_limit: Option<MemoryAmount>,
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    pub wasm_memory_threshold: Option<u64>,
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    pub wasm_memory_threshold: Option<MemoryAmount>,
 
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
@@ -238,7 +243,7 @@ impl From<Settings> for CanisterSettingsArg {
             controllers: None,
             reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),
-            memory_allocation: settings.memory_allocation.map(Nat::from),
+            memory_allocation: settings.memory_allocation.map(|m| Nat::from(m.get())),
             compute_allocation: settings.compute_allocation.map(Nat::from),
         }
     }
@@ -353,6 +358,36 @@ allowed_viewers:
         assert_eq!(
             settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
             Some(5_000_000_000_000)
+        );
+    }
+
+    #[test]
+    fn settings_memory_allocation_parses_suffix() {
+        let yaml = "memory_allocation: 4gib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.memory_allocation.as_ref().map(|m| m.get()),
+            Some(4 * 1024 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn settings_memory_allocation_parses_number() {
+        let yaml = "memory_allocation: 4294967296";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.memory_allocation.as_ref().map(|m| m.get()),
+            Some(4294967296)
+        );
+    }
+
+    #[test]
+    fn settings_wasm_memory_limit_parses_suffix() {
+        let yaml = "wasm_memory_limit: 1.5gib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.wasm_memory_limit.as_ref().map(|m| m.get()),
+            Some(1610612736)
         );
     }
 

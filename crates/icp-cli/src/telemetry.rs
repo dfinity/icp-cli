@@ -16,7 +16,6 @@ use icp::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
-use crate::commands::{self, Command};
 use crate::version::icp_cli_version_str;
 
 // ---------------------------------------------------------------------------
@@ -161,7 +160,6 @@ impl TelemetrySession {
 /// Initialise a telemetry session unless telemetry is disabled.
 pub(crate) async fn setup(
     ctx: &icp::context::Context,
-    command: &Command,
     raw_args: &[String],
     clap_command: &clap::Command,
 ) -> Option<TelemetrySession> {
@@ -192,14 +190,13 @@ pub(crate) async fn setup(
 
     show_notice_if_needed(&telemetry_dir);
 
-    let cmd_name = command_name(command).to_string();
-
-    // Re-parse raw args into ArgMatches for structured argument extraction.
-    // This never fails in practice since Cli::parse() already succeeded.
-    let arguments = clap_command
+    // Re-parse raw args into ArgMatches to derive command name and arguments
+    // in one pass. This never fails in practice since Cli::parse() already
+    // succeeded.
+    let (cmd_name, arguments) = clap_command
         .clone()
         .try_get_matches_from(raw_args)
-        .map(|m| collect_arguments(&m, clap_command))
+        .map(|m| collect_command_and_arguments(&m, clap_command))
         .unwrap_or_default();
 
     let version = icp_cli_version_str().to_string();
@@ -211,97 +208,6 @@ pub(crate) async fn setup(
         version,
         autocontainerize,
     ))
-}
-
-/// Map a parsed `Command` to its telemetry name string.
-///
-/// This is an exhaustive match rather than a runtime string extraction from
-/// argv so that adding a new `Command` variant causes a compile error here,
-/// forcing the author to assign an explicit telemetry name.
-///
-/// Deriving the name automatically from argv would risk leaking positional
-/// argument values (e.g. project names) into telemetry and would be fragile when
-/// flags appear before subcommands.
-fn command_name(cmd: &Command) -> &'static str {
-    use commands::{canister, cycles, environment, identity, network, project, token};
-    match cmd {
-        Command::Build(_) => "build",
-        Command::Deploy(_) => "deploy",
-        Command::New(_) => "new",
-        Command::Sync(_) => "sync",
-        Command::Settings(_) => "settings",
-
-        Command::Canister(sub) => match sub {
-            canister::Command::Call(_) => "canister call",
-            canister::Command::Create(_) => "canister create",
-            canister::Command::Delete(_) => "canister delete",
-            canister::Command::Install(_) => "canister install",
-            canister::Command::List(_) => "canister list",
-            canister::Command::Logs(_) => "canister logs",
-            canister::Command::Metadata(_) => "canister metadata",
-            canister::Command::MigrateId(_) => "canister migrate-id",
-            canister::Command::Settings(sub) => match sub {
-                canister::settings::Command::Show(_) => "canister settings show",
-                canister::settings::Command::Update(_) => "canister settings update",
-                canister::settings::Command::Sync(_) => "canister settings sync",
-            },
-            canister::Command::Snapshot(sub) => match sub {
-                canister::snapshot::Command::Create(_) => "canister snapshot create",
-                canister::snapshot::Command::Delete(_) => "canister snapshot delete",
-                canister::snapshot::Command::Download(_) => "canister snapshot download",
-                canister::snapshot::Command::List(_) => "canister snapshot list",
-                canister::snapshot::Command::Restore(_) => "canister snapshot restore",
-                canister::snapshot::Command::Upload(_) => "canister snapshot upload",
-            },
-            canister::Command::Start(_) => "canister start",
-            canister::Command::Status(_) => "canister status",
-            canister::Command::Stop(_) => "canister stop",
-            canister::Command::TopUp(_) => "canister top-up",
-        },
-
-        Command::Cycles(sub) => match sub {
-            cycles::Command::Balance(_) => "cycles balance",
-            cycles::Command::Mint(_) => "cycles mint",
-            cycles::Command::Transfer(_) => "cycles transfer",
-        },
-
-        Command::Environment(sub) => match sub {
-            environment::Command::List(_) => "environment list",
-        },
-
-        Command::Identity(sub) => match sub {
-            identity::Command::AccountId(_) => "identity account-id",
-            identity::Command::Default(_) => "identity default",
-            identity::Command::Delete(_) => "identity delete",
-            identity::Command::Export(_) => "identity export",
-            identity::Command::Import(_) => "identity import",
-            identity::Command::Link(sub) => match sub {
-                identity::link::Command::Hsm(_) => "identity link hsm",
-            },
-            identity::Command::List(_) => "identity list",
-            identity::Command::New(_) => "identity new",
-            identity::Command::Principal(_) => "identity principal",
-            identity::Command::Rename(_) => "identity rename",
-        },
-
-        Command::Network(sub) => match sub {
-            network::Command::List(_) => "network list",
-            network::Command::Ping(_) => "network ping",
-            network::Command::Start(_) => "network start",
-            network::Command::Status(_) => "network status",
-            network::Command::Stop(_) => "network stop",
-            network::Command::Update(_) => "network update",
-        },
-
-        Command::Project(sub) => match sub {
-            project::Command::Show(_) => "project show",
-        },
-
-        Command::Token(sub) => match sub.command {
-            token::Commands::Balance(_) => "token balance",
-            token::Commands::Transfer(_) => "token transfer",
-        },
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -618,12 +524,14 @@ fn write_next_send_time(telemetry_dir: &Path) {
 // Argument extraction from clap
 // ---------------------------------------------------------------------------
 
-/// Walk `ArgMatches` / `Command` down to the leaf subcommand, returning the
-/// deepest matches and the corresponding command definition.
+/// Walk `ArgMatches` / `Command` down to the leaf subcommand, collecting
+/// subcommand names along the way and returning the deepest matches and
+/// the corresponding command definition.
 fn get_deepest_subcommand<'a>(
     matches: &'a clap::ArgMatches,
     command: &'a clap::Command,
-) -> (&'a clap::ArgMatches, &'a clap::Command) {
+) -> (Vec<&'a str>, &'a clap::ArgMatches, &'a clap::Command) {
+    let mut command_names = Vec::new();
     let mut deepest_matches = matches;
     let mut deepest_command = command;
 
@@ -632,6 +540,7 @@ fn get_deepest_subcommand<'a>(
             .get_subcommands()
             .find(|c| c.get_name() == name)
         {
+            command_names.push(name);
             deepest_matches = sub_matches;
             deepest_command = sub_cmd;
         } else {
@@ -639,7 +548,7 @@ fn get_deepest_subcommand<'a>(
         }
     }
 
-    (deepest_matches, deepest_command)
+    (command_names, deepest_matches, deepest_command)
 }
 
 /// Extract sanitized arguments from clap's parsed state.
@@ -649,8 +558,13 @@ fn get_deepest_subcommand<'a>(
 /// - Includes the value **only** when the argument has a constrained set of
 ///   `possible_values` and the actual value matches one of them, preventing
 ///   free-form user input (paths, principals, etc.) from leaking into telemetry.
-fn collect_arguments(arg_matches: &clap::ArgMatches, command: &clap::Command) -> Vec<Argument> {
-    let (deepest_matches, deepest_command) = get_deepest_subcommand(arg_matches, command);
+fn collect_command_and_arguments(
+    arg_matches: &clap::ArgMatches,
+    command: &clap::Command,
+) -> (String, Vec<Argument>) {
+    let (command_names, deepest_matches, deepest_command) =
+        get_deepest_subcommand(arg_matches, command);
+    let command_name = command_names.join(" ");
 
     let mut arguments = Vec::new();
 
@@ -687,5 +601,5 @@ fn collect_arguments(arg_matches: &clap::ArgMatches, command: &clap::Command) ->
         });
     }
 
-    arguments
+    (command_name, arguments)
 }

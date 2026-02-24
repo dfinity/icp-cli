@@ -168,7 +168,7 @@ async fn main() -> Result<(), Error> {
     // -----------------------------------------------------------------------
     // Telemetry setup
     // -----------------------------------------------------------------------
-    let telemetry_session = telemetry::setup(&ctx, &command, &raw_args, &Cli::command()).await;
+    let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
 
     // -----------------------------------------------------------------------
     // Command dispatch

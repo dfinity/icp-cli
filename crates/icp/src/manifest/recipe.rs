@@ -1,11 +1,11 @@
 use std::{collections::HashMap, fmt::Display};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, de::Error as _};
+use serde::{Deserialize, Serialize, de::Error as _};
 
 /// Represents the accepted values for a recipe type in
 /// the canister manifest
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 #[schemars(from = "String")]
 pub enum RecipeType {
     /// path to a locally defined recipe

@@ -27,6 +27,9 @@ pub trait Access: Sync + Send {
 
     /// Returns the path to the user settings directory.
     fn settings(&self) -> Result<SettingsDirectories, LockError>;
+
+    /// Returns the path to the telemetry data directory.
+    fn telemetry_data(&self) -> PathBuf;
 }
 
 /// Inner structure holding data and cache directory paths.
@@ -196,6 +199,18 @@ impl Access for Directories {
     fn settings(&self) -> Result<SettingsDirectories, LockError> {
         SettingsPaths::new(self.config().join("settings"))
     }
+
+    /// Returns the path to the telemetry data directory.
+    ///
+    /// This directory stores telemetry events and state files.
+    ///
+    /// Unlike [`Self::settings`] or [`Self::identity`], this intentionally
+    /// returns a plain path without a directory lock. Telemetry files are
+    /// append-only or write-once, so concurrent access is harmless and
+    /// locking would risk blocking the CLI on a best-effort subsystem.
+    fn telemetry_data(&self) -> PathBuf {
+        self.data().join("telemetry")
+    }
 }
 
 #[cfg(test)]
@@ -220,5 +235,9 @@ impl Access for UnimplementedMockDirs {
 
     fn settings(&self) -> Result<SettingsDirectories, LockError> {
         unimplemented!("UnimplementedMockDirs::settings")
+    }
+
+    fn telemetry_data(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::telemetry_data")
     }
 }

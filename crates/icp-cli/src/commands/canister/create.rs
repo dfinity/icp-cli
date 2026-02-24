@@ -136,7 +136,11 @@ impl CreateArgs {
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
             log_visibility: None,
-            memory_allocation: self.settings.memory_allocation.map(Nat::from),
+            memory_allocation: self
+                .settings
+                .memory_allocation
+                .clone()
+                .map(|m| Nat::from(m.get())),
             compute_allocation: self.settings.compute_allocation.map(Nat::from),
         }
     }

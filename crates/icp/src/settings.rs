@@ -57,6 +57,14 @@ pub struct Settings {
     /// Use Docker for the network launcher even when native mode is requested.
     #[serde(default)]
     pub autocontainerize: bool,
+
+    /// Whether telemetry collection is enabled.
+    #[serde(default = "default_telemetry_enabled")]
+    pub telemetry_enabled: bool,
+}
+
+fn default_telemetry_enabled() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -64,6 +72,7 @@ impl Default for Settings {
         Self {
             v: 1,
             autocontainerize: false,
+            telemetry_enabled: true,
         }
     }
 }

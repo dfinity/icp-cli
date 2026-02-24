@@ -7,12 +7,11 @@ use snafu::prelude::*;
 use crate::{
     fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
     identity::{
-        key::{
-            LoadIdentityError, LoadIdentityInContextError, load_identity, load_identity_in_context,
-        },
+        key::{LoadIdentityError, LoadIdentityInContextError, load_identity},
         manifest::{IdentityList, LoadIdentityManifestError},
     },
     prelude::*,
+    telemetry_data::{IdentityStorageType, TelemetryData},
 };
 
 pub mod key;
@@ -109,19 +108,31 @@ pub type PasswordFunc = Box<dyn Fn() -> Result<String, String> + Send + Sync>;
 pub struct Loader {
     pub dir: IdentityDirectories,
     pub password_func: PasswordFunc,
+    pub telemetry_data: Arc<TelemetryData>,
 }
 
 #[async_trait]
 impl Load for Loader {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
         let password_func = &self.password_func;
+        let telemetry_data = &self.telemetry_data;
         match id {
-            IdentitySelection::Default => Ok(self
-                .dir
-                .with_read(async |dirs| load_identity_in_context(dirs, password_func).await)
-                .await??),
+            IdentitySelection::Default => {
+                self.dir
+                    .with_read(async |dirs| {
+                        let list = IdentityList::load_from(dirs)?;
+                        let default_name = manifest::IdentityDefaults::load_from(dirs)?.default;
+                        let identity = load_identity(dirs, &list, &default_name, password_func)?;
+                        if let Some(spec) = list.identities.get(&default_name) {
+                            telemetry_data.set_identity_type(spec.into());
+                        }
+                        Ok(identity)
+                    })
+                    .await?
+            }
 
             IdentitySelection::Anonymous => {
+                telemetry_data.set_identity_type(IdentityStorageType::Anonymous);
                 self.dir
                     .with_read(async |dirs| {
                         Ok(load_identity(
@@ -137,12 +148,12 @@ impl Load for Loader {
             IdentitySelection::Named(name) => {
                 self.dir
                     .with_read(async |dirs| {
-                        Ok(load_identity(
-                            dirs,
-                            &IdentityList::load_from(dirs)?,
-                            &name,
-                            password_func,
-                        )?)
+                        let list = IdentityList::load_from(dirs)?;
+                        let identity = load_identity(dirs, &list, &name, password_func)?;
+                        if let Some(spec) = list.identities.get(&name) {
+                            telemetry_data.set_identity_type(spec.into());
+                        }
+                        Ok(identity)
                     })
                     .await?
             }

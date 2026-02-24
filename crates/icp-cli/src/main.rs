@@ -3,7 +3,7 @@ use clap::{CommandFactory, Parser};
 use commands::Command;
 use console::Term;
 use icp::{context::TermWriter, prelude::*};
-use tracing::{Instrument, Level, debug, subscriber::set_global_default, trace_span};
+use tracing::{Instrument, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{
     Layer, Registry,
     filter::{self, FilterExt},
@@ -12,7 +12,6 @@ use tracing_subscriber::{
 
 use crate::{
     logging::debug_layer,
-    telemetry::EventLayer,
     version::{git_sha, icp_cli_version_str},
 };
 
@@ -92,6 +91,18 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    // -----------------------------------------------------------------------
+    // Background telemetry-send-batch mode: spawned as a detached child process.
+    // Handle it before any other setup and exit immediately after.
+    // -----------------------------------------------------------------------
+    let raw_args: Vec<String> = std::env::args().collect();
+    if raw_args.get(1).map(String::as_str) == Some("__telemetry-send-batch") {
+        if let Some(batch_path) = raw_args.get(2) {
+            telemetry::handle_send_batch(batch_path).await;
+        }
+        return Ok(());
+    }
+
     let cli = Cli::parse();
 
     // Generate markdown documentation if requested
@@ -114,35 +125,15 @@ async fn main() -> Result<(), Error> {
         raw_term: Term::stdout(),
     };
 
-    // Logging and Telemetry
-    let (debug_layer, event_layer) = (
-        debug_layer(), // debug
-        EventLayer,    // event
+    // Logging
+    let debug_layer = debug_layer();
+
+    let reg = Registry::default().with(
+        debug_layer
+            .with_filter(filter::filter_fn(|_| true).and(filter::filter_fn(move |_| cli.debug))),
     );
 
-    let reg = Registry::default()
-        .with(
-            debug_layer.with_filter(
-                filter::filter_fn(|_| true)
-                    //
-                    // Only log if `debug` is set
-                    .and(filter::filter_fn(move |_| cli.debug)),
-            ),
-        )
-        .with(
-            event_layer.with_filter(
-                filter::filter_fn(|_| true)
-                    //
-                    // Only log to telemetry layer if target is `events`
-                    .and(filter::filter_fn(move |md| md.target() == "events"))
-                    //
-                    // Only log to telemetry layer if level if `trace`
-                    .and(filter::filter_fn(|md| md.level() == &Level::TRACE)),
-            ),
-        );
-
     // Set the configured subscriber registry as the global default for tracing
-    // This enables the logging and telemetry layers we configured above
     set_global_default(reg)?;
 
     // Execute the command within a span that includes version and SHA context
@@ -174,10 +165,30 @@ async fn main() -> Result<(), Error> {
     };
     let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug, password_func)?;
 
+    let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
+    let result = dispatch(&ctx, command, trace_span).await;
+
+    if let Some(session) = telemetry_session {
+        session.finish(result.is_ok(), &ctx.telemetry_data);
+    }
+
+    result?;
+
+    debug!("Command executed successfully");
+
+    Ok(())
+}
+
+/// Dispatch the command to its handler.
+async fn dispatch(
+    ctx: &icp::context::Context,
+    command: Command,
+    trace_span: tracing::Span,
+) -> Result<(), Error> {
     match command {
         // Build
         Command::Build(args) => {
-            commands::build::exec(&ctx, &args)
+            commands::build::exec(ctx, &args)
                 .instrument(trace_span)
                 .await?
         }
@@ -185,68 +196,68 @@ async fn main() -> Result<(), Error> {
         // Canister
         Command::Canister(cmd) => match cmd {
             commands::canister::Command::Call(args) => {
-                commands::canister::call::exec(&ctx, &args)
+                commands::canister::call::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Create(args) => {
-                commands::canister::create::exec(&ctx, &args)
+                commands::canister::create::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Delete(args) => {
-                commands::canister::delete::exec(&ctx, &args)
+                commands::canister::delete::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Install(args) => {
-                commands::canister::install::exec(&ctx, &args)
+                commands::canister::install::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::List(args) => {
-                commands::canister::list::exec(&ctx, &args)
+                commands::canister::list::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Logs(args) => {
-                commands::canister::logs::exec(&ctx, &args)
+                commands::canister::logs::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Metadata(args) => {
-                commands::canister::metadata::exec(&ctx, &args)
+                commands::canister::metadata::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::MigrateId(args) => {
-                commands::canister::migrate_id::exec(&ctx, &args)
+                commands::canister::migrate_id::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Settings(cmd) => match cmd {
                 commands::canister::settings::Command::Show(args) => {
-                    commands::canister::settings::show::exec(&ctx, &args)
+                    commands::canister::settings::show::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::settings::Command::Update(args) => {
-                    commands::canister::settings::update::exec(&ctx, &args)
+                    commands::canister::settings::update::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::settings::Command::Sync(args) => {
-                    commands::canister::settings::sync::exec(&ctx, &args)
+                    commands::canister::settings::sync::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
@@ -254,62 +265,62 @@ async fn main() -> Result<(), Error> {
 
             commands::canister::Command::Snapshot(cmd) => match cmd {
                 commands::canister::snapshot::Command::Create(args) => {
-                    commands::canister::snapshot::create::exec(&ctx, &args)
+                    commands::canister::snapshot::create::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::snapshot::Command::Delete(args) => {
-                    commands::canister::snapshot::delete::exec(&ctx, &args)
+                    commands::canister::snapshot::delete::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::snapshot::Command::Download(args) => {
-                    commands::canister::snapshot::download::exec(&ctx, &args)
+                    commands::canister::snapshot::download::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::snapshot::Command::List(args) => {
-                    commands::canister::snapshot::list::exec(&ctx, &args)
+                    commands::canister::snapshot::list::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::snapshot::Command::Restore(args) => {
-                    commands::canister::snapshot::restore::exec(&ctx, &args)
+                    commands::canister::snapshot::restore::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
 
                 commands::canister::snapshot::Command::Upload(args) => {
-                    commands::canister::snapshot::upload::exec(&ctx, &args)
+                    commands::canister::snapshot::upload::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
             },
 
             commands::canister::Command::Start(args) => {
-                commands::canister::start::exec(&ctx, &args)
+                commands::canister::start::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Status(args) => {
-                commands::canister::status::exec(&ctx, &args)
+                commands::canister::status::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::Stop(args) => {
-                commands::canister::stop::exec(&ctx, &args)
+                commands::canister::stop::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::canister::Command::TopUp(args) => {
-                commands::canister::top_up::exec(&ctx, &args)
+                commands::canister::top_up::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -318,19 +329,19 @@ async fn main() -> Result<(), Error> {
         // Cycles
         Command::Cycles(cmd) => match cmd {
             commands::cycles::Command::Balance(args) => {
-                commands::cycles::balance::exec(&ctx, &args)
+                commands::cycles::balance::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::cycles::Command::Mint(args) => {
-                commands::cycles::mint::exec(&ctx, &args)
+                commands::cycles::mint::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::cycles::Command::Transfer(args) => {
-                commands::cycles::transfer::exec(&ctx, &args)
+                commands::cycles::transfer::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -338,7 +349,7 @@ async fn main() -> Result<(), Error> {
 
         // Deploy
         Command::Deploy(args) => {
-            commands::deploy::exec(&ctx, &args)
+            commands::deploy::exec(ctx, &args)
                 .instrument(trace_span)
                 .await?
         }
@@ -346,7 +357,7 @@ async fn main() -> Result<(), Error> {
         // Environment
         Command::Environment(cmd) => match cmd {
             commands::environment::Command::List(args) => {
-                commands::environment::list::exec(&ctx, &args)
+                commands::environment::list::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -355,63 +366,63 @@ async fn main() -> Result<(), Error> {
         // Identity
         Command::Identity(cmd) => match cmd {
             commands::identity::Command::AccountId(args) => {
-                commands::identity::account_id::exec(&ctx, &args)
+                commands::identity::account_id::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Default(args) => {
-                commands::identity::default::exec(&ctx, &args)
+                commands::identity::default::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Delete(args) => {
-                commands::identity::delete::exec(&ctx, &args)
+                commands::identity::delete::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Export(args) => {
-                commands::identity::export::exec(&ctx, &args)
+                commands::identity::export::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Import(args) => {
-                commands::identity::import::exec(&ctx, &args)
+                commands::identity::import::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Link(cmd) => match cmd {
                 commands::identity::link::Command::Hsm(args) => {
-                    commands::identity::link::hsm::exec(&ctx, &args)
+                    commands::identity::link::hsm::exec(ctx, &args)
                         .instrument(trace_span)
                         .await?
                 }
             },
 
             commands::identity::Command::List(args) => {
-                commands::identity::list::exec(&ctx, &args)
+                commands::identity::list::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::New(args) => {
-                commands::identity::new::exec(&ctx, &args)
+                commands::identity::new::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Principal(args) => {
-                commands::identity::principal::exec(&ctx, &args)
+                commands::identity::principal::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::identity::Command::Rename(args) => {
-                commands::identity::rename::exec(&ctx, &args)
+                commands::identity::rename::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -420,37 +431,37 @@ async fn main() -> Result<(), Error> {
         // Network
         Command::Network(cmd) => match cmd {
             commands::network::Command::List(args) => {
-                commands::network::list::exec(&ctx, &args)
+                commands::network::list::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::network::Command::Ping(args) => {
-                commands::network::ping::exec(&ctx, &args)
+                commands::network::ping::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::network::Command::Start(args) => {
-                commands::network::start::exec(&ctx, &args)
+                commands::network::start::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::network::Command::Status(args) => {
-                commands::network::status::exec(&ctx, &args)
+                commands::network::status::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::network::Command::Stop(args) => {
-                commands::network::stop::exec(&ctx, &args)
+                commands::network::stop::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::network::Command::Update(args) => {
-                commands::network::update::exec(&ctx, &args)
+                commands::network::update::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -458,7 +469,7 @@ async fn main() -> Result<(), Error> {
 
         // New
         Command::New(args) => {
-            commands::new::exec(&ctx, &args)
+            commands::new::exec(ctx, &args)
                 .instrument(trace_span)
                 .await?
         }
@@ -466,7 +477,7 @@ async fn main() -> Result<(), Error> {
         // Project
         Command::Project(cmd) => match cmd {
             commands::project::Command::Show(args) => {
-                commands::project::show::exec(&ctx, &args)
+                commands::project::show::exec(ctx, &args)
                     .instrument(trace_span)
                     .await?
             }
@@ -474,14 +485,14 @@ async fn main() -> Result<(), Error> {
 
         // Settings
         Command::Settings(args) => {
-            commands::settings::exec(&ctx, &args)
+            commands::settings::exec(ctx, &args)
                 .instrument(trace_span)
                 .await?
         }
 
         // Sync
         Command::Sync(args) => {
-            commands::sync::exec(&ctx, &args)
+            commands::sync::exec(ctx, &args)
                 .instrument(trace_span)
                 .await?
         }
@@ -489,20 +500,18 @@ async fn main() -> Result<(), Error> {
         // Token
         Command::Token(cmd) => match cmd.command {
             commands::token::Commands::Balance(args) => {
-                commands::token::balance::exec(&ctx, &cmd.token_name_or_ledger_id, &args)
+                commands::token::balance::exec(ctx, &cmd.token_name_or_ledger_id, &args)
                     .instrument(trace_span)
                     .await?
             }
 
             commands::token::Commands::Transfer(args) => {
-                commands::token::transfer::exec(&ctx, &cmd.token_name_or_ledger_id, &args)
+                commands::token::transfer::exec(ctx, &cmd.token_name_or_ledger_id, &args)
                     .instrument(trace_span)
                     .await?
             }
         },
     }
-
-    debug!("Command executed successfully");
 
     Ok(())
 }

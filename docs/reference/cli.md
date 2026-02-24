@@ -61,6 +61,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp project show`↴](#icp-project-show)
 * [`icp settings`↴](#icp-settings)
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
+* [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -1256,6 +1257,7 @@ Configure user settings
 ###### **Subcommands:**
 
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
+* `telemetry` — Enable or disable anonymous usage telemetry
 
 
 
@@ -1264,6 +1266,21 @@ Configure user settings
 Use Docker for the network launcher even when native mode is requested
 
 **Usage:** `icp settings autocontainerize [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to true or false. If omitted, prints the current value
+
+  Possible values: `true`, `false`
+
+
+
+
+## `icp settings telemetry`
+
+Enable or disable anonymous usage telemetry
+
+**Usage:** `icp settings telemetry [VALUE]`
 
 ###### **Arguments:**
 

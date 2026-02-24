@@ -309,6 +309,18 @@ pub async fn load_identity_in_context(
     Ok(identity)
 }
 
+pub const MIN_IDENTITY_PASSWORD_LEN: usize = 8;
+
+pub fn validate_password(password: &str) -> Result<(), String> {
+    if password.len() < MIN_IDENTITY_PASSWORD_LEN {
+        return Err(format!(
+            "password must be at least {} characters",
+            MIN_IDENTITY_PASSWORD_LEN
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Snafu)]
 pub enum CreateIdentityError {
     #[snafu(transparent)]
@@ -818,6 +830,9 @@ pub enum ExportIdentityError {
         name: String,
         source: keyring::Error,
     },
+
+    #[snafu(display("{message}"))]
+    BadPassword { message: String },
 }
 
 /// Exports an identity as a PEM string, optionally encrypted.
@@ -831,6 +846,11 @@ pub fn export_identity(
     export_format: ExportFormat,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<String, ExportIdentityError> {
+    if let ExportFormat::Encrypted { password } = &export_format {
+        validate_password(password)
+            .map_err(|message| ExportIdentityError::BadPassword { message })?;
+    }
+
     // Load the identity list
     let identity_list = IdentityList::load_from(dirs)?;
 

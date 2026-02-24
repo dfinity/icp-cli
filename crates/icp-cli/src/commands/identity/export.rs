@@ -4,7 +4,7 @@ use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::context::Context;
 use icp::fs::read_to_string;
-use icp::identity::key::{ExportFormat, export_identity, validate_password};
+use icp::identity::key::{ExportFormat, export_identity};
 use icp::prelude::*;
 
 /// Print the PEM file for the identity
@@ -43,7 +43,6 @@ pub(crate) async fn exec(ctx: &Context, args: &ExportArgs) -> Result<(), anyhow:
                 .interact()
                 .context("failed to read password from terminal")?
         };
-        validate_password(&password).map_err(anyhow::Error::msg)?;
         ExportFormat::Encrypted {
             password: Zeroizing::new(password),
         }

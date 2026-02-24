@@ -1,3 +1,7 @@
+use std::collections::HashSet;
+
+use candid::types::subtype::{OptReport, subtype_with_config};
+use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{
@@ -15,6 +19,7 @@ use tracing::debug;
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::misc::fetch_canister_metadata;
+use super::wasm::extract_candid_service;
 
 #[derive(Debug, Snafu)]
 pub enum InstallOperationError {
@@ -23,6 +28,18 @@ pub enum InstallOperationError {
 
     #[snafu(display("agent error: {source}"))]
     Agent { source: AgentError },
+
+    #[snafu(display(
+        "Candid interface compatibility check failed for canister '{canister_name}'.\n\
+         You are making a BREAKING change. Other canisters or frontend clients \
+         relying on your canister may stop working.\n\n\
+         {details}\n\n\
+         Use --skip-candid-check to bypass this check."
+    ))]
+    CandidIncompatible {
+        canister_name: String,
+        details: String,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -38,6 +55,86 @@ struct InstallFailure {
     error: InstallOperationError,
 }
 
+/// Result of a Candid interface compatibility check.
+enum CandidCompatibility {
+    /// Both interfaces present and compatible.
+    Compatible,
+    /// Both interfaces present but the new one is not a subtype of the old.
+    Incompatible(String),
+    /// Check could not be performed (missing metadata, parse error, etc.).
+    Skipped(String),
+}
+
+/// Check whether the new WASM module's Candid interface is backward-compatible
+/// with the currently deployed one.
+///
+/// Returns [`CandidCompatibility::Skipped`] if either side lacks a
+/// `candid:service` metadata section or if the interfaces cannot be parsed.
+async fn check_candid_compatibility(
+    agent: &Agent,
+    canister_id: &Principal,
+    wasm: &[u8],
+) -> CandidCompatibility {
+    // Extract candid:service from the new WASM module
+    let new_candid = match extract_candid_service(wasm) {
+        Some(s) => s,
+        None => {
+            return CandidCompatibility::Skipped(
+                "new module does not contain candid:service metadata".into(),
+            );
+        }
+    };
+
+    // Fetch candid:service from the deployed canister
+    let old_candid = match fetch_canister_metadata(agent, *canister_id, "candid:service").await {
+        Some(s) => s,
+        None => {
+            return CandidCompatibility::Skipped(
+                "deployed canister does not expose candid:service metadata".into(),
+            );
+        }
+    };
+
+    // Parse both interfaces and run the subtype check
+    let new_loaded = match CandidSource::Text(&new_candid).load() {
+        Ok((env, Some(ty))) => (env, ty),
+        Ok((_, None)) => {
+            return CandidCompatibility::Skipped(
+                "new module candid:service does not define a service".into(),
+            );
+        }
+        Err(e) => {
+            return CandidCompatibility::Skipped(format!(
+                "failed to parse new module candid:service: {e}"
+            ));
+        }
+    };
+
+    let old_loaded = match CandidSource::Text(&old_candid).load() {
+        Ok((env, Some(ty))) => (env, ty),
+        Ok((_, None)) => {
+            return CandidCompatibility::Skipped(
+                "deployed candid:service does not define a service".into(),
+            );
+        }
+        Err(e) => {
+            return CandidCompatibility::Skipped(format!(
+                "failed to parse deployed candid:service: {e}"
+            ));
+        }
+    };
+
+    let (mut env, new_type) = new_loaded;
+    let (env2, old_type) = old_loaded;
+
+    let mut gamma = HashSet::new();
+    let old_type = env.merge_type(env2, old_type);
+    match subtype_with_config(OptReport::Error, &mut gamma, &env, &new_type, &old_type) {
+        Ok(()) => CandidCompatibility::Compatible,
+        Err(e) => CandidCompatibility::Incompatible(e.to_string()),
+    }
+}
+
 pub(crate) async fn install_canister(
     agent: &Agent,
     canister_id: &Principal,
@@ -45,6 +142,7 @@ pub(crate) async fn install_canister(
     wasm: &[u8],
     mode: &str,
     init_args: Option<&[u8]>,
+    skip_candid_check: bool,
 ) -> Result<(), InstallOperationError> {
     let mgmt = ManagementCanister::create(agent);
     let install_mode = match mode {
@@ -86,6 +184,27 @@ pub(crate) async fn install_canister(
         }
         _ => install_mode,
     };
+
+    // Candid interface compatibility check for upgrades and reinstalls
+    if !skip_candid_check
+        && matches!(
+            install_mode,
+            CanisterInstallMode::Upgrade(_) | CanisterInstallMode::Reinstall
+        )
+    {
+        match check_candid_compatibility(agent, canister_id, wasm).await {
+            CandidCompatibility::Compatible => {}
+            CandidCompatibility::Incompatible(details) => {
+                return Err(InstallOperationError::CandidIncompatible {
+                    canister_name: canister_name.to_owned(),
+                    details,
+                });
+            }
+            CandidCompatibility::Skipped(reason) => {
+                debug!("Candid compatibility check skipped for {canister_name}: {reason}");
+            }
+        }
+    }
 
     // Install code to canister
     debug!(
@@ -213,6 +332,7 @@ pub(crate) async fn install_many(
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
+    skip_candid_check: bool,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -236,7 +356,16 @@ pub(crate) async fn install_many(
                     }
                 })?;
 
-                install_canister(&agent, &cid, &name, &wasm, &mode, init_args.as_deref()).await
+                install_canister(
+                    &agent,
+                    &cid,
+                    &name,
+                    &wasm,
+                    &mode,
+                    init_args.as_deref(),
+                    skip_candid_check,
+                )
+                .await
             }
         };
 

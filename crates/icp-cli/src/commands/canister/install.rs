@@ -30,6 +30,10 @@ pub(crate) struct InstallArgs {
     #[arg(long, default_value = "candid")]
     pub(crate) args_format: InitArgsFormat,
 
+    /// Skip the Candid interface compatibility check when upgrading or reinstalling.
+    #[arg(long)]
+    pub(crate) skip_candid_check: bool,
+
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
 }
@@ -113,6 +117,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         &wasm,
         &args.mode,
         init_args_bytes.as_deref(),
+        args.skip_candid_check,
     )
     .await?;
 

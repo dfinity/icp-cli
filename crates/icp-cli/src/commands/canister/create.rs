@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use candid::{Nat, Principal};
-use clap::Args;
+use clap::{ArgGroup, Args, Parser};
 use icp::context::Context;
 use icp::parsers::{CyclesAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
@@ -33,7 +33,7 @@ pub(crate) struct CanisterSettings {
 }
 
 /// Create a canister on a network.
-#[derive(Debug, Args)]
+#[derive(Debug, Parser)]
 #[command(after_long_help = "\
 This command can be used to create canisters defined in a project
 or a \"detached\" canister on a network.
@@ -49,6 +49,11 @@ Examples:
     # Create a detached canister inside the scope of a project
     icp canister create -n mynetwork --detached
 ")]
+#[command(group(
+    ArgGroup::new("canister_sel")
+        .args(["canister", "detached"])
+        .required(true)
+))]
 pub(crate) struct CreateArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::OptionalCanisterCommandArgs,
@@ -77,7 +82,11 @@ pub(crate) struct CreateArgs {
     /// Create a canister detached from any project configuration. The canister id will be
     /// printed out but not recorded in the project configuration. Not valid if `Canister`
     /// is provided.
-    #[arg(long, conflicts_with = "canister", required_unless_present = "canister")]
+    #[arg(
+        long,
+        conflicts_with = "canister",
+        required_unless_present = "canister"
+    )]
     pub detached: bool,
 }
 

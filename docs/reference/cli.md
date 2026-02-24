@@ -186,7 +186,7 @@ Make a canister call
 
 Create a canister on a network
 
-**Usage:** `icp canister create [OPTIONS] [CANISTER]`
+**Usage:** `icp canister create [OPTIONS] <CANISTER|--detached>`
 
 This command can be used to create canisters defined in a project
 or a "detached" canister on a network.

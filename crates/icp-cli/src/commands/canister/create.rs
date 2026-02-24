@@ -1,16 +1,12 @@
 use anyhow::anyhow;
 use candid::{Nat, Principal};
-use clap::Args;
+use clap::{ArgGroup, Args, Parser};
 use icp::context::Context;
 use icp::parsers::{CyclesAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
-use crate::{
-    commands::args,
-    operations::create::CreateOperation,
-    progress::{ProgressManager, ProgressManagerSettings},
-};
+use crate::{commands::args, operations::create::CreateOperation};
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -36,11 +32,31 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<CyclesAmount>,
 }
 
-/// Create a canister on a network
-#[derive(Debug, Args)]
+/// Create a canister on a network.
+#[derive(Debug, Parser)]
+#[command(after_long_help = "\
+This command can be used to create canisters defined in a project
+or a \"detached\" canister on a network.
+
+Examples:
+
+    # Create on a network by url
+    icp canister create -n http://localhost:8000 -k $ROOT_KEY --detached
+
+    # Create on mainnet outside of a project context
+    icp canister create -n ic --detached
+
+    # Create a detached canister inside the scope of a project
+    icp canister create -n mynetwork --detached
+")]
+#[command(group(
+    ArgGroup::new("canister_sel")
+        .args(["canister", "detached"])
+        .required(true)
+))]
 pub(crate) struct CreateArgs {
     #[command(flatten)]
-    pub(crate) cmd_args: args::CanisterCommandArgs,
+    pub(crate) cmd_args: args::OptionalCanisterCommandArgs,
 
     /// One or more controllers for the canister. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -62,6 +78,16 @@ pub(crate) struct CreateArgs {
     /// The subnet to create canisters on.
     #[arg(long)]
     pub(crate) subnet: Option<Principal>,
+
+    /// Create a canister detached from any project configuration. The canister id will be
+    /// printed out but not recorded in the project configuration. Not valid if `Canister`
+    /// is provided.
+    #[arg(
+        long,
+        conflicts_with = "canister",
+        required_unless_present = "canister"
+    )]
+    pub detached: bool,
 }
 
 impl CreateArgs {
@@ -83,6 +109,7 @@ impl CreateArgs {
                 .clone()
                 .or(default.settings.reserved_cycles_limit.clone())
                 .map(|c| Nat::from(c.get())),
+            // TODO This should be configurable from the CLI
             log_visibility: default.settings.log_visibility.clone().map(Into::into),
             memory_allocation: self
                 .settings
@@ -97,14 +124,84 @@ impl CreateArgs {
                 .map(Nat::from),
         }
     }
+
+    pub(crate) fn canister_settings(&self) -> CanisterSettingsArg {
+        CanisterSettingsArg {
+            freezing_threshold: self.settings.freezing_threshold.map(Nat::from),
+            controllers: if self.controller.is_empty() {
+                None
+            } else {
+                Some(self.controller.clone())
+            },
+            reserved_cycles_limit: self
+                .settings
+                .reserved_cycles_limit
+                .clone()
+                .map(|c| Nat::from(c.get())),
+            // TODO This should be configurable from the CLI
+            log_visibility: None,
+            memory_allocation: self
+                .settings
+                .memory_allocation
+                .clone()
+                .map(|m| Nat::from(m.get())),
+            compute_allocation: self.settings.compute_allocation.map(Nat::from),
+        }
+    }
 }
 
 // Creates canister(s) by asking the cycles ledger to create them.
 // The cycles ledger will take cycles out of the user's account, and attaches them to a call to CMC::create_canister.
 // The CMC will then pick a subnet according to the user's preferences and permissions, and create a canister on that subnet.
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
+    if args.detached {
+        create_canister(ctx, args).await
+    } else {
+        create_project_canister(ctx, args).await
+    }
+}
+
+// Attemtps to create a canister on the target network without recording it in the project metadata
+async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
-    let canister = match selections.canister {
+    assert!(
+        selections.canister.is_none(),
+        "This path should not be called if canister is_some()"
+    );
+
+    let agent = ctx
+        .get_agent(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await?;
+
+    let create_operation = CreateOperation::new(agent, args.subnet, args.cycles.get(), vec![]);
+
+    let canister_settings = args.canister_settings();
+
+    let id = create_operation.create(&canister_settings).await?;
+
+    if args.quiet {
+        let _ = ctx.term.write_line(&format!("{id}"));
+    } else {
+        let _ = ctx
+            .term
+            .write_line(&format!("Created canister with ID {id}"));
+    }
+
+    Ok(())
+}
+
+// Attempts to create a canister and record it in the project metadata
+async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
+    let selections = args.cmd_args.selections();
+
+    let canister = match selections
+        .canister
+        .expect("Canister must be Some() when --detached is not used")
+    {
         CanisterSelection::Named(name) => name,
         CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
     };
@@ -135,28 +232,23 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .map_err(|e| anyhow!(e))?
         .into_values()
         .collect();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+
     let create_operation =
         CreateOperation::new(agent, args.subnet, args.cycles.get(), existing_canisters);
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
-    let pb = progress_manager.create_progress_bar(&canister);
-    pb.set_message("Creating...");
-    let id = ProgressManager::execute_with_custom_progress(
-        &pb,
-        create_operation.create(&canister_settings),
-        || "Created successfully".to_string(),
-        |err: &_| err.to_string(),
-        |_| false,
-    )
-    .await?;
+    let id = create_operation.create(&canister_settings).await?;
 
     ctx.set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
-    let _ = ctx
-        .term
-        .write_line(&format!("Created canister {canister} with ID {id}"));
+    if args.quiet {
+        let _ = ctx.term.write_line(&format!("{id}"));
+    } else {
+        let _ = ctx
+            .term
+            .write_line(&format!("Created canister {canister} with ID {id}"));
+    }
 
     Ok(())
 }

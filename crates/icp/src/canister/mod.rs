@@ -210,7 +210,7 @@ pub struct Settings {
     pub compute_allocation: Option<u64>,
 
     /// Memory allocation in bytes. If unset, memory is allocated dynamically.
-    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     pub memory_allocation: Option<MemoryAmount>,
 
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
@@ -223,11 +223,11 @@ pub struct Settings {
     pub reserved_cycles_limit: Option<CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     pub wasm_memory_limit: Option<MemoryAmount>,
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "1.5gib").
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     pub wasm_memory_threshold: Option<MemoryAmount>,
 
     /// Environment variables for the canister as key-value pairs.

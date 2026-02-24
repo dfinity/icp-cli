@@ -6,10 +6,13 @@ use snafu::prelude::*;
 use tokio::sync::Mutex;
 use tracing::debug;
 
+use candid_parser::parse_idl_args;
+
 use crate::{
     canister::{Settings, recipe::Resolve},
     manifest::{
-        LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
+        InitArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
+        ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
         load_manifest_from_path,
     },
@@ -33,10 +36,54 @@ pub mod settings;
 pub mod signal;
 pub mod store_artifact;
 pub mod store_id;
+pub mod telemetry_data;
 
 const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";
 const DATA_DIR: &str = "data";
+
+/// Resolved initialization arguments, with any file references already loaded.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum InitArgs {
+    /// Text content (inline or loaded from file). Format is always known.
+    Text {
+        content: String,
+        format: InitArgsFormat,
+    },
+    /// Raw binary bytes (from a file with `format: bin`). Used directly.
+    Binary(Vec<u8>),
+}
+
+#[derive(Debug, Snafu)]
+pub enum InitArgsToBytesError {
+    #[snafu(display("failed to decode hex init args"))]
+    HexDecode { source: hex::FromHexError },
+
+    #[snafu(display("failed to parse Candid init args"))]
+    CandidParse { source: candid_parser::Error },
+
+    #[snafu(display("failed to encode Candid init args to bytes"))]
+    CandidEncode { source: candid::Error },
+}
+
+impl InitArgs {
+    /// Resolve to raw bytes according to the format.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, InitArgsToBytesError> {
+        match self {
+            InitArgs::Binary(bytes) => Ok(bytes.clone()),
+            InitArgs::Text { content, format } => match format {
+                InitArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
+                InitArgsFormat::Candid => {
+                    let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
+                    args.to_bytes().context(CandidEncodeSnafu)
+                }
+                InitArgsFormat::Bin => {
+                    unreachable!("binary format cannot appear in InitArgs::Text")
+                }
+            },
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Canister {
@@ -53,8 +100,13 @@ pub struct Canister {
     pub sync: SyncSteps,
 
     /// Initialization arguments passed to the canister during installation.
-    /// Can be hex-encoded bytes or Candid text format.
-    pub init_args: Option<String>,
+    /// Resolved from the manifest — file contents are already loaded.
+    pub init_args: Option<InitArgs>,
+
+    /// If the canister was defined via a recipe reference, this holds the
+    /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
+    /// `None` when the canister uses explicit build/sync instructions.
+    pub registry_recipe: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -241,6 +293,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         let local_network = Network {
@@ -323,6 +376,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         let frontend_canister = Canister {
@@ -338,6 +392,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         let database_canister = Canister {
@@ -353,6 +408,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         // Create networks

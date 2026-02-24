@@ -61,6 +61,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp project show`↴](#icp-project-show)
 * [`icp settings`↴](#icp-settings)
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
+* [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -144,23 +145,29 @@ Make a canister call
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<METHOD>` — Name of canister method to call into
-* `<ARGS>` — Canister call arguments. Can be:
-
-   - Hex-encoded bytes (e.g., `4449444c00`)
-
-   - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-
-   - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
-
-   If not provided, an interactive prompt will be launched to help build the arguments.
+* `<ARGS>` — Call arguments, interpreted per `--args-format` (Candid by default). If not provided, an interactive prompt will be launched
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--args-file <ARGS_FILE>` — Path to a file containing call arguments
+* `--args-format <ARGS_FORMAT>` — Format of the call arguments
+
+  Default value: `candid`
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 * `--proxy <PROXY>` — Principal of a proxy canister to route the call through.
 
    When specified, instead of calling the target canister directly, the call will be sent to the proxy canister's `proxy` method, which forwards it to the target canister.
@@ -183,11 +190,12 @@ Create a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
@@ -211,11 +219,12 @@ Delete a canister from a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -229,7 +238,7 @@ Install a built WASM to a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
@@ -240,14 +249,22 @@ Install a built WASM to a canister on a network
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
-* `--args <ARGS>` — Initialization arguments for the canister. Can be:
+* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
+* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
 
-   - Hex-encoded bytes (e.g., `4449444c00`)
+  Default value: `candid`
 
-   - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
 
-   - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -273,11 +290,12 @@ Fetch and display canister logs
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
@@ -295,12 +313,13 @@ Read a metadata section from a canister
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<METADATA_NAME>` — The name of the metadata section to read
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -314,11 +333,12 @@ Migrate a canister ID from one subnet to another
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — The canister to replace with the source canister's ID
@@ -356,7 +376,8 @@ By default this queries the status endpoint of the management canister. If the c
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
@@ -373,11 +394,12 @@ Change a canister's settings to specified values
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--force` — Force the operation without confirmation prompts
@@ -411,11 +433,12 @@ Synchronize a canister's settings with those defined in the project
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -446,11 +469,12 @@ Create a snapshot of a canister's state
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
@@ -465,12 +489,13 @@ Delete a canister snapshot
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<SNAPSHOT_ID>` — The snapshot ID to delete (hex-encoded)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -484,12 +509,13 @@ Download a snapshot to local disk
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<SNAPSHOT_ID>` — The snapshot ID to download (hex-encoded)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
@@ -505,11 +531,12 @@ List all snapshots for a canister
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -523,12 +550,13 @@ Restore a canister from a snapshot
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<SNAPSHOT_ID>` — The snapshot ID to restore (hex-encoded)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -542,11 +570,12 @@ Upload a snapshot from local disk
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--input <INPUT>` — Input directory containing the snapshot files
@@ -563,11 +592,12 @@ Start a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -587,7 +617,8 @@ By default this queries the status endpoint of the management canister. If the c
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
@@ -604,11 +635,12 @@ Stop a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -622,12 +654,13 @@ Top up a canister with cycles
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
 * `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -655,7 +688,8 @@ Display the cycles balance
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
@@ -674,7 +708,8 @@ Convert icp to cycles
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--from-subaccount <FROM_SUBACCOUNT>` — Subaccount to withdraw the ICP from
 * `--to-subaccount <TO_SUBACCOUNT>` — Subaccount to deposit the cycles to
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -695,7 +730,8 @@ Transfer cycles to another principal
 
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
 * `--from-subaccount <FROM_SUBACCOUNT>`
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -850,6 +886,9 @@ Import a new identity
 * `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
 
 
 
@@ -1218,6 +1257,7 @@ Configure user settings
 ###### **Subcommands:**
 
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
+* `telemetry` — Enable or disable anonymous usage telemetry
 
 
 
@@ -1226,6 +1266,21 @@ Configure user settings
 Use Docker for the network launcher even when native mode is requested
 
 **Usage:** `icp settings autocontainerize [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to true or false. If omitted, prints the current value
+
+  Possible values: `true`, `false`
+
+
+
+
+## `icp settings telemetry`
+
+Enable or disable anonymous usage telemetry
+
+**Usage:** `icp settings telemetry [VALUE]`
 
 ###### **Arguments:**
 
@@ -1280,7 +1335,8 @@ Display the token balance on the ledger (default token: icp)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
@@ -1302,7 +1358,8 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
 * `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer from
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 

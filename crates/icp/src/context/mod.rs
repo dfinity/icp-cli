@@ -12,6 +12,7 @@ use crate::{
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
     store_id::{IdMapping, LookupIdError},
+    telemetry_data::NetworkType,
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -31,7 +32,7 @@ pub enum NetworkSelection {
     /// Use a named network
     Named(String),
     /// Use a network by URL
-    Url(Url),
+    Url(Url, Vec<u8>),
 }
 
 /// Selection type for environments - similar to IdentitySelection
@@ -103,6 +104,9 @@ pub struct Context {
 
     /// Whether debug is enabled
     pub debug: bool,
+
+    /// Telemetry data collected during command execution
+    pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
 }
 
 impl Context {
@@ -140,6 +144,13 @@ impl Context {
                 name: environment.name().to_owned(),
             })?;
 
+        let network_type = match &env.network.configuration {
+            NetworkConfiguration::Managed { .. } => NetworkType::Managed,
+            NetworkConfiguration::Connected { .. } => NetworkType::Connected,
+        };
+        self.telemetry_data.set_network_type(network_type);
+        self.telemetry_data.set_project(&p);
+
         Ok(env.clone())
     }
 
@@ -152,16 +163,16 @@ impl Context {
         &self,
         network_selection: &NetworkSelection,
     ) -> Result<crate::Network, GetNetworkError> {
-        match network_selection {
+        let network = match network_selection {
             NetworkSelection::Named(network_name) => {
                 if self.project.exists().await? {
                     let p = self.project.load().await?;
                     let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
                         name: network_name.to_owned(),
                     })?;
-                    Ok(net.clone())
+                    net.clone()
                 } else if network_name == IC {
-                    Ok(crate::Network {
+                    crate::Network {
                         name: IC.to_string(),
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
@@ -172,25 +183,33 @@ impl Context {
                                 root_key: IC_ROOT_KEY.to_vec(),
                             },
                         },
-                    })
+                    }
                 } else {
-                    Err(GetNetworkError::NetworkNotFound {
+                    return Err(GetNetworkError::NetworkNotFound {
                         name: network_name.to_owned(),
-                    })
+                    });
                 }
             }
-            NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(url) => Ok(crate::Network {
+            NetworkSelection::Default => return Err(GetNetworkError::DefaultNetwork),
+            NetworkSelection::Url(url, root_key) => crate::Network {
                 name: url.to_string(),
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
                         api_url: url.clone(),
                         http_gateway_url: Some(url.clone()),
-                        root_key: IC_ROOT_KEY.to_vec(),
+                        root_key: root_key.to_vec(),
                     },
                 },
-            }),
-        }
+            },
+        };
+
+        let network_type = match &network.configuration {
+            NetworkConfiguration::Managed { .. } => NetworkType::Managed,
+            NetworkConfiguration::Connected { .. } => NetworkType::Connected,
+        };
+        self.telemetry_data.set_network_type(network_type);
+
+        Ok(network)
     }
 
     /// Gets a network from either a network name or environment name.
@@ -402,7 +421,7 @@ impl Context {
         match (environment, network) {
             // Error: Both environment and network specified
             (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
                 Err(GetAgentError::EnvironmentAndNetworkSpecified)
             }
 
@@ -428,7 +447,7 @@ impl Context {
 
             // Network specified
             (EnvironmentSelection::Default, NetworkSelection::Named(_))
-            | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+            | (EnvironmentSelection::Default, NetworkSelection::Url(_, _)) => {
                 Ok(self.get_agent_for_network(identity, network).await?)
             }
         }
@@ -446,13 +465,13 @@ impl Context {
                 match (environment, network) {
                     // Error: Both environment and network specified
                     (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
                         Err(GetCanisterIdError::CanisterEnvironmentAndNetworkSpecified)
                     }
 
                     // Error: Canister by name with explicit network but no environment
                     (EnvironmentSelection::Default, NetworkSelection::Named(_))
-                    | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                    | (EnvironmentSelection::Default, NetworkSelection::Url(_, _)) => {
                         Err(GetCanisterIdError::AmbiguousCanisterName)
                     }
 
@@ -499,6 +518,7 @@ impl Context {
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
+            telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
         }
     }
 }

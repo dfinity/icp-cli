@@ -18,7 +18,9 @@
 * feat: `icp canister logs` to display the current canister logs
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 * feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
+* feat: Support `kb`, `kib`, `mb`, `mib`, `gb`, `gib` suffixes in `.yaml` files and CLI arguments when specifying memory amounts
 * feat: Add an optional root-key argument to canister commands
+* chore!: new passwords for identity encryption need to be at least 8 characters long
 * feat: Anonymous usage telemetry — collects command name, arguments, duration, and outcome
   * Enabled by default; opt out with `icp settings telemetry false`, `DO_NOT_TRACK=1`, or `ICP_TELEMETRY_DISABLED=1`
   * Automatically disabled in CI environments (`CI` env var set)

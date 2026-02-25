@@ -1,5 +1,4 @@
 use anyhow::bail;
-use byte_unit::{Byte, Unit};
 use clap::{ArgAction, Args};
 use dialoguer::Confirm;
 use ic_agent::Identity;
@@ -7,7 +6,7 @@ use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::ProjectLoadError;
 use icp::context::{CanisterSelection, Context, TermWriter};
-use icp::parsers::CyclesAmount;
+use icp::parsers::{CyclesAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
@@ -97,8 +96,9 @@ pub(crate) struct UpdateArgs {
     #[arg(long, value_parser = compute_allocation_parser)]
     compute_allocation: Option<u8>,
 
-    #[arg(long, value_parser = memory_parser)]
-    memory_allocation: Option<Byte>,
+    /// Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[arg(long)]
+    memory_allocation: Option<MemoryAmount>,
 
     #[arg(long, value_parser = freezing_threshold_parser)]
     freezing_threshold: Option<u64>,
@@ -109,11 +109,13 @@ pub(crate) struct UpdateArgs {
     #[arg(long)]
     reserved_cycles_limit: Option<CyclesAmount>,
 
-    #[arg(long, value_parser = memory_parser)]
-    wasm_memory_limit: Option<Byte>,
+    /// Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[arg(long)]
+    wasm_memory_limit: Option<MemoryAmount>,
 
-    #[arg(long, value_parser = memory_parser)]
-    wasm_memory_threshold: Option<Byte>,
+    /// Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[arg(long)]
+    wasm_memory_threshold: Option<MemoryAmount>,
 
     #[command(flatten)]
     log_visibility: Option<LogVisibilityOpt>,
@@ -221,13 +223,13 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
         update = update.with_compute_allocation(compute_allocation);
     }
-    if let Some(memory_allocation) = args.memory_allocation {
+    if let Some(memory_allocation) = &args.memory_allocation {
         if configured_settings.memory_allocation.is_some() {
             ctx.term.write_line(
                 "Warning: Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
             )?
         }
-        update = update.with_memory_allocation(memory_allocation.as_u64());
+        update = update.with_memory_allocation(memory_allocation.get());
     }
     if let Some(freezing_threshold) = args.freezing_threshold {
         if configured_settings.freezing_threshold.is_some() {
@@ -245,21 +247,21 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
         update = update.with_reserved_cycles_limit(reserved_cycles_limit.get());
     }
-    if let Some(wasm_memory_limit) = args.wasm_memory_limit {
+    if let Some(wasm_memory_limit) = &args.wasm_memory_limit {
         if configured_settings.wasm_memory_limit.is_some() {
             ctx.term.write_line(
                 "Warning: Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
             )?
         }
-        update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
+        update = update.with_wasm_memory_limit(wasm_memory_limit.get());
     }
-    if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
+    if let Some(wasm_memory_threshold) = &args.wasm_memory_threshold {
         if configured_settings.wasm_memory_threshold.is_some() {
             ctx.term.write_line(
                 "Warning: Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
             )?
         }
-        update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
+        update = update.with_wasm_memory_threshold(wasm_memory_threshold.get());
     }
     if let Some(log_visibility) = log_visibility {
         if configured_settings.log_visibility.is_some() {
@@ -284,16 +286,6 @@ fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
         return Ok(num);
     }
     Err("Must be a percent between 0 and 100".to_string())
-}
-
-fn memory_parser(memory_allocation: &str) -> Result<Byte, String> {
-    let limit = Byte::from_u64_with_unit(256, Unit::TiB).expect("256 TiB is a valid byte unit");
-    if let Ok(byte) = memory_allocation.parse::<Byte>()
-        && byte <= limit
-    {
-        return Ok(byte);
-    }
-    Err("Must be a value between 0..256 TiB inclusive, (e.g. '2GiB')".to_string())
 }
 
 fn freezing_threshold_parser(freezing_threshold: &str) -> Result<u64, String> {

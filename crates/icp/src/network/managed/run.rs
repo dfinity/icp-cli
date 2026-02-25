@@ -998,4 +998,27 @@ mod tests {
         );
         assert!(opts.extra_hosts.is_empty());
     }
+
+    #[test]
+    fn transform_native_launcher_with_all_zeros_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["0.0.0.0:18444".to_string()]),
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
+        );
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
 }

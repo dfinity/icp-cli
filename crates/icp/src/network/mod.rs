@@ -158,6 +158,7 @@ pub struct ManagedImageConfig {
     pub shm_size: Option<i64>,
     pub status_dir: String,
     pub mounts: Vec<String>,
+    pub extra_hosts: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
@@ -302,6 +303,7 @@ impl From<Mode> for Configuration {
                     shm_size,
                     status_dir,
                     mounts: mount,
+                    extra_hosts,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image(Box::new(ManagedImageConfig {
@@ -317,6 +319,7 @@ impl From<Mode> for Configuration {
                             shm_size,
                             status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
                             mounts: mount.unwrap_or_default(),
+                            extra_hosts: extra_hosts.unwrap_or_default(),
                         })),
                     },
                 },

@@ -177,7 +177,12 @@ The `args` field passes values directly to the container entrypoint with no proc
 
 **Comparison with native launcher mode:** When using native managed networks (without `image`), settings like `bitcoind-addr`, `ii`, `nns`, and `subnets` are configured as top-level YAML fields. In Docker image mode, these are passed via `args` instead, since the image could be any Docker image — not necessarily the official network launcher.
 
-> **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, you may need to pass `--add-host=host.docker.internal:host-gateway` or equivalent to ensure it resolves.
+> **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, add the `extra-hosts` option to ensure it resolves:
+>
+> ```yaml
+> extra-hosts:
+>   - "host.docker.internal:host-gateway"
+> ```
 
 ### Remove Container on Exit
 
@@ -346,6 +351,7 @@ All available configuration options for containerized networks:
 | `user`         | string   | No       | User to run as in `user[:group]` format (group is optional)                    |
 | `shm-size`     | number   | No       | Size of `/dev/shm` in bytes                                                    |
 | `status-dir`   | string   | No       | Status directory path (default: `/app/status`)                                 |
+| `extra-hosts`  | string[] | No       | Extra hosts entries (e.g., `host.docker.internal:host-gateway`)                |
 
 Example with multiple options:
 

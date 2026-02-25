@@ -115,6 +115,16 @@
                 "null"
               ]
             },
+            "extra-hosts": {
+              "description": "Extra hosts entries for Docker networking (e.g. \"host.docker.internal:host-gateway\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "image": {
               "description": "The docker image to use for the network",
               "type": "string"

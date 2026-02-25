@@ -162,7 +162,7 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             shm_size: config.shm_size,
             status_dir: config.status_dir.clone(),
             mounts,
-            extra_hosts: vec![],
+            extra_hosts: config.extra_hosts.clone(),
         })
     }
 }
@@ -191,12 +191,12 @@ pub enum ManagedImageConversionError {
 }
 
 /// Translates a host:port address for use inside a Docker container.
-/// Replaces `127.0.0.1`, `localhost`, and `::1` with `host.docker.internal`
+/// Replaces `127.0.0.1`, `0.0.0.0`, `localhost`, and `::1` with `host.docker.internal`
 /// so the container can reach services running on the host machine.
 pub(super) fn translate_addr_for_docker(addr: &str) -> String {
     if let Some((host, port)) = addr.rsplit_once(':') {
         let translated = match host {
-            "127.0.0.1" | "localhost" | "::1" => "host.docker.internal",
+            "127.0.0.1" | "0.0.0.0" | "localhost" | "::1" => "host.docker.internal",
             _ => host,
         };
         format!("{translated}:{port}")
@@ -211,7 +211,7 @@ pub(super) fn translate_addr_for_docker(addr: &str) -> String {
 pub(super) fn docker_extra_hosts_for_addrs(addrs: &[String]) -> Vec<String> {
     let needs_host_gateway = addrs.iter().any(|addr| {
         addr.rsplit_once(':')
-            .map(|(host, _)| matches!(host, "127.0.0.1" | "localhost" | "::1"))
+            .map(|(host, _)| matches!(host, "127.0.0.1" | "0.0.0.0" | "localhost" | "::1"))
             .unwrap_or(false)
     });
     if needs_host_gateway {

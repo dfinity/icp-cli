@@ -256,7 +256,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let modes = try_join_all(
         canisters
             .iter()
-            .map(|(_, cid, _)| resolve_install_mode(&agent, cid, &args.mode)),
+            .map(|(cname, cid, _)| resolve_install_mode(&agent, cname, cid, &args.mode)),
     )
     .await?;
 

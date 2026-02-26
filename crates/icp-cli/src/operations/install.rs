@@ -10,7 +10,7 @@ use ic_utils::interfaces::{
 };
 use icp::context::TermWriter;
 use sha2::{Digest, Sha256};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::debug;
@@ -140,13 +140,17 @@ pub(crate) async fn check_candid_compatibility(
 /// determine whether the canister already has code installed.
 pub(crate) async fn resolve_install_mode(
     agent: &Agent,
+    canister_name: &str,
     canister_id: &Principal,
     mode: &str,
-) -> Result<CanisterInstallMode, AgentError> {
+) -> Result<CanisterInstallMode, ResolveInstallModeError> {
     match mode {
         "auto" => {
             let mgmt = ManagementCanister::create(agent);
-            let (status,) = mgmt.canister_status(canister_id).await?;
+            let (status,) = mgmt
+                .canister_status(canister_id)
+                .await
+                .context(ResolveInstallModeSnafu { canister_name })?;
             Ok(if status.module_hash.is_some() {
                 CanisterInstallMode::Upgrade(None)
             } else {
@@ -158,6 +162,13 @@ pub(crate) async fn resolve_install_mode(
         "upgrade" => Ok(CanisterInstallMode::Upgrade(None)),
         _ => panic!("invalid install mode: {mode}"),
     }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Failed to resolve install mode for canister {canister_name}"))]
+pub(crate) struct ResolveInstallModeError {
+    canister_name: String,
+    source: AgentError,
 }
 
 pub(crate) async fn install_canister(

@@ -952,7 +952,7 @@ async fn deploy_with_init_args_file_idl_format() {
 
 #[cfg(unix)] // moc
 #[tokio::test]
-async fn canister_upgrade_rejects_incompatible_candid() {
+async fn canister_install_upgrade_rejects_incompatible_candid() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -996,7 +996,7 @@ async fn canister_upgrade_rejects_incompatible_candid() {
     "#};
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
-    // Start network and deploy initial version
+    // Start network and install initial version
     let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
@@ -1004,8 +1004,28 @@ async fn canister_upgrade_rejects_incompatible_candid() {
 
     ctx.icp()
         .current_dir(&project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
         .args([
-            "deploy",
+            "canister",
+            "create",
+            "my-canister",
+            "--quiet",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
             "my-canister",
             "--environment",
             "random-environment",
@@ -1044,24 +1064,32 @@ async fn canister_upgrade_rejects_incompatible_candid() {
     )
     .expect("failed to write updated main.mo");
 
-    // Upgrade should fail with candid incompatibility error
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .success();
+
+    // Upgrade via canister install should fail with candid incompatibility error
     ctx.icp()
         .current_dir(&project_dir)
         .args([
-            "deploy",
+            "canister",
+            "install",
             "my-canister",
             "--environment",
             "random-environment",
         ])
         .assert()
         .failure()
-        .stdout(contains("Candid interface compatibility check failed"));
+        .stderr(contains("Candid interface compatibility check failed"));
 
     // Upgrade with --yes should succeed
     ctx.icp()
         .current_dir(&project_dir)
         .args([
-            "deploy",
+            "canister",
+            "install",
             "my-canister",
             "--environment",
             "random-environment",

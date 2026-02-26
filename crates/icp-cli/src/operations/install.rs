@@ -54,6 +54,13 @@ struct InstallFailure {
     error: InstallOperationError,
 }
 
+/// Holds error information from a failed candid compatibility check
+struct CandidCheckFailure {
+    canister_name: String,
+    canister_id: Principal,
+    details: String,
+}
+
 /// Result of a Candid interface compatibility check.
 enum CandidCompatibility {
     /// Both interfaces present and compatible.
@@ -184,7 +191,7 @@ pub(crate) async fn install_canister(
         _ => install_mode,
     };
 
-    // Candid interface compatibility check for upgrades and reinstalls
+    // Candid interface compatibility check for upgrades
     if !yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
         match check_candid_compatibility(agent, canister_id, wasm).await {
             CandidCompatibility::Compatible => {}
@@ -318,7 +325,11 @@ async fn do_install_operation(
     Ok(())
 }
 
-/// Installs code to multiple canisters and displays progress bars
+/// Installs code to multiple canisters and displays progress bars.
+///
+/// When `yes` is false, runs a parallel candid compatibility pre-check for all
+/// canisters that would be upgraded. If any are incompatible the entire
+/// operation is aborted before installing anything.
 pub(crate) async fn install_many(
     agent: Agent,
     canisters: Vec<(String, Principal, Option<Vec<u8>>)>,
@@ -328,6 +339,70 @@ pub(crate) async fn install_many(
     debug: bool,
     yes: bool,
 ) -> Result<(), InstallManyError> {
+    // Phase 1: Check candid compatibility for all upgrading canisters
+    if !yes {
+        let mut check_futs = FuturesOrdered::new();
+        let check_progress = ProgressManager::new(ProgressManagerSettings { hidden: debug });
+
+        for (name, cid, _) in &canisters {
+            let pb = check_progress.create_progress_bar(name);
+            let agent = agent.clone();
+            let artifacts = artifacts.clone();
+            let name = name.clone();
+            let cid = *cid;
+            let mode = mode.to_string();
+
+            check_futs.push_back(async move {
+                pb.set_message("Checking compatibility...");
+
+                let check_result =
+                    check_canister_candid_compat(&agent, &cid, &name, &mode, &*artifacts).await;
+
+                ProgressManager::execute_with_progress(
+                    &pb,
+                    async { check_result },
+                    || "Compatible".to_string(),
+                    |_| "Incompatible".to_string(),
+                )
+                .await
+            });
+        }
+
+        let mut check_failures: Vec<CandidCheckFailure> = Vec::new();
+        while let Some(res) = check_futs.next().await {
+            if let Err(failure) = res {
+                check_failures.push(failure);
+            }
+        }
+
+        if !check_failures.is_empty() {
+            for failure in &check_failures {
+                let _ = term.write_line("");
+                let _ = term.write_line("");
+                let _ = term.write_line(&format!(
+                    " ----- Candid interface incompatible: '{}' ({}) -----",
+                    failure.canister_name, failure.canister_id,
+                ));
+                let _ = term.write_line(&format!(
+                    "You are making a BREAKING change. Other canisters or frontend clients \
+                     relying on your canister may stop working.\n\n{}",
+                    failure.details,
+                ));
+                let _ = term.write_line("");
+            }
+            let _ = term.write_line("Use --yes to bypass this check.");
+
+            return InstallManySnafu {
+                names: check_failures
+                    .iter()
+                    .map(|f| f.canister_name.clone())
+                    .collect::<Vec<_>>(),
+            }
+            .fail();
+        }
+    }
+
+    // Phase 2: Install all canisters (compatibility already verified or skipped)
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -350,7 +425,16 @@ pub(crate) async fn install_many(
                     }
                 })?;
 
-                install_canister(&agent, &cid, &name, &wasm, &mode, init_args.as_deref(), yes).await
+                install_canister(
+                    &agent,
+                    &cid,
+                    &name,
+                    &wasm,
+                    &mode,
+                    init_args.as_deref(),
+                    true,
+                )
+                .await
             }
         };
 
@@ -403,4 +487,55 @@ pub(crate) async fn install_many(
     }
 
     Ok(())
+}
+
+/// Check candid compatibility for a single canister as part of a batch pre-check.
+///
+/// Returns `Ok(())` if the canister is not being upgraded, if the check passes,
+/// or if the check cannot be performed (missing metadata, etc.).
+/// Returns `Err(CandidCheckFailure)` only when a genuine incompatibility is found.
+async fn check_canister_candid_compat(
+    agent: &Agent,
+    canister_id: &Principal,
+    canister_name: &str,
+    mode: &str,
+    artifacts: &dyn icp::store_artifact::Access,
+) -> Result<(), CandidCheckFailure> {
+    // Determine whether this canister will be upgraded
+    let is_upgrade = match mode {
+        "install" | "reinstall" => false,
+        "upgrade" => true,
+        "auto" => {
+            let mgmt = ManagementCanister::create(agent);
+            match mgmt.canister_status(canister_id).await {
+                Ok((status,)) => status.module_hash.is_some(),
+                // If we can't query status, skip the check — install will surface the real error
+                Err(_) => return Ok(()),
+            }
+        }
+        _ => false,
+    };
+
+    if !is_upgrade {
+        return Ok(());
+    }
+
+    let wasm = match artifacts.lookup(canister_name).await {
+        Ok(w) => w,
+        // Missing artifact will be caught during install
+        Err(_) => return Ok(()),
+    };
+
+    match check_candid_compatibility(agent, canister_id, &wasm).await {
+        CandidCompatibility::Compatible => Ok(()),
+        CandidCompatibility::Skipped(reason) => {
+            debug!("Candid compatibility check skipped for {canister_name}: {reason}");
+            Ok(())
+        }
+        CandidCompatibility::Incompatible(details) => Err(CandidCheckFailure {
+            canister_name: canister_name.to_owned(),
+            canister_id: *canister_id,
+            details,
+        }),
+    }
 }

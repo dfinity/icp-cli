@@ -366,7 +366,6 @@ fn telemetry_failed_send_is_silent() {
 
     ctx.icp()
         .args(["__telemetry-send-batch", batch_path.as_str()])
-        .env_remove("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD")
         .timeout(Duration::from_secs(15))
         .assert()
         .success()
@@ -412,7 +411,6 @@ fn telemetry_send_batch_delivers_data() {
     ctx.icp()
         .args(["__telemetry-send-batch", batch_path.as_str()])
         .env("ICP_TELEMETRY_ENDPOINT", &endpoint)
-        .env_remove("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD")
         .assert()
         .success()
         .stdout(predstr::is_empty())

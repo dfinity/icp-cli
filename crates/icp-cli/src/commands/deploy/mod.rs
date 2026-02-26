@@ -253,26 +253,26 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     }))
     .await?;
 
-    let modes = if !args.yes {
+    let modes = try_join_all(
+        canisters
+            .iter()
+            .map(|(_, cid, _)| resolve_install_mode(&agent, cid, &args.mode)),
+    )
+    .await?;
+
+    if !args.yes {
         let _ = ctx.term.write_line("\n\nChecking compatibility:");
         check_candid_compatibility_many(
             agent.clone(),
             &canisters,
-            &args.mode,
+            &modes,
             ctx.artifacts.clone(),
             Arc::new(ctx.term.clone()),
             ctx.debug,
         )
         .await
-        .map_err(|e| anyhow!(e))?
-    } else {
-        try_join_all(
-            canisters
-                .iter()
-                .map(|(_, cid, _)| resolve_install_mode(&agent, cid, &args.mode)),
-        )
-        .await?
-    };
+        .map_err(|e| anyhow!(e))?;
+    }
 
     let _ = ctx.term.write_line("\n\nInstalling canisters:");
 

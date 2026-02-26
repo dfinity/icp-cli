@@ -297,49 +297,37 @@ async fn do_install_operation(
 }
 
 /// Checks Candid interface compatibility for all canisters that would be
-/// upgraded. Resolves "auto" mode for each canister and returns the resolved
-/// modes on success. Aborts if any canister has an incompatible interface.
+/// upgraded. Aborts if any canister has an incompatible interface.
 pub(crate) async fn check_candid_compatibility_many(
     agent: Agent,
     canisters: &[(String, Principal, Option<Vec<u8>>)],
-    mode: &str,
+    modes: &[CanisterInstallMode],
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
-) -> Result<Vec<CanisterInstallMode>, CandidCheckManyError> {
+) -> Result<(), CandidCheckManyError> {
     let mut check_futs = FuturesOrdered::new();
     let check_progress = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for (name, cid, _) in canisters {
+    for ((name, cid, _), mode) in canisters.iter().zip(modes) {
         let pb = check_progress.create_progress_bar(name);
+        let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
         let agent = agent.clone();
         let artifacts = artifacts.clone();
         let name = name.clone();
         let cid = *cid;
-        let mode = mode.to_string();
 
         check_futs.push_back(async move {
+            if !is_upgrade {
+                pb.finish_with_message("Skipped (not an upgrade)");
+                return Ok::<_, CandidCheckFailure>(());
+            }
+
             pb.set_message("Checking compatibility...");
-
-            let check_result = async {
-                let resolved = resolve_install_mode(&agent, &cid, &mode)
-                    .await
-                    .map_err(|e| CandidCheckFailure {
-                        canister_name: name.clone(),
-                        canister_id: cid,
-                        details: format!("failed to resolve install mode: {e}"),
-                    })?;
-
-                if matches!(resolved, CanisterInstallMode::Upgrade(_)) {
-                    check_canister_candid_compat(&agent, &cid, &name, &*artifacts).await?;
-                }
-
-                Ok(resolved)
-            };
 
             ProgressManager::execute_with_progress(
                 &pb,
-                check_result,
+                check_canister_candid_compat(&agent, &cid, &name, &*artifacts),
                 || "Compatible".to_string(),
                 |_| "Incompatible".to_string(),
             )
@@ -347,15 +335,10 @@ pub(crate) async fn check_candid_compatibility_many(
         });
     }
 
-    let mut resolved = Vec::new();
     let mut check_failures: Vec<CandidCheckFailure> = Vec::new();
     while let Some(res) = check_futs.next().await {
-        match res {
-            Ok(mode) => resolved.push(mode),
-            Err(failure) => {
-                resolved.push(CanisterInstallMode::Install);
-                check_failures.push(failure);
-            }
+        if let Err(failure) = res {
+            check_failures.push(failure);
         }
     }
 
@@ -385,7 +368,7 @@ pub(crate) async fn check_candid_compatibility_many(
         .fail();
     }
 
-    Ok(resolved)
+    Ok(())
 }
 
 /// Installs code to multiple canisters and displays progress bars.

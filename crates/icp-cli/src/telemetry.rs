@@ -20,7 +20,6 @@ use time::OffsetDateTime;
 use crate::version::icp_cli_version_str;
 
 const EVENTS_FILE: &str = "events.jsonl";
-const MACHINE_ID_FILE: &str = "machine-id";
 const NOTICE_SHOWN_FILE: &str = "notice-shown";
 const NEXT_SEND_TIME_FILE: &str = "next-send-time";
 
@@ -72,7 +71,6 @@ pub(crate) struct Argument {
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TelemetryRecord {
     // --- Metadata that is constant across all events on the same machine
-    pub machine_id: String,
     pub platform: String,
     pub arch: &'static str,
 
@@ -132,13 +130,11 @@ impl TelemetrySession {
 
     /// Finish the session, record the event, and trigger a send if needed.
     pub(crate) fn finish(self, success: bool, telemetry_data: &TelemetryData) {
-        let machine_id = get_or_create_machine_id(&self.telemetry_dir);
         let duration_ms = self.start.elapsed().as_millis() as u64;
 
         let date = OffsetDateTime::now_utc().date().to_string();
 
         let record = TelemetryRecord {
-            machine_id,
             platform: if cfg!(target_os = "linux") && std::env::var_os("WSL_DISTRO_NAME").is_some()
             {
                 "wsl".to_string()
@@ -235,20 +231,6 @@ fn show_notice_if_needed(telemetry_dir: &Path) {
     );
     let _ = std::fs::create_dir_all(telemetry_dir);
     let _ = std::fs::write(&marker, "");
-}
-
-fn get_or_create_machine_id(telemetry_dir: &Path) -> String {
-    let path = telemetry_dir.join(MACHINE_ID_FILE);
-    if let Ok(id) = std::fs::read_to_string(&path) {
-        let id = id.trim().to_string();
-        if !id.is_empty() {
-            return id;
-        }
-    }
-    let id = uuid::Uuid::new_v4().to_string();
-    let _ = std::fs::create_dir_all(telemetry_dir);
-    let _ = std::fs::write(&path, &id);
-    id
 }
 
 fn append_record(telemetry_dir: &Path, record: &TelemetryRecord) {

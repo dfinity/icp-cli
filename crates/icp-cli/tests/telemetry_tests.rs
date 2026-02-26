@@ -10,7 +10,6 @@
 //! 5. **No rotation when triggers not met** — events.jsonl kept intact
 //! 6. **Batch send** — `__telemetry-send-batch`: payload shape, silent failure, file cleanup
 //! 7. **Stale batch cleanup** — old/excess batch files pruned when a send is triggered
-//! 8. **Machine-id persistence** — same UUID is reused across invocations
 //!
 //! Full-pipeline tests run `icp settings telemetry` (a fast, network-free
 //! command) with `ICP_HOME` set to a known temp path and all opt-out env vars
@@ -29,7 +28,7 @@ mod common;
 use common::TestContext;
 
 /// A minimal, syntactically-valid NDJSON telemetry record.
-const FAKE_RECORD: &str = r#"{"machine_id":"test-machine","platform":"test","arch":"x86_64","version":"0.0.0","command":"version","arguments":[],"success":true,"duration_ms":42}"#;
+const FAKE_RECORD: &str = r#"{"platform":"test","arch":"x86_64","version":"0.0.0","command":"version","arguments":[],"success":true,"duration_ms":42}"#;
 
 /// A timestamp guaranteed to be far in the future (~year 2286).
 /// Written to `next-send-time` to prevent the time-based send trigger from
@@ -175,13 +174,6 @@ fn telemetry_record_appended_to_events_file() {
     let record: Value = serde_json::from_str(first_line).expect("record must be valid JSON");
 
     // Required fields
-    assert!(
-        record["machine_id"]
-            .as_str()
-            .map(|s| !s.is_empty())
-            .unwrap_or(false),
-        "machine_id must be a non-empty string"
-    );
     assert!(
         !record["platform"].as_str().unwrap_or("").is_empty(),
         "platform must be present"
@@ -381,7 +373,6 @@ fn telemetry_send_batch_delivers_data() {
             request::body(matches("\"batch\"")),
             request::body(matches("\"sequence\"")),
             // Original fields must be preserved.
-            request::body(matches("\"machine_id\":\"test-machine\"")),
             request::body(matches("\"command\":\"version\"")),
         ])
         .times(1)
@@ -478,48 +469,5 @@ fn telemetry_excess_batches_pruned_on_trigger() {
     assert!(
         remaining <= 10,
         "batch count must be pruned to ≤10; found {remaining}"
-    );
-}
-
-/// The same `machine_id` UUID must appear in all records produced by
-/// consecutive command invocations.
-#[test]
-fn telemetry_machine_id_persists_across_invocations() {
-    let ctx = TestContext::new();
-    let icp_home = ctx.home_path().join("icp-home");
-    let telemetry_dir = icp_home.join("telemetry");
-
-    // Keep next-send-time in the future so events.jsonl is never rotated
-    // and both records land in the same file.
-    init_telemetry_dir(&telemetry_dir, Some(FAR_FUTURE_SECS));
-
-    for _ in 0..2 {
-        ctx.icp()
-            .env("ICP_HOME", icp_home.as_str())
-            .env_remove("CI")
-            .env_remove("DO_NOT_TRACK")
-            .env_remove("ICP_TELEMETRY_DISABLED")
-            .args(["settings", "telemetry"])
-            .assert()
-            .success();
-    }
-
-    let contents = std::fs::read_to_string(telemetry_dir.join("events.jsonl")).unwrap();
-    let ids: Vec<&str> = contents
-        .lines()
-        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter_map(|v| {
-            v["machine_id"]
-                .as_str()
-                .map(str::to_owned)
-                .map(|s| Box::leak(s.into_boxed_str()) as &str)
-        })
-        .collect();
-
-    assert_eq!(ids.len(), 2, "expected 2 records");
-    assert_eq!(
-        ids[0], ids[1],
-        "machine_id must be identical across invocations: got {:?} and {:?}",
-        ids[0], ids[1]
     );
 }

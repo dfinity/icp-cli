@@ -8,7 +8,8 @@ Each command invocation produces a single telemetry record with the following fi
 
 | Field | Example | Purpose |
 |---|---|---|
-| `machine_id` | `a1b2c3d4-...` | Count unique installations |
+| `batch` | `a1b2c3d4-...` | Group records from the same transmission; server-side deduplication |
+| `sequence` | `0`, `1`, `2` | Ordering of records within a batch |
 | `platform` | `macos`, `linux`, `windows`, `wsl` | Platform distribution |
 | `arch` | `aarch64`, `x86_64` | Architecture distribution |
 | `version` | `0.1.0` | Identify version adoption |
@@ -40,7 +41,7 @@ For example, `icp deploy --mode install --environment production` records:
 ]
 ```
 
-The `machine_id` is a random UUID generated on first run and stored locally. It is used solely to count unique installations and is not linked to any user identity.
+The `batch` UUID is generated fresh each time records are transmitted and is not persisted across sends. Records within the same batch can be grouped, but there is no long-lived identifier that links activity across different transmissions.
 
 Additional fields may be introduced in future versions. This page will be updated accordingly. The same privacy principles apply: no personally identifiable information, no project data.
 
@@ -105,7 +106,6 @@ Runtime state and event data live in the `telemetry/` data directory. Each piece
 
 ```
 telemetry/
-  machine-id                          # plain text UUID, generated on first run
   notice-shown                        # empty marker file, presence = notice was shown
   next-send-time                      # plain text UTC timestamp
   events.jsonl                        # active event log

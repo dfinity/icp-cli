@@ -1,6 +1,7 @@
 # Unreleased
 
 * feat: check for Candid incompatibility when upgrading a canister
+* feat: Add `bitcoind-addr` and `dogecoind-addr` options for managed networks to connect to Bitcoin and Dogecoin nodes
 * feat: Init/call arg files now support raw binary without conversion to hex
 * feat!: Remove argument type inference in init/call args in commands and manifest. Args are always assumed Candid, new parameters allow specifying other formats like hex, and alternate parameters are used to specify loading from a file.
 * feat: Network gateway now supports a `domains` key

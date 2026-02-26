@@ -10,7 +10,7 @@ use icp::{InitArgs, fs};
 
 use crate::{
     commands::args,
-    operations::install::{InstallOperationError, install_canister},
+    operations::install::{InstallOperationError, install_canister, resolve_install_mode},
 };
 
 /// Install a built WASM to a canister on a network
@@ -116,30 +116,21 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .transpose()?;
 
     let canister_display = args.cmd_args.canister.to_string();
+    let install_mode = resolve_install_mode(&agent, &canister_id, &args.mode).await?;
     match install_canister(
         &agent,
         &canister_id,
         &canister_display,
         &wasm,
-        &args.mode,
+        install_mode,
         init_args_bytes.as_deref(),
         args.yes,
     )
     .await
     {
-        Err(InstallOperationError::CandidIncompatible {
-            canister_name,
-            details,
-        }) if !args.yes => {
-            let warning = format!(
-                "Candid interface compatibility check failed for canister '{canister_name}'.\n\
-                 You are making a BREAKING change. Other canisters or frontend clients \
-                 relying on your canister may stop working.\n\n\
-                 {details}"
-            );
-
+        Err(err @ InstallOperationError::CandidIncompatible { .. }) if !args.yes => {
             if std::io::stderr().is_terminal() {
-                let _ = ctx.term.write_line(&warning);
+                let _ = ctx.term.write_line(&err.to_string());
                 let confirmed = Confirm::new()
                     .with_prompt("Do you want to proceed anyway?")
                     .default(false)
@@ -152,13 +143,13 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                     &canister_id,
                     &canister_display,
                     &wasm,
-                    &args.mode,
+                    install_mode,
                     init_args_bytes.as_deref(),
                     true,
                 )
                 .await?;
             } else {
-                bail!("{warning}\n\nUse --yes to bypass this check.");
+                bail!("{err}\n\nUse --yes to bypass this check.");
             }
         }
         other => {

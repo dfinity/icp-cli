@@ -32,8 +32,7 @@ pub enum InstallOperationError {
         "Candid interface compatibility check failed for canister '{canister_name}'.\n\
          You are making a BREAKING change. Other canisters or frontend clients \
          relying on your canister may stop working.\n\n\
-         {details}\n\n\
-         Use --yes to bypass this check."
+         {details}"
     ))]
     CandidIncompatible {
         canister_name: String,
@@ -141,38 +140,41 @@ async fn check_candid_compatibility(
     }
 }
 
+/// Resolve a mode string ("auto", "install", "reinstall", "upgrade") into
+/// a [`CanisterInstallMode`]. For "auto", queries `canister_status` to
+/// determine whether the canister already has code installed.
+pub(crate) async fn resolve_install_mode(
+    agent: &Agent,
+    canister_id: &Principal,
+    mode: &str,
+) -> Result<CanisterInstallMode, AgentError> {
+    match mode {
+        "auto" => {
+            let mgmt = ManagementCanister::create(agent);
+            let (status,) = mgmt.canister_status(canister_id).await?;
+            Ok(if status.module_hash.is_some() {
+                CanisterInstallMode::Upgrade(None)
+            } else {
+                CanisterInstallMode::Install
+            })
+        }
+        "install" => Ok(CanisterInstallMode::Install),
+        "reinstall" => Ok(CanisterInstallMode::Reinstall),
+        "upgrade" => Ok(CanisterInstallMode::Upgrade(None)),
+        _ => panic!("invalid install mode: {mode}"),
+    }
+}
+
 pub(crate) async fn install_canister(
     agent: &Agent,
     canister_id: &Principal,
     canister_name: &str,
     wasm: &[u8],
-    mode: &str,
+    mode: CanisterInstallMode,
     init_args: Option<&[u8]>,
     yes: bool,
 ) -> Result<(), InstallOperationError> {
-    let mgmt = ManagementCanister::create(agent);
-    let install_mode = match mode {
-        "auto" => {
-            let (status,) = mgmt
-                .canister_status(canister_id)
-                .await
-                .map_err(|source| InstallOperationError::Agent { source })?;
-
-            match status.module_hash {
-                // Canister has had code installed to it.
-                Some(_) => CanisterInstallMode::Upgrade(None),
-
-                // Canister has not had code installed to it.
-                None => CanisterInstallMode::Install,
-            }
-        }
-        "install" => CanisterInstallMode::Install,
-        "reinstall" => CanisterInstallMode::Reinstall,
-        "upgrade" => CanisterInstallMode::Upgrade(None),
-        _ => panic!("invalid install mode"),
-    };
-
-    let install_mode = match install_mode {
+    let mode = match mode {
         CanisterInstallMode::Upgrade(_) => {
             // if this is a motoko canister using EOP
             // we need to set additional options
@@ -185,14 +187,14 @@ pub(crate) async fn install_canister(
                     wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
                 }))
             } else {
-                install_mode
+                mode
             }
         }
-        _ => install_mode,
+        _ => mode,
     };
 
     // Candid interface compatibility check for upgrades
-    if !yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
+    if !yes && matches!(mode, CanisterInstallMode::Upgrade(_)) {
         match check_candid_compatibility(agent, canister_id, wasm).await {
             CandidCompatibility::Compatible => {}
             CandidCompatibility::Incompatible(details) => {
@@ -210,18 +212,10 @@ pub(crate) async fn install_canister(
     // Install code to canister
     debug!(
         "Install new canister code for {} with mode `{:?}`",
-        canister_name, install_mode
+        canister_name, mode
     );
 
-    do_install_operation(
-        agent,
-        canister_id,
-        canister_name,
-        wasm,
-        install_mode,
-        init_args,
-    )
-    .await
+    do_install_operation(agent, canister_id, canister_name, wasm, mode, init_args).await
 }
 
 async fn do_install_operation(
@@ -342,7 +336,7 @@ pub(crate) async fn install_many(
     // Phase 1: Check candid compatibility for all upgrading canisters.
     // Also resolves "auto" mode so the install phase can skip redundant
     // canister_status calls.
-    let resolved_modes: Vec<String> = if !yes {
+    let resolved_modes: Vec<Option<CanisterInstallMode>> = if !yes {
         let mut check_futs = FuturesOrdered::new();
         let check_progress = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -357,38 +351,25 @@ pub(crate) async fn install_many(
             check_futs.push_back(async move {
                 pb.set_message("Checking compatibility...");
 
-                // Resolve "auto" into a concrete mode so the install phase
-                // can skip the redundant canister_status call.
-                let resolved_mode = match mode.as_str() {
-                    "auto" => {
-                        let mgmt = ManagementCanister::create(&agent);
-                        match mgmt.canister_status(&cid).await {
-                            Ok((status,)) => {
-                                if status.module_hash.is_some() {
-                                    "upgrade".to_owned()
-                                } else {
-                                    "install".to_owned()
-                                }
-                            }
-                            // If we can't query status, pass "auto" through —
-                            // install_canister will surface the real error.
-                            Err(_) => mode,
-                        }
-                    }
-                    _ => mode,
-                };
+                let check_result = async {
+                    // Resolve "auto" into a concrete mode so the install phase
+                    // can skip the redundant canister_status call.
+                    let resolved = match resolve_install_mode(&agent, &cid, &mode).await {
+                        Ok(m) => m,
+                        // If we can't query status, let the install phase retry.
+                        Err(_) => return Ok(None),
+                    };
 
-                let check_result = if resolved_mode == "upgrade" {
-                    check_canister_candid_compat(&agent, &cid, &name, &*artifacts)
-                        .await
-                        .map(|()| resolved_mode)
-                } else {
-                    Ok(resolved_mode)
+                    if matches!(resolved, CanisterInstallMode::Upgrade(_)) {
+                        check_canister_candid_compat(&agent, &cid, &name, &*artifacts).await?;
+                    }
+
+                    Ok(Some(resolved))
                 };
 
                 ProgressManager::execute_with_progress(
                     &pb,
-                    async { check_result },
+                    check_result,
                     || "Compatible".to_string(),
                     |_| "Incompatible".to_string(),
                 )
@@ -402,7 +383,7 @@ pub(crate) async fn install_many(
             match res {
                 Ok(mode) => resolved.push(mode),
                 Err(failure) => {
-                    resolved.push(String::new());
+                    resolved.push(None);
                     check_failures.push(failure);
                 }
             }
@@ -436,16 +417,17 @@ pub(crate) async fn install_many(
 
         resolved
     } else {
-        canisters.iter().map(|_| mode.to_string()).collect()
+        canisters.iter().map(|_| None).collect()
     };
 
     // Phase 2: Install all canisters (compatibility already verified or skipped)
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for ((name, cid, init_args), resolved_mode) in canisters.into_iter().zip(resolved_modes) {
+    for ((name, cid, init_args), pre_resolved) in canisters.into_iter().zip(resolved_modes) {
         let pb = progress_manager.create_progress_bar(&name);
         let agent = agent.clone();
+        let mode = mode.to_string();
         let install_fn = {
             let pb = pb.clone();
             let artifacts = artifacts.clone();
@@ -461,12 +443,19 @@ pub(crate) async fn install_many(
                     }
                 })?;
 
+                let install_mode = match pre_resolved {
+                    Some(m) => m,
+                    None => resolve_install_mode(&agent, &cid, &mode)
+                        .await
+                        .map_err(|source| InstallOperationError::Agent { source })?,
+                };
+
                 install_canister(
                     &agent,
                     &cid,
                     &name,
                     &wasm,
-                    &resolved_mode,
+                    install_mode,
                     init_args.as_deref(),
                     true,
                 )

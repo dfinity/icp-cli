@@ -296,6 +296,9 @@ fn random_send_interval(is_prerelease: bool) -> u64 {
 }
 
 fn should_send(telemetry_dir: &Path) -> bool {
+    if std::env::var_os("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD").is_some() {
+        return false;
+    }
     let is_prerelease = env!("CARGO_PKG_VERSION").contains('-');
 
     // Size-based trigger

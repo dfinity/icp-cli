@@ -311,8 +311,7 @@ async fn do_install_operation(
 /// upgraded. Aborts if any canister has an incompatible interface.
 pub(crate) async fn check_candid_compatibility_many(
     agent: Agent,
-    canisters: &[(String, Principal, Option<Vec<u8>>)],
-    modes: &[CanisterInstallMode],
+    canisters: impl IntoIterator<Item = (&str, Principal, CanisterInstallMode)>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
@@ -320,13 +319,11 @@ pub(crate) async fn check_candid_compatibility_many(
     let mut check_futs = FuturesOrdered::new();
     let check_progress = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for ((name, cid, _), mode) in canisters.iter().zip(modes) {
+    for (name, cid, mode) in canisters {
         let pb = check_progress.create_progress_bar(name);
         let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
         let agent = agent.clone();
         let artifacts = artifacts.clone();
-        let name = name.clone();
-        let cid = *cid;
 
         check_futs.push_back(async move {
             if !is_upgrade {
@@ -338,7 +335,7 @@ pub(crate) async fn check_candid_compatibility_many(
 
             ProgressManager::execute_with_progress(
                 &pb,
-                check_canister_candid_compat(&agent, &cid, &name, &*artifacts),
+                check_canister_candid_compat(&agent, &cid, name, &*artifacts),
                 || "Compatible".to_string(),
                 |_| "Incompatible".to_string(),
             )
@@ -385,8 +382,7 @@ pub(crate) async fn check_candid_compatibility_many(
 /// Installs code to multiple canisters and displays progress bars.
 pub(crate) async fn install_many(
     agent: Agent,
-    canisters: Vec<(String, Principal, Option<Vec<u8>>)>,
-    modes: Vec<CanisterInstallMode>,
+    canisters: impl IntoIterator<Item = (String, Principal, CanisterInstallMode, Option<Vec<u8>>)>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
@@ -394,7 +390,7 @@ pub(crate) async fn install_many(
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for ((name, cid, init_args), mode) in canisters.into_iter().zip(modes) {
+    for (name, cid, mode, init_args) in canisters {
         let pb = progress_manager.create_progress_bar(&name);
         let agent = agent.clone();
         let install_fn = {

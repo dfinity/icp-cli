@@ -119,7 +119,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .transpose()?;
 
     let canister_display = args.cmd_args.canister.to_string();
-    let install_mode = resolve_install_mode(&agent, &canister_id, &args.mode).await?;
+    let install_mode =
+        resolve_install_mode(&agent, &canister_display, &canister_id, &args.mode).await?;
 
     // Candid interface compatibility check for upgrades
     if !args.yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {

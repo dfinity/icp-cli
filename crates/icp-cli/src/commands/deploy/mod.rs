@@ -229,6 +229,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     let canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
+        let agent = agent.clone();
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
@@ -237,6 +238,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 )
                 .await
                 .map_err(|e| anyhow!(e))?;
+
+            let mode = resolve_install_mode(&agent, name, &cid, &args.mode).await?;
 
             let env = ctx.get_environment(&environment_selection).await?;
             let (_canister_path, canister_info) =
@@ -248,24 +251,18 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map(|ia| ia.to_bytes())
                 .transpose()?;
 
-            Ok::<_, anyhow::Error>((name.clone(), cid, init_args_bytes))
+            Ok::<_, anyhow::Error>((name.clone(), cid, mode, init_args_bytes))
         }
     }))
-    .await?;
-
-    let modes = try_join_all(
-        canisters
-            .iter()
-            .map(|(cname, cid, _)| resolve_install_mode(&agent, cname, cid, &args.mode)),
-    )
     .await?;
 
     if !args.yes {
         let _ = ctx.term.write_line("\n\nChecking compatibility:");
         check_candid_compatibility_many(
             agent.clone(),
-            &canisters,
-            &modes,
+            canisters
+                .iter()
+                .map(|(name, cid, mode, _)| (&**name, *cid, *mode)),
             ctx.artifacts.clone(),
             Arc::new(ctx.term.clone()),
             ctx.debug,
@@ -279,7 +276,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     install_many(
         agent.clone(),
         canisters,
-        modes,
         ctx.artifacts.clone(),
         Arc::new(ctx.term.clone()),
         ctx.debug,

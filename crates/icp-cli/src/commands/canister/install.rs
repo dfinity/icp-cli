@@ -3,6 +3,7 @@ use std::io::IsTerminal;
 use anyhow::{Context as _, anyhow, bail};
 use clap::Args;
 use dialoguer::Confirm;
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp::context::{CanisterSelection, Context};
 use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
@@ -10,7 +11,9 @@ use icp::{InitArgs, fs};
 
 use crate::{
     commands::args,
-    operations::install::{InstallOperationError, install_canister, resolve_install_mode},
+    operations::install::{
+        CandidCompatibility, check_candid_compatibility, install_canister, resolve_install_mode,
+    },
 };
 
 /// Install a built WASM to a canister on a network
@@ -117,45 +120,45 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     let canister_display = args.cmd_args.canister.to_string();
     let install_mode = resolve_install_mode(&agent, &canister_id, &args.mode).await?;
-    match install_canister(
+
+    // Candid interface compatibility check for upgrades
+    if !args.yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
+        match check_candid_compatibility(&agent, &canister_id, &wasm).await {
+            CandidCompatibility::Compatible | CandidCompatibility::Skipped(_) => {}
+            CandidCompatibility::Incompatible(details) => {
+                let warning = format!(
+                    "Candid interface compatibility check failed for canister \
+                     '{canister_display}'.\n\
+                     You are making a BREAKING change. Other canisters or frontend clients \
+                     relying on your canister may stop working.\n\n\
+                     {details}"
+                );
+
+                if std::io::stderr().is_terminal() {
+                    let _ = ctx.term.write_line(&warning);
+                    let confirmed = Confirm::new()
+                        .with_prompt("Do you want to proceed anyway?")
+                        .default(false)
+                        .interact()?;
+                    if !confirmed {
+                        bail!("Installation cancelled.");
+                    }
+                } else {
+                    bail!("{warning}\n\nUse --yes to bypass this check.");
+                }
+            }
+        }
+    }
+
+    install_canister(
         &agent,
         &canister_id,
         &canister_display,
         &wasm,
         install_mode,
         init_args_bytes.as_deref(),
-        args.yes,
     )
-    .await
-    {
-        Err(err @ InstallOperationError::CandidIncompatible { .. }) if !args.yes => {
-            if std::io::stderr().is_terminal() {
-                let _ = ctx.term.write_line(&err.to_string());
-                let confirmed = Confirm::new()
-                    .with_prompt("Do you want to proceed anyway?")
-                    .default(false)
-                    .interact()?;
-                if !confirmed {
-                    bail!("Installation cancelled.");
-                }
-                install_canister(
-                    &agent,
-                    &canister_id,
-                    &canister_display,
-                    &wasm,
-                    install_mode,
-                    init_args_bytes.as_deref(),
-                    true,
-                )
-                .await?;
-            } else {
-                bail!("{err}\n\nUse --yes to bypass this check.");
-            }
-        }
-        other => {
-            other?;
-        }
-    }
+    .await?;
 
     let _ = ctx.term.write_line(&format!(
         "Canister {canister_display} installed successfully"

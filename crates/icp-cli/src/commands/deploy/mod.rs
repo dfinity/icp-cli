@@ -16,8 +16,11 @@ use std::sync::Arc;
 use crate::{
     commands::canister::create,
     operations::{
-        binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
-        create::CreateOperation, install::install_many, settings::sync_settings_many,
+        binding_env_vars::set_binding_env_vars_many,
+        build::build_many_with_progress_bar,
+        create::CreateOperation,
+        install::{check_candid_compatibility_many, install_many, resolve_install_mode},
+        settings::sync_settings_many,
         sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
@@ -223,7 +226,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
-    let _ = ctx.term.write_line("\n\nInstalling canisters:");
 
     let canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
@@ -251,14 +253,36 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     }))
     .await?;
 
+    let modes = if !args.yes {
+        let _ = ctx.term.write_line("\n\nChecking compatibility:");
+        check_candid_compatibility_many(
+            agent.clone(),
+            &canisters,
+            &args.mode,
+            ctx.artifacts.clone(),
+            Arc::new(ctx.term.clone()),
+            ctx.debug,
+        )
+        .await
+        .map_err(|e| anyhow!(e))?
+    } else {
+        try_join_all(
+            canisters
+                .iter()
+                .map(|(_, cid, _)| resolve_install_mode(&agent, cid, &args.mode)),
+        )
+        .await?
+    };
+
+    let _ = ctx.term.write_line("\n\nInstalling canisters:");
+
     install_many(
         agent.clone(),
         canisters,
-        &args.mode,
+        modes,
         ctx.artifacts.clone(),
         Arc::new(ctx.term.clone()),
         ctx.debug,
-        args.yes,
     )
     .await?;
 

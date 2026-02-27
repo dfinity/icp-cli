@@ -18,8 +18,9 @@ use crate::{
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
+        candid_compat::check_candid_compatibility_many,
         create::CreateOperation,
-        install::{check_candid_compatibility_many, install_many, resolve_install_mode},
+        install::{install_many, resolve_install_mode},
         settings::sync_settings_many,
         sync::sync_many,
     },

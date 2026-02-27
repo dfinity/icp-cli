@@ -11,8 +11,9 @@ use icp::{InitArgs, fs};
 
 use crate::{
     commands::args,
-    operations::install::{
-        CandidCompatibility, check_candid_compatibility, install_canister, resolve_install_mode,
+    operations::{
+        candid_compat::{CandidCompatibility, check_candid_compatibility},
+        install::{install_canister, resolve_install_mode},
     },
 };
 

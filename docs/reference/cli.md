@@ -179,6 +179,20 @@ Make a canister call
 * `--query` — Sends a query request to a canister instead of an update request.
 
    Query calls are faster but return uncertified responses. Cannot be used with --proxy (proxy calls are always update calls).
+* `-o`, `--output <OUTPUT>` — How to interpret and display the response
+
+  Default value: `auto`
+
+  Possible values:
+  - `auto`:
+    Try Candid, then UTF-8, then fall back to hex
+  - `candid`:
+    Parse as Candid and pretty-print; error if parsing fails
+  - `text`:
+    Parse as UTF-8 text; error if invalid
+  - `hex`:
+    Print raw response as hex
+
 
 
 

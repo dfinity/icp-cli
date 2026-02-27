@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -9,6 +9,7 @@ use snafu::prelude::*;
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 use strum::EnumString;
+use tokio::net::lookup_host;
 use url::Url;
 
 use crate::{
@@ -85,9 +86,12 @@ pub enum ResolveBindError {
 /// 1. The original bind string if it was a domain name (preserving it for URLs)
 /// 2. The first entry from `domains` if configured
 /// 3. `"localhost"` as a fallback (reachable for both valid bind addresses)
-pub fn resolve_bind(bind: &str, domains: &[String]) -> Result<ResolvedBind, ResolveBindError> {
-    let addrs: Vec<_> = (bind, 0u16)
-        .to_socket_addrs()
+pub async fn resolve_bind(
+    bind: &str,
+    domains: &[String],
+) -> Result<ResolvedBind, ResolveBindError> {
+    let addrs: Vec<_> = lookup_host((bind, 0u16))
+        .await
         .context(ResolveSnafu { bind })?
         .collect();
     let ip = addrs

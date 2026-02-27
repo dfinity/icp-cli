@@ -24,7 +24,7 @@ use crate::{
 
 pub const DEFAULT_LOCAL_NETWORK_BIND: &str = "127.0.0.1";
 pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
-pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://127.0.0.1:8000";
+pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 
 #[derive(Debug, Snafu)]
 pub enum EnvironmentError {

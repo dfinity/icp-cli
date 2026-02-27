@@ -136,7 +136,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                      {details}"
                 );
 
-                if std::io::stderr().is_terminal() {
+                if std::io::stdin().is_terminal() {
                     let _ = ctx.term.write_line(&warning);
                     let confirmed = Confirm::new()
                         .with_prompt("Do you want to proceed anyway?")

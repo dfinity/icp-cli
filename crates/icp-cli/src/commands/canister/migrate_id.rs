@@ -1,4 +1,4 @@
-use std::io::{IsTerminal, stderr};
+use std::io::{IsTerminal, stdin};
 use std::time::{Duration, Instant};
 
 use anyhow::bail;
@@ -85,7 +85,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
     // If --resume-watch is set, skip all validation and migration initiation
     if !args.resume_watch {
-        let can_confirm = stderr().is_terminal();
+        let can_confirm = stdin().is_terminal();
         if !args.yes && can_confirm {
             ctx.term.write_line(&format!(
                 "This will migrate canister '{source_name}' ({source_cid}) to replace '{target_name}' ({target_cid})."

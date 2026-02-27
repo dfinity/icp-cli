@@ -798,6 +798,7 @@ async fn network_gateway_responds_to_custom_domain() {
                 gateway:
                   port: 0
                   domains:
+                    - localhost
                     - {domain}
             environments:
               - name: domain-env

@@ -10,6 +10,7 @@ use ic_management_canister_types::{EnvironmentVariable, LogVisibility as IcLogVi
 use ic_utils::interfaces::ManagementCanister;
 use icp::{Canister, canister::Settings, context::TermWriter};
 use itertools::Itertools;
+use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
@@ -79,11 +80,11 @@ pub(crate) async fn sync_settings(
     let &Settings {
         ref log_visibility,
         compute_allocation,
-        memory_allocation,
+        ref memory_allocation,
         freezing_threshold,
         ref reserved_cycles_limit,
-        wasm_memory_limit,
-        wasm_memory_threshold,
+        ref wasm_memory_limit,
+        ref wasm_memory_threshold,
         ref environment_variables,
     } = &canister.settings;
     let current_settings = status.settings;
@@ -114,13 +115,22 @@ pub(crate) async fn sync_settings(
         .as_ref()
         .is_none_or(|s| log_visibility_eq(s, &current_settings.log_visibility))
         && compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
-        && memory_allocation.is_none_or(|s| s == current_settings.memory_allocation)
+        && memory_allocation
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.memory_allocation.0.to_u64() == Some(s))
         && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
         && reserved_cycles_limit
             .as_ref()
             .is_none_or(|s| s.get() == current_settings.reserved_cycles_limit)
-        && wasm_memory_limit.is_none_or(|s| s == current_settings.wasm_memory_limit)
-        && wasm_memory_threshold.is_none_or(|s| s == current_settings.wasm_memory_threshold)
+        && wasm_memory_limit
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.wasm_memory_limit.0.to_u64() == Some(s))
+        && wasm_memory_threshold
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.wasm_memory_threshold.0.to_u64() == Some(s))
         && environment_variable_setting
             .as_ref()
             .is_none_or(|s| environment_variables_eq(s, &current_settings.environment_variables))
@@ -131,11 +141,11 @@ pub(crate) async fn sync_settings(
     mgmt.update_settings(cid)
         .with_optional_log_visibility(log_visibility_setting)
         .with_optional_compute_allocation(compute_allocation)
-        .with_optional_memory_allocation(memory_allocation)
+        .with_optional_memory_allocation(memory_allocation.as_ref().map(|m| m.get()))
         .with_optional_freezing_threshold(freezing_threshold)
         .with_optional_reserved_cycles_limit(reserved_cycles_limit.as_ref().map(|r| r.get()))
-        .with_optional_wasm_memory_limit(wasm_memory_limit)
-        .with_optional_wasm_memory_threshold(wasm_memory_threshold)
+        .with_optional_wasm_memory_limit(wasm_memory_limit.as_ref().map(|m| m.get()))
+        .with_optional_wasm_memory_threshold(wasm_memory_threshold.as_ref().map(|m| m.get()))
         .with_optional_environment_variables(environment_variable_setting)
         .build()
         .context(ValidateSettingsSnafu {

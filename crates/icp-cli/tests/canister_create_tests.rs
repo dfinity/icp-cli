@@ -185,7 +185,7 @@ async fn canister_create_with_settings() {
 }
 
 #[tokio::test]
-async fn canister_create_with_settings_reserved_cycles_suffix_in_yaml() {
+async fn canister_create_with_settings_suffix_in_yaml() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("icp");
@@ -193,7 +193,7 @@ async fn canister_create_with_settings_reserved_cycles_suffix_in_yaml() {
     let f = NamedTempFile::new().expect("failed to create temporary file");
     let path = f.path();
 
-    // reserved_cycles_limit with suffix
+    // reserved_cycles_limit, memory_allocation and wasm_memory_limit with suffixes
     let pm = formatdoc! {r#"
             canisters:
               - name: my-canister
@@ -204,6 +204,8 @@ async fn canister_create_with_settings_reserved_cycles_suffix_in_yaml() {
                 settings:
                   compute_allocation: 1
                   reserved_cycles_limit: 1.2t
+                  memory_allocation: 2gib
+                  wasm_memory_limit: 0.25kib
 
             {NETWORK_RANDOM_PORT}
             {ENVIRONMENT_RANDOM_PORT}
@@ -245,8 +247,36 @@ async fn canister_create_with_settings_reserved_cycles_suffix_in_yaml() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Running"))
-                .and(contains("Reserved cycles limit: 1_200_000_000_000")),
+                .and(contains("Reserved cycles limit: 1_200_000_000_000"))
+                .and(contains("Memory allocation: 2_147_483_648")),
         );
+
+    // Sync settings from manifest to apply wasm_memory_limit (not sent at create)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Wasm memory limit: 256"));
 }
 
 #[tokio::test]
@@ -434,4 +464,76 @@ fn canister_create_with_valid_principal() {
         .assert()
         .failure()
         .stderr(contains("Cannot create a canister by principal"));
+}
+
+#[tokio::test]
+async fn canister_create_detached() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        {NETWORK_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Get the network information so we can call the network directly
+    let assert = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args(["network", "status", "random-network", "--json"])
+        .assert()
+        .success();
+    let output = assert.get_output();
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let gateway_url = json["gateway_url"].as_str().expect("Should be a string");
+    let root_key = json["root_key"].as_str().expect("Should be a string");
+
+    // Test creating outside a project
+    ctx.icp()
+        .args([
+            "canister",
+            "create",
+            "--network",
+            gateway_url,
+            "--root-key",
+            root_key,
+            "--detached",
+        ])
+        .assert()
+        .success()
+        .stdout(starts_with("Created canister with ID"));
+
+    // Test creating inside a project
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "--network",
+            "random-network",
+            "--detached",
+        ])
+        .assert()
+        .success()
+        .stdout(starts_with("Created canister with ID"));
+
+    // Test it fails outside of a project
+    ctx.icp()
+        .args([
+            "canister",
+            "create",
+            "--network",
+            "random-network",
+            "--detached",
+        ])
+        .assert()
+        .failure();
 }

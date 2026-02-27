@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Add `bitcoind-addr` and `dogecoind-addr` options for managed networks to connect to Bitcoin and Dogecoin nodes
 * feat: Init/call arg files now support raw binary without conversion to hex
 * feat!: Remove argument type inference in init/call args in commands and manifest. Args are always assumed Candid, new parameters allow specifying other formats like hex, and alternate parameters are used to specify loading from a file.
 * feat: Network gateway now supports a `domains` key
@@ -17,12 +18,18 @@
 * feat: `icp canister logs` to display the current canister logs
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 * feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
+* feat: Support `kb`, `kib`, `mb`, `mib`, `gb`, `gib` suffixes in `.yaml` files and CLI arguments when specifying memory amounts
 * feat: Add an optional root-key argument to canister commands
 * feat: `icp canister call` now supports `--output <mode>` with the following modes:
   * `auto` (default): Try decoding the response as Candid, then UTF-8, then fall back to hex.
   * `candid`: Parse as Candid and pretty-print; error if parsing fails.
   * `text`: Parse as UTF-8 text; error if invalid.
   * `hex`: Print raw response as hex.
+* chore!: new passwords for identity encryption need to be at least 8 characters long
+* feat: Anonymous usage telemetry — collects command name, arguments, duration, and outcome
+  * Enabled by default; opt out with `icp settings telemetry false`, `DO_NOT_TRACK=1`, or `ICP_TELEMETRY_DISABLED=1`
+  * Automatically disabled in CI environments (`CI` env var set)
+  * `icp settings telemetry` to view or change the current setting
 
 # v0.1.0
 

@@ -36,6 +36,7 @@ pub mod settings;
 pub mod signal;
 pub mod store_artifact;
 pub mod store_id;
+pub mod telemetry_data;
 
 const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";
@@ -101,6 +102,11 @@ pub struct Canister {
     /// Initialization arguments passed to the canister during installation.
     /// Resolved from the manifest — file contents are already loaded.
     pub init_args: Option<InitArgs>,
+
+    /// If the canister was defined via a recipe reference, this holds the
+    /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
+    /// `None` when the canister uses explicit build/sync instructions.
+    pub registry_recipe: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -287,6 +293,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         let local_network = Network {
@@ -369,6 +376,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         let frontend_canister = Canister {
@@ -384,6 +392,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         let database_canister = Canister {
@@ -399,6 +408,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            registry_recipe: None,
         };
 
         // Create networks
@@ -416,6 +426,8 @@ impl MockProjectLoader {
                         ii: false,
                         nns: false,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
                         version: None,
                     })),
                 },
@@ -436,6 +448,8 @@ impl MockProjectLoader {
                         ii: false,
                         nns: false,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
                         version: None,
                     })),
                 },

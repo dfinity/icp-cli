@@ -61,6 +61,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp project show`↴](#icp-project-show)
 * [`icp settings`↴](#icp-settings)
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
+* [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -185,7 +186,22 @@ Make a canister call
 
 Create a canister on a network
 
-**Usage:** `icp canister create [OPTIONS] <CANISTER>`
+**Usage:** `icp canister create [OPTIONS] <CANISTER|--detached>`
+
+This command can be used to create canisters defined in a project
+or a "detached" canister on a network.
+
+Examples:
+
+    # Create on a network by url
+    icp canister create -n http://localhost:8000 -k $ROOT_KEY --detached
+
+    # Create on mainnet outside of a project context
+    icp canister create -n ic --detached
+
+    # Create a detached canister inside the scope of a project
+    icp canister create -n mynetwork --detached
+
 
 ###### **Arguments:**
 
@@ -199,7 +215,7 @@ Create a canister on a network
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
-* `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically
+* `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
@@ -207,6 +223,7 @@ Create a canister on a network
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
 
 
 
@@ -410,11 +427,11 @@ Change a canister's settings to specified values
 
    Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
 * `--compute-allocation <COMPUTE_ALLOCATION>`
-* `--memory-allocation <MEMORY_ALLOCATION>`
+* `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>`
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `--wasm-memory-limit <WASM_MEMORY_LIMIT>`
-* `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>`
+* `--wasm-memory-limit <WASM_MEMORY_LIMIT>` — Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
+* `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>` — Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--log-visibility <LOG_VISIBILITY>`
 * `--add-log-viewer <ADD_LOG_VIEWER>`
 * `--remove-log-viewer <REMOVE_LOG_VIEWER>`
@@ -1256,6 +1273,7 @@ Configure user settings
 ###### **Subcommands:**
 
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
+* `telemetry` — Enable or disable anonymous usage telemetry
 
 
 
@@ -1264,6 +1282,21 @@ Configure user settings
 Use Docker for the network launcher even when native mode is requested
 
 **Usage:** `icp settings autocontainerize [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to true or false. If omitted, prints the current value
+
+  Possible values: `true`, `false`
+
+
+
+
+## `icp settings telemetry`
+
+Enable or disable anonymous usage telemetry
+
+**Usage:** `icp settings telemetry [VALUE]`
 
 ###### **Arguments:**
 

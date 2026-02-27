@@ -18,6 +18,8 @@ pub(crate) struct SettingsArgs {
 enum Setting {
     /// Use Docker for the network launcher even when native mode is requested
     Autocontainerize(AutocontainerizeArgs),
+    /// Enable or disable anonymous usage telemetry
+    Telemetry(TelemetryArgs),
 }
 
 #[derive(Debug, Args)]
@@ -26,9 +28,16 @@ struct AutocontainerizeArgs {
     value: Option<bool>,
 }
 
+#[derive(Debug, Args)]
+struct TelemetryArgs {
+    /// Set to true or false. If omitted, prints the current value.
+    value: Option<bool>,
+}
+
 pub(crate) async fn exec(ctx: &Context, args: &SettingsArgs) -> Result<(), anyhow::Error> {
     match &args.setting {
         Setting::Autocontainerize(sub_args) => exec_autocontainerize(ctx, sub_args).await,
+        Setting::Telemetry(sub_args) => exec_telemetry(ctx, sub_args).await,
     }
 }
 
@@ -61,6 +70,31 @@ async fn exec_autocontainerize(
                 .with_read(async |dirs| Settings::load_from(dirs))
                 .await??;
             println!("{}", settings.autocontainerize);
+            Ok(())
+        }
+    }
+}
+
+async fn exec_telemetry(ctx: &Context, args: &TelemetryArgs) -> Result<(), anyhow::Error> {
+    let dirs = ctx.dirs.settings()?;
+
+    match args.value {
+        Some(value) => {
+            dirs.with_write(async |dirs| {
+                let mut settings = Settings::load_from(dirs.read())?;
+                settings.telemetry_enabled = value;
+                settings.write_to(dirs)?;
+                println!("Set telemetry to {value}");
+                Ok(())
+            })
+            .await?
+        }
+
+        None => {
+            let settings = dirs
+                .with_read(async |dirs| Settings::load_from(dirs))
+                .await??;
+            println!("{}", settings.telemetry_enabled);
             Ok(())
         }
     }

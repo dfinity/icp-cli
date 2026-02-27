@@ -91,6 +91,7 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
+wasmparser = "0.240.0"
 winreg = "0.55"
 wslpath2 = "0.1"
 zeroize = "1.8.1"

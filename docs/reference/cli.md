@@ -293,6 +293,7 @@ Install a built WASM to a canister on a network
   - `bin`:
     Raw binary (only valid for file references)
 
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
@@ -790,6 +791,7 @@ Deploy a project to an environment
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 

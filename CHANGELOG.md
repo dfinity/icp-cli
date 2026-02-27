@@ -18,6 +18,11 @@
   * use `--follow` to continuously poll for new logs. `--interval <n>` to poll every `n` seconds
 * feat: Support `k`, `m`, `b`, `t` suffixes in `.yaml` files when specifying cycles amounts
 * feat: Add an optional root-key argument to canister commands
+* feat: `icp canister call` now supports `--output <mode>` with the following modes:
+  * `auto` (default): Try decoding the response as Candid, then UTF-8, then fall back to hex.
+  * `candid`: Parse as Candid and pretty-print; error if parsing fails.
+  * `text`: Parse as UTF-8 text; error if invalid.
+  * `hex`: Print raw response as hex.
 
 # v0.1.0
 

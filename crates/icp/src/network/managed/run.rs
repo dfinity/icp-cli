@@ -45,7 +45,6 @@ use crate::{
             docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
             launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
         },
-        resolve_bind,
     },
     prelude::*,
     signal::stop_signal,
@@ -135,22 +134,6 @@ async fn run_network_launcher(
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
 
-    // Resolve the bind address to an IP and a URL host
-    let resolved = match &config.mode {
-        ManagedMode::Launcher(launcher_config) => {
-            resolve_bind(
-                &launcher_config.gateway.bind,
-                &launcher_config.gateway.domains,
-            )
-            .await?
-        }
-        ManagedMode::Image(_) => crate::network::ResolvedBind {
-            ip: std::net::Ipv4Addr::LOCALHOST.into(),
-            host: "localhost".to_string(),
-            extra_domains: vec![],
-        },
-    };
-
     // Determine the image options and fixed ports to check before spawning
     #[allow(clippy::large_enum_variant)] // Only used inline, not moved
     enum LaunchMode<'a> {
@@ -164,7 +147,7 @@ async fn run_network_launcher(
             (LaunchMode::Image(options), fixed_ports)
         }
         ManagedMode::Launcher(launcher_config) if autocontainerize => {
-            let options = transform_native_launcher_to_container(launcher_config, &resolved);
+            let options = transform_native_launcher_to_container(launcher_config);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
@@ -176,7 +159,6 @@ async fn run_network_launcher(
             (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
         }
     };
-
     let (mut guard, instance, gateway, locator) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
             // Acquire locks for all fixed ports and check they're not in use
@@ -208,7 +190,8 @@ async fn run_network_launcher(
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
-                        host: resolved.host.clone(),
+                        host: "localhost".to_string(),
+                        ip: "127.0.0.1".to_string(),
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
@@ -227,14 +210,18 @@ async fn run_network_launcher(
                         background,
                         verbose,
                         launcher_config,
-                        &resolved,
                         &root.state_dir(),
                     )
                     .await?;
+                    let host = match launcher_config.gateway.domains.first() {
+                        Some(domain) => domain.clone(),
+                        None => launcher_config.gateway.bind.to_string(),
+                    };
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
-                        host: resolved.host.clone(),
+                        ip: launcher_config.gateway.bind.clone(),
+                        host,
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
                 }
@@ -248,7 +235,7 @@ async fn run_network_launcher(
     }
 
     let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
-        &format!("http://{}:{}", resolved.host, instance.gateway_port)
+        &format!("http://{}:{}", gateway.host, gateway.port)
             .parse()
             .unwrap(),
         &instance.root_key,
@@ -305,10 +292,7 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn transform_native_launcher_to_container(
-    config: &ManagedLauncherConfig,
-    resolved: &crate::network::ResolvedBind,
-) -> ManagedImageOptions {
+fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
     use bollard::secret::PortBinding;
     use std::collections::HashMap;
 
@@ -318,7 +302,7 @@ fn transform_native_launcher_to_container(
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
-    let args = launcher_settings_flags(config, resolved);
+    let args = launcher_settings_flags(config);
     let args = translate_launcher_args_for_docker(args);
 
     let all_addrs: Vec<String> = config
@@ -339,7 +323,7 @@ fn transform_native_launcher_to_container(
     let port_bindings: HashMap<String, Option<Vec<PortBinding>>> = [(
         "4943/tcp".to_string(),
         Some(vec![PortBinding {
-            host_ip: Some(resolved.ip.to_string()),
+            host_ip: Some(config.gateway.bind.to_string()),
             host_port: Some(port.to_string()),
         }]),
     )]
@@ -387,11 +371,6 @@ impl ShutdownGuard {
 pub enum RunNetworkLauncherError {
     #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
     NoNetworkLauncherPath,
-
-    #[snafu(transparent)]
-    ResolveBind {
-        source: crate::network::ResolveBindError,
-    },
 
     #[snafu(display("failed to create dir"))]
     CreateDirAll { source: crate::fs::IoError },
@@ -896,7 +875,7 @@ async fn install_proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::{Gateway, ManagedLauncherConfig, Port, ResolvedBind};
+    use crate::network::{Gateway, ManagedLauncherConfig, Port};
 
     #[test]
     fn transform_native_launcher_default_config() {
@@ -914,7 +893,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
+        let opts = transform_native_launcher_to_container(&config);
         assert_eq!(
             opts.image,
             "ghcr.io/dfinity/icp-cli-network-launcher:latest"
@@ -948,7 +927,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
+        let opts = transform_native_launcher_to_container(&config);
         let binding = opts
             .port_bindings
             .get("4943/tcp")
@@ -970,7 +949,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
+        let opts = transform_native_launcher_to_container(&config);
         assert!(opts.args.contains(&"--ii".to_string()));
         assert!(
             opts.args
@@ -994,7 +973,7 @@ mod tests {
             dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
+        let opts = transform_native_launcher_to_container(&config);
         assert!(opts.args.contains(&"--nns".to_string()));
         assert!(opts.args.contains(&"--artificial-delay-ms=50".to_string()));
         assert!(
@@ -1019,7 +998,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
+        let opts = transform_native_launcher_to_container(&config);
         assert!(
             opts.args
                 .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
@@ -1039,7 +1018,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config, &ResolvedBind::default());
+        let opts = transform_native_launcher_to_container(&config);
         assert!(
             opts.args
                 .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())

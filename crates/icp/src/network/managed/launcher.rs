@@ -10,7 +10,7 @@ use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
 
 use crate::{
-    network::{ManagedLauncherConfig, Port, ResolvedBind, config::ChildLocator},
+    network::{ManagedLauncherConfig, Port, config::ChildLocator},
     prelude::*,
 };
 
@@ -65,7 +65,6 @@ pub async fn spawn_network_launcher(
     background: bool,
     verbose: bool,
     launcher_config: &ManagedLauncherConfig,
-    resolved_bind: &ResolvedBind,
     state_dir: &Path,
 ) -> Result<
     (
@@ -82,13 +81,13 @@ pub async fn spawn_network_launcher(
         "--state-dir",
         state_dir.as_str(),
     ]);
-    cmd.args(["--bind", &resolved_bind.ip.to_string()]);
+    cmd.args(["--bind", &launcher_config.gateway.bind]);
     if let Port::Fixed(port) = launcher_config.gateway.port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }
     let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     cmd.args(["--status-dir", status_dir.path().as_str()]);
-    cmd.args(launcher_settings_flags(launcher_config, resolved_bind));
+    cmd.args(launcher_settings_flags(launcher_config));
     if background {
         eprintln!("For background mode, network output will be redirected:");
         eprintln!("  stdout: {}", stdout_file);
@@ -169,10 +168,7 @@ pub async fn stop_launcher(pid: Pid) {
     }
 }
 
-pub fn launcher_settings_flags(
-    config: &ManagedLauncherConfig,
-    resolved_bind: &ResolvedBind,
-) -> Vec<String> {
+pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     let ManagedLauncherConfig {
         gateway,
         version: _,
@@ -208,9 +204,10 @@ pub fn launcher_settings_flags(
             flags.push(format!("--dogecoind-addr={addr}"));
         }
     }
-    for domain in gateway.domains.iter().chain(&resolved_bind.extra_domains) {
+    for domain in &gateway.domains {
         flags.push(format!("--domain={domain}"));
     }
+    flags.push(format!("--domain={}", gateway.bind));
     flags
 }
 

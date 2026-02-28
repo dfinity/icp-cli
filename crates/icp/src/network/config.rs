@@ -20,6 +20,10 @@ fn default_gateway_host() -> String {
     "localhost".to_string()
 }
 
+fn default_gateway_ip() -> String {
+    "127.0.0.1".to_string()
+}
+
 /// Gateway port configuration within a network descriptor.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -32,6 +36,9 @@ pub struct NetworkDescriptorGatewayPort {
     /// The host to use when constructing URLs to reach the gateway.
     #[serde(default = "default_gateway_host")]
     pub host: String,
+    /// The IP address to use when constructing URLs to reach the API.
+    #[serde(default = "default_gateway_ip")]
+    pub ip: String,
 }
 
 /// Runtime state of a running managed network, persisted as `descriptor.json`.

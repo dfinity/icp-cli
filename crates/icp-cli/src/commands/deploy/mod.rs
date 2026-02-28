@@ -16,8 +16,12 @@ use std::sync::Arc;
 use crate::{
     commands::canister::create,
     operations::{
-        binding_env_vars::set_binding_env_vars_many, build::build_many_with_progress_bar,
-        create::CreateOperation, install::install_many, settings::sync_settings_many,
+        binding_env_vars::set_binding_env_vars_many,
+        build::build_many_with_progress_bar,
+        candid_compat::check_candid_compatibility_many,
+        create::CreateOperation,
+        install::{install_many, resolve_install_mode},
+        settings::sync_settings_many,
         sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
@@ -46,6 +50,10 @@ pub(crate) struct DeployArgs {
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
     #[arg(long, default_value_t = CyclesAmount::from(create::DEFAULT_CANISTER_CYCLES))]
     pub(crate) cycles: CyclesAmount,
+
+    /// Skip confirmation prompts, including the Candid interface compatibility check.
+    #[arg(long, short)]
+    pub(crate) yes: bool,
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
@@ -219,10 +227,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
-    let _ = ctx.term.write_line("\n\nInstalling canisters:");
 
     let canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
+        let agent = agent.clone();
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
@@ -231,6 +239,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 )
                 .await
                 .map_err(|e| anyhow!(e))?;
+
+            let mode = resolve_install_mode(&agent, name, &cid, &args.mode).await?;
 
             let env = ctx.get_environment(&environment_selection).await?;
             let (_canister_path, canister_info) =
@@ -242,15 +252,31 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map(|ia| ia.to_bytes())
                 .transpose()?;
 
-            Ok::<_, anyhow::Error>((name.clone(), cid, init_args_bytes))
+            Ok::<_, anyhow::Error>((name.clone(), cid, mode, init_args_bytes))
         }
     }))
     .await?;
 
+    if !args.yes {
+        let _ = ctx.term.write_line("\n\nChecking compatibility:");
+        check_candid_compatibility_many(
+            agent.clone(),
+            canisters
+                .iter()
+                .map(|(name, cid, mode, _)| (&**name, *cid, *mode)),
+            ctx.artifacts.clone(),
+            Arc::new(ctx.term.clone()),
+            ctx.debug,
+        )
+        .await
+        .map_err(|e| anyhow!(e))?;
+    }
+
+    let _ = ctx.term.write_line("\n\nInstalling canisters:");
+
     install_many(
         agent.clone(),
         canisters,
-        &args.mode,
         ctx.artifacts.clone(),
         Arc::new(ctx.term.clone()),
         ctx.debug,

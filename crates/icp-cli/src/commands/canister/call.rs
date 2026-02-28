@@ -1,9 +1,9 @@
-use anyhow::{Context as _, bail};
+use anyhow::{Context as _, anyhow, bail};
 use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use candid_parser::utils::CandidSource;
-use clap::Args;
+use clap::{Args, ValueEnum};
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
@@ -16,6 +16,20 @@ use std::io::{self, Write};
 use tracing::warn;
 
 use crate::{commands::args, operations::misc::fetch_canister_metadata};
+
+/// How to interpret and display the call response blob.
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+pub(crate) enum CallOutputMode {
+    /// Try Candid, then UTF-8, then fall back to hex.
+    #[default]
+    Auto,
+    /// Parse as Candid and pretty-print; error if parsing fails.
+    Candid,
+    /// Parse as UTF-8 text; error if invalid.
+    Text,
+    /// Print raw response as hex.
+    Hex,
+}
 
 /// Make a canister call
 #[derive(Args, Debug)]
@@ -59,6 +73,10 @@ pub(crate) struct CallArgs {
     /// Cannot be used with --proxy (proxy calls are always update calls).
     #[arg(long, conflicts_with = "proxy")]
     pub(crate) query: bool,
+
+    /// How to interpret and display the response.
+    #[arg(long, short, default_value = "auto")]
+    pub(crate) output: CallOutputMode,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
@@ -204,16 +222,53 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         agent.update(&cid, &args.method).with_arg(arg_bytes).await?
     };
 
-    let ret = match &candid_types {
-        Some((type_env, func)) => IDLArgs::from_bytes_with_types(&res[..], type_env, &func.rets)
-            .context("failed to decode candid response with types")?,
-        None => IDLArgs::from_bytes(&res[..]).context("failed to decode candid response")?,
-    };
+    let mut term = Term::buffered_stdout();
+    let res_hex = || format!("response (hex): {}", hex::encode(&res));
 
-    print_candid_for_term(&mut Term::buffered_stdout(), &ret)
-        .context("failed to print candid return value")?;
+    match args.output {
+        CallOutputMode::Auto => {
+            if let Ok(ret) = try_decode_candid(&res, candid_types.as_ref()) {
+                print_candid_for_term(&mut term, &ret)
+                    .context("failed to print candid return value")?;
+            } else if let Ok(s) = std::str::from_utf8(&res) {
+                writeln!(term, "{s}")?;
+                term.flush()?;
+            } else {
+                writeln!(term, "{}", hex::encode(&res))?;
+                term.flush()?;
+            }
+        }
+        CallOutputMode::Candid => {
+            let ret = try_decode_candid(&res, candid_types.as_ref()).with_context(res_hex)?;
+            print_candid_for_term(&mut term, &ret)
+                .context("failed to print candid return value")?;
+        }
+        CallOutputMode::Text => {
+            let s = std::str::from_utf8(&res)
+                .with_context(res_hex)
+                .context("response is not valid UTF-8")?;
+            writeln!(term, "{s}")?;
+            term.flush()?;
+        }
+        CallOutputMode::Hex => {
+            writeln!(term, "{}", hex::encode(&res))?;
+            term.flush()?;
+        }
+    }
 
     Ok(())
+}
+
+/// Tries to decode the response as Candid. Returns `None` if decoding fails.
+fn try_decode_candid(
+    res: &[u8],
+    candid_types: Option<&(TypeEnv, Function)>,
+) -> Result<IDLArgs, anyhow::Error> {
+    match candid_types {
+        Some((type_env, func)) => IDLArgs::from_bytes_with_types(res, type_env, &func.rets)
+            .map_err(|e| anyhow!("failed to parse Candid: {e}")),
+        None => IDLArgs::from_bytes(res).map_err(|e| anyhow!("failed to parse Candid: {e}")),
+    }
 }
 
 /// Pretty-prints IDLArgs detecting the terminal's width to avoid the 80-column default.

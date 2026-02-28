@@ -8,7 +8,7 @@ use ic_utils::interfaces::{
 };
 use icp::context::TermWriter;
 use sha2::{Digest, Sha256};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
 use tracing::debug;
 
@@ -38,37 +38,51 @@ struct InstallFailure {
     error: InstallOperationError,
 }
 
+/// Resolve a mode string ("auto", "install", "reinstall", "upgrade") into
+/// a [`CanisterInstallMode`]. For "auto", queries `canister_status` to
+/// determine whether the canister already has code installed.
+pub(crate) async fn resolve_install_mode(
+    agent: &Agent,
+    canister_name: &str,
+    canister_id: &Principal,
+    mode: &str,
+) -> Result<CanisterInstallMode, ResolveInstallModeError> {
+    match mode {
+        "auto" => {
+            let mgmt = ManagementCanister::create(agent);
+            let (status,) = mgmt
+                .canister_status(canister_id)
+                .await
+                .context(ResolveInstallModeSnafu { canister_name })?;
+            Ok(if status.module_hash.is_some() {
+                CanisterInstallMode::Upgrade(None)
+            } else {
+                CanisterInstallMode::Install
+            })
+        }
+        "install" => Ok(CanisterInstallMode::Install),
+        "reinstall" => Ok(CanisterInstallMode::Reinstall),
+        "upgrade" => Ok(CanisterInstallMode::Upgrade(None)),
+        _ => panic!("invalid install mode: {mode}"),
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Failed to resolve install mode for canister {canister_name}"))]
+pub(crate) struct ResolveInstallModeError {
+    canister_name: String,
+    source: AgentError,
+}
+
 pub(crate) async fn install_canister(
     agent: &Agent,
     canister_id: &Principal,
     canister_name: &str,
     wasm: &[u8],
-    mode: &str,
+    mode: CanisterInstallMode,
     init_args: Option<&[u8]>,
 ) -> Result<(), InstallOperationError> {
-    let mgmt = ManagementCanister::create(agent);
-    let install_mode = match mode {
-        "auto" => {
-            let (status,) = mgmt
-                .canister_status(canister_id)
-                .await
-                .map_err(|source| InstallOperationError::Agent { source })?;
-
-            match status.module_hash {
-                // Canister has had code installed to it.
-                Some(_) => CanisterInstallMode::Upgrade(None),
-
-                // Canister has not had code installed to it.
-                None => CanisterInstallMode::Install,
-            }
-        }
-        "install" => CanisterInstallMode::Install,
-        "reinstall" => CanisterInstallMode::Reinstall,
-        "upgrade" => CanisterInstallMode::Upgrade(None),
-        _ => panic!("invalid install mode"),
-    };
-
-    let install_mode = match install_mode {
+    let mode = match mode {
         CanisterInstallMode::Upgrade(_) => {
             // if this is a motoko canister using EOP
             // we need to set additional options
@@ -81,27 +95,18 @@ pub(crate) async fn install_canister(
                     wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
                 }))
             } else {
-                install_mode
+                mode
             }
         }
-        _ => install_mode,
+        _ => mode,
     };
 
-    // Install code to canister
     debug!(
         "Install new canister code for {} with mode `{:?}`",
-        canister_name, install_mode
+        canister_name, mode
     );
 
-    do_install_operation(
-        agent,
-        canister_id,
-        canister_name,
-        wasm,
-        install_mode,
-        init_args,
-    )
-    .await
+    do_install_operation(agent, canister_id, canister_name, wasm, mode, init_args).await
 }
 
 async fn do_install_operation(
@@ -205,11 +210,10 @@ async fn do_install_operation(
     Ok(())
 }
 
-/// Installs code to multiple canisters and displays progress bars
+/// Installs code to multiple canisters and displays progress bars.
 pub(crate) async fn install_many(
     agent: Agent,
-    canisters: Vec<(String, Principal, Option<Vec<u8>>)>,
-    mode: &str,
+    canisters: impl IntoIterator<Item = (String, Principal, CanisterInstallMode, Option<Vec<u8>>)>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
@@ -217,26 +221,24 @@ pub(crate) async fn install_many(
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for (name, cid, init_args) in canisters {
+    for (name, cid, mode, init_args) in canisters {
         let pb = progress_manager.create_progress_bar(&name);
         let agent = agent.clone();
         let install_fn = {
             let pb = pb.clone();
-            let mode = mode.to_string();
             let artifacts = artifacts.clone();
             let name = name.clone();
 
             async move {
                 pb.set_message("Installing...");
 
-                // Lookup the canister build artifact
                 let wasm = artifacts.lookup(&name).await.map_err(|_| {
                     InstallOperationError::ArtifactNotFound {
                         canister_name: name.clone(),
                     }
                 })?;
 
-                install_canister(&agent, &cid, &name, &wasm, &mode, init_args.as_deref()).await
+                install_canister(&agent, &cid, &name, &wasm, mode, init_args.as_deref()).await
             }
         };
 
@@ -249,7 +251,6 @@ pub(crate) async fn install_many(
             )
             .await;
 
-            // Map error to include canister context for deferred printing
             result.map_err(|error| InstallFailure {
                 canister_name: name.clone(),
                 canister_id: cid,
@@ -258,7 +259,6 @@ pub(crate) async fn install_many(
         });
     }
 
-    // Consume the set of futures and collect errors
     let mut errors: Vec<InstallFailure> = Vec::new();
     while let Some(res) = futs.next().await {
         if let Err(failure) = res {
@@ -267,7 +267,6 @@ pub(crate) async fn install_many(
     }
 
     if !errors.is_empty() {
-        // Print all errors in batch
         for failure in &errors {
             let _ = term.write_line("");
             let _ = term.write_line("");

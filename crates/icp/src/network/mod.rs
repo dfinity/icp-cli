@@ -216,10 +216,14 @@ impl From<ManifestGateway> for Gateway {
             Some(p) => Port::Fixed(p),
             None => Port::Random,
         };
+        let mut domains = domains.unwrap_or_default();
+        if bind == "127.0.0.1" || bind == "0.0.0.0" || bind == "::1" || bind == "::" {
+            domains.push("localhost".to_string());
+        }
         Gateway {
             bind,
             port,
-            domains: domains.unwrap_or_default(),
+            domains,
         }
     }
 }

@@ -798,7 +798,6 @@ async fn network_gateway_responds_to_custom_domain() {
                 gateway:
                   port: 0
                   domains:
-                    - localhost
                     - {domain}
             environments:
               - name: domain-env
@@ -808,6 +807,7 @@ async fn network_gateway_responds_to_custom_domain() {
     .expect("failed to write project manifest");
 
     let _guard = ctx.start_network_in(&project_dir, "domain-network").await;
+    ctx.ping_until_healthy(&project_dir, "domain-network");
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "domain-network");
     let port = network.gateway_port;

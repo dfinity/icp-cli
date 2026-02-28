@@ -881,9 +881,9 @@ mod tests {
     fn transform_native_launcher_default_config() {
         let config = ManagedLauncherConfig {
             gateway: Gateway {
-                bind: "localhost".to_string(),
+                bind: "127.0.0.1".to_string(),
                 port: Port::Fixed(8000),
-                domains: vec![],
+                domains: vec!["localhost".to_string()],
             },
             artificial_delay_ms: None,
             ii: false,

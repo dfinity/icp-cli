@@ -148,7 +148,7 @@ impl From<RootKey> for String {
 pub struct Gateway {
     /// Network interface for the gateway. Defaults to 127.0.0.1
     pub bind: Option<String>,
-    /// Domains the gateway should respond to. localhost is always included.
+    /// Domains the gateway should respond to. Automatically includes localhost if applicable.
     pub domains: Option<Vec<String>>,
     /// Port for the gateway to listen on. Defaults to 8000
     pub port: Option<u16>,

@@ -38,14 +38,9 @@ const SEND_GUARD_SECS: u64 = 30 * 60;
 
 /// Telemetry ingestion endpoint.
 ///
-/// Deliberately set to a non-resolvable placeholder until the real endpoint is
-/// confirmed.  The `.invalid` TLD is reserved by RFC 2606 and will never
-/// resolve, so any send attempt fails silently without reaching a third-party
-/// server.
-///
 /// Override at runtime with the `ICP_TELEMETRY_ENDPOINT` environment variable
 /// (intended for integration tests only).
-const TELEMETRY_ENDPOINT: &str = "https://telemetry.invalid/v1/events";
+const TELEMETRY_ENDPOINT: &str = "https://icp-cli.dfinity.network/telemetry";
 
 /// How an argument was supplied.
 #[derive(Clone, Debug, Serialize, Deserialize)]

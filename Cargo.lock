@@ -2534,6 +2534,7 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash",
+ "serde",
 ]
 
 [[package]]
@@ -3199,6 +3200,7 @@ dependencies = [
  "dialoguer 0.11.0",
  "dunce",
  "elliptic-curve",
+ "flate2",
  "futures",
  "hex",
  "httptest",
@@ -3245,6 +3247,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+ "wasmparser",
  "wslpath2",
 ]
 
@@ -6957,6 +6960,19 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b722dcf61e0ea47440b53ff83ccb5df8efec57a69d150e4f24882e4eba7e24a4"
+dependencies = [
+ "bitflags 2.10.0",
+ "hashbrown 0.15.5",
+ "indexmap 2.13.0",
+ "semver",
+ "serde",
 ]
 
 [[package]]

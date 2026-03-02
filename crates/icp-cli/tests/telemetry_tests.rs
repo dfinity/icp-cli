@@ -87,6 +87,20 @@ macro_rules! icp_with_telemetry {
             .env_remove("ICP_TELEMETRY_DISABLED");
         (icp_home, cmd)
     }};
+    ($ctx:expr, allow_upload) => {{
+        let icp_home = $ctx.home_path().join("icp-home");
+        let mut cmd = $ctx.icp();
+        cmd.env("ICP_HOME", icp_home.as_str())
+            .env_remove("CI")
+            .env_remove("DO_NOT_TRACK")
+            .env_remove("ICP_TELEMETRY_DISABLED")
+            .env_remove("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD")
+            .env(
+                "ICP_TELEMETRY_ENDPOINT",
+                "https://telemetry.invalid/v1/events",
+            );
+        (icp_home, cmd)
+    }};
 }
 
 /// Each of the three opt-out env vars must prevent any telemetry state from
@@ -273,7 +287,7 @@ fn telemetry_notice_suppressed_when_marker_exists() {
 #[test]
 fn telemetry_time_trigger_rotates_events() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
     let telemetry_dir = icp_home.join("telemetry");
 
     // Set next-send-time to Unix epoch (far in the past).
@@ -297,7 +311,7 @@ fn telemetry_time_trigger_rotates_events() {
 #[test]
 fn telemetry_size_trigger_rotates_events() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
     let telemetry_dir = icp_home.join("telemetry");
 
     // next-send-time far in the future → only the size trigger can fire.
@@ -415,7 +429,7 @@ fn telemetry_send_batch_delivers_data() {
 #[test]
 fn telemetry_stale_batches_deleted_on_trigger() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
     let telemetry_dir = icp_home.join("telemetry");
 
     // Time trigger will fire.
@@ -449,7 +463,7 @@ fn telemetry_stale_batches_deleted_on_trigger() {
 #[test]
 fn telemetry_excess_batches_pruned_on_trigger() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
     let telemetry_dir = icp_home.join("telemetry");
 
     // Time trigger will fire.

@@ -104,6 +104,8 @@ impl TestContext {
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.env("PATH", self.os_path.clone());
         cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
+        cmd.env("ICP_TELEMETRY_DISABLED", "1");
+        cmd.env("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD", "1");
 
         // If SoftHSM has been initialized, include its config
         if let Some(hsm) = self.softhsm.get() {

@@ -115,6 +115,16 @@
                 "null"
               ]
             },
+            "extra-hosts": {
+              "description": "Extra hosts entries for Docker networking (e.g. \"host.docker.internal:host-gateway\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "image": {
               "description": "The docker image to use for the network",
               "type": "string"
@@ -197,6 +207,26 @@
               "minimum": 0,
               "type": [
                 "integer",
+                "null"
+              ]
+            },
+            "bitcoind-addr": {
+              "description": "Bitcoin P2P node addresses to connect to (e.g. \"127.0.0.1:18444\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "dogecoind-addr": {
+              "description": "Dogecoin P2P node addresses to connect to",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },

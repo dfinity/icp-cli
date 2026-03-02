@@ -179,6 +179,20 @@ Make a canister call
 * `--query` — Sends a query request to a canister instead of an update request.
 
    Query calls are faster but return uncertified responses. Cannot be used with --proxy (proxy calls are always update calls).
+* `-o`, `--output <OUTPUT>` — How to interpret and display the response
+
+  Default value: `auto`
+
+  Possible values:
+  - `auto`:
+    Try Candid, then UTF-8, then fall back to hex
+  - `candid`:
+    Parse as Candid and pretty-print; error if parsing fails
+  - `text`:
+    Parse as UTF-8 text; error if invalid
+  - `hex`:
+    Print raw response as hex
+
 
 
 
@@ -279,6 +293,7 @@ Install a built WASM to a canister on a network
   - `bin`:
     Raw binary (only valid for file references)
 
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
@@ -776,6 +791,7 @@ Deploy a project to an environment
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 

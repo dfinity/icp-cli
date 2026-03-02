@@ -300,6 +300,130 @@ async fn canister_call_through_proxy() {
 }
 
 #[tokio::test]
+async fn canister_call_output_modes() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("write manifest");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // --output auto (default): Candid decode
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // --output candid: same for Candid response
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--output",
+            "candid",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // --output hex: raw hex (Candid response bytes)
+    let out = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--output",
+            "hex",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .output()
+        .expect("run call");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Candid encoding of ("Hello, world!") — didc encode '("Hello, world!")'
+    const GREET_HEX: &str = "4449444c0001710d48656c6c6f2c20776f726c6421";
+    let hex_out = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert_eq!(
+        hex_out, GREET_HEX,
+        "expected Candid hex for (\"Hello, world!\")"
+    );
+
+    // --output text: this Candid response is valid UTF-8; output must equal GREET_HEX decoded as UTF-8
+    let out = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--output",
+            "text",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .output()
+        .expect("run call");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let expected_text = String::from_utf8(hex::decode(GREET_HEX).unwrap()).unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert_eq!(
+        stdout, expected_text,
+        "text output must equal GREET_HEX decoded as UTF-8"
+    );
+}
+
+#[tokio::test]
 async fn canister_call_query_conflicts_with_proxy() {
     let ctx = TestContext::new();
 

@@ -8,6 +8,8 @@ Each command invocation produces a single telemetry record with the following fi
 
 | Field | Example | Purpose |
 |---|---|---|
+| `batch` | `a1b2c3d4-...` | Group records from the same transmission; server-side deduplication |
+| `sequence` | `0`, `1`, `2` | Ordering of records within a batch |
 | `machine_id` | `a1b2c3d4-...` | Count unique installations |
 | `platform` | `macos`, `linux`, `windows`, `wsl` | Platform distribution |
 | `arch` | `aarch64`, `x86_64` | Architecture distribution |
@@ -39,6 +41,8 @@ For example, `icp deploy --mode install --environment production` records:
   {"name": "environment", "value": null, "source": "command-line"}
 ]
 ```
+
+The `batch` UUID is generated fresh each time records are transmitted and is not persisted across sends. Records within the same batch can be grouped for server-side deduplication.
 
 The `machine_id` is a random UUID generated on first run and stored locally. It is used solely to count unique installations and is not linked to any user identity.
 

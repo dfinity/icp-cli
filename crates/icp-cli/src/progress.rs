@@ -228,8 +228,11 @@ impl MultiStepProgressBar {
                 complete.push(line);
 
                 // Update progress-bar with rolling terminal output
-                let msg = rolling.iter().map(|s| format!("> {s}")).join("\n");
-                set_message(msg);
+                // Make the output
+                // │ look prettier...
+                // └
+                let msg = rolling.iter().map(|s| format!("│ {s}")).join("\n");
+                set_message(format!("{msg}\n└\n"));
             }
 
             complete.into_iter().collect()

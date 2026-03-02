@@ -898,11 +898,7 @@ mod tests {
             opts.image,
             "ghcr.io/dfinity/icp-cli-network-launcher:latest"
         );
-        assert!(
-            opts.args
-                .iter()
-                .eq(["--domain=localhost", "--domain=127.0.0.1"])
-        );
+        assert!(opts.args.iter().eq(["--domain=localhost"]));
         assert!(opts.extra_hosts.is_empty());
         assert!(opts.rm_on_exit);
         assert_eq!(opts.status_dir, "/app/status");

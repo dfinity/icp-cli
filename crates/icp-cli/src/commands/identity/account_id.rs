@@ -31,7 +31,7 @@ pub(crate) struct AccountIdArgs {
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) of_subaccount: Option<[u8; 32]>,
 
-    /// Account identifier format to display [default: ledger]
+    /// Account identifier format to display
     #[arg(long, default_value = "ledger")]
     pub(crate) format: OutputFormat,
 }

@@ -825,7 +825,7 @@ Manage your identities
 
 ###### **Subcommands:**
 
-* `account-id` — Display the ICP ledger and ICRC-1 account identifiers for the current identity
+* `account-id` — Display the ICP ledger or ICRC-1 account identifier for the current identity
 * `default` — Display the currently selected identity
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
@@ -840,7 +840,7 @@ Manage your identities
 
 ## `icp identity account-id`
 
-Display the ICP ledger and ICRC-1 account identifiers for the current identity
+Display the ICP ledger or ICRC-1 account identifier for the current identity
 
 **Usage:** `icp identity account-id [OPTIONS]`
 
@@ -848,7 +848,17 @@ Display the ICP ledger and ICRC-1 account identifiers for the current identity
 
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--of-principal <OF_PRINCIPAL>` — Convert this Principal instead of the current identity's Principal
-* `--of-subaccount <OF_SUBACCOUNT>` — Specify a subaccount. If absent, the ICRC-1 account will be omitted as it is just the principal
+* `--of-subaccount <OF_SUBACCOUNT>` — Specify a subaccount
+* `--format <FORMAT>` — Account identifier format to display [default: ledger]
+
+  Default value: `ledger`
+
+  Possible values:
+  - `ledger`:
+    ICP ledger account identifier
+  - `icrc1`:
+    ICRC-1 account identifier
+
 
 
 

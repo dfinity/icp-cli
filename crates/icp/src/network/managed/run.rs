@@ -159,7 +159,6 @@ async fn run_network_launcher(
             (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
         }
     };
-
     let (mut guard, instance, gateway, locator) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
             // Acquire locks for all fixed ports and check they're not in use
@@ -191,6 +190,8 @@ async fn run_network_launcher(
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
+                        host: "localhost".to_string(),
+                        ip: "127.0.0.1".to_string(),
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
@@ -212,9 +213,15 @@ async fn run_network_launcher(
                         &root.state_dir(),
                     )
                     .await?;
+                    let host = match launcher_config.gateway.domains.first() {
+                        Some(domain) => domain.clone(),
+                        None => launcher_config.gateway.bind.to_string(),
+                    };
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
+                        ip: launcher_config.gateway.bind.clone(),
+                        host,
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
                 }
@@ -228,7 +235,7 @@ async fn run_network_launcher(
     }
 
     let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
-        &format!("http://localhost:{}", instance.gateway_port)
+        &format!("http://{}:{}", gateway.host, gateway.port)
             .parse()
             .unwrap(),
         &instance.root_key,
@@ -316,7 +323,7 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
     let port_bindings: HashMap<String, Option<Vec<PortBinding>>> = [(
         "4943/tcp".to_string(),
         Some(vec![PortBinding {
-            host_ip: Some("127.0.0.1".to_string()),
+            host_ip: Some(config.gateway.bind.to_string()),
             host_port: Some(port.to_string()),
         }]),
     )]
@@ -874,9 +881,9 @@ mod tests {
     fn transform_native_launcher_default_config() {
         let config = ManagedLauncherConfig {
             gateway: Gateway {
-                host: "localhost".to_string(),
+                bind: "127.0.0.1".to_string(),
                 port: Port::Fixed(8000),
-                domains: vec![],
+                domains: vec!["localhost".to_string()],
             },
             artificial_delay_ms: None,
             ii: false,
@@ -891,7 +898,7 @@ mod tests {
             opts.image,
             "ghcr.io/dfinity/icp-cli-network-launcher:latest"
         );
-        assert!(opts.args.is_empty());
+        assert!(opts.args.iter().eq(["--domain=localhost"]));
         assert!(opts.extra_hosts.is_empty());
         assert!(opts.rm_on_exit);
         assert_eq!(opts.status_dir, "/app/status");
@@ -908,7 +915,7 @@ mod tests {
     fn transform_native_launcher_random_port() {
         let config = ManagedLauncherConfig {
             gateway: Gateway {
-                host: "localhost".to_string(),
+                bind: "127.0.0.1".to_string(),
                 port: Port::Random,
                 domains: vec![],
             },

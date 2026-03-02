@@ -77,10 +77,11 @@ pub async fn spawn_network_launcher(
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
-        "1.0.0",
+        "1.1.0",
         "--state-dir",
         state_dir.as_str(),
     ]);
+    cmd.args(["--bind", &launcher_config.gateway.bind]);
     if let Port::Fixed(port) = launcher_config.gateway.port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }
@@ -205,6 +206,9 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     }
     for domain in &gateway.domains {
         flags.push(format!("--domain={domain}"));
+    }
+    if gateway.domains.is_empty() {
+        flags.push(format!("--domain={}", gateway.bind));
     }
     flags
 }

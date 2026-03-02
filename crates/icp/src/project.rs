@@ -22,9 +22,8 @@ use crate::{
     prelude::*,
 };
 
-pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
+pub const DEFAULT_LOCAL_NETWORK_BIND: &str = "127.0.0.1";
 pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
-pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 
 #[derive(Debug, Snafu)]
 pub enum EnvironmentError {
@@ -382,7 +381,7 @@ pub async fn consolidate_manifest(
                     managed: Managed {
                         mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                             gateway: Gateway {
-                                host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                                bind: DEFAULT_LOCAL_NETWORK_BIND.to_string(),
                                 port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
                                 domains: vec![],
                             },

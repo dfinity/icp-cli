@@ -6,11 +6,12 @@ use crate::{
         Configuration, Gateway, Managed, ManagedLauncherConfig, ManagedMode, MockNetworkAccessor,
         Port, access::NetworkAccess,
     },
-    project::DEFAULT_LOCAL_NETWORK_URL,
     store_id::{Access as IdAccess, mock::MockInMemoryIdStore},
 };
 use candid::Principal;
 use std::collections::HashMap;
+
+const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 
 #[tokio::test]
 async fn test_get_identity_default() {
@@ -601,7 +602,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(8000),
                         domains: vec![],
                     },
@@ -671,7 +672,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(9000),
                         domains: vec![],
                     },
@@ -743,7 +744,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(8000),
                         domains: vec![],
                     },
@@ -765,7 +766,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
             managed: Managed {
                 mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                     gateway: Gateway {
-                        host: "localhost".to_string(),
+                        bind: "127.0.0.1".to_string(),
                         port: Port::Fixed(7000),
                         domains: vec![],
                     },

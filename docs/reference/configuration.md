@@ -199,7 +199,7 @@ networks:
   - name: local-dev
     mode: managed
     gateway:
-      host: 127.0.0.1
+      bind: 127.0.0.1
       port: 4943
 ```
 
@@ -207,7 +207,7 @@ networks:
 |----------|------|----------|-------------|
 | `name` | string | Yes | Network identifier |
 | `mode` | string | Yes | `managed` |
-| `gateway.host` | string | No | Host address (default: localhost) |
+| `gateway.bind` | string | No | Bind address (default: 127.0.0.1) |
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
 | `artificial-delay-ms` | integer | No | Artificial delay for update calls (ms) |
 | `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. |

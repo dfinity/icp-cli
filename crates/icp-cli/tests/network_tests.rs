@@ -829,3 +829,48 @@ async fn network_gateway_responds_to_custom_domain() {
         resp.status()
     );
 }
+
+#[cfg(target_os = "linux")] // alternate loopback
+#[tokio::test]
+async fn network_gateway_binds_to_configured_interface() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("custom-bind");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: bind-network
+                mode: managed
+                gateway:
+                  port: 0
+                  bind: 127.0.0.2
+            environments:
+              - name: bind-env
+                network: bind-network
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _guard = ctx.start_network_in(&project_dir, "bind-network").await;
+    ctx.ping_until_healthy(&project_dir, "bind-network");
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "bind-network");
+    let port = network.gateway_port;
+
+    let client = reqwest::Client::builder()
+        .build()
+        .expect("failed to build reqwest client");
+
+    let resp = client
+        .get(format!("http://127.0.0.2:{port}/api/v2/status"))
+        .send()
+        .await
+        .expect("request to custom interface failed");
+
+    assert!(
+        resp.status().is_success(),
+        "gateway should respond successfully on custom interface, got {}",
+        resp.status()
+    );
+}

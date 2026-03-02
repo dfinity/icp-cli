@@ -207,7 +207,6 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     for domain in &gateway.domains {
         flags.push(format!("--domain={domain}"));
     }
-    flags.push(format!("--domain={}", gateway.bind));
     flags
 }
 

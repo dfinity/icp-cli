@@ -87,17 +87,17 @@ macro_rules! icp_with_telemetry {
             .env_remove("ICP_TELEMETRY_DISABLED");
         (icp_home, cmd)
     }};
-    ($ctx:expr, allow_upload) => {{
+    ($ctx:expr, enable_send) => {{
         let icp_home = $ctx.home_path().join("icp-home");
         let mut cmd = $ctx.icp();
         cmd.env("ICP_HOME", icp_home.as_str())
             .env_remove("CI")
             .env_remove("DO_NOT_TRACK")
             .env_remove("ICP_TELEMETRY_DISABLED")
+            // Allow should_send() to return true so the send trigger fires.
             .env_remove("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD")
             // Override the endpoint to a non-resolvable address so the
-            // background sender silently fails. Without this, tests would
-            // send junk data to the real production endpoint.
+            // background sender silently fails instead of hitting production.
             .env(
                 "ICP_TELEMETRY_ENDPOINT",
                 "https://telemetry.invalid/v1/events",
@@ -290,7 +290,7 @@ fn telemetry_notice_suppressed_when_marker_exists() {
 #[test]
 fn telemetry_time_trigger_rotates_events() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, enable_send);
     let telemetry_dir = icp_home.join("telemetry");
 
     // Set next-send-time to Unix epoch (far in the past).
@@ -314,7 +314,7 @@ fn telemetry_time_trigger_rotates_events() {
 #[test]
 fn telemetry_size_trigger_rotates_events() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, enable_send);
     let telemetry_dir = icp_home.join("telemetry");
 
     // next-send-time far in the future → only the size trigger can fire.
@@ -355,7 +355,7 @@ fn telemetry_no_rotation_when_send_not_due() {
     );
 }
 
-/// A failed batch send (default `.invalid` endpoint) must exit 0, produce no
+/// A failed batch send (non-resolvable `.invalid` endpoint) must exit 0, produce no
 /// output, and leave the batch file in place for retry.
 #[test]
 fn telemetry_failed_send_is_silent() {
@@ -367,8 +367,8 @@ fn telemetry_failed_send_is_silent() {
         .join("batch-1700000000-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl");
     std::fs::write(&batch_path, FAKE_RECORD).expect("write batch file");
 
-    ctx.icp()
-        .args(["__telemetry-send-batch", batch_path.as_str()])
+    let (_icp_home, mut cmd) = icp_with_telemetry!(ctx, enable_send);
+    cmd.args(["__telemetry-send-batch", batch_path.as_str()])
         .timeout(Duration::from_secs(15))
         .assert()
         .success()
@@ -432,7 +432,7 @@ fn telemetry_send_batch_delivers_data() {
 #[test]
 fn telemetry_stale_batches_deleted_on_trigger() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, enable_send);
     let telemetry_dir = icp_home.join("telemetry");
 
     // Time trigger will fire.
@@ -466,7 +466,7 @@ fn telemetry_stale_batches_deleted_on_trigger() {
 #[test]
 fn telemetry_excess_batches_pruned_on_trigger() {
     let ctx = TestContext::new();
-    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, allow_upload);
+    let (icp_home, mut cmd) = icp_with_telemetry!(ctx, enable_send);
     let telemetry_dir = icp_home.join("telemetry");
 
     // Time trigger will fire.

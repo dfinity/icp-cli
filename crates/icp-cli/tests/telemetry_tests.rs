@@ -95,6 +95,9 @@ macro_rules! icp_with_telemetry {
             .env_remove("DO_NOT_TRACK")
             .env_remove("ICP_TELEMETRY_DISABLED")
             .env_remove("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD")
+            // Override the endpoint to a non-resolvable address so the
+            // background sender silently fails. Without this, tests would
+            // send junk data to the real production endpoint.
             .env(
                 "ICP_TELEMETRY_ENDPOINT",
                 "https://telemetry.invalid/v1/events",

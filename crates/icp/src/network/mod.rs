@@ -25,6 +25,7 @@ use crate::{
 
 pub mod access;
 pub mod config;
+pub mod custom_domains;
 pub mod directory;
 pub mod managed;
 

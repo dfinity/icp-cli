@@ -245,7 +245,7 @@ async fn sync_adapter_static_assets() {
         .assert()
         .success();
 
-    // Verify that assets canister was synced
+    // Verify that assets canister was synced via canisterId query param
     let resp = reqwest::get(format!("http://localhost:{network_port}/?canisterId={cid}"))
         .await
         .expect("request failed");
@@ -255,6 +255,26 @@ async fn sync_adapter_static_assets() {
         .await
         .expect("failed to read canister response body");
 
+    assert_eq!(out, "hello");
+
+    // Verify that the friendly domain also works
+    let friendly_domain = "my-canister.random-environment.localhost";
+    let client = reqwest::Client::builder()
+        .resolve(
+            friendly_domain,
+            std::net::SocketAddr::from(([127, 0, 0, 1], network_port)),
+        )
+        .build()
+        .expect("failed to build reqwest client");
+    let resp = client
+        .get(format!("http://{friendly_domain}:{network_port}/"))
+        .send()
+        .await
+        .expect("friendly domain request failed");
+    let out = resp
+        .text()
+        .await
+        .expect("failed to read friendly domain response body");
     assert_eq!(out, "hello");
 }
 

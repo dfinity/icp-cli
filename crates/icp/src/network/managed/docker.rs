@@ -11,7 +11,6 @@ use bollard::{
     },
     secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
-use camino_tempfile::Utf8TempDir;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 use snafu::ResultExt;
@@ -238,6 +237,7 @@ pub(super) fn translate_launcher_args_for_docker(args: Vec<String>) -> Vec<Strin
 
 pub async fn spawn_docker_launcher(
     options: &ManagedImageOptions,
+    host_status_dir: &Path,
 ) -> Result<
     (
         AsyncDropper<DockerDropGuard>,
@@ -263,13 +263,11 @@ pub async fn spawn_docker_launcher(
         extra_hosts,
     } = options;
 
-    // Create status tmpdir and convert path for WSL2 if needed
+    // Convert path for WSL2 if needed
     let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO").ok();
     let wsl2_distro = wsl2_distro.as_deref();
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
-    let host_status_tmpdir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    let host_status_dir = host_status_tmpdir.path();
-    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
+    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_dir)?;
 
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
@@ -700,8 +698,6 @@ pub enum DockerLauncherError {
         container_id: String,
         exit_status: i64,
     },
-    #[snafu(display("failed to create status directory"))]
-    CreateStatusDir { source: std::io::Error },
     #[snafu(display("failed to query docker image {image}"))]
     QueryImage {
         source: bollard::errors::Error,

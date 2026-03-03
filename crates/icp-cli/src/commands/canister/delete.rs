@@ -38,6 +38,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
     if let CanisterSelection::Named(canister_name) = &selections.canister {
         ctx.remove_canister_id_for_env(canister_name, &selections.environment)
             .await?;
+        ctx.update_custom_domains(&selections.environment).await;
     }
 
     Ok(())

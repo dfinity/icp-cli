@@ -353,7 +353,7 @@ See [Canister Settings Reference](canister-settings.md) for all options.
 settings:
   compute_allocation: 5
   memory_allocation: 4gib
-  freezing_threshold: 2592000          # 30 days
+  freezing_threshold: 30d
   reserved_cycles_limit: 1t
   wasm_memory_limit: 1gib
   wasm_memory_threshold: 512mib
@@ -362,7 +362,7 @@ settings:
     KEY: "value"
 ```
 
-Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Decimals and underscores are supported (e.g. `2.5gib`, `1_000_000`).
+Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Decimals and underscores are supported where applicable (e.g. `2.5gib`, `1_000_000`).
 
 ## Init Args
 
@@ -465,7 +465,7 @@ environments:
         memory_allocation: 4gib
       backend:
         compute_allocation: 30
-        freezing_threshold: 7776000        # 90 days
+        freezing_threshold: 90d
         environment_variables:
           ENV: "production"
     init_args:

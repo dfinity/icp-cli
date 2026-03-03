@@ -6,7 +6,7 @@ use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
 use icp::ProjectLoadError;
 use icp::context::{CanisterSelection, Context, TermWriter};
-use icp::parsers::{CyclesAmount, MemoryAmount};
+use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
@@ -100,8 +100,11 @@ pub(crate) struct UpdateArgs {
     #[arg(long)]
     memory_allocation: Option<MemoryAmount>,
 
-    #[arg(long, value_parser = freezing_threshold_parser)]
-    freezing_threshold: Option<u64>,
+    /// Freezing threshold. Controls how long a canister can be inactive before being frozen.
+    /// Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks).
+    /// A bare number is treated as seconds.
+    #[arg(long)]
+    freezing_threshold: Option<DurationAmount>,
 
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
@@ -231,13 +234,13 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
         update = update.with_memory_allocation(memory_allocation.get());
     }
-    if let Some(freezing_threshold) = args.freezing_threshold {
+    if let Some(freezing_threshold) = &args.freezing_threshold {
         if configured_settings.freezing_threshold.is_some() {
             ctx.term.write_line(
                 "Warning: Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
             )?
         }
-        update = update.with_freezing_threshold(freezing_threshold);
+        update = update.with_freezing_threshold(freezing_threshold.get());
     }
     if let Some(reserved_cycles_limit) = &args.reserved_cycles_limit {
         if configured_settings.reserved_cycles_limit.is_some() {
@@ -286,13 +289,6 @@ fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
         return Ok(num);
     }
     Err("Must be a percent between 0 and 100".to_string())
-}
-
-fn freezing_threshold_parser(freezing_threshold: &str) -> Result<u64, String> {
-    if let Ok(num) = freezing_threshold.parse::<u64>() {
-        return Ok(num);
-    }
-    Err("Must be a value between 0..2^64-1 inclusive".to_string())
 }
 
 fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> {

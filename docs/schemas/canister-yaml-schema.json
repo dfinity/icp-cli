@@ -150,6 +150,19 @@
       ],
       "description": "An amount of cycles.\n\nDeserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators."
     },
+    "DurationAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A duration in seconds.\n\nDeserializes from a number (seconds) or a string with duration suffix (s, m, h, d, w)\nand optional underscore separators.\n\nSuffixes (case-insensitive):\n- `s` — seconds\n- `m` — minutes (×60)\n- `h` — hours (×3600)\n- `d` — days (×86400)\n- `w` — weeks (×604800)\n\nA bare number without suffix is treated as seconds."
+    },
     "InitArgsFormat": {
       "description": "Format specifier for init args content.",
       "oneOf": [
@@ -329,13 +342,15 @@
           ]
         },
         "freezing_threshold": {
-          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DurationAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.\nSupports duration suffixes in YAML: s, m, h, d, w (e.g. \"30d\" or \"4w\")."
         },
         "log_visibility": {
           "anyOf": [

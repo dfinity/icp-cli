@@ -728,7 +728,7 @@ async fn canister_settings_update_miscellaneous() {
             "--memory-allocation",
             "6GiB",
             "--freezing-threshold",
-            "8640000",
+            "100d",
             "--reserved-cycles-limit",
             "6t",
             "--wasm-memory-limit",

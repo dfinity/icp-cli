@@ -81,7 +81,7 @@ pub(crate) async fn sync_settings(
         ref log_visibility,
         compute_allocation,
         ref memory_allocation,
-        freezing_threshold,
+        ref freezing_threshold,
         ref reserved_cycles_limit,
         ref wasm_memory_limit,
         ref wasm_memory_threshold,
@@ -119,7 +119,10 @@ pub(crate) async fn sync_settings(
             .as_ref()
             .map(|m| m.get())
             .is_none_or(|s| current_settings.memory_allocation.0.to_u64() == Some(s))
-        && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
+        && freezing_threshold
+            .as_ref()
+            .map(|d| d.get())
+            .is_none_or(|s| s == current_settings.freezing_threshold)
         && reserved_cycles_limit
             .as_ref()
             .is_none_or(|s| s.get() == current_settings.reserved_cycles_limit)
@@ -142,7 +145,7 @@ pub(crate) async fn sync_settings(
         .with_optional_log_visibility(log_visibility_setting)
         .with_optional_compute_allocation(compute_allocation)
         .with_optional_memory_allocation(memory_allocation.as_ref().map(|m| m.get()))
-        .with_optional_freezing_threshold(freezing_threshold)
+        .with_optional_freezing_threshold(freezing_threshold.as_ref().map(|d| d.get()))
         .with_optional_reserved_cycles_limit(reserved_cycles_limit.as_ref().map(|r| r.get()))
         .with_optional_wasm_memory_limit(wasm_memory_limit.as_ref().map(|m| m.get()))
         .with_optional_wasm_memory_threshold(wasm_memory_threshold.as_ref().map(|m| m.get()))

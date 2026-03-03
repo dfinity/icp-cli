@@ -5,7 +5,7 @@ use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::parsers::{CyclesAmount, MemoryAmount};
+use crate::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 
 pub mod build;
 pub mod recipe;
@@ -214,7 +214,8 @@ pub struct Settings {
     pub memory_allocation: Option<MemoryAmount>,
 
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
-    pub freezing_threshold: Option<u64>,
+    /// Supports duration suffixes in YAML: s, m, h, d, w (e.g. "30d" or "4w").
+    pub freezing_threshold: Option<DurationAmount>,
 
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
@@ -239,7 +240,7 @@ pub struct Settings {
 impl From<Settings> for CanisterSettingsArg {
     fn from(settings: Settings) -> Self {
         CanisterSettingsArg {
-            freezing_threshold: settings.freezing_threshold.map(Nat::from),
+            freezing_threshold: settings.freezing_threshold.map(|d| Nat::from(d.get())),
             controllers: None,
             reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),

@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use icp::context::Context;
-use icp::parsers::{CyclesAmount, MemoryAmount};
+use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
 
@@ -21,9 +21,11 @@ pub(crate) struct CanisterSettings {
     #[arg(long)]
     pub(crate) memory_allocation: Option<MemoryAmount>,
 
-    /// Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
+    /// Optional freezing threshold. Controls how long a canister can be inactive before being frozen.
+    /// Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks).
+    /// A bare number is treated as seconds.
     #[arg(long)]
-    pub(crate) freezing_threshold: Option<u64>,
+    pub(crate) freezing_threshold: Option<DurationAmount>,
 
     /// Optional upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
@@ -96,8 +98,9 @@ impl CreateArgs {
             freezing_threshold: self
                 .settings
                 .freezing_threshold
-                .or(default.settings.freezing_threshold)
-                .map(Nat::from),
+                .clone()
+                .or(default.settings.freezing_threshold.clone())
+                .map(|d| Nat::from(d.get())),
             controllers: if self.controller.is_empty() {
                 None
             } else {
@@ -127,7 +130,11 @@ impl CreateArgs {
 
     pub(crate) fn canister_settings(&self) -> CanisterSettingsArg {
         CanisterSettingsArg {
-            freezing_threshold: self.settings.freezing_threshold.map(Nat::from),
+            freezing_threshold: self
+                .settings
+                .freezing_threshold
+                .clone()
+                .map(|d| Nat::from(d.get())),
             controllers: if self.controller.is_empty() {
                 None
             } else {

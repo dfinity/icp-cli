@@ -308,9 +308,12 @@ The ICRC-1 account format works for both `icp token transfer` and `icp cycles tr
 ```bash
 # Show account identifiers for a subaccount
 icp identity account-id --of-subaccount 1
+
+# Show the icrc1 format
+icp identity account-id --of-subaccount 1 --format icrc1
 ```
 
-When a subaccount is specified, this prints both the ICP ledger account identifier and the ICRC-1 account format.
+You can choose to the output format as either `ledger` (the default) or `icrc1`.
 
 ## Fees and Safety
 

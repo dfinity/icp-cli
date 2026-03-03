@@ -853,7 +853,7 @@ Raw binary (only valid for file references)</li>
 <p><strong>Usage:</strong> <code>icp identity &#x3C;COMMAND></code></p>
 <h6 id="subcommands-6"><strong>Subcommands:</strong></h6>
 <ul>
-<li><code>account-id</code> — Display the ICP ledger and ICRC-1 account identifiers for the current identity</li>
+<li><code>account-id</code> — Display the ICP ledger or ICRC-1 account identifier for the current identity</li>
 <li><code>default</code> — Display the currently selected identity</li>
 <li><code>delete</code> — Delete an identity</li>
 <li><code>export</code> — Print the PEM file for the identity</li>
@@ -865,13 +865,30 @@ Raw binary (only valid for file references)</li>
 <li><code>rename</code> — Rename an identity</li>
 </ul>
 <h2 id="icp-identity-account-id"><code>icp identity account-id</code></h2>
-<p>Display the ICP ledger and ICRC-1 account identifiers for the current identity</p>
+<p>Display the ICP ledger or ICRC-1 account identifier for the current identity</p>
 <p><strong>Usage:</strong> <code>icp identity account-id [OPTIONS]</code></p>
 <h6 id="options-27"><strong>Options:</strong></h6>
 <ul>
-<li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--of-principal &#x3C;OF_PRINCIPAL></code> — Convert this Principal instead of the current identity’s Principal</li>
-<li><code>--of-subaccount &#x3C;OF_SUBACCOUNT></code> — Specify a subaccount. If absent, the ICRC-1 account will be omitted as it is just the principal</li>
+<li>
+<p><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</p>
+</li>
+<li>
+<p><code>--of-principal &#x3C;OF_PRINCIPAL></code> — Convert this Principal instead of the current identity’s Principal</p>
+</li>
+<li>
+<p><code>--of-subaccount &#x3C;OF_SUBACCOUNT></code> — Specify a subaccount</p>
+</li>
+<li>
+<p><code>--format &#x3C;FORMAT></code> — Account identifier format to display</p>
+<p>Default value: <code>ledger</code></p>
+<p>Possible values:</p>
+<ul>
+<li><code>ledger</code>:
+ICP ledger account identifier</li>
+<li><code>icrc1</code>:
+ICRC-1 account identifier</li>
+</ul>
+</li>
 </ul>
 <h2 id="icp-identity-default"><code>icp identity default</code></h2>
 <p>Display the currently selected identity</p>

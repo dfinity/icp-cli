@@ -11,8 +11,8 @@ canisters:
 
     settings:
       compute_allocation: 1
-      memory_allocation: 4294967296
-      freezing_threshold: 2592000
-      reserved_cycles_limit: 1000000000000
-      wasm_memory_limit: 1073741824
-      wasm_memory_threshold: 536870912
+      memory_allocation: 4gib
+      freezing_threshold: 2592000        # 30 days
+      reserved_cycles_limit: 1t
+      wasm_memory_limit: 1gib
+      wasm_memory_threshold: 512mib

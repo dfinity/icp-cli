@@ -209,6 +209,7 @@ networks:
 | `mode` | string | Yes | `managed` |
 | `gateway.bind` | string | No | Bind address (default: 127.0.0.1) |
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
+| `gateway.domains` | array | No | Custom domain names the gateway responds to (e.g. `my-app.localhost`) |
 | `artificial-delay-ms` | integer | No | Artificial delay for update calls (ms) |
 | `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. |
 | `nns` | boolean | No | Install NNS and SNS canisters (default: false). Implies `ii` and adds an SNS subnet. |
@@ -327,7 +328,7 @@ environments:
       - backend
     settings:
       frontend:
-        memory_allocation: 2147483648
+        memory_allocation: 2gib
       backend:
         compute_allocation: 10
         environment_variables:
@@ -351,15 +352,17 @@ See [Canister Settings Reference](canister-settings.md) for all options.
 ```yaml
 settings:
   compute_allocation: 5
-  memory_allocation: 4294967296
-  freezing_threshold: 2592000
-  reserved_cycles_limit: 1000000000000
-  wasm_memory_limit: 1073741824
-  wasm_memory_threshold: 536870912
+  memory_allocation: 4gib
+  freezing_threshold: 2592000          # 30 days
+  reserved_cycles_limit: 1t
+  wasm_memory_limit: 1gib
+  wasm_memory_threshold: 512mib
   log_visibility: controllers
   environment_variables:
     KEY: "value"
 ```
+
+Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Decimals and underscores are supported (e.g. `2.5gib`, `1_000_000`).
 
 ## Init Args
 
@@ -424,7 +427,7 @@ canisters:
       configuration:
         dir: dist
     settings:
-      memory_allocation: 1073741824
+      memory_allocation: 1gib
 
   - name: backend
     build:
@@ -459,10 +462,10 @@ environments:
     canisters: [frontend, backend]
     settings:
       frontend:
-        memory_allocation: 4294967296
+        memory_allocation: 4gib
       backend:
         compute_allocation: 30
-        freezing_threshold: 7776000
+        freezing_threshold: 7776000        # 90 days
         environment_variables:
           ENV: "production"
     init_args:

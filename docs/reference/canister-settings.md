@@ -28,18 +28,20 @@ Higher values guarantee more compute but cost more cycles.
 
 ### memory_allocation
 
-Fixed memory reservation in bytes.
+Fixed memory reservation.
 
 | Property | Value |
 |----------|-------|
-| Type | Integer |
-| Unit | Bytes |
+| Type | Integer or string with suffix |
+| Unit | Bytes (accepts suffixes) |
 | Default | Dynamic allocation |
 
 ```yaml
 settings:
-  memory_allocation: 4294967296  # 4GB
+  memory_allocation: 4gib
 ```
+
+Memory values accept suffixes: `kb` (1,000), `kib` (1,024), `mb` (1,000,000), `mib` (1,048,576), `gb` (1,000,000,000), `gib` (1,073,741,824). Decimals are supported (e.g. `2.5gib`). Raw byte counts are also accepted.
 
 If not set, the canister uses dynamic memory allocation.
 
@@ -66,14 +68,16 @@ Upper limit on cycles reserved for future resource payments. When a canister all
 
 | Property | Value |
 |----------|-------|
-| Type | Integer |
-| Unit | Cycles |
+| Type | Integer or string with suffix |
+| Unit | Cycles (accepts suffixes) |
 | IC Default | 5,000,000,000,000 (5T) |
 
 ```yaml
 settings:
-  reserved_cycles_limit: 1000000000000  # 1T cycles
+  reserved_cycles_limit: 1t
 ```
+
+Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Decimals and underscores are supported (e.g. `1.5t`, `500_000`). Raw integers are also accepted.
 
 ### wasm_memory_limit
 
@@ -81,13 +85,13 @@ Maximum heap size for the WASM module.
 
 | Property | Value |
 |----------|-------|
-| Type | Integer |
-| Unit | Bytes |
+| Type | Integer or string with suffix |
+| Unit | Bytes (accepts suffixes) |
 | Default | Platform default |
 
 ```yaml
 settings:
-  wasm_memory_limit: 1073741824  # 1GB
+  wasm_memory_limit: 1gib
 ```
 
 ### wasm_memory_threshold
@@ -96,13 +100,13 @@ Memory threshold that triggers low-memory callbacks.
 
 | Property | Value |
 |----------|-------|
-| Type | Integer |
-| Unit | Bytes |
+| Type | Integer or string with suffix |
+| Unit | Bytes (accepts suffixes) |
 | Default | None |
 
 ```yaml
 settings:
-  wasm_memory_threshold: 536870912  # 512MB
+  wasm_memory_threshold: 512mib
 ```
 
 ### log_visibility
@@ -164,11 +168,11 @@ canisters:
             - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
-      memory_allocation: 2147483648        # 2GB
+      memory_allocation: 2gib
       freezing_threshold: 2592000          # 30 days
-      reserved_cycles_limit: 5000000000000 # 5T cycles
-      wasm_memory_limit: 1073741824        # 1GB
-      wasm_memory_threshold: 536870912     # 512MB
+      reserved_cycles_limit: 5t
+      wasm_memory_limit: 1gib
+      wasm_memory_threshold: 512mib
       log_visibility: controllers
       environment_variables:
         ENV: "production"

@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.2.0-beta.0
+
 * feat: Added `bind` key to network gateway config to pick your network interface (previous documentation mentioned a `host` key, but it did not do anything)
 * feat: check for Candid incompatibility when upgrading a canister
 * feat: Add `bitcoind-addr` and `dogecoind-addr` options for managed networks to connect to Bitcoin and Dogecoin nodes

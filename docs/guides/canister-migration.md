@@ -32,25 +32,13 @@ If you don't need to keep the canister ID, you can move state to a new canister 
 
 ### 1. Create a New Canister
 
-Add a temporary canister entry to your `icp.yaml` with a placeholder build step. This is required for `icp canister create` but the build itself won't run — state is transferred via snapshots instead:
-
-```yaml
-canisters:
-  # ...your existing canisters...
-  - name: migration-target
-    build:
-      steps:
-        - type: script
-          command: "true"
-```
-
-Create it on the desired subnet:
+Create a new canister on the desired subnet. The `--detached` flag allows creating a canister without recording it in your project configuration — useful here because this is a temporary target for state transfer:
 
 ```bash
-icp canister create migration-target -e ic --subnet <target-subnet-id>
+icp canister create --detached -n ic --subnet <target-subnet-id>
 ```
 
-Note the canister ID from the output — you'll use it in subsequent steps.
+Note the canister ID from the output — you'll use it in subsequent steps. Add `--quiet` to print just the canister ID (useful for scripting).
 
 ### 2. Transfer State via Snapshots
 
@@ -108,8 +96,6 @@ icp canister delete my-canister -e ic
 }
 ```
 
-Remove the `migration-target` entry from the mappings file and from your `icp.yaml`.
-
 **Update external references** — any other canisters, frontends, or off-chain systems that reference the old canister ID need to be updated to the new ID.
 
 ## Migrating With the Canister ID
@@ -137,25 +123,13 @@ Because the target canister's state is what survives, **you must transfer state 
 
 ### 1. Create a Target Canister
 
-Add a temporary canister entry to your `icp.yaml` with a placeholder build step. This is required for `icp canister create` but the build itself won't run — state is transferred via snapshots instead:
-
-```yaml
-canisters:
-  # ...your existing canisters...
-  - name: migration-target
-    build:
-      steps:
-        - type: script
-          command: "true"
-```
-
-Create it on the desired subnet:
+Create a new canister on the desired subnet. The `--detached` flag allows creating a canister without recording it in your project configuration:
 
 ```bash
-icp canister create migration-target -e ic --subnet <target-subnet-id>
+icp canister create --detached -n ic --subnet <target-subnet-id>
 ```
 
-Note the canister ID from the output — you'll use it in all subsequent steps.
+Note the canister ID from the output — you'll use it in all subsequent steps. Add `--quiet` to print just the canister ID (useful for scripting).
 
 Top up the target canister with enough cycles for ongoing operation, since the source canister's cycles will be burned during the ID migration:
 
@@ -265,8 +239,6 @@ icp canister call rwlgt-iiaaa-aaaaa-aaaaa-cai get_subnet_for_canister \
 
 ### 8. Clean Up
 
-**Clean up the temporary canister entry.** Remove `migration-target` from your `icp.yaml` and from the ID mappings file (`.icp/data/mappings/<environment>.ids.json`), since its original ID no longer exists. The source canister keeps its original ID, so `my-canister` in your `icp.yaml` and mappings remains valid.
-
 **Remove the NNS migration canister as controller** if desired — it is added during the ID migration and not automatically removed:
 
 ```bash
@@ -307,10 +279,10 @@ The canister hasn't finished preparing for migration. Wait a few seconds and try
 
 **"Canisters are on the same subnet"**
 
-Migration requires canisters on different subnets. Create a canister on the desired subnet to use as the migration target:
+Migration requires canisters on different subnets. Create a new canister on the desired subnet to use as the migration target:
 
 ```bash
-icp canister create migration-target -e ic --subnet <target-subnet-id>
+icp canister create --detached -n ic --subnet <target-subnet-id>
 ```
 
 **"Target canister has snapshots"**

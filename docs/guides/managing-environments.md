@@ -163,10 +163,10 @@ environments:
     canisters: [frontend, backend]
     settings:
       frontend:
-        memory_allocation: 2147483648  # 2GB
+        memory_allocation: 2gib
       backend:
         compute_allocation: 5
-        reserved_cycles_limit: 5000000000000
+        reserved_cycles_limit: 5t
         environment_variables:
           API_ENV: "staging"
 
@@ -175,12 +175,12 @@ environments:
     canisters: [frontend, backend]
     settings:
       frontend:
-        memory_allocation: 4294967296  # 4GB
-        freezing_threshold: 7776000    # 90 days
+        memory_allocation: 4gib
+        freezing_threshold: 7776000        # 90 days
       backend:
         compute_allocation: 20
-        reserved_cycles_limit: 50000000000000
-        freezing_threshold: 7776000
+        reserved_cycles_limit: 50t
+        freezing_threshold: 7776000        # 90 days
         environment_variables:
           API_ENV: "production"
 ```

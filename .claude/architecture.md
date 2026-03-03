@@ -76,3 +76,96 @@ These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` a
   - Connected networks (mainnet) use `.icp/data/mappings/`
 
 Store management is in `crates/icp/src/store_id.rs`.
+
+## Telemetry
+
+Anonymous usage telemetry implementation. User-facing documentation is in `docs/telemetry.md`.
+
+### Settings
+
+The telemetry enabled/disabled flag is a user setting stored in the existing `Settings` struct (alongside `autocontainerize`), persisted at the standard settings path. It is controlled via `icp settings telemetry [true|false]`.
+
+### Telemetry data directory
+
+Runtime state and event data live in the `telemetry/` data directory. Each piece of state is a separate plain file to avoid JSON parsing:
+
+```
+telemetry/
+  machine-id                          # plain text UUID, generated on first run
+  notice-shown                        # empty marker file, presence = notice was shown
+  next-send-time                      # plain text UTC timestamp
+  events.jsonl                        # active event log
+  batch-<timestamp>-<uuid>.jsonl      # in-flight/pending batch(es)
+```
+
+### Transmission
+
+A send is triggered at the end of a command if **either** threshold is met:
+
+- **Time-based**: A randomized interval has elapsed since the last send (2–4 days for stable releases, 0.75–1.25 days for pre-release). The jitter prevents thundering herd problems.
+- **Size-based**: The log file exceeds 256 KB. This acts as a safety valve against unbounded growth from rapid command usage.
+
+When a send is triggered:
+
+1. The log file is renamed to `telemetry/batch-<timestamp>-<uuid>.jsonl` (atomically moves it out of the write path). The UUID identifies the batch for server-side deduplication.
+2. A detached background process is spawned. It injects the batch UUID and a per-record sequence number into each JSON line, then POSTs the payload. This ensures sending never blocks the CLI.
+3. On success, the batch file is deleted and the next send time is randomized.
+4. On failure, the batch file remains for retry on the next trigger. Since the batch UUID is stable in the filename, retried sends use the same ID, allowing the server to deduplicate.
+
+Safeguards:
+
+- **Concurrent send guard**: During an active send, the next send time is temporarily set 30 minutes in the future to prevent races.
+- **Stale batch cleanup**: Batch files older than 14 days or exceeding 10 in count are deleted without sending. This prevents unbounded accumulation from repeated network failures.
+- **Send timeout**: Each HTTP POST uses a 5-second timeout. The detached process exits silently on failure.
+
+### Control flow
+
+```
+command start
+  |
+  v
+check env vars (DO_NOT_TRACK, ICP_TELEMETRY_DISABLED, CI)
+  |-- any set? --> skip telemetry entirely
+  |
+  v
+load settings
+  |-- disabled in settings? --> skip
+  |
+  v
+check telemetry/notice-shown
+  |-- missing? --> print notice, create marker file
+  |
+  v
+execute command, measure duration
+  |
+  v
+append record to events.jsonl
+  |
+  v
+check send triggers:
+  - next-send-time has passed? OR
+  - events.jsonl > 256 KB?
+  |-- neither met? --> done
+  |
+  v
+set next-send-time to now + 30 min (concurrent send guard)
+rename events.jsonl to batch-<timestamp>-<uuid>.jsonl
+delete stale batches (batch-*.jsonl >14 days old or >10 files)
+spawn detached background process:
+  inject batch UUID + sequence numbers into each JSON record
+  POST batch to server (5s timeout)
+  on success: delete batch file
+  on failure: leave batch file for next retry
+  randomize next-send-time (2-4 days or 0.75-1.25 days for pre-release)
+```
+
+### Schema evolution
+
+New fields can be added to the record struct without migration. In the Rust struct, new fields should use `Option<T>` or `#[serde(default)]` so that older records still in `events.jsonl` deserialize correctly. No versioning scheme is needed.
+
+### Key principles
+
+1. **Never block the CLI.** Telemetry checks and writes are fast. Network sends happen in a detached background process.
+2. **Fail silently.** Any telemetry error (file I/O, network) is swallowed. Telemetry must never cause a command to fail.
+3. **Full transparency.** Users can inspect the local file, check status, and opt out at any time.
+4. **Minimal data.** Collect only what is listed above. No free-form argument values, no PII, no project data.

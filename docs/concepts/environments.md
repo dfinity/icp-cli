@@ -137,7 +137,7 @@ environments:
     settings:
       backend:
         compute_allocation: 20
-        freezing_threshold: 7776000
+        freezing_threshold: 7776000        # 90 days
 ```
 
 ### Environment-Specific Settings

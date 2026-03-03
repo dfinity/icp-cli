@@ -99,9 +99,10 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Migration',
+          label: 'Other',
           items: [
-            { label: 'From dfx', slug: 'migration/from-dfx' },
+            { label: 'Migrating from dfx', slug: 'migration/from-dfx' },
+            { label: 'Telemetry', slug: 'telemetry' },
           ],
         },
       ],

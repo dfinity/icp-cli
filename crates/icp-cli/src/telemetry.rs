@@ -223,10 +223,11 @@ fn show_notice_if_needed(telemetry_dir: &Path) {
     if marker.exists() {
         return;
     }
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
     eprintln!(
         "icp collects anonymous usage data to improve the tool.\n\
          Run `icp settings telemetry false` or set DO_NOT_TRACK=1 to opt out.\n\
-         Learn more: https://docs.icp-cli.dev/telemetry"
+         Learn more: https://github.com/dfinity/icp-cli/blob/v{VERSION}/docs/telemetry.md"
     );
     let _ = std::fs::create_dir_all(telemetry_dir);
     let _ = std::fs::write(&marker, "");

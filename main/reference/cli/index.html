@@ -320,7 +320,7 @@ or a “detached” canister on a network.</p>
 <p><code>--memory-allocation &#x3C;MEMORY_ALLOCATION></code> — Optional memory allocation in bytes. If unset, memory is allocated dynamically. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. “4gib” or “2.5kb”)</p>
 </li>
 <li>
-<p><code>--freezing-threshold &#x3C;FREEZING_THRESHOLD></code> — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen</p>
+<p><code>--freezing-threshold &#x3C;FREEZING_THRESHOLD></code> — Optional freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds</p>
 </li>
 <li>
 <p><code>--reserved-cycles-limit &#x3C;RESERVED_CYCLES_LIMIT></code> — Optional upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</p>
@@ -543,7 +543,7 @@ Raw binary (only valid for file references)</li>
 <p><code>--memory-allocation &#x3C;MEMORY_ALLOCATION></code> — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. “4gib” or “2.5kb”)</p>
 </li>
 <li>
-<p><code>--freezing-threshold &#x3C;FREEZING_THRESHOLD></code></p>
+<p><code>--freezing-threshold &#x3C;FREEZING_THRESHOLD></code> — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds</p>
 </li>
 <li>
 <p><code>--reserved-cycles-limit &#x3C;RESERVED_CYCLES_LIMIT></code> — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</p>

@@ -92,7 +92,7 @@ async fn canister_create_with_settings() {
                   log_visibility: public
                   compute_allocation: 1
                   memory_allocation: 4294967296
-                  freezing_threshold: 2592000
+                  freezing_threshold: 30d
                   reserved_cycles_limit: 1000000000000
 
             {NETWORK_RANDOM_PORT}

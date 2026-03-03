@@ -1,4 +1,4 @@
-//! Parsing of token and cycle amounts with support for suffixes (k, m, b, t) and underscores.
+//! Parsing of token, cycle, memory, and duration amounts with support for suffixes and underscores.
 
 use bigdecimal::{BigDecimal, Signed};
 use num_bigint::BigUint;
@@ -312,6 +312,145 @@ impl From<u64> for MemoryAmount {
     }
 }
 
+const SECONDS_PER_MINUTE: u64 = 60;
+const SECONDS_PER_HOUR: u64 = 3600;
+const SECONDS_PER_DAY: u64 = 86400;
+const SECONDS_PER_WEEK: u64 = 604800;
+
+fn parse_duration_str(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("Duration cannot be empty".to_string());
+    }
+    let lower = s.to_lowercase();
+    let (number_part, factor) = if lower.ends_with('w') {
+        (&s[..s.len() - 1], SECONDS_PER_WEEK)
+    } else if lower.ends_with('d') {
+        (&s[..s.len() - 1], SECONDS_PER_DAY)
+    } else if lower.ends_with('h') {
+        (&s[..s.len() - 1], SECONDS_PER_HOUR)
+    } else if lower.ends_with('m') {
+        (&s[..s.len() - 1], SECONDS_PER_MINUTE)
+    } else if lower.ends_with('s') {
+        (&s[..s.len() - 1], 1u64)
+    } else {
+        (s, 1u64)
+    };
+    let cleaned = number_part.trim().replace('_', "");
+    if cleaned.is_empty() {
+        return Err(format!("Invalid duration: '{s}'"));
+    }
+    let value: u64 = cleaned
+        .parse()
+        .map_err(|_| format!("Invalid duration: '{s}'"))?;
+    value
+        .checked_mul(factor)
+        .ok_or_else(|| format!("Duration too large: '{s}'"))
+}
+
+/// A duration in seconds.
+///
+/// Deserializes from a number (seconds) or a string with duration suffix (s, m, h, d, w)
+/// and optional underscore separators.
+///
+/// Suffixes (case-insensitive):
+/// - `s` — seconds
+/// - `m` — minutes (×60)
+/// - `h` — hours (×3600)
+/// - `d` — days (×86400)
+/// - `w` — weeks (×604800)
+///
+/// A bare number without suffix is treated as seconds.
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema)]
+#[schemars(untagged)]
+pub enum DurationAmount {
+    Number(u64),
+    Str(String),
+}
+
+impl DurationAmount {
+    pub fn get(&self) -> u64 {
+        match self {
+            DurationAmount::Number(n) => *n,
+            DurationAmount::Str(s) => {
+                parse_duration_str(s).unwrap_or_else(|e| panic!("invalid duration '{}': {}", s, e))
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DurationAmount {
+    fn deserialize<D>(d: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Number(u64),
+            Str(String),
+        }
+        let v = Raw::deserialize(d).map_err(|_| {
+            serde::de::Error::custom(
+                "duration must be a number (seconds) or a string with optional suffix (s, m, h, d, w), e.g. 2592000 or \"30d\"",
+            )
+        })?;
+        let c = match v {
+            Raw::Number(n) => DurationAmount::Number(n),
+            Raw::Str(ref s) => {
+                parse_duration_str(s).map_err(serde::de::Error::custom)?;
+                DurationAmount::Str(s.clone())
+            }
+        };
+        Ok(c)
+    }
+}
+
+impl Serialize for DurationAmount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            DurationAmount::Number(n) => serializer.serialize_u64(*n),
+            DurationAmount::Str(s) => serializer.serialize_str(s),
+        }
+    }
+}
+
+impl FromStr for DurationAmount {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_duration_str(s)?;
+        Ok(DurationAmount::Str(s.to_string()))
+    }
+}
+
+impl fmt::Display for DurationAmount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+impl From<DurationAmount> for u64 {
+    fn from(d: DurationAmount) -> Self {
+        d.get()
+    }
+}
+
+impl From<u64> for DurationAmount {
+    fn from(n: u64) -> Self {
+        DurationAmount::Number(n)
+    }
+}
+
+impl PartialEq<u64> for DurationAmount {
+    fn eq(&self, other: &u64) -> bool {
+        self.get() == *other
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,5 +565,79 @@ mod tests {
         let yaml = "4294967296";
         let m: MemoryAmount = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(m.get(), 4294967296);
+    }
+
+    #[test]
+    fn duration_amount_from_str_plain() {
+        assert_eq!("60".parse::<DurationAmount>().unwrap().get(), 60);
+        assert_eq!("2592000".parse::<DurationAmount>().unwrap().get(), 2592000);
+    }
+
+    #[test]
+    fn duration_amount_from_str_underscores() {
+        assert_eq!(
+            "2_592_000".parse::<DurationAmount>().unwrap().get(),
+            2592000
+        );
+    }
+
+    #[test]
+    fn duration_amount_from_str_suffixes() {
+        assert_eq!("60s".parse::<DurationAmount>().unwrap().get(), 60);
+        assert_eq!("90m".parse::<DurationAmount>().unwrap().get(), 5400);
+        assert_eq!("24h".parse::<DurationAmount>().unwrap().get(), 86400);
+        assert_eq!("30d".parse::<DurationAmount>().unwrap().get(), 2592000);
+        assert_eq!("4w".parse::<DurationAmount>().unwrap().get(), 2419200);
+    }
+
+    #[test]
+    fn duration_amount_from_str_case_insensitive() {
+        assert_eq!("30D".parse::<DurationAmount>().unwrap().get(), 2592000);
+        assert_eq!("1W".parse::<DurationAmount>().unwrap().get(), 604800);
+        assert_eq!("24H".parse::<DurationAmount>().unwrap().get(), 86400);
+        assert_eq!("60S".parse::<DurationAmount>().unwrap().get(), 60);
+        assert_eq!("90M".parse::<DurationAmount>().unwrap().get(), 5400);
+    }
+
+    #[test]
+    fn duration_amount_from_str_underscores_with_suffix() {
+        assert_eq!(
+            "2_592_000s".parse::<DurationAmount>().unwrap().get(),
+            2592000
+        );
+    }
+
+    #[test]
+    fn duration_amount_from_str_errors() {
+        assert!("abc".parse::<DurationAmount>().is_err());
+        assert!("".parse::<DurationAmount>().is_err());
+        assert!("1x".parse::<DurationAmount>().is_err());
+        assert!("1.5d".parse::<DurationAmount>().is_err());
+        assert!("-1d".parse::<DurationAmount>().is_err());
+    }
+
+    #[test]
+    fn duration_amount_deserialize() {
+        let yaml = "30d";
+        let d: DurationAmount = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(d.get(), 2592000);
+
+        let yaml = "2592000";
+        let d: DurationAmount = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(d.get(), 2592000);
+
+        let yaml = "2_592_000";
+        let d: DurationAmount = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(d.get(), 2592000);
+    }
+
+    #[test]
+    fn duration_amount_partial_eq_u64() {
+        let d = DurationAmount::Number(2592000);
+        assert!(d == 2592000);
+        assert!(d != 0);
+
+        let d = DurationAmount::Str("30d".to_string());
+        assert!(d == 2592000);
     }
 }

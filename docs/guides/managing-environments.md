@@ -57,7 +57,7 @@ environments:
     settings:
       backend:
         compute_allocation: 20
-        freezing_threshold: 7776000  # 90 days
+        freezing_threshold: 90d
         environment_variables:
           LOG_LEVEL: "error"
 ```
@@ -176,11 +176,11 @@ environments:
     settings:
       frontend:
         memory_allocation: 4gib
-        freezing_threshold: 7776000        # 90 days
+        freezing_threshold: 90d
       backend:
         compute_allocation: 20
         reserved_cycles_limit: 50t
-        freezing_threshold: 7776000        # 90 days
+        freezing_threshold: 90d
         environment_variables:
           API_ENV: "production"
 ```

@@ -47,18 +47,20 @@ If not set, the canister uses dynamic memory allocation.
 
 ### freezing_threshold
 
-Time in seconds before the canister freezes due to low cycles.
+Time before the canister freezes due to low cycles.
 
 | Property | Value |
 |----------|-------|
-| Type | Integer |
-| Unit | Seconds |
-| Default | 2,592,000 (30 days) |
+| Type | Integer or string with duration suffix |
+| Unit | Seconds (accepts duration suffixes) |
+| Default | 2,592,000 seconds (30 days) |
 
 ```yaml
 settings:
-  freezing_threshold: 7776000  # 90 days
+  freezing_threshold: 90d
 ```
+
+Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Underscores are supported in the numeric part (e.g. `2_592_000`). A bare number is treated as seconds. Raw second counts are also accepted for backwards compatibility.
 
 The canister freezes if its cycles balance would be exhausted within this threshold.
 
@@ -169,7 +171,7 @@ canisters:
     settings:
       compute_allocation: 5
       memory_allocation: 2gib
-      freezing_threshold: 2592000          # 30 days
+      freezing_threshold: 30d
       reserved_cycles_limit: 5t
       wasm_memory_limit: 1gib
       wasm_memory_threshold: 512mib
@@ -196,7 +198,7 @@ environments:
     settings:
       backend:
         compute_allocation: 20              # Production override
-        freezing_threshold: 7776000         # 90 days
+        freezing_threshold: 90d
         environment_variables:
           ENV: "production"
 ```

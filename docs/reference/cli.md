@@ -230,7 +230,7 @@ Examples:
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
-* `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
+* `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
@@ -443,7 +443,7 @@ Change a canister's settings to specified values
    Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
 * `--compute-allocation <COMPUTE_ALLOCATION>`
 * `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
-* `--freezing-threshold <FREEZING_THRESHOLD>`
+* `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--wasm-memory-limit <WASM_MEMORY_LIMIT>` — Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>` — Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")

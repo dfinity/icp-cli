@@ -524,11 +524,11 @@ impl Context {
         let Some(status_dir) = &desc.status_dir else {
             return;
         };
-        let gateway_url = Url::parse(&format!(
-            "http://{}:{}",
-            desc.gateway.host, desc.gateway.port
-        ))
-        .unwrap();
+        let gateway_url_str = format!("http://{}:{}", desc.gateway.host, desc.gateway.port);
+        let Ok(gateway_url) = Url::parse(&gateway_url_str) else {
+            tracing::warn!("Failed to parse gateway URL {gateway_url_str:?} for custom domains");
+            return;
+        };
         let domain = crate::network::custom_domains::gateway_domain(&gateway_url);
         let Some(domain) = domain else {
             return;

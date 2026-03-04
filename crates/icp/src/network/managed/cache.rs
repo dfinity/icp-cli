@@ -7,17 +7,17 @@ use snafu::{ResultExt, Snafu};
 use tar::Archive;
 
 use crate::fs::lock::{LRead, LWrite};
-use crate::package::{PackageCachePaths, get_tag, set_tag};
+use crate::package::{PackageCachePaths, get_tag, get_tag_with_updater, set_tag_with_updater};
 use crate::prelude::*;
+
+const LAUNCHER_NAME: &str = "icp-cli-network-launcher";
 
 pub fn get_cached_launcher_version(
     paths: LRead<&PackageCachePaths>,
     version: &str,
 ) -> Result<Option<PathBuf>, ReadCacheError> {
     let declared_version = if version == "latest" {
-        let Some(version) =
-            get_tag(paths, "icp-cli-network-launcher", "latest").context(LoadTagSnafu)?
-        else {
+        let Some(version) = get_tag(paths, LAUNCHER_NAME, "latest").context(LoadTagSnafu)? else {
             return Ok(None);
         };
         version.to_owned()
@@ -27,10 +27,53 @@ pub fn get_cached_launcher_version(
     };
     let version_path = paths.launcher_version(&declared_version);
     if version_path.exists() {
-        Ok(Some(version_path.join("icp-cli-network-launcher")))
+        Ok(Some(version_path.join(LAUNCHER_NAME)))
     } else {
         Ok(None)
     }
+}
+
+/// Like [`get_cached_launcher_version`], but for the "latest" tag also checks
+/// whether the launcher was downloaded by an older CLI version, returning `None`
+/// if so. Pinned versions are never considered stale.
+pub fn get_cached_launcher_version_if_fresh(
+    paths: LRead<&PackageCachePaths>,
+    version: &str,
+) -> Result<Option<PathBuf>, ReadCacheError> {
+    let declared_version = if version == "latest" {
+        let (tag, updater) =
+            get_tag_with_updater(paths, LAUNCHER_NAME, "latest").context(LoadTagSnafu)?;
+        let Some(version) = tag else {
+            return Ok(None);
+        };
+        if is_updater_stale(updater.as_deref()) {
+            return Ok(None);
+        }
+        version
+    } else {
+        assert!(version.starts_with('v'));
+        version.to_owned()
+    };
+    let version_path = paths.launcher_version(&declared_version);
+    if version_path.exists() {
+        Ok(Some(version_path.join(LAUNCHER_NAME)))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Returns true if the given updater version is older than the current CLI version
+/// (or if no updater version is recorded).
+fn is_updater_stale(updater_version: Option<&str>) -> bool {
+    let Some(updater_version) = updater_version else {
+        return true;
+    };
+    let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+        .expect("package versions should always be valid semver");
+    let Ok(stored) = semver::Version::parse(updater_version) else {
+        return true;
+    };
+    stored < current
 }
 
 #[derive(Debug, Snafu)]
@@ -67,7 +110,14 @@ pub async fn download_launcher_version(
 ) -> Result<(String, PathBuf), DownloadLauncherError> {
     let pkg_version = if version_req == "latest" {
         let latest = get_latest_launcher_version(client).await?;
-        set_tag(paths, "icp-cli-network-launcher", &latest, "latest").context(CreateTagSnafu)?;
+        set_tag_with_updater(
+            paths,
+            LAUNCHER_NAME,
+            &latest,
+            "latest",
+            env!("CARGO_PKG_VERSION"),
+        )
+        .context(CreateTagSnafu)?;
         latest
     } else {
         assert!(version_req.starts_with('v'));
@@ -136,7 +186,7 @@ pub async fn download_launcher_version(
         from: extracted_dir_path,
         to: &version_path,
     })?;
-    Ok((pkg_version, version_path.join("icp-cli-network-launcher")))
+    Ok((pkg_version, version_path.join(LAUNCHER_NAME)))
 }
 
 #[derive(Debug, Snafu)]

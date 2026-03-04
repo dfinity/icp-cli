@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: Added 'friendly name' domains for canisters - instead of `<frontend principal>.localhost` you can access `frontend.local.localhost`.
+
 # v0.2.0-beta.0
 
 * feat: Added `bind` key to network gateway config to pick your network interface (previous documentation mentioned a `host` key, but it did not do anything)

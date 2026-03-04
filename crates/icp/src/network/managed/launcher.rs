@@ -1,6 +1,5 @@
 use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
-use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::{EventHandler, Watcher};
 use serde::Deserialize;
@@ -23,8 +22,6 @@ pub struct NetworkInstance {
 
 #[derive(Debug, Snafu)]
 pub enum SpawnNetworkLauncherError {
-    #[snafu(display("failed to create status directory"))]
-    CreateStatusDir { source: std::io::Error },
     #[snafu(display("failed to create stdio log at {path}"))]
     CreateStdioFile {
         source: std::io::Error,
@@ -66,6 +63,7 @@ pub async fn spawn_network_launcher(
     verbose: bool,
     launcher_config: &ManagedLauncherConfig,
     state_dir: &Path,
+    status_dir: &Path,
 ) -> Result<
     (
         AsyncDropper<ChildSignalOnDrop>,
@@ -85,8 +83,7 @@ pub async fn spawn_network_launcher(
     if let Port::Fixed(port) = launcher_config.gateway.port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }
-    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    cmd.args(["--status-dir", status_dir.path().as_str()]);
+    cmd.args(["--status-dir", status_dir.as_str()]);
     cmd.args(launcher_settings_flags(launcher_config));
     if background {
         eprintln!("For background mode, network output will be redirected:");
@@ -105,7 +102,7 @@ pub async fn spawn_network_launcher(
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::null());
     }
-    let watcher = wait_for_launcher_status(status_dir.as_ref()).context(WatchStatusDirSnafu)?;
+    let watcher = wait_for_launcher_status(status_dir).context(WatchStatusDirSnafu)?;
     let child = cmd.spawn().context(SpawnLauncherSnafu {
         network_launcher_path,
     })?;

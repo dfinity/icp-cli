@@ -21,10 +21,12 @@ use crate::{
         get_managed_network_access,
     },
     prelude::*,
+    project::DEFAULT_LOCAL_NETWORK_PORT,
 };
 
 pub mod access;
 pub mod config;
+pub mod custom_domains;
 pub mod directory;
 pub mod managed;
 
@@ -117,7 +119,7 @@ pub enum SubnetKind {
 
 impl Default for ManagedMode {
     fn default() -> Self {
-        Self::default_for_port(0)
+        Self::default_for_port(DEFAULT_LOCAL_NETWORK_PORT)
     }
 }
 
@@ -214,7 +216,7 @@ impl From<ManifestGateway> for Gateway {
         let port = match port {
             Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
-            None => Port::Random,
+            None => Port::default(),
         };
         let mut domains = domains.unwrap_or_default();
         if bind == "127.0.0.1" || bind == "0.0.0.0" || bind == "::1" || bind == "::" {

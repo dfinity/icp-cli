@@ -5,7 +5,10 @@ use predicates::{
 };
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+use icp::{
+    fs::{create_dir_all, write_string},
+    prelude::*,
+};
 
 mod common;
 
@@ -401,6 +404,63 @@ async fn deploy_prints_canister_urls() {
         .stdout(contains("my-canister (Candid UI):"))
         .stdout(contains(".localhost:"))
         .stdout(contains("?id="));
+}
+
+#[tokio::test]
+async fn deploy_prints_friendly_url_for_asset_canister() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+    let assets_dir = project_dir.join("www");
+    create_dir_all(&assets_dir).expect("failed to create assets directory");
+    write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
+
+    // Project manifest with a pre-built asset canister
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                  sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+
+            sync:
+              steps:
+                - type: assets
+                  dirs:
+                    - {assets_dir}
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Deploy and check that the friendly URL is printed (not the Candid UI form)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Deployed canisters:"))
+        .stdout(contains(
+            "my-canister: http://my-canister.random-environment.localhost:",
+        ));
 }
 
 #[cfg(unix)] // moc

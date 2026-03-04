@@ -1,5 +1,6 @@
 use async_dropper::{AsyncDrop, AsyncDropper};
 use bigdecimal::BigDecimal;
+use camino_tempfile::Utf8TempDir;
 use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
 use ic_agent::{
@@ -159,6 +160,8 @@ async fn run_network_launcher(
             (LaunchMode::NativeLauncher(launcher_config), fixed_ports)
         }
     };
+
+    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let (mut guard, instance, gateway, locator) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
             // Acquire locks for all fixed ports and check they're not in use
@@ -186,7 +189,8 @@ async fn run_network_launcher(
 
             match launch_mode {
                 LaunchMode::Image(options) => {
-                    let (guard, instance, locator, fixed) = spawn_docker_launcher(&options).await?;
+                    let (guard, instance, locator, fixed) =
+                        spawn_docker_launcher(&options, status_dir.path()).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
@@ -211,6 +215,7 @@ async fn run_network_launcher(
                         verbose,
                         launcher_config,
                         &root.state_dir(),
+                        status_dir.path(),
                     )
                     .await?;
                     let host = match launcher_config.gateway.domains.first() {
@@ -228,7 +233,8 @@ async fn run_network_launcher(
             }
         })
         .await??;
-
+    // The launcher owns cleanup, so we call keep() to prevent the Utf8TempDir from deleting it on drop.
+    let status_dir_path = status_dir.keep();
     if background {
         // background means we're using stdio files - otherwise the launcher already prints this
         eprintln!("Network started on port {}", instance.gateway_port);
@@ -267,6 +273,7 @@ async fn run_network_launcher(
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
                 proxy_canister_id,
+                status_dir: Some(status_dir_path.clone()),
             };
 
             // Save descriptor to project root and all fixed port directories
@@ -371,6 +378,9 @@ impl ShutdownGuard {
 pub enum RunNetworkLauncherError {
     #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
     NoNetworkLauncherPath,
+
+    #[snafu(display("failed to create status directory"))]
+    CreateStatusDir { source: std::io::Error },
 
     #[snafu(display("failed to create dir"))]
     CreateDirAll { source: crate::fs::IoError },

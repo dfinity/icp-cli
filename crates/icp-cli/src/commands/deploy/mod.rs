@@ -3,6 +3,7 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
+use icp::network::{Managed, ManagedMode};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
@@ -175,6 +176,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             return Err(err);
         }
     }
+
+    ctx.update_custom_domains(&environment_selection).await;
 
     let _ = ctx.term.write_line("\n\nSetting environment variables:");
     let env = ctx
@@ -377,20 +380,28 @@ async fn print_canister_urls(
     agent: Agent,
     canister_names: &[String],
 ) -> Result<(), anyhow::Error> {
+    use icp::network::custom_domains::{canister_gateway_url, gateway_domain};
+
     let env = ctx.get_environment(environment_selection).await?;
 
     // Get the network URL
     let http_gateway_url = match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
-            // For managed networks, construct localhost URL
             let access = ctx.network.access(&env.network).await?;
             access.http_gateway_url.clone()
         }
-        NetworkConfiguration::Connected { connected } => {
-            // For connected networks, use the configured URL
-            connected.http_gateway_url.clone()
-        }
+        NetworkConfiguration::Connected { connected } => connected.http_gateway_url.clone(),
     };
+
+    // Friendly domains are available for managed networks where we write custom-domains.txt
+    let has_friendly = matches!(
+        &env.network.configuration,
+        NetworkConfiguration::Managed {
+            managed: Managed {
+                mode: ManagedMode::Launcher(config)
+            }
+        } if config.version.is_none()
+    );
 
     let _ = ctx.term.write_line("\n\nDeployed canisters:");
 
@@ -407,58 +418,40 @@ async fn print_canister_urls(
         };
 
         if let Some(http_gateway_url) = &http_gateway_url {
-            // Check if canister has http_request
             let has_http = has_http_request(&agent, canister_id).await;
-            let domain = if let Some(domain) = http_gateway_url.domain() {
-                Some(domain)
-            } else if let Some(host) = http_gateway_url.host_str()
-                && (host == "127.0.0.1" || host == "[::1]")
-            {
-                Some("localhost")
+            let friendly = if has_friendly {
+                Some((name.as_str(), environment_selection.name()))
             } else {
                 None
             };
 
             if has_http {
-                let mut canister_url = http_gateway_url.clone();
-                if let Some(domain) = domain {
-                    canister_url
-                        .set_host(Some(&format!("{canister_id}.{domain}")))
-                        .unwrap();
-                } else {
-                    canister_url.set_query(Some(&format!("canisterId={canister_id}")));
-                }
+                let canister_url = canister_gateway_url(http_gateway_url, canister_id, friendly);
                 let _ = ctx
                     .term
                     .write_line(&format!("  {}: {}", name, canister_url));
             } else {
                 // For canisters without http_request, show the Candid UI URL
-                if let Some(ref ui_id) = get_candid_ui_id(ctx, environment_selection).await {
-                    let mut candid_url = http_gateway_url.clone();
-                    if let Some(domain) = domain {
-                        candid_url
-                            .set_host(Some(&format!("{ui_id}.{domain}",)))
-                            .unwrap();
+                if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                    let domain = gateway_domain(http_gateway_url);
+                    let mut candid_url = canister_gateway_url(http_gateway_url, ui_id, None);
+                    if domain.is_some() {
                         candid_url.set_query(Some(&format!("id={canister_id}")));
                     } else {
                         candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
                     }
                     let _ = ctx
                         .term
-                        .write_line(&format!("  {} (Candid UI): {}", name, candid_url));
+                        .write_line(&format!("  {name} (Candid UI): {candid_url}"));
                 } else {
-                    // No Candid UI available - just show the canister ID
                     let _ = ctx.term.write_line(&format!(
-                        "  {}: {} (Candid UI not available)",
-                        name, canister_id
+                        "  {name}: {canister_id} (Candid UI not available)",
                     ));
                 }
             }
         } else {
-            // No gateway subdomains available - just show the canister ID
             let _ = ctx.term.write_line(&format!(
-                "  {}: {} (No gateway URL available)",
-                name, canister_id
+                "  {name}: {canister_id} (No gateway URL available)",
             ));
         }
     }
@@ -471,7 +464,7 @@ async fn print_canister_urls(
 async fn get_candid_ui_id(
     ctx: &Context,
     environment_selection: &EnvironmentSelection,
-) -> Option<String> {
+) -> Option<Principal> {
     let env = ctx.get_environment(environment_selection).await.ok()?;
 
     match &env.network.configuration {
@@ -481,14 +474,14 @@ async fn get_candid_ui_id(
             if let Ok(Some(desc)) = nd.load_network_descriptor().await
                 && let Some(candid_ui) = desc.candid_ui_canister_id
             {
-                return Some(candid_ui.to_string());
+                return Some(candid_ui);
             }
             // No Candid UI available for this managed network
             None
         }
         NetworkConfiguration::Connected { .. } => {
             // For connected networks, use the mainnet Candid UI
-            Some(MAINNET_CANDID_UI_CID.to_string())
+            Some(MAINNET_CANDID_UI_CID)
         }
     }
 }

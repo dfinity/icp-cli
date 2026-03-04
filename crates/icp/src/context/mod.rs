@@ -500,6 +500,65 @@ impl Context {
             })
     }
 
+    /// Updates the `custom-domains.txt` file for the managed network used by the
+    /// given environment. Collects ID mappings from all environments that share
+    /// the same managed network, then writes the file to the network's status
+    /// directory.
+    ///
+    /// This is a best-effort operation: errors are logged but not propagated,
+    /// because a failure to update friendly domains should not block canister
+    /// creation or deletion.
+    pub async fn update_custom_domains(&self, environment: &EnvironmentSelection) {
+        let Ok(env) = self.get_environment(environment).await else {
+            return;
+        };
+        let NetworkConfiguration::Managed { .. } = &env.network.configuration else {
+            return;
+        };
+        let Ok(nd) = self.network.get_network_directory(&env.network) else {
+            return;
+        };
+        let Ok(Some(desc)) = nd.load_network_descriptor().await else {
+            return;
+        };
+        let Some(status_dir) = &desc.status_dir else {
+            return;
+        };
+        let gateway_url_str = format!("http://{}:{}", desc.gateway.host, desc.gateway.port);
+        let Ok(gateway_url) = Url::parse(&gateway_url_str) else {
+            tracing::warn!("Failed to parse gateway URL {gateway_url_str:?} for custom domains");
+            return;
+        };
+        let domain = crate::network::custom_domains::gateway_domain(&gateway_url);
+        let Some(domain) = domain else {
+            return;
+        };
+        // Collect mappings from all environments that use this network
+        let Ok(project) = self.project.load().await else {
+            return;
+        };
+        let mut env_mappings = std::collections::BTreeMap::new();
+        for (env_name, env) in &project.environments {
+            if env.network.name != desc.network {
+                continue;
+            }
+            let is_cache = matches!(
+                env.network.configuration,
+                NetworkConfiguration::Managed { .. }
+            );
+            if let Ok(mapping) = self.ids.lookup_by_environment(is_cache, env_name)
+                && !mapping.is_empty()
+            {
+                env_mappings.insert(env_name.clone(), mapping);
+            }
+        }
+        if let Err(e) =
+            crate::network::custom_domains::write_custom_domains(status_dir, domain, &env_mappings)
+        {
+            tracing::warn!("Failed to update custom domains: {e}");
+        }
+    }
+
     #[cfg(test)]
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {

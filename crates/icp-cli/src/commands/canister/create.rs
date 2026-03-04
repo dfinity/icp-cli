@@ -248,6 +248,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 
     ctx.set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
+    ctx.update_custom_domains(&selections.environment).await;
 
     if args.quiet {
         let _ = ctx.term.write_line(&format!("{id}"));

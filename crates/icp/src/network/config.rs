@@ -75,6 +75,10 @@ pub struct NetworkDescriptorModel {
     pub candid_ui_canister_id: Option<Principal>,
     /// Canister ID of the deployed proxy canister, if any.
     pub proxy_canister_id: Option<Principal>,
+    /// Path to the status directory shared with the network launcher.
+    /// Used to write `custom-domains.txt` for friendly domain routing.
+    #[serde(default)]
+    pub status_dir: Option<PathBuf>,
 }
 
 /// Identifies the process or container running a managed network.

@@ -10,14 +10,14 @@ use crate::fs::lock::{LRead, LWrite};
 use crate::package::{PackageCachePaths, get_tag, get_tag_with_updater, set_tag_with_updater};
 use crate::prelude::*;
 
+const LAUNCHER_NAME: &str = "icp-cli-network-launcher";
+
 pub fn get_cached_launcher_version(
     paths: LRead<&PackageCachePaths>,
     version: &str,
 ) -> Result<Option<PathBuf>, ReadCacheError> {
     let declared_version = if version == "latest" {
-        let Some(version) =
-            get_tag(paths, "icp-cli-network-launcher", "latest").context(LoadTagSnafu)?
-        else {
+        let Some(version) = get_tag(paths, LAUNCHER_NAME, "latest").context(LoadTagSnafu)? else {
             return Ok(None);
         };
         version.to_owned()
@@ -27,7 +27,7 @@ pub fn get_cached_launcher_version(
     };
     let version_path = paths.launcher_version(&declared_version);
     if version_path.exists() {
-        Ok(Some(version_path.join("icp-cli-network-launcher")))
+        Ok(Some(version_path.join(LAUNCHER_NAME)))
     } else {
         Ok(None)
     }
@@ -41,8 +41,8 @@ pub fn get_cached_launcher_version_if_fresh(
     version: &str,
 ) -> Result<Option<PathBuf>, ReadCacheError> {
     let declared_version = if version == "latest" {
-        let (tag, updater) = get_tag_with_updater(paths, "icp-cli-network-launcher", "latest")
-            .context(LoadTagSnafu)?;
+        let (tag, updater) =
+            get_tag_with_updater(paths, LAUNCHER_NAME, "latest").context(LoadTagSnafu)?;
         let Some(version) = tag else {
             return Ok(None);
         };
@@ -56,7 +56,7 @@ pub fn get_cached_launcher_version_if_fresh(
     };
     let version_path = paths.launcher_version(&declared_version);
     if version_path.exists() {
-        Ok(Some(version_path.join("icp-cli-network-launcher")))
+        Ok(Some(version_path.join(LAUNCHER_NAME)))
     } else {
         Ok(None)
     }
@@ -112,7 +112,7 @@ pub async fn download_launcher_version(
         let latest = get_latest_launcher_version(client).await?;
         set_tag_with_updater(
             paths,
-            "icp-cli-network-launcher",
+            LAUNCHER_NAME,
             &latest,
             "latest",
             env!("CARGO_PKG_VERSION"),
@@ -186,7 +186,7 @@ pub async fn download_launcher_version(
         from: extracted_dir_path,
         to: &version_path,
     })?;
-    Ok((pkg_version, version_path.join("icp-cli-network-launcher")))
+    Ok((pkg_version, version_path.join(LAUNCHER_NAME)))
 }
 
 #[derive(Debug, Snafu)]

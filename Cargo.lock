@@ -3147,6 +3147,7 @@ dependencies = [
  "schemars 1.2.0",
  "scrypt",
  "sec1",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

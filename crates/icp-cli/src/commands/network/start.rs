@@ -7,7 +7,7 @@ use icp::{
     identity::manifest::IdentityList,
     network::{
         Configuration,
-        managed::cache::{download_launcher_version, get_cached_launcher_version},
+        managed::cache::{download_launcher_version, get_cached_launcher_version_if_fresh},
         run_network,
     },
     settings::Settings,
@@ -127,14 +127,13 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         ctx.dirs
             .package_cache()?
             .with_write(async |pkg| {
-                if let Some(path) = get_cached_launcher_version(pkg.read(), version)? {
-                    anyhow::Ok(Some(path))
-                } else {
-                    debug!("Downloading icp-cli-network-launcher version `{version}`");
-                    let client = reqwest::Client::new();
-                    let (_ver, path) = download_launcher_version(pkg, version, &client).await?;
-                    Ok(Some(path))
+                if let Some(path) = get_cached_launcher_version_if_fresh(pkg.read(), version)? {
+                    return anyhow::Ok(Some(path));
                 }
+                debug!("Downloading icp-cli-network-launcher version `{version}`");
+                let client = reqwest::Client::new();
+                let (_ver, path) = download_launcher_version(pkg, version, &client).await?;
+                Ok(Some(path))
             })
             .await??
     } else {

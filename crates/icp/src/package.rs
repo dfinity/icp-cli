@@ -251,7 +251,41 @@ pub fn set_tag(
     Ok(())
 }
 
+/// Like [`set_tag`], but also records the CLI version that performed the update.
+pub fn set_tag_with_updater(
+    paths: LWrite<&PackageCachePaths>,
+    tool: &str,
+    version: &str,
+    tag: &str,
+    updater_version: &str,
+) -> Result<(), crate::fs::json::Error> {
+    let mut manifest: Manifest = crate::fs::json::load_or_default(&paths.manifest())?;
+    manifest
+        .tags
+        .insert(format!("{tool}:{tag}"), version.to_string());
+    manifest
+        .updater_versions
+        .insert(tool.to_string(), updater_version.to_string());
+    crate::fs::json::save(&paths.manifest(), &manifest)?;
+    Ok(())
+}
+
+/// Like [`get_tag`], but also returns the updater version for the tool.
+/// Returns `(tag_value, updater_version)`.
+pub fn get_tag_with_updater(
+    paths: LRead<&PackageCachePaths>,
+    tool: &str,
+    tag: &str,
+) -> Result<(Option<String>, Option<String>), crate::fs::json::Error> {
+    let manifest: Manifest = crate::fs::json::load_or_default(&paths.manifest())?;
+    let tag_value = manifest.tags.get(&format!("{tool}:{tag}")).cloned();
+    let updater = manifest.updater_versions.get(tool).cloned();
+    Ok((tag_value, updater))
+}
+
 #[derive(Serialize, Deserialize, Default)]
 struct Manifest {
     tags: HashMap<String, String>,
+    #[serde(default)]
+    updater_versions: HashMap<String, String>,
 }

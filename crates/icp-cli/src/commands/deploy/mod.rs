@@ -3,6 +3,7 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
+use icp::network::{Managed, ManagedMode};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
@@ -395,7 +396,11 @@ async fn print_canister_urls(
     // Friendly domains are available for managed networks where we write custom-domains.txt
     let has_friendly = matches!(
         &env.network.configuration,
-        NetworkConfiguration::Managed { .. }
+        NetworkConfiguration::Managed {
+            managed: Managed {
+                mode: ManagedMode::Launcher(config)
+            }
+        } if config.version.is_none()
     );
 
     let _ = ctx.term.write_line("\n\nDeployed canisters:");

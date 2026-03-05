@@ -5,11 +5,16 @@ on:
     branches:
       - main
     paths-ignore:
+      # NOTE: all docs/ markdown files are covered by "**.md" above. The only
+      # docs/ files that still trigger this workflow are docs/schemas/*.json —
+      # intentionally, since this workflow validates project manifests against
+      # those schemas.
       - "**.md"
       - "docs-site/**"
       - "npm/**"
   pull_request:
     paths-ignore:
+      # See push paths-ignore NOTE above.
       - "**.md"
       - "docs-site/**"
       - "npm/**"

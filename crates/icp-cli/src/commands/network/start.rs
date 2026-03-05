@@ -7,7 +7,10 @@ use icp::{
     identity::manifest::IdentityList,
     network::{
         Configuration,
-        managed::cache::{download_launcher_version, get_cached_launcher_version_if_fresh},
+        managed::cache::{
+            check_launcher_update_available, download_launcher_version,
+            get_cached_launcher_version_if_fresh,
+        },
         run_network,
     },
     settings::Settings,
@@ -120,26 +123,46 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     // On Windows, always use Docker since the native launcher doesn't run there
     let autocontainerize = cfg!(windows) || settings.autocontainerize;
 
-    let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
-        Some(PathBuf::from(var))
-    } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
-        let version = managed_cfg.version.as_deref().unwrap_or("latest");
-        ctx.dirs
+    let (network_launcher_path, launcher_cached_version) =
+        if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+            (Some(PathBuf::from(var)), None)
+        } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
+            let version = managed_cfg.version.as_deref().unwrap_or("latest");
+            ctx.dirs
+                .package_cache()?
+                .with_write(async |pkg| {
+                    if let Some((resolved, path)) =
+                        get_cached_launcher_version_if_fresh(pkg.read(), version)?
+                    {
+                        anyhow::Ok((Some(path), Some(resolved)))
+                    } else {
+                        debug!("Downloading icp-cli-network-launcher version `{version}`");
+                        let client = reqwest::Client::new();
+                        let (ver, path) = download_launcher_version(pkg, version, &client).await?;
+                        Ok((Some(path), Some(ver)))
+                    }
+                })
+                .await??
+        } else {
+            (None, None)
+        };
+
+    if let Some(cached_version) = &launcher_cached_version {
+        let client = reqwest::Client::new();
+        let result = ctx
+            .dirs
             .package_cache()?
             .with_write(async |pkg| {
-                if let Some(path) = get_cached_launcher_version_if_fresh(pkg.read(), version)? {
-                    anyhow::Ok(Some(path))
-                } else {
-                    debug!("Downloading icp-cli-network-launcher version `{version}`");
-                    let client = reqwest::Client::new();
-                    let (_ver, path) = download_launcher_version(pkg, version, &client).await?;
-                    Ok(Some(path))
-                }
+                check_launcher_update_available(pkg, cached_version, &client).await
             })
-            .await??
-    } else {
-        None
-    };
+            .await?;
+        if let Some(latest) = result {
+            _ = ctx.term.write_line(&format!(
+                "A newer network launcher version is available: {latest} (current: {cached_version}). \
+                 Run `icp network update` to update."
+            ));
+        }
+    }
 
     run_network(
         cfg,

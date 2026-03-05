@@ -2,6 +2,7 @@
 
 # v0.2.0
 
+* feat: Added a notification about new versions of the network
 * feat: Added 'friendly name' domains for canisters - instead of `<frontend principal>.localhost` you can access `frontend.local.localhost`.
 * feat: Added `bind` key to network gateway config to pick your network interface (previous documentation mentioned a `host` key, but it did not do anything)
 * feat: check for Candid incompatibility when upgrading a canister

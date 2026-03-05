@@ -167,6 +167,9 @@ impl Handlebars {
         // Load the template via handlebars
         let mut reg = handlebars::Handlebars::new();
 
+        // Disable HTML escaping since the output is YAML, not HTML
+        reg.register_escape_fn(handlebars::no_escape);
+
         // Register helpers
         reg.register_helper("replace", Box::new(ReplaceHelper));
 
@@ -330,4 +333,66 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], HandlebarsE
 /// Helper function to parse bytes into a UTF-8 string
 fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, HandlebarsError> {
     String::from_utf8(bytes).context(DecodeUtf8Snafu)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::recipe::{Recipe, RecipeType};
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn template_values_are_not_html_escaped() {
+        // Create a recipe template that interpolates a value containing
+        // characters that Handlebars would normally HTML-escape (", =, &, <, >).
+        // Use double-stache {{ }} which is what real recipe templates use.
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let tmpl_path = tmp.path().join("recipe.hbs");
+        std::fs::write(
+            &tmpl_path,
+            indoc::indoc! {r#"
+                build:
+                  steps:
+                    - type: script
+                      command: "{{ command }}"
+            "#},
+        )
+        .unwrap();
+
+        let cache_dir = tmp.path().join("pkg");
+        let pkg_cache = PackageCache::new(cache_dir).unwrap();
+        let hbs = Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache,
+        };
+
+        let mut configuration = HashMap::new();
+        configuration.insert(
+            "command".to_string(),
+            serde_yaml::Value::String(
+                "SITE=https://example.com&foo=bar npm run build".to_string(),
+            ),
+        );
+
+        let recipe = Recipe {
+            recipe_type: RecipeType::File(tmpl_path.to_string()),
+            configuration,
+            sha256: None,
+        };
+
+        let (build, _sync) = hbs.resolve_impl(&recipe).await.unwrap();
+        let cmd = build.steps[0].clone();
+
+        match cmd {
+            crate::manifest::canister::BuildStep::Script(adapter) => {
+                let commands = adapter.command.as_vec();
+                assert_eq!(
+                    commands[0],
+                    "SITE=https://example.com&foo=bar npm run build",
+                    "Template values must not be HTML-escaped (= and & must be preserved)"
+                );
+            }
+            other => panic!("Expected Script build step, got: {other:?}"),
+        }
+    }
 }

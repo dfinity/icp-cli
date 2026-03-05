@@ -369,9 +369,7 @@ mod tests {
         let mut configuration = HashMap::new();
         configuration.insert(
             "command".to_string(),
-            serde_yaml::Value::String(
-                "SITE=https://example.com&foo=bar npm run build".to_string(),
-            ),
+            serde_yaml::Value::String("SITE=https://example.com&foo=bar npm run build".to_string()),
         );
 
         let recipe = Recipe {
@@ -387,8 +385,7 @@ mod tests {
             crate::manifest::canister::BuildStep::Script(adapter) => {
                 let commands = adapter.command.as_vec();
                 assert_eq!(
-                    commands[0],
-                    "SITE=https://example.com&foo=bar npm run build",
+                    commands[0], "SITE=https://example.com&foo=bar npm run build",
                     "Template values must not be HTML-escaped (= and & must be preserved)"
                 );
             }

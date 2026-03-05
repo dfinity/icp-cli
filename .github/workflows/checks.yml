@@ -4,7 +4,22 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      # NOTE: docs/reference/cli.md and docs/schemas/*.json are auto-generated
+      # and ideally should trigger cli-ref/icp-yaml-schema checks when manually
+      # edited. However, GitHub Actions does not support combining paths-ignore
+      # with negation patterns, so we accept the tradeoff: manual edits to those
+      # files won't be caught in isolation, but will be caught the next time any
+      # Rust source is changed and the checks run.
+      - "**.md"
+      - "docs-site/**"
+      - "npm/**"
   pull_request:
+    paths-ignore:
+      # See push paths-ignore comment above for the tradeoff explanation.
+      - "**.md"
+      - "docs-site/**"
+      - "npm/**"
 
 jobs:
   compile:

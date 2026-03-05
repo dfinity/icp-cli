@@ -6,11 +6,13 @@ on:
       - main
     paths-ignore:
       - "**.md"
-      - "docs/**"
+      - "docs-site/**"
+      - "npm/**"
   pull_request:
     paths-ignore:
       - "**.md"
-      - "docs/**"
+      - "docs-site/**"
+      - "npm/**"
 
 env:
   # When getting Rust dependencies, retry on network error:

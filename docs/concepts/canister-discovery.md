@@ -104,19 +104,17 @@ let backend_id = Principal::from_text(
 ).unwrap();
 ```
 
-**Motoko** canisters can read canister environment variables using `Prim.envVar` (since Motoko 0.16.2):
+**Motoko** canisters can read canister environment variables using `Runtime.envVar` from the [motoko-core](https://mops.one/core) package (v2.1.0+):
 
 ```motoko
-import Prim "mo:⛔";
+import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
 
-let ?backendIdText = Prim.envVar<system>("PUBLIC_CANISTER_ID:backend") else {
+let ?backendIdText = Runtime.envVar("PUBLIC_CANISTER_ID:backend") else {
     return #err("backend canister ID not set");
 };
 let backendId = Principal.fromText(backendIdText);
 ```
-
-> **Note:** `Prim` is an internal module not intended for general use. This functionality will be available in the Motoko core package in a future release.
 
 ### Making Inter-Canister Calls
 

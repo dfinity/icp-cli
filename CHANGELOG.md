@@ -1,5 +1,7 @@
 # Unreleased
 
+* fix: Correct templating of special HTML characters in recipes
+
 # v0.2.0
 
 * feat: Added 'friendly name' domains for canisters - instead of `<frontend principal>.localhost` you can access `frontend.local.localhost`.

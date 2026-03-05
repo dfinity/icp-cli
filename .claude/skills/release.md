@@ -3,7 +3,7 @@ name: release
 description: Release a new version of icp-cli. Use when the user asks to do a release or cut a new version. Requires a semver VERSION argument.
 argument-hint: <VERSION>
 disable-model-invocation: true
-allowed-tools: Read, Edit, Glob, Grep, Bash(git *), Bash(gh *), Bash(cargo check -q), Bash(curl *), Bash(shasum *), Bash(awk *), Bash(sed *), Bash(base64 *), Bash(tr *), Bash(uname *), Bash(sleep *), Bash(echo *)
+allowed-tools: Read, Edit, Bash(git *), Bash(gh *), Bash(cargo check -q), Bash(curl *), Bash(jq *), Bash(shasum *), Bash(awk *), Bash(sed *), Bash(base64 *), Bash(tr *), Bash(uname *), Bash(sleep *), Bash(echo *)
 ---
 
 Release VERSION: **$ARGUMENTS**
@@ -33,20 +33,24 @@ If validation fails, stop and inform the user.
 ## Dependency order
 
 ```
-                                            !IS_BETA -> Part 5a (homebrew-core)
-                                           /
-Part 1 (PR) -> Part 2 (tag) --+-- [IS_BETA?]
-                               |           \
-                               |            IS_BETA -> Part 5b (homebrew-tap)
-                               |
-                               +-- Part 3 (Release workflow) -> Part 4 (npm)
+Task 1 (PR)
+    |
+Task 2 (tag)
+    |
+    +----------------------+
+    |                      |
+Task 3 (Release workflow)  [beta only] Task 5 (homebrew-tap)
+    |
+Task 4 (NPM)
+    |
+    [stable only] Task 6 (homebrew-core check)
 ```
 
-Parts 3, 5a, and 5b all start immediately after the tag is pushed. Parts 5a/5b do **not** wait for the Release workflow. Part 4 (npm) requires Part 3 to complete first (needs GitHub release artifacts).
+Task 5 starts immediately after the tag is pushed and runs concurrently with Tasks 3 & 4. Task 4 requires Task 3 to complete first (needs GitHub release artifacts). Task 6 runs after Task 4 and is only for stable releases.
 
 ---
 
-## Part 1: icp-cli repo
+## Task 1: icp-cli repo
 
 **0. Branch**
 ```bash
@@ -116,7 +120,7 @@ Notify the release driver: "PR has failing CI: ${PR_URL} — please fix or rerun
 
 ---
 
-## Part 2: Tag
+## Task 2: Tag
 
 Wait for the release PR to be approved and merged, then:
 
@@ -126,11 +130,11 @@ git tag v$ARGUMENTS
 git push origin v$ARGUMENTS
 ```
 
-**After the tag is pushed, start Parts 3, 5a, and 5b concurrently in background.**
+**After the tag is pushed, start Task 3 in background. If `$ARGUMENTS` is a beta release, also start Task 5 concurrently in background.**
 
 ---
 
-## Part 3: Monitor Release workflow
+## Task 3: Monitor Release workflow
 
 ```bash
 sleep 5
@@ -141,15 +145,15 @@ echo "Watching: ${RELEASE_RUN_URL}"
 gh run watch ${RELEASE_RUN_ID} --exit-status
 ```
 
-If it succeeds, proceed to Part 4.
+If it succeeds, proceed to Task 4.
 
 If it fails, notify the release driver: "Release workflow failed for v$ARGUMENTS: ${RELEASE_RUN_URL} — please investigate before proceeding."
 
 ---
 
-## Part 4: Publish to npm
+## Task 4: Publish to NPM
 
-*Requires Part 3 to be complete.*
+*Requires Task 3 to be complete.*
 
 ```bash
 gh workflow run "Publish to npm" \
@@ -167,25 +171,15 @@ echo "Watching: ${NPM_RUN_URL}"
 gh run watch ${NPM_RUN_ID} --exit-status
 ```
 
-If it succeeds, notify the release driver: "npm publish completed for v$ARGUMENTS."
+If it succeeds, notify the release driver: "NPM publish completed for v$ARGUMENTS."
 
-If it fails, notify the release driver: "npm publish failed for v$ARGUMENTS: ${NPM_RUN_URL} — please investigate."
-
----
-
-## Part 5a: Publish to homebrew-core (stable releases only)
-
-*Requires Part 2. Runs concurrently with Parts 3 & 4. Skip if `$ARGUMENTS` is a beta release.*
-
-No action required. Notify the release driver:
-
-> "This is a stable release. BrewTestBot will automatically bump the `icp-cli` formula in homebrew-core — no action needed from our side. The full process (bot PR + CI + maintainer review) may take several hours. Please check https://formulae.brew.sh/formula/icp-cli later to confirm it reflects v$ARGUMENTS."
+If it fails, notify the release driver: "NPM publish failed for v$ARGUMENTS: ${NPM_RUN_URL} — please investigate."
 
 ---
 
-## Part 5b: Publish to dfinity/homebrew-tap (beta releases only)
+## Task 5: Publish to dfinity/homebrew-tap (beta releases only)
 
-*Requires Part 2. Runs concurrently with Parts 3 & 4. Skip if `$ARGUMENTS` is a stable release.*
+*Skip if `$ARGUMENTS` is a stable release. Requires Task 2. Runs concurrently with Tasks 3 & 4.*
 
 Formula: `Formula/icp-cli-beta.rb` in `dfinity/homebrew-tap`. Only `url` (line 4) and the top-level `sha256` (line 5) need updating — leave the `bottle` block alone, CI regenerates it.
 
@@ -267,22 +261,56 @@ Notify the release driver: "homebrew-tap PR is ready for review: ${TAP_PR_URL}"
 
 ---
 
+## Task 6: Check homebrew-core status (stable releases only)
+
+*Skip if `$ARGUMENTS` is a beta release. Requires Task 4 to be complete.*
+
+Check the homebrew-core PR and extract its URL and state:
+```bash
+HBC_PR=$(gh pr list --repo Homebrew/homebrew-core \
+  --search "icp-cli $ARGUMENTS" \
+  --json number,state,url,mergedAt \
+  --state all)
+HBC_PR_URL=$(echo "$HBC_PR" | jq -r '.[0].url // ""')
+HBC_PR_STATE=$(echo "$HBC_PR" | jq -r '.[0].state // ""')
+```
+
+Determine the **homebrew status line** to use in the release announcement:
+
+- If `$HBC_PR_URL` is empty (no PR found):
+  `- Homebrew: stable release will be published to homebrew-core — BrewTestBot hasn't created the PR yet, check https://github.com/Homebrew/homebrew-core/pulls?q=is%3Apr+icp-cli+$ARGUMENTS later`
+- If `$HBC_PR_STATE` is `OPEN`:
+  `- Homebrew: stable release will be published to homebrew-core — formula PR is in review: $HBC_PR_URL`
+- If `$HBC_PR_STATE` is `MERGED`: check whether the new version is live:
+  ```bash
+  curl -s https://formulae.brew.sh/api/formula/icp-cli.json | jq -r '.versions.stable'
+  ```
+  - If the returned version equals `$ARGUMENTS`:
+    `- Homebrew: stable release has been published to homebrew-core. \`brew install icp-cli\` (or \`brew upgrade icp-cli\`)`
+  - If the returned version does not equal `$ARGUMENTS`:
+    `- Homebrew: stable release will be published to homebrew-core — formula PR merged but not yet propagated: $HBC_PR_URL`
+
+Proceed to the release announcement with the homebrew status line determined above.
+
+---
+
 ## Release announcement
 
-When all parts are complete, output a message ready to copy to the team channel.
+When all tasks are complete, output a message ready to copy to the team channel.
 
-If `$ARGUMENTS` is a stable release, output:
+If `$ARGUMENTS` is a stable release, output (using the homebrew status line from Task 6):
 ```
 🚀 icp-cli v$ARGUMENTS released!
 - Release: https://github.com/dfinity/icp-cli/releases/tag/v$ARGUMENTS
-- npm: https://www.npmjs.com/package/@icp-sdk/icp-cli/v/$ARGUMENTS
-- Homebrew (homebrew-core PR, may take a few hours): https://github.com/Homebrew/homebrew-core/pulls?q=is%3Apr+icp-cli+$ARGUMENTS
+- NPM: https://www.npmjs.com/package/@icp-sdk/icp-cli/v/$ARGUMENTS
+- <homebrew status line from Task 6>
 ```
 
 If `$ARGUMENTS` is a beta release, output:
 ```
 🚀 icp-cli v$ARGUMENTS released!
 - Release: https://github.com/dfinity/icp-cli/releases/tag/v$ARGUMENTS
-- npm: https://www.npmjs.com/package/@icp-sdk/icp-cli/v/$ARGUMENTS
-- Homebrew: `brew install dfinity/tap/icp-cli-beta`
+- NPM: https://www.npmjs.com/package/@icp-sdk/icp-cli/v/$ARGUMENTS
+- Homebrew: beta release has been published to dfinity/homebrew-tap.
+    `brew install dfinity/tap/icp-cli-beta`
 ```

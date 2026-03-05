@@ -499,6 +499,10 @@ pub async fn spawn_docker_launcher(
             root_key: hex::decode(&launcher_status.root_key).context(ParseRootKeySnafu {
                 key: &launcher_status.root_key,
             })?,
+            use_friendly_domains: launcher_status
+                .supported_features
+                .iter()
+                .any(|f| f == "custom-domains"),
         },
         locator,
         gateway_port_was_fixed,

@@ -18,6 +18,7 @@ pub struct NetworkInstance {
     pub root_key: Vec<u8>,
     pub pocketic_config_port: Option<u16>,
     pub pocketic_instance_id: Option<usize>,
+    pub use_friendly_domains: bool,
 }
 
 #[derive(Debug, Snafu)]
@@ -141,6 +142,10 @@ pub async fn spawn_network_launcher(
             })?,
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
+            use_friendly_domains: launcher_status
+                .supported_features
+                .iter()
+                .any(|f| f == "custom-domains"),
         },
         ChildLocator::Pid { pid, start_time },
     ))
@@ -357,6 +362,8 @@ pub struct LauncherStatus {
     pub gateway_port: u16,
     pub root_key: String,
     pub default_effective_canister_id: Option<Principal>,
+    #[serde(default)]
+    pub supported_features: Vec<String>,
 }
 
 struct WatchRecv(Sender<notify::Result<notify::Event>>);

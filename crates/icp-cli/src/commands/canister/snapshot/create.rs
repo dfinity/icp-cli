@@ -58,9 +58,11 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
     let take_args = TakeCanisterSnapshotArgs {
         canister_id: cid,
         replace_snapshot: args.replace.as_ref().map(|s| s.0.clone()),
+        uninstall_code: None,
+        sender_canister_version: None,
     };
 
-    let (snapshot,) = mgmt.take_canister_snapshot(&cid, &take_args).await?;
+    let (snapshot,) = mgmt.take_canister_snapshot(&take_args).await?;
 
     ctx.term.write_line(&format!(
         "Created snapshot {id} for canister {name} ({cid})",

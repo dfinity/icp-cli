@@ -141,15 +141,32 @@ pub(crate) async fn sync_settings(
         // No changes needed
         return Ok(());
     }
-    mgmt.update_settings(cid)
-        .with_optional_log_visibility(log_visibility_setting)
-        .with_optional_compute_allocation(compute_allocation)
-        .with_optional_memory_allocation(memory_allocation.as_ref().map(|m| m.get()))
-        .with_optional_freezing_threshold(freezing_threshold.as_ref().map(|d| d.get()))
-        .with_optional_reserved_cycles_limit(reserved_cycles_limit.as_ref().map(|r| r.get()))
-        .with_optional_wasm_memory_limit(wasm_memory_limit.as_ref().map(|m| m.get()))
-        .with_optional_wasm_memory_threshold(wasm_memory_threshold.as_ref().map(|m| m.get()))
-        .with_optional_environment_variables(environment_variable_setting)
+    let mut builder = mgmt.update_settings(cid);
+    if let Some(v) = log_visibility_setting {
+        builder = builder.with_log_visibility(v);
+    }
+    if let Some(v) = compute_allocation {
+        builder = builder.with_compute_allocation(v);
+    }
+    if let Some(v) = memory_allocation.as_ref().map(|m| m.get()) {
+        builder = builder.with_memory_allocation(v);
+    }
+    if let Some(v) = freezing_threshold.as_ref().map(|d| d.get()) {
+        builder = builder.with_freezing_threshold(v);
+    }
+    if let Some(v) = reserved_cycles_limit.as_ref().map(|r| r.get()) {
+        builder = builder.with_reserved_cycles_limit(v);
+    }
+    if let Some(v) = wasm_memory_limit.as_ref().map(|m| m.get()) {
+        builder = builder.with_wasm_memory_limit(v);
+    }
+    if let Some(v) = wasm_memory_threshold.as_ref().map(|m| m.get()) {
+        builder = builder.with_wasm_memory_threshold(v);
+    }
+    if let Some(v) = environment_variable_setting {
+        builder = builder.with_environment_variables(v);
+    }
+    builder
         .build()
         .context(ValidateSettingsSnafu {
             name: &canister.name,

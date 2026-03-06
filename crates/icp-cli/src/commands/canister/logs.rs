@@ -1,7 +1,9 @@
 use anyhow::{Context as _, anyhow};
 use clap::Args;
-use ic_management_canister_types::{CanisterLogRecord, FetchCanisterLogsResult};
 use ic_utils::interfaces::ManagementCanister;
+use ic_utils::interfaces::management_canister::{
+    CanisterLogFilter, CanisterLogRecord, FetchCanisterLogsArgs, FetchCanisterLogsResult,
+};
 use icp::context::Context;
 use icp::signal::stop_signal;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -22,6 +24,38 @@ pub(crate) struct LogsArgs {
     /// Polling interval in seconds when following logs (requires --follow)
     #[arg(long, requires = "follow", default_value = "2")]
     pub(crate) interval: u64,
+
+    /// Show logs at or after this timestamp. Accepts nanoseconds since Unix epoch or RFC3339
+    /// (e.g. '2024-01-01T00:00:00Z')
+    #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["since_index", "until_index"], value_parser = parse_timestamp)]
+    pub(crate) since: Option<u64>,
+
+    /// Show logs at or before this timestamp. Accepts nanoseconds since Unix epoch or RFC3339
+    /// (e.g. '2024-01-01T00:00:00Z'). Requires --since
+    #[arg(long, value_name = "TIMESTAMP", requires = "since", conflicts_with_all = ["since_index", "until_index"], value_parser = parse_timestamp)]
+    pub(crate) until: Option<u64>,
+
+    /// Show logs at or after this log index (inclusive)
+    #[arg(long, value_name = "INDEX", conflicts_with_all = ["since", "until"])]
+    pub(crate) since_index: Option<u64>,
+
+    /// Show logs at or before this log index (inclusive). Requires --since-index
+    #[arg(long, value_name = "INDEX", requires = "since_index", conflicts_with_all = ["since", "until"])]
+    pub(crate) until_index: Option<u64>,
+}
+
+fn parse_timestamp(s: &str) -> Result<u64, String> {
+    // Try raw nanoseconds first
+    if let Ok(nanos) = s.parse::<u64>() {
+        return Ok(nanos);
+    }
+    // Fall back to RFC3339
+    OffsetDateTime::parse(s, &Rfc3339)
+        .map(|dt| {
+            let nanos_per_sec = 1_000_000_000u64;
+            (dt.unix_timestamp() as u64) * nanos_per_sec + dt.nanosecond() as u64
+        })
+        .map_err(|_| format!("'{s}' is not a valid nanosecond timestamp or RFC3339 datetime"))
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::Error> {
@@ -50,12 +84,30 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
 
     let mgmt = ManagementCanister::create(&agent);
 
+    let initial_filter = build_filter(args);
+
     if args.follow {
         // Follow mode: continuously fetch and display new logs
-        follow_logs(ctx, &mgmt, &canister_id, args.interval).await
+        follow_logs(ctx, &mgmt, &canister_id, args.interval, initial_filter).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(ctx, &mgmt, &canister_id).await
+        fetch_and_display_logs(ctx, &mgmt, &canister_id, initial_filter).await
+    }
+}
+
+fn build_filter(args: &LogsArgs) -> Option<CanisterLogFilter> {
+    if let Some(start) = args.since_index {
+        Some(CanisterLogFilter::ByIdx {
+            start,
+            end: args.until_index.unwrap_or(u64::MAX),
+        })
+    } else if let Some(start) = args.since {
+        Some(CanisterLogFilter::ByTimestampNanos {
+            start,
+            end: args.until.unwrap_or(u64::MAX),
+        })
+    } else {
+        None
     }
 }
 
@@ -63,9 +115,14 @@ async fn fetch_and_display_logs(
     ctx: &Context,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
+    filter: Option<CanisterLogFilter>,
 ) -> Result<(), anyhow::Error> {
+    let fetch_args = FetchCanisterLogsArgs {
+        canister_id: *canister_id,
+        filter,
+    };
     let (result,): (FetchCanisterLogsResult,) = mgmt
-        .fetch_canister_logs(canister_id)
+        .fetch_canister_logs(&fetch_args)
         .await
         .context("Failed to fetch canister logs")?;
 
@@ -82,26 +139,31 @@ async fn follow_logs(
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     interval_seconds: u64,
+    initial_filter: Option<CanisterLogFilter>,
 ) -> Result<(), anyhow::Error> {
     let mut last_idx: Option<u64> = None;
     let interval = std::time::Duration::from_secs(interval_seconds);
 
     loop {
-        // Fetch all logs
+        // On first iteration use the user-supplied filter; on subsequent iterations use
+        // server-side idx filtering to fetch only new logs.
+        let filter = match last_idx {
+            Some(idx) => Some(CanisterLogFilter::ByIdx {
+                start: idx + 1,
+                end: u64::MAX,
+            }),
+            None => initial_filter.clone(),
+        };
+        let fetch_args = FetchCanisterLogsArgs {
+            canister_id: *canister_id,
+            filter,
+        };
         let (result,): (FetchCanisterLogsResult,) = mgmt
-            .fetch_canister_logs(canister_id)
+            .fetch_canister_logs(&fetch_args)
             .await
             .context("Failed to fetch canister logs")?;
 
-        // Filter to only new logs based on last_idx
-        let new_logs: Vec<_> = result
-            .canister_log_records
-            .into_iter()
-            .filter(|log| match last_idx {
-                None => true, // First iteration, show all logs
-                Some(idx) => log.idx > idx,
-            })
-            .collect();
+        let new_logs = result.canister_log_records;
 
         if !new_logs.is_empty() {
             for log in &new_logs {
@@ -216,5 +278,36 @@ mod tests {
             formatted,
             "[42. 2024-01-01T10:00:00.123456789Z]: Test message"
         );
+    }
+
+    #[test]
+    fn test_parse_timestamp_raw_nanos() {
+        assert_eq!(
+            parse_timestamp("1704103200123456789"),
+            Ok(1704103200123456789)
+        );
+        assert_eq!(parse_timestamp("0"), Ok(0));
+    }
+
+    #[test]
+    fn test_parse_timestamp_rfc3339() {
+        // 2024-01-01T10:00:00Z = 1704103200000000000 nanos
+        assert_eq!(
+            parse_timestamp("2024-01-01T10:00:00Z"),
+            Ok(1704103200_000_000_000)
+        );
+    }
+
+    #[test]
+    fn test_parse_timestamp_rfc3339_with_nanos() {
+        assert_eq!(
+            parse_timestamp("2024-01-01T10:00:00.123456789Z"),
+            Ok(1704103200123456789)
+        );
+    }
+
+    #[test]
+    fn test_parse_timestamp_invalid() {
+        assert!(parse_timestamp("not-a-timestamp").is_err());
     }
 }

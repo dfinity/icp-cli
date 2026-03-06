@@ -43,15 +43,15 @@ glob = "0.3.2"
 handlebars = "6.3.2"
 hex = { version = "0.4.3", features = ["serde"] }
 httptest = "0.16.3"
-ic-agent = { version = "0.45.0" }
-ic-asset = "0.27.0"
+ic-agent = { version = "0.46.0" }
+ic-asset = "0.28.0"
 ic-ed25519 = "0.5.0"
 ic-ledger-types = "0.16.0"
-ic-management-canister-types = { version = "0.5.0" }
-ic-utils = { version = "0.45.0" }
+ic-management-canister-types = { version = "0.7.1" }
+ic-utils = { version = "0.46.0" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
-ic-identity-hsm = "0.45.0"
+ic-identity-hsm = "0.46.0"
 icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
 indoc = "2.0.6"
@@ -100,7 +100,7 @@ zeroize = "1.8.1"
 [workspace.dependencies.reqwest]
 version = "0.12.15"
 default-features = false
-features = ["rustls-tls"]
+features = ["rustls-tls", "json", "stream"]
 
 [workspace.dependencies.schemars]
 version = "1.0.4"

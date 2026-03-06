@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: `icp canister logs` supports filtering by timestamp (`--since`, `--until`) and log index (`--since-index`, `--until-index`)
+* feat: Support `log_memory_limit` canister setting in `icp canister settings update` and `icp canister settings sync`
 * fix: Correct templating of special HTML characters in recipes
 
 # v0.2.0

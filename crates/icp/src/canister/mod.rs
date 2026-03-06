@@ -231,6 +231,10 @@ pub struct Settings {
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     pub wasm_memory_threshold: Option<MemoryAmount>,
 
+    /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
+    /// Supports suffixes in YAML: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    pub log_memory_limit: Option<MemoryAmount>,
+
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.

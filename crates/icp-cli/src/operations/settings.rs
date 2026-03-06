@@ -85,6 +85,7 @@ pub(crate) async fn sync_settings(
         ref reserved_cycles_limit,
         ref wasm_memory_limit,
         ref wasm_memory_threshold,
+        ref log_memory_limit,
         ref environment_variables,
     } = &canister.settings;
     let current_settings = status.settings;
@@ -134,6 +135,10 @@ pub(crate) async fn sync_settings(
             .as_ref()
             .map(|m| m.get())
             .is_none_or(|s| current_settings.wasm_memory_threshold.0.to_u64() == Some(s))
+        && log_memory_limit
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.log_memory_limit.0.to_u64() == Some(s))
         && environment_variable_setting
             .as_ref()
             .is_none_or(|s| environment_variables_eq(s, &current_settings.environment_variables))
@@ -162,6 +167,9 @@ pub(crate) async fn sync_settings(
     }
     if let Some(v) = wasm_memory_threshold.as_ref().map(|m| m.get()) {
         builder = builder.with_wasm_memory_threshold(v);
+    }
+    if let Some(v) = log_memory_limit.as_ref().map(|m| m.get()) {
+        builder = builder.with_log_memory_limit(v);
     }
     if let Some(v) = environment_variable_setting {
         builder = builder.with_environment_variables(v);

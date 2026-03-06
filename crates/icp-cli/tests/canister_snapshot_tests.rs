@@ -800,6 +800,7 @@ async fn canister_snapshot_requires_stopped() {
 }
 
 /// Helper to generate large.wasm if it doesn't exist
+#[cfg(unix)]
 fn ensure_large_wasm(ctx: &TestContext) -> PathBuf {
     let script_path = ctx.pkg_dir().join("tests/assets/generate_large_wasm.sh");
     let wasm_path = ctx.pkg_dir().join("tests/assets/large.wasm");
@@ -820,11 +821,13 @@ fn ensure_large_wasm(ctx: &TestContext) -> PathBuf {
 }
 
 /// Helper to start mitmproxy as a reverse proxy
+#[cfg(unix)]
 struct MitmproxyGuard {
     child: std::process::Child,
     port: u16,
 }
 
+#[cfg(unix)]
 impl MitmproxyGuard {
     /// Start mitmproxy allowing `limit_requests` request/response pairs through.
     /// Default of 2 allows metadata + one data chunk.
@@ -872,6 +875,7 @@ impl MitmproxyGuard {
     }
 }
 
+#[cfg(unix)]
 impl Drop for MitmproxyGuard {
     fn drop(&mut self) {
         let _ = self.child.kill();

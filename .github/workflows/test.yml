@@ -23,6 +23,9 @@ env:
   CURL_HOME: .
   # Disable incremental compilation
   CARGO_INCREMENTAL: 0
+  # Prevent setup-rust-toolchain from injecting RUST_BACKTRACE=short,
+  # which breaks tests that assert exact stderr output.
+  RUST_BACKTRACE: ""
   # These variables should be shared with WSL
   WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p
 

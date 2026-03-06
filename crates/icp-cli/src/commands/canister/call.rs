@@ -1,12 +1,9 @@
 use anyhow::{Context as _, anyhow, bail};
-use candid::types::{Type, TypeInner};
 use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
-use candid_parser::utils::CandidSource;
 use clap::{Args, ValueEnum};
 use dialoguer::console::Term;
-use ic_agent::Agent;
 use icp::context::Context;
 use icp::fs;
 use icp::manifest::InitArgsFormat;
@@ -16,7 +13,8 @@ use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use std::io::{self, Write};
 use tracing::warn;
 
-use crate::{commands::args, operations::misc::fetch_canister_metadata};
+use crate::commands::args;
+use crate::commands::candid::build::{get_candid_type, load_candid_file, pick_method};
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
@@ -79,6 +77,11 @@ pub(crate) struct CallArgs {
     /// How to interpret and display the response.
     #[arg(long, short, default_value = "auto")]
     pub(crate) output: CallOutputMode,
+
+    /// Optionally provide a local Candid file describing the canister interface,
+    /// instead of looking it up from canister metadata.
+    #[arg(short = 'c', long)]
+    pub(crate) candid_file: Option<PathBuf>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
@@ -99,22 +102,16 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let candid_types = get_candid_type(&agent, cid).await;
+    let candid_types = if let Some(path) = &args.candid_file {
+        Some(load_candid_file(path)?)
+    } else {
+        get_candid_type(&agent, cid).await
+    };
 
     let method = if let Some(method) = &args.method {
         method.clone()
     } else if let Some(interface) = &candid_types {
-        // Interactive method selection using candid assist
-        let methods: Vec<&str> = interface.methods().collect();
-        if methods.is_empty() {
-            bail!("the canister's Candid interface has no methods");
-        }
-        let selection = dialoguer::Select::new()
-            .with_prompt("Select a method to call")
-            .items(&methods)
-            .default(0)
-            .interact()?;
-        methods[selection].to_string()
+        pick_method(interface, "Select a method to call")?
     } else {
         bail!(
             "method name was not provided and could not fetch candid type to assist method selection"
@@ -313,48 +310,10 @@ pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Resu
     Ok(())
 }
 
-/// Gets the Candid type of a method on a canister by fetching its Candid interface.
-///
-/// This is a best effort function: it will succeed if
-/// - the canister exposes its Candid interface in its metadata;
-/// - the IDL file can be parsed and type checked in Rust parser;
-/// - has an actor in the IDL file. If anything fails, it returns None.
-async fn get_candid_type(agent: &Agent, canister_id: Principal) -> Option<CanisterInterface> {
-    let candid_interface = fetch_canister_metadata(agent, canister_id, "candid:service").await?;
-    let candid_source = CandidSource::Text(&candid_interface);
-    let (type_env, ty) = candid_source.load().ok()?;
-    let actor = ty?;
-    Some(CanisterInterface {
-        env: type_env,
-        ty: actor,
-    })
-}
-
-struct CanisterInterface {
-    env: TypeEnv,
-    ty: Type,
-}
-
-impl CanisterInterface {
-    fn methods(&self) -> impl Iterator<Item = &str> {
-        let ty = if let TypeInner::Class(_, t) = &*self.ty.0 {
-            t
-        } else {
-            &self.ty
-        };
-        let TypeInner::Service(methods) = &*ty.0 else {
-            unreachable!("check_prog should verify service type")
-        };
-        methods.iter().map(|(name, _)| name.as_str())
-    }
-    fn get_method<'a>(&'a self, method_name: &'a str) -> Option<&'a Function> {
-        self.env.get_method(&self.ty, method_name).ok()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use candid_parser::utils::CandidSource;
 
     #[test]
     fn typed_decoding_preserves_record_field_names() {

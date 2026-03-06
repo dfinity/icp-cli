@@ -2,6 +2,7 @@ use clap::Subcommand;
 
 pub(crate) mod args;
 pub(crate) mod build;
+pub(crate) mod candid;
 pub(crate) mod canister;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
@@ -19,6 +20,8 @@ pub(crate) mod token;
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Command {
     Build(build::BuildArgs),
+    #[command(subcommand)]
+    Candid(candid::Command),
     #[command(subcommand)]
     Canister(canister::Command),
     #[command(subcommand)]

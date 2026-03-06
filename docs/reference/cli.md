@@ -6,6 +6,8 @@ This document contains the help content for the `icp` command-line program.
 
 * [`icp`↴](#icp)
 * [`icp build`↴](#icp-build)
+* [`icp candid`↴](#icp-candid)
+* [`icp candid build`↴](#icp-candid-build)
 * [`icp canister`↴](#icp-canister)
 * [`icp canister call`↴](#icp-canister-call)
 * [`icp canister create`↴](#icp-canister-create)
@@ -74,6 +76,7 @@ This document contains the help content for the `icp` command-line program.
 ###### **Subcommands:**
 
 * `build` — Build canisters
+* `candid` — Candid encoding utilities
 * `canister` — Perform canister operations against a network
 * `cycles` — Mint and manage cycles
 * `deploy` — Deploy a project to an environment
@@ -109,6 +112,46 @@ Build canisters
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+
+
+
+## `icp candid`
+
+Candid encoding utilities
+
+**Usage:** `icp candid <COMMAND>`
+
+###### **Subcommands:**
+
+* `build` — Interactively build Candid arguments for a canister method
+
+
+
+## `icp candid build`
+
+Interactively build Candid arguments for a canister method
+
+**Usage:** `icp candid build [OPTIONS] --output <OUTPUT> <CANISTER|--candid-file <CANDID_FILE>> [METHOD]`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
+* `<METHOD>` — Name of canister method to build arguments for. If not provided, an interactive prompt will be launched
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-o`, `--output <OUTPUT>` — Output file path. Pass `-` for stdout
+* `--format <FORMAT>` — Output format
+
+  Default value: `bin`
+
+  Possible values: `bin`, `hex`, `candid`
+
+* `-c`, `--candid-file <CANDID_FILE>` — Optionally provide a local Candid file describing the canister interface, instead of looking it up from canister metadata
 
 
 
@@ -193,6 +236,7 @@ Make a canister call
   - `hex`:
     Print raw response as hex
 
+* `-c`, `--candid-file <CANDID_FILE>` — Optionally provide a local Candid file describing the canister interface, instead of looking it up from canister metadata
 
 
 

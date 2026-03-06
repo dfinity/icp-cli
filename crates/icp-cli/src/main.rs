@@ -185,6 +185,13 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
         // Build
         Command::Build(args) => commands::build::exec(ctx, &args).await?,
 
+        // Candid
+        Command::Candid(cmd) => match cmd {
+            commands::candid::Command::Build(args) => {
+                commands::candid::build::exec(ctx, &args).await?
+            }
+        },
+
         // Canister
         Command::Canister(cmd) => match cmd {
             commands::canister::Command::Call(args) => {

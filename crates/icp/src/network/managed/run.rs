@@ -274,6 +274,7 @@ async fn run_network_launcher(
                 candid_ui_canister_id,
                 proxy_canister_id,
                 status_dir: Some(status_dir_path.clone()),
+                use_friendly_domains: instance.use_friendly_domains,
             };
 
             // Save descriptor to project root and all fixed port directories

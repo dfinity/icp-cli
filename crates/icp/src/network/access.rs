@@ -13,8 +13,10 @@ pub struct NetworkAccess {
 
     /// Routing configuration
     pub api_url: Url,
-
     pub http_gateway_url: Option<Url>,
+
+    /// If true, use friendly canister names with the gateway url
+    pub use_friendly_domains: bool,
 }
 
 #[derive(Debug, Snafu)]
@@ -81,6 +83,7 @@ pub async fn get_managed_network_access(
         root_key: desc.root_key,
         api_url: http_gateway_url.clone(),
         http_gateway_url: Some(http_gateway_url),
+        use_friendly_domains: desc.use_friendly_domains,
     })
 }
 
@@ -93,5 +96,6 @@ pub async fn get_connected_network_access(
         root_key,
         api_url: connected.api_url.clone(),
         http_gateway_url: connected.http_gateway_url.clone(),
+        use_friendly_domains: false,
     })
 }

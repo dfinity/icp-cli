@@ -3,7 +3,6 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
-use icp::network::{Managed, ManagedMode};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
@@ -385,23 +384,15 @@ async fn print_canister_urls(
     let env = ctx.get_environment(environment_selection).await?;
 
     // Get the network URL
-    let http_gateway_url = match &env.network.configuration {
+    let (http_gateway_url, has_friendly) = match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
             let access = ctx.network.access(&env.network).await?;
-            access.http_gateway_url.clone()
+            (access.http_gateway_url.clone(), access.use_friendly_domains)
         }
-        NetworkConfiguration::Connected { connected } => connected.http_gateway_url.clone(),
+        NetworkConfiguration::Connected { connected } => {
+            (connected.http_gateway_url.clone(), false)
+        }
     };
-
-    // Friendly domains are available for managed networks where we write custom-domains.txt
-    let has_friendly = matches!(
-        &env.network.configuration,
-        NetworkConfiguration::Managed {
-            managed: Managed {
-                mode: ManagedMode::Launcher(config)
-            }
-        } if config.version.is_none()
-    );
 
     let _ = ctx.term.write_line("\n\nDeployed canisters:");
 

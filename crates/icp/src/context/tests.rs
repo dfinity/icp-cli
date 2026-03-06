@@ -351,6 +351,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                         root_key: local_root_key.clone(),
                         api_url: Url::parse("http://localhost:8000").unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 )
                 .with_network(
@@ -359,6 +360,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                         root_key: staging_root_key.clone(),
                         api_url: Url::parse("http://staging:9000").unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 ),
         ),
@@ -432,6 +434,7 @@ async fn test_get_agent_for_network_success() {
                 root_key: root_key.clone(),
                 api_url: Url::parse("http://localhost:8000").unwrap(),
                 http_gateway_url: None,
+                use_friendly_domains: false,
             },
         )),
         ..Context::mocked()
@@ -645,6 +648,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
                 root_key: local_root_key.clone(),
                 api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                 http_gateway_url: None,
+                use_friendly_domains: false,
             },
         )),
         ..Context::mocked()
@@ -717,6 +721,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
                 root_key: custom_root_key.clone(),
                 api_url: Url::parse("http://localhost:9000").unwrap(), // Custom port
                 http_gateway_url: None,
+                use_friendly_domains: false,
             },
         )),
         ..Context::mocked()
@@ -816,6 +821,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                         root_key: local_root_key.clone(),
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 )
                 .with_network(
@@ -824,6 +830,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                         root_key: custom_root_key.clone(),
                         api_url: Url::parse("http://localhost:7000").unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 ),
         ),
@@ -858,6 +865,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                         root_key: local_root_key.clone(),
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 )
                 .with_network(
@@ -866,6 +874,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                         root_key: staging_root_key.clone(),
                         api_url: Url::parse("http://localhost:8001").unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 ),
         ),
@@ -901,6 +910,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                         root_key: local_root_key.clone(),
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 )
                 .with_network(
@@ -909,6 +919,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                         root_key: staging_root_key.clone(),
                         api_url: Url::parse("http://localhost:8001").unwrap(),
                         http_gateway_url: None,
+                        use_friendly_domains: false,
                     },
                 ),
         ),

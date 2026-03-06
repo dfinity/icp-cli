@@ -79,6 +79,9 @@ pub struct NetworkDescriptorModel {
     /// Used to write `custom-domains.txt` for friendly domain routing.
     #[serde(default)]
     pub status_dir: Option<PathBuf>,
+    /// Whether the network supports friendly domain routing (e.g., `foo.local.localhost`).
+    #[serde(default)]
+    pub use_friendly_domains: bool,
 }
 
 /// Identifies the process or container running a managed network.

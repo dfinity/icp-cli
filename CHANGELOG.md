@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: `icp candid build` allows using the Candid-assist wizard from `icp canister call` to construct a precompiled argument file
 * feat: Leaving off the method name parameter in `icp canister call` prompts you with an interactive list of methods
 * fix: Correct templating of special HTML characters in recipes
 

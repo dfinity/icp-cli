@@ -1,4 +1,5 @@
 use anyhow::{Context as _, anyhow, bail};
+use candid::types::{Type, TypeInner};
 use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
@@ -37,8 +38,9 @@ pub(crate) struct CallArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
 
-    /// Name of canister method to call into
-    pub(crate) method: String,
+    /// Name of canister method to call into.
+    /// If not provided, an interactive prompt will be launched.
+    pub(crate) method: Option<String>,
 
     /// Call arguments, interpreted per `--args-format` (Candid by default).
     /// If not provided, an interactive prompt will be launched.
@@ -97,8 +99,29 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let candid_types = get_candid_type(&agent, cid, &args.method).await;
+    let candid_types = get_candid_type(&agent, cid).await;
 
+    let method = if let Some(method) = &args.method {
+        method.clone()
+    } else if let Some(interface) = &candid_types {
+        // Interactive method selection using candid assist
+        let methods: Vec<&str> = interface.methods().collect();
+        if methods.is_empty() {
+            bail!("the canister's Candid interface has no methods");
+        }
+        let selection = dialoguer::Select::new()
+            .with_prompt("Select a method to call")
+            .items(&methods)
+            .default(0)
+            .interact()?;
+        methods[selection].to_string()
+    } else {
+        bail!(
+            "method name was not provided and could not fetch candid type to assist method selection"
+        );
+    };
+    let declared_method =
+        candid_types.and_then(|i| Some((i.env.clone(), i.get_method(&method)?.clone())));
     enum ResolvedArgs {
         Candid(IDLArgs),
         Bytes(Vec<u8>),
@@ -141,7 +164,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
     };
 
-    let arg_bytes = match (&candid_types, resolved_args) {
+    let arg_bytes = match (&declared_method, resolved_args) {
         (_, None) if args.args_format != InitArgsFormat::Candid => {
             bail!("arguments must be provided when --args-format is not candid");
         }
@@ -182,7 +205,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         // Route the call through the proxy canister
         let proxy_args = ProxyArgs {
             canister_id: cid,
-            method: args.method.clone(),
+            method: method.clone(),
             args: arg_bytes,
             cycles: Nat::from(args.cycles.get()),
         };
@@ -203,23 +226,22 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         }
     } else if args.query {
         // Preemptive check: error if Candid shows this is an update method
-        if let Some((_, func)) = &candid_types
+        if let Some((_, func)) = &declared_method
             && !func.is_query()
         {
             bail!(
-                "`{}` is an update method, not a query method. \
+                "`{method}` is an update method, not a query method. \
                  Run the command without `--query`.",
-                args.method
             );
         }
         agent
-            .query(&cid, &args.method)
+            .query(&cid, &method)
             .with_arg(arg_bytes)
             .call()
             .await?
     } else {
         // Direct update call to the target canister
-        agent.update(&cid, &args.method).with_arg(arg_bytes).await?
+        agent.update(&cid, &method).with_arg(arg_bytes).await?
     };
 
     let mut term = Term::buffered_stdout();
@@ -227,7 +249,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
 
     match args.output {
         CallOutputMode::Auto => {
-            if let Ok(ret) = try_decode_candid(&res, candid_types.as_ref()) {
+            if let Ok(ret) = try_decode_candid(&res, declared_method.as_ref()) {
                 print_candid_for_term(&mut term, &ret)
                     .context("failed to print candid return value")?;
             } else if let Ok(s) = std::str::from_utf8(&res) {
@@ -239,7 +261,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             }
         }
         CallOutputMode::Candid => {
-            let ret = try_decode_candid(&res, candid_types.as_ref()).with_context(res_hex)?;
+            let ret = try_decode_candid(&res, declared_method.as_ref()).with_context(res_hex)?;
             print_candid_for_term(&mut term, &ret)
                 .context("failed to print candid return value")?;
         }
@@ -297,17 +319,37 @@ pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Resu
 /// - the canister exposes its Candid interface in its metadata;
 /// - the IDL file can be parsed and type checked in Rust parser;
 /// - has an actor in the IDL file. If anything fails, it returns None.
-async fn get_candid_type(
-    agent: &Agent,
-    canister_id: Principal,
-    method_name: &str,
-) -> Option<(TypeEnv, Function)> {
+async fn get_candid_type(agent: &Agent, canister_id: Principal) -> Option<CanisterInterface> {
     let candid_interface = fetch_canister_metadata(agent, canister_id, "candid:service").await?;
     let candid_source = CandidSource::Text(&candid_interface);
     let (type_env, ty) = candid_source.load().ok()?;
     let actor = ty?;
-    let func = type_env.get_method(&actor, method_name).ok()?.clone();
-    Some((type_env, func))
+    Some(CanisterInterface {
+        env: type_env,
+        ty: actor,
+    })
+}
+
+struct CanisterInterface {
+    env: TypeEnv,
+    ty: Type,
+}
+
+impl CanisterInterface {
+    fn methods(&self) -> impl Iterator<Item = &str> {
+        let ty = if let TypeInner::Class(_, t) = &*self.ty.0 {
+            t
+        } else {
+            &self.ty
+        };
+        let TypeInner::Service(methods) = &*ty.0 else {
+            unreachable!("check_prog should verify service type")
+        };
+        methods.iter().map(|(name, _)| name.as_str())
+    }
+    fn get_method<'a>(&'a self, method_name: &'a str) -> Option<&'a Function> {
+        self.env.get_method(&self.ty, method_name).ok()
+    }
 }
 
 #[cfg(test)]

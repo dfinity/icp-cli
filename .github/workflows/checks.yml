@@ -34,6 +34,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-checks
+          rustflags: ""
 
       - name: build
         run: cargo build
@@ -54,6 +55,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-checks
+          rustflags: ""
 
       - name: Run Lint
         run: cargo clippy --verbose --tests --benches -- -D warnings
@@ -74,6 +76,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-checks
+          rustflags: ""
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -101,6 +104,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-checks
+          rustflags: ""
 
       - name: generate docs
         run: ./scripts/generate-cli-docs.sh
@@ -135,6 +139,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-checks
+          rustflags: ""
 
       - name: generate schemas
         run: ./scripts/generate-config-schemas.sh

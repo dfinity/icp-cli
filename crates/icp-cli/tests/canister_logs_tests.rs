@@ -1,9 +1,11 @@
-use indoc::formatdoc;
-use predicates::str::contains;
-use std::time::Duration;
-
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext};
-use icp::fs::write_string;
+#[cfg(unix)]
+use {
+    crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext},
+    icp::fs::write_string,
+    indoc::formatdoc,
+    predicates::str::contains,
+    std::time::Duration,
+};
 
 mod common;
 

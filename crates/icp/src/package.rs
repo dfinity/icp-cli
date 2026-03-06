@@ -41,6 +41,9 @@ impl PackageCachePaths {
     pub fn manifest(&self) -> PathBuf {
         self.root.join("manifest.json")
     }
+    pub fn update_nag_timestamp(&self) -> PathBuf {
+        self.root.join(".update-nag-timestamp")
+    }
 }
 
 pub struct CanisterCache {

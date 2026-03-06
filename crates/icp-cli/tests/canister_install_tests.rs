@@ -1,4 +1,6 @@
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
+#[cfg(unix)]
+use indoc::indoc;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},

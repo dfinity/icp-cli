@@ -64,7 +64,7 @@ fn deploy_canister_not_found() {
         .args(["deploy", "my-canister", "--subnet", common::SUBNET_ID])
         .assert()
         .failure()
-        .stderr(eq("Error: project does not contain a canister named 'my-canister'").trim());
+        .stderr(contains("Error: project does not contain a canister named 'my-canister'").trim());
 }
 
 #[tokio::test]

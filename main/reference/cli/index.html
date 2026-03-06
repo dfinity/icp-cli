@@ -217,11 +217,11 @@
 </ul>
 <h2 id="icp-canister-call"><code>icp canister call</code></h2>
 <p>Make a canister call</p>
-<p><strong>Usage:</strong> <code>icp canister call [OPTIONS] &#x3C;CANISTER> &#x3C;METHOD> [ARGS]</code></p>
+<p><strong>Usage:</strong> <code>icp canister call [OPTIONS] &#x3C;CANISTER> [METHOD] [ARGS]</code></p>
 <h6 id="arguments-1"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
-<li><code>&#x3C;METHOD></code> — Name of canister method to call into</li>
+<li><code>&#x3C;METHOD></code> — Name of canister method to call into. If not provided, an interactive prompt will be launched</li>
 <li><code>&#x3C;ARGS></code> — Call arguments, interpreted per <code>--args-format</code> (Candid by default). If not provided, an interactive prompt will be launched</li>
 </ul>
 <h6 id="options-2"><strong>Options:</strong></h6>

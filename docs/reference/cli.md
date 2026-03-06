@@ -141,12 +141,12 @@ Perform canister operations against a network
 
 Make a canister call
 
-**Usage:** `icp canister call [OPTIONS] <CANISTER> <METHOD> [ARGS]`
+**Usage:** `icp canister call [OPTIONS] <CANISTER> [METHOD] [ARGS]`
 
 ###### **Arguments:**
 
 * `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
-* `<METHOD>` — Name of canister method to call into
+* `<METHOD>` — Name of canister method to call into. If not provided, an interactive prompt will be launched
 * `<ARGS>` — Call arguments, interpreted per `--args-format` (Candid by default). If not provided, an interactive prompt will be launched
 
 ###### **Options:**

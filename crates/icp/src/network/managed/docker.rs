@@ -19,7 +19,9 @@ use tokio::select;
 use wslpath2::Conversion;
 
 use crate::network::{
-    ManagedImageConfig, config::ChildLocator, managed::launcher::NetworkInstance,
+    ManagedImageConfig,
+    config::ChildLocator,
+    managed::launcher::{CUSTOM_DOMAINS_FEATURE, NetworkInstance},
 };
 use crate::prelude::*;
 
@@ -499,6 +501,10 @@ pub async fn spawn_docker_launcher(
             root_key: hex::decode(&launcher_status.root_key).context(ParseRootKeySnafu {
                 key: &launcher_status.root_key,
             })?,
+            use_friendly_domains: launcher_status
+                .supported_features
+                .iter()
+                .any(|f| f == CUSTOM_DOMAINS_FEATURE),
         },
         locator,
         gateway_port_was_fixed,

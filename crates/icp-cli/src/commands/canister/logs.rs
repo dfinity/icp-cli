@@ -243,6 +243,10 @@ fn format_content(content: &[u8]) -> String {
 mod tests {
     use super::*;
 
+    /// 2024-01-01T10:00:00.123456789Z as nanoseconds since Unix epoch.
+    const TEST_TIMESTAMP_NANOS: u64 = 1_704_103_200_123_456_789;
+    const TEST_TIMESTAMP_RFC3339: &str = "2024-01-01T10:00:00.123456789Z";
+
     #[test]
     fn test_format_content_valid_utf8() {
         let content = b"Hello, World!";
@@ -267,31 +271,29 @@ mod tests {
 
     #[test]
     fn test_format_timestamp() {
-        // Test timestamp: 2024-01-01T10:00:00.123456789Z
-        let nanos = 1704103200123456789u64;
-        let formatted = format_timestamp(nanos);
-        assert_eq!(formatted, "2024-01-01T10:00:00.123456789Z");
+        let formatted = format_timestamp(TEST_TIMESTAMP_NANOS);
+        assert_eq!(formatted, TEST_TIMESTAMP_RFC3339);
     }
 
     #[test]
     fn test_format_log() {
         let log = CanisterLogRecord {
             idx: 42,
-            timestamp_nanos: 1704103200123456789,
+            timestamp_nanos: TEST_TIMESTAMP_NANOS,
             content: b"Test message".to_vec(),
         };
         let formatted = format_log(&log);
         assert_eq!(
             formatted,
-            "[42. 2024-01-01T10:00:00.123456789Z]: Test message"
+            format!("[42. {TEST_TIMESTAMP_RFC3339}]: Test message")
         );
     }
 
     #[test]
     fn test_parse_timestamp_raw_nanos() {
         assert_eq!(
-            parse_timestamp("1704103200123456789"),
-            Ok(1704103200123456789)
+            parse_timestamp(&TEST_TIMESTAMP_NANOS.to_string()),
+            Ok(TEST_TIMESTAMP_NANOS)
         );
         assert_eq!(parse_timestamp("0"), Ok(0));
     }
@@ -301,15 +303,15 @@ mod tests {
         // 2024-01-01T10:00:00Z = 1704103200000000000 nanos
         assert_eq!(
             parse_timestamp("2024-01-01T10:00:00Z"),
-            Ok(1704103200_000_000_000)
+            Ok(1_704_103_200_000_000_000)
         );
     }
 
     #[test]
     fn test_parse_timestamp_rfc3339_with_nanos() {
         assert_eq!(
-            parse_timestamp("2024-01-01T10:00:00.123456789Z"),
-            Ok(1704103200123456789)
+            parse_timestamp(TEST_TIMESTAMP_RFC3339),
+            Ok(TEST_TIMESTAMP_NANOS)
         );
     }
 

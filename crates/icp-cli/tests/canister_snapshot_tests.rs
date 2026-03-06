@@ -1,8 +1,10 @@
-use indoc::formatdoc;
-use predicates::str::contains;
-
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+#[cfg(unix)]
+use {
+    crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients},
+    icp::{fs::write_string, prelude::*},
+    indoc::formatdoc,
+    predicates::str::contains,
+};
 
 mod common;
 

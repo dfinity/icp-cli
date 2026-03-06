@@ -23,9 +23,6 @@ env:
   CURL_HOME: .
   # Disable incremental compilation
   CARGO_INCREMENTAL: 0
-  # Prevent setup-rust-toolchain from injecting RUST_BACKTRACE=short,
-  # which breaks tests that assert exact stderr output.
-  RUST_BACKTRACE: ""
   # These variables should be shared with WSL
   WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p
 
@@ -63,7 +60,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-test
-          rustflags: ""
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -86,7 +82,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-test
-          rustflags: ""
 
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}

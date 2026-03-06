@@ -45,7 +45,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
           cache-shared-key: ${{ runner.os }}-validate
-          rustflags: ""
 
       - name: Build icp CLI
         run: cargo build

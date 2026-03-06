@@ -145,7 +145,7 @@ pub async fn spawn_network_launcher(
             use_friendly_domains: launcher_status
                 .supported_features
                 .iter()
-                .any(|f| f == "custom-domains"),
+                .any(|f| f == CUSTOM_DOMAINS_FEATURE),
         },
         ChildLocator::Pid { pid, start_time },
     ))
@@ -365,6 +365,8 @@ pub struct LauncherStatus {
     #[serde(default)]
     pub supported_features: Vec<String>,
 }
+
+pub const CUSTOM_DOMAINS_FEATURE: &str = "custom-domains";
 
 struct WatchRecv(Sender<notify::Result<notify::Event>>);
 

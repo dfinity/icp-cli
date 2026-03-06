@@ -42,16 +42,9 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@a0b538fa0b742a6aa35d6e2c169b4bd06d225a98 # v1.15.3
         with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ matrix.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-shared-key: ${{ runner.os }}-validate
 
       - name: Build icp CLI
         run: cargo build

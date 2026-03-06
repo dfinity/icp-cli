@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Leaving off the method name parameter in `icp canister call` prompts you with an interactive list of methods
 * fix: Correct templating of special HTML characters in recipes
 
 # v0.2.0

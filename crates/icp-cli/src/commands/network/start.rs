@@ -125,6 +125,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
 
     let (network_launcher_path, launcher_cached_version) =
         if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+            debug!("Network launcher path overridden by ICP_CLI_NETWORK_LAUNCHER_PATH={var}");
             (Some(PathBuf::from(var)), None)
         } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
             let version = managed_cfg.version.as_deref().unwrap_or("latest");

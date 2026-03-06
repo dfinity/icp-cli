@@ -50,12 +50,19 @@ fn parse_timestamp(s: &str) -> Result<u64, String> {
         return Ok(nanos);
     }
     // Fall back to RFC3339
-    OffsetDateTime::parse(s, &Rfc3339)
-        .map(|dt| {
-            let nanos_per_sec = 1_000_000_000u64;
-            (dt.unix_timestamp() as u64) * nanos_per_sec + dt.nanosecond() as u64
-        })
-        .map_err(|_| format!("'{s}' is not a valid nanosecond timestamp or RFC3339 datetime"))
+    let dt = OffsetDateTime::parse(s, &Rfc3339)
+        .map_err(|_| format!("'{s}' is not a valid nanosecond timestamp or RFC3339 datetime"))?;
+    let nanos = dt.unix_timestamp_nanos();
+    u64::try_from(nanos).map_err(|_| {
+        if nanos < 0 {
+            format!(
+                "'{s}' is before the Unix epoch; timestamp must be a non-negative number \
+                 or an RFC3339 datetime at or after 1970-01-01T00:00:00Z"
+            )
+        } else {
+            format!("'{s}' overflows the nanosecond timestamp range (u64)")
+        }
+    })
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::Error> {
@@ -89,23 +96,31 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
         follow_logs(ctx, &mgmt, &canister_id, args.interval).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(ctx, &mgmt, &canister_id, build_filter(args)).await
+        fetch_and_display_logs(ctx, &mgmt, &canister_id, build_filter(args)?).await
     }
 }
 
-fn build_filter(args: &LogsArgs) -> Option<CanisterLogFilter> {
+fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Error> {
     if args.since_index.is_some() || args.until_index.is_some() {
-        Some(CanisterLogFilter::ByIdx {
-            start: args.since_index.unwrap_or(0),
-            end: args.until_index.unwrap_or(u64::MAX),
-        })
+        let start = args.since_index.unwrap_or(0);
+        let end = args.until_index.unwrap_or(u64::MAX);
+        if start > end {
+            return Err(anyhow!(
+                "--since-index ({start}) must not be greater than --until-index ({end})"
+            ));
+        }
+        Ok(Some(CanisterLogFilter::ByIdx { start, end }))
     } else if args.since.is_some() || args.until.is_some() {
-        Some(CanisterLogFilter::ByTimestampNanos {
-            start: args.since.unwrap_or(0),
-            end: args.until.unwrap_or(u64::MAX),
-        })
+        let start = args.since.unwrap_or(0);
+        let end = args.until.unwrap_or(u64::MAX);
+        if start > end {
+            return Err(anyhow!(
+                "--since timestamp must not be after --until timestamp"
+            ));
+        }
+        Ok(Some(CanisterLogFilter::ByTimestampNanos { start, end }))
     } else {
-        None
+        Ok(None)
     }
 }
 

@@ -169,7 +169,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             bail!("arguments must be provided when --args-format is not candid");
         }
         (None, None) => bail!(
-            "arguments was not provided and could not fetch candid type to assist building arguments"
+            "arguments were not provided and could not fetch candid type to assist building arguments"
         ),
         (None, Some(ResolvedArgs::Bytes(bytes))) => bytes,
         (None, Some(ResolvedArgs::Candid(arguments))) => {

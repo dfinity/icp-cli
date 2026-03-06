@@ -123,47 +123,41 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     // On Windows, always use Docker since the native launcher doesn't run there
     let autocontainerize = cfg!(windows) || settings.autocontainerize;
 
-    let (network_launcher_path, launcher_cached_version) =
-        if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
-            debug!("Network launcher path overridden by ICP_CLI_NETWORK_LAUNCHER_PATH={var}");
-            (Some(PathBuf::from(var)), None)
-        } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
-            let version = managed_cfg.version.as_deref().unwrap_or("latest");
-            ctx.dirs
-                .package_cache()?
-                .with_write(async |pkg| {
-                    if let Some((resolved, path)) =
-                        get_cached_launcher_version_if_fresh(pkg.read(), version)?
-                    {
-                        anyhow::Ok((Some(path), Some(resolved)))
-                    } else {
-                        debug!("Downloading icp-cli-network-launcher version `{version}`");
-                        let client = reqwest::Client::new();
-                        let (ver, path) = download_launcher_version(pkg, version, &client).await?;
-                        Ok((Some(path), Some(ver)))
-                    }
-                })
-                .await??
-        } else {
-            (None, None)
-        };
-
-    if let Some(cached_version) = &launcher_cached_version {
+    // Acquire network launcher path, downloading it if necessary
+    let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+        // The user is overriding the launcher
+        debug!("Network launcher path overridden by ICP_CLI_NETWORK_LAUNCHER_PATH={var}");
+        Some(PathBuf::from(var))
+    } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
+        let version = managed_cfg.version.as_deref().unwrap_or("latest");
         let client = reqwest::Client::new();
-        let result = ctx
-            .dirs
+        ctx.dirs
             .package_cache()?
             .with_write(async |pkg| {
-                check_launcher_update_available(pkg, cached_version, &client).await
+                // Resolve the declared version to a real version, if it's fresh
+                // A fresh version is one that is either specified exactly, or was last updated since icp-cli was updated
+                if let Some((resolved, path)) =
+                    get_cached_launcher_version_if_fresh(pkg.read(), version)?
+                {
+                    // The version has already been downloaded. Use it, but first, check for updates and nag if so
+                    if let Some(update) = check_launcher_update_available(pkg, &resolved, &client).await {
+                        _ = ctx.term.write_line(&format!(
+                            "A newer network launcher version is available: {update} (current: {resolved}). \
+                            Run `icp network update` to update."
+                        ));
+                    }
+                    anyhow::Ok(Some(path))
+                } else {
+                    // The version is not fresh or not cached, download it
+                    debug!("Downloading icp-cli-network-launcher version `{version}`");
+                    let (_, path) = download_launcher_version(pkg, version, &client).await?;
+                    Ok(Some(path))
+                }
             })
-            .await?;
-        if let Some(latest) = result {
-            _ = ctx.term.write_line(&format!(
-                "A newer network launcher version is available: {latest} (current: {cached_version}). \
-                 Run `icp network update` to update."
-            ));
-        }
-    }
+            .await??
+    } else {
+        None
+    };
 
     run_network(
         cfg,

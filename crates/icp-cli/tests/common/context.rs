@@ -136,11 +136,12 @@ impl TestContext {
                 .into_write()
                 .await
                 .unwrap();
-            if let Some(path) = icp::network::managed::cache::get_cached_launcher_version_if_fresh(
-                cache.as_ref().read(),
-                "latest",
-            )
-            .unwrap()
+            if let Some((_, path)) =
+                icp::network::managed::cache::get_cached_launcher_version_if_fresh(
+                    cache.as_ref().read(),
+                    "latest",
+                )
+                .unwrap()
             {
                 path
             } else {

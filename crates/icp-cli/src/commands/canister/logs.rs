@@ -26,21 +26,21 @@ pub(crate) struct LogsArgs {
     pub(crate) interval: u64,
 
     /// Show logs at or after this timestamp. Accepts nanoseconds since Unix epoch or RFC3339
-    /// (e.g. '2024-01-01T00:00:00Z')
-    #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["since_index", "until_index"], value_parser = parse_timestamp)]
+    /// (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+    #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["follow", "since_index", "until_index"], value_parser = parse_timestamp)]
     pub(crate) since: Option<u64>,
 
     /// Show logs at or before this timestamp. Accepts nanoseconds since Unix epoch or RFC3339
-    /// (e.g. '2024-01-01T00:00:00Z'). Requires --since
-    #[arg(long, value_name = "TIMESTAMP", requires = "since", conflicts_with_all = ["since_index", "until_index"], value_parser = parse_timestamp)]
+    /// (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+    #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["follow", "since_index", "until_index"], value_parser = parse_timestamp)]
     pub(crate) until: Option<u64>,
 
-    /// Show logs at or after this log index (inclusive)
-    #[arg(long, value_name = "INDEX", conflicts_with_all = ["since", "until"])]
+    /// Show logs at or after this log index (inclusive). Cannot be used with --follow
+    #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
     pub(crate) since_index: Option<u64>,
 
-    /// Show logs at or before this log index (inclusive). Requires --since-index
-    #[arg(long, value_name = "INDEX", requires = "since_index", conflicts_with_all = ["since", "until"])]
+    /// Show logs at or before this log index (inclusive). Cannot be used with --follow
+    #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
     pub(crate) until_index: Option<u64>,
 }
 
@@ -84,26 +84,24 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
 
     let mgmt = ManagementCanister::create(&agent);
 
-    let initial_filter = build_filter(args);
-
     if args.follow {
         // Follow mode: continuously fetch and display new logs
-        follow_logs(ctx, &mgmt, &canister_id, args.interval, initial_filter).await
+        follow_logs(ctx, &mgmt, &canister_id, args.interval).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(ctx, &mgmt, &canister_id, initial_filter).await
+        fetch_and_display_logs(ctx, &mgmt, &canister_id, build_filter(args)).await
     }
 }
 
 fn build_filter(args: &LogsArgs) -> Option<CanisterLogFilter> {
-    if let Some(start) = args.since_index {
+    if args.since_index.is_some() || args.until_index.is_some() {
         Some(CanisterLogFilter::ByIdx {
-            start,
+            start: args.since_index.unwrap_or(0),
             end: args.until_index.unwrap_or(u64::MAX),
         })
-    } else if let Some(start) = args.since {
+    } else if args.since.is_some() || args.until.is_some() {
         Some(CanisterLogFilter::ByTimestampNanos {
-            start,
+            start: args.since.unwrap_or(0),
             end: args.until.unwrap_or(u64::MAX),
         })
     } else {
@@ -134,25 +132,34 @@ async fn fetch_and_display_logs(
     Ok(())
 }
 
+const FOLLOW_LOOKBACK_NANOS: u64 = 60 * 60 * 1_000_000_000; // 1 hour
+
 async fn follow_logs(
     ctx: &Context,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     interval_seconds: u64,
-    initial_filter: Option<CanisterLogFilter>,
 ) -> Result<(), anyhow::Error> {
     let mut last_idx: Option<u64> = None;
     let interval = std::time::Duration::from_secs(interval_seconds);
 
     loop {
-        // On first iteration use the user-supplied filter; on subsequent iterations use
-        // server-side idx filtering to fetch only new logs.
         let filter = match last_idx {
             Some(idx) => Some(CanisterLogFilter::ByIdx {
                 start: idx + 1,
                 end: u64::MAX,
             }),
-            None => initial_filter.clone(),
+            None => {
+                // First fetch: look back 1 hour from now
+                let now_nanos = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos() as u64)
+                    .unwrap_or(0);
+                Some(CanisterLogFilter::ByTimestampNanos {
+                    start: now_nanos.saturating_sub(FOLLOW_LOOKBACK_NANOS),
+                    end: u64::MAX,
+                })
+            }
         };
         let fetch_args = FetchCanisterLogsArgs {
             canister_id: *canister_id,

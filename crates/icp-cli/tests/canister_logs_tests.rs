@@ -198,7 +198,7 @@ async fn canister_logs_filter_by_index() {
         .success();
 
     // Create several log entries
-    for i in 1..=3 {
+    for i in 0..=2 {
         ctx.icp()
             .current_dir(&project_dir)
             .args([
@@ -227,13 +227,12 @@ async fn canister_logs_filter_by_index() {
         .assert()
         .success()
         .stdout(
-            contains("Message 1")
-                .and(contains("Message 2"))
-                .and(contains("Message 3")),
+            contains("Message 0")
+                .and(contains("Message 1"))
+                .and(contains("Message 2")),
         );
 
-    // Filter by --since-index: only the last log entry
-    // Log indices are 0-based, so index 2 is the third entry
+    // Log indices are 0-based
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -241,16 +240,20 @@ async fn canister_logs_filter_by_index() {
             "logs",
             "logger",
             "--since-index",
-            "2",
+            "1",
             "--environment",
             "random-environment",
         ])
         .assert()
         .success()
-        .stdout(contains("Message 3"))
-        .stdout(contains("Message 1").not());
+        .stdout(contains("Message 0").not())
+        .stdout(contains("Message 1"))
+        .stdout(contains("Message 2"));
 
-    // Filter by --until-index: only the first log entry
+    // Per the IC specification, --until-index should be inclusive: indices <= 1
+    // means Message 0 (index 0) and Message 1 (index 1) should both be returned.
+    // However, the current PocketIC implementation treats the end bound as exclusive,
+    // so --until-index 1 only returns Message 0 (index 0).
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -258,12 +261,13 @@ async fn canister_logs_filter_by_index() {
             "logs",
             "logger",
             "--until-index",
-            "0",
+            "1",
             "--environment",
             "random-environment",
         ])
         .assert()
         .success()
+        .stdout(contains("Message 0"))
         .stdout(contains("Message 1"))
         .stdout(contains("Message 2").not());
 
@@ -336,6 +340,7 @@ async fn canister_logs_filter_by_timestamp() {
         .success();
 
     // Filter with --since far in the future should return no logs
+    // Use a large but valid u64 nanosecond value (~year 2286)
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -343,7 +348,7 @@ async fn canister_logs_filter_by_timestamp() {
             "logs",
             "logger",
             "--since",
-            "99999999999999999999",
+            "9999999999999999999",
             "--environment",
             "random-environment",
         ])
@@ -407,7 +412,7 @@ async fn canister_logs_filter_by_timestamp() {
             "logs",
             "logger",
             "--since",
-            "99999999999999999999",
+            "9999999999999999999",
             "--until",
             "0",
             "--environment",

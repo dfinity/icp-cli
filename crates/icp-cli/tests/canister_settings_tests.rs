@@ -713,7 +713,10 @@ async fn canister_settings_update_miscellaneous() {
                 .and(contains("Wasm memory threshold: 0")),
         );
 
-    // Update compute allocation
+    // Update miscellaneous settings.
+    // NOTE: `log_memory_limit` is intentionally not tested here because PocketIC
+    // does not yet support it — setting it via `update_settings` has no effect,
+    // and querying the canister settings always returns 0 regardless of the value set.
     ctx.icp()
         .current_dir(&project_dir)
         .args([

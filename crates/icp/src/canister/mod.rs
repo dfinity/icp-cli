@@ -397,6 +397,26 @@ allowed_viewers:
     }
 
     #[test]
+    fn settings_log_memory_limit_parses_suffix() {
+        let yaml = "log_memory_limit: 256kib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.log_memory_limit.as_ref().map(|m| m.get()),
+            Some(256 * 1024)
+        );
+    }
+
+    #[test]
+    fn settings_log_memory_limit_parses_mib() {
+        let yaml = "log_memory_limit: 2mib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.log_memory_limit.as_ref().map(|m| m.get()),
+            Some(2 * 1024 * 1024)
+        );
+    }
+
+    #[test]
     fn log_visibility_conversion_to_ic_type() {
         let controllers = LogVisibility::Controllers;
         let ic_controllers: ic_management_canister_types::LogVisibility = controllers.into();

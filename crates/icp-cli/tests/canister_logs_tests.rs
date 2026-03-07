@@ -3,6 +3,7 @@ use {
     crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext},
     icp::fs::write_string,
     indoc::formatdoc,
+    predicates::prelude::PredicateBooleanExt,
     predicates::str::contains,
     std::time::Duration,
 };
@@ -162,4 +163,259 @@ async fn canister_logs_follow_mode() {
         .stdout(contains("3 Repeated"))
         .stdout(contains("4 Repeated"))
         .stdout(contains("5 Repeated"));
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_logs_filter_by_index() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("canister_logs");
+
+    ctx.copy_asset_dir("canister_logs", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: logger
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "logger", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Create several log entries
+    for i in 1..=3 {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "canister",
+                "call",
+                "--environment",
+                "random-environment",
+                "logger",
+                "log",
+                &format!("(\"Message {i}\")"),
+            ])
+            .assert()
+            .success();
+    }
+
+    // Fetch all logs to verify baseline
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Message 1")
+                .and(contains("Message 2"))
+                .and(contains("Message 3")),
+        );
+
+    // Filter by --since-index: only the last log entry
+    // Log indices are 0-based, so index 2 is the third entry
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--since-index",
+            "2",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Message 3"))
+        .stdout(contains("Message 1").not());
+
+    // Filter by --until-index: only the first log entry
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--until-index",
+            "0",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Message 1"))
+        .stdout(contains("Message 2").not());
+
+    // Inverted range should error
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--since-index",
+            "5",
+            "--until-index",
+            "0",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "--since-index (5) must not be greater than --until-index (0)",
+        ));
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_logs_filter_by_timestamp() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("canister_logs");
+
+    ctx.copy_asset_dir("canister_logs", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: logger
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "logger", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Create a log entry
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "logger",
+            "log",
+            "(\"Timestamped message\")",
+        ])
+        .assert()
+        .success();
+
+    // Filter with --since far in the future should return no logs
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--since",
+            "99999999999999999999",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Timestamped message").not());
+
+    // Filter with --until 0 (epoch) should return no logs
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--until",
+            "0",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Timestamped message").not());
+
+    // Filter with --since 0 should return all logs
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--since",
+            "0",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Timestamped message"));
+
+    // RFC3339 timestamp: --since with a past date should include the log
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--since",
+            "2020-01-01T00:00:00Z",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Timestamped message"));
+
+    // Inverted timestamp range should error
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--since",
+            "99999999999999999999",
+            "--until",
+            "0",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "--since timestamp must not be after --until timestamp",
+        ));
 }

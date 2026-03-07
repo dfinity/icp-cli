@@ -334,4 +334,125 @@ mod tests {
     fn test_parse_timestamp_invalid() {
         assert!(parse_timestamp("not-a-timestamp").is_err());
     }
+
+    #[test]
+    fn test_parse_timestamp_before_epoch() {
+        let result = parse_timestamp("1969-12-31T23:59:59Z");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("before the Unix epoch"));
+    }
+
+    fn make_logs_args(
+        since: Option<u64>,
+        until: Option<u64>,
+        since_index: Option<u64>,
+        until_index: Option<u64>,
+    ) -> LogsArgs {
+        LogsArgs {
+            cmd_args: args::CanisterCommandArgs {
+                canister: args::Canister::Name("test".to_string()),
+                network: Default::default(),
+                environment: Default::default(),
+                identity: Default::default(),
+            },
+            follow: false,
+            interval: 2,
+            since,
+            until,
+            since_index,
+            until_index,
+        }
+    }
+
+    #[test]
+    fn build_filter_no_flags() {
+        let args = make_logs_args(None, None, None, None);
+        assert!(build_filter(&args).unwrap().is_none());
+    }
+
+    #[test]
+    fn build_filter_since_index_only() {
+        let args = make_logs_args(None, None, Some(5), None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByIdx {
+                start: 5,
+                end: u64::MAX
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_until_index_only() {
+        let args = make_logs_args(None, None, None, Some(10));
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByIdx { start: 0, end: 10 }
+        ));
+    }
+
+    #[test]
+    fn build_filter_both_indices() {
+        let args = make_logs_args(None, None, Some(3), Some(7));
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByIdx { start: 3, end: 7 }
+        ));
+    }
+
+    #[test]
+    fn build_filter_inverted_indices_error() {
+        let args = make_logs_args(None, None, Some(10), Some(5));
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--since-index (10) must not be greater than --until-index (5)"));
+    }
+
+    #[test]
+    fn build_filter_since_timestamp_only() {
+        let args = make_logs_args(Some(1000), None, None, None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByTimestampNanos {
+                start: 1000,
+                end: u64::MAX
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_until_timestamp_only() {
+        let args = make_logs_args(None, Some(2000), None, None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByTimestampNanos {
+                start: 0,
+                end: 2000
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_both_timestamps() {
+        let args = make_logs_args(Some(1000), Some(2000), None, None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByTimestampNanos {
+                start: 1000,
+                end: 2000
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_inverted_timestamps_error() {
+        let args = make_logs_args(Some(2000), Some(1000), None, None);
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--since timestamp must not be after --until timestamp"));
+    }
 }

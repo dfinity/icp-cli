@@ -1,6 +1,8 @@
 # Unreleased
 
 * feat: `icp candid build` allows using the Candid-assist wizard from `icp canister call` to construct a precompiled argument file
+* feat: `icp canister logs` supports filtering by timestamp (`--since`, `--until`) and log index (`--since-index`, `--until-index`)
+* feat: Support `log_memory_limit` canister setting in `icp canister settings update` and `icp canister settings sync`
 * feat: Leaving off the method name parameter in `icp canister call` prompts you with an interactive list of methods
 * fix: Correct templating of special HTML characters in recipes
 

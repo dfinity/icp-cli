@@ -120,6 +120,11 @@ pub(crate) struct UpdateArgs {
     #[arg(long)]
     wasm_memory_threshold: Option<MemoryAmount>,
 
+    /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
+    /// Supports suffixes: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    #[arg(long)]
+    log_memory_limit: Option<MemoryAmount>,
+
     #[command(flatten)]
     log_visibility: Option<LogVisibilityOpt>,
 
@@ -265,6 +270,14 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             )?
         }
         update = update.with_wasm_memory_threshold(wasm_memory_threshold.get());
+    }
+    if let Some(log_memory_limit) = &args.log_memory_limit {
+        if configured_settings.log_memory_limit.is_some() {
+            ctx.term.write_line(
+                "Warning: Log memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+            )?
+        }
+        update = update.with_log_memory_limit(log_memory_limit.get());
     }
     if let Some(log_visibility) = log_visibility {
         if configured_settings.log_visibility.is_some() {

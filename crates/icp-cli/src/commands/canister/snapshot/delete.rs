@@ -41,7 +41,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
         snapshot_id: args.snapshot_id.0.clone(),
     };
 
-    mgmt.delete_canister_snapshot(&cid, &delete_args).await?;
+    mgmt.delete_canister_snapshot(&delete_args).await?;
 
     let name = &args.cmd_args.canister;
     ctx.term.write_line(&format!(

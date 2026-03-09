@@ -86,7 +86,9 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
             Err(e) => return Err(e).context("failed to look up canister ID"),
         };
         let Some(interface) = get_candid_type(&agent, cid).await else {
-            bail!("Could not fetch Candid interface from `candid:service` metadata section of canister {cid}");
+            bail!(
+                "Could not fetch Candid interface from `candid:service` metadata section of canister {cid}"
+            );
         };
         interface
     };

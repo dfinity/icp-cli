@@ -49,6 +49,10 @@ fn parse_timestamp(s: &str) -> Result<u64, String> {
     if let Ok(nanos) = s.parse::<u64>() {
         return Ok(nanos);
     }
+    // Detect numeric overflow before falling back to RFC3339
+    if s.parse::<u128>().is_ok() {
+        return Err(format!("'{s}' overflows the nanosecond timestamp range (u64)"));
+    }
     // Fall back to RFC3339
     let dt = OffsetDateTime::parse(s, &Rfc3339)
         .map_err(|_| format!("'{s}' is not a valid nanosecond timestamp or RFC3339 datetime"))?;
@@ -333,6 +337,13 @@ mod tests {
     #[test]
     fn test_parse_timestamp_invalid() {
         assert!(parse_timestamp("not-a-timestamp").is_err());
+    }
+
+    #[test]
+    fn test_parse_timestamp_numeric_overflow() {
+        let result = parse_timestamp("99999999999999999999999");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("overflows the nanosecond timestamp range"));
     }
 
     #[test]

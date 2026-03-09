@@ -333,10 +333,10 @@ Fetch and display canister logs
 * `--interval <INTERVAL>` — Polling interval in seconds when following logs (requires --follow)
 
   Default value: `2`
-* `--since <TIMESTAMP>` — Show logs at or after this timestamp. Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
-* `--until <TIMESTAMP>` — Show logs at or before this timestamp. Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+* `--since <TIMESTAMP>` — Show logs at or after this timestamp (inclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+* `--until <TIMESTAMP>` — Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
 * `--since-index <INDEX>` — Show logs at or after this log index (inclusive). Cannot be used with --follow
-* `--until-index <INDEX>` — Show logs at or before this log index (inclusive). Cannot be used with --follow
+* `--until-index <INDEX>` — Show logs before this log index (exclusive). Cannot be used with --follow
 
 
 

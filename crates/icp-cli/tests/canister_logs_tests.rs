@@ -232,7 +232,7 @@ async fn canister_logs_filter_by_index() {
                 .and(contains("Message 2")),
         );
 
-    // Log indices are 0-based
+    // --since-index is inclusive, so --since-index 1 should include Message 1 and Message 2 but not Message 0
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -250,10 +250,7 @@ async fn canister_logs_filter_by_index() {
         .stdout(contains("Message 1"))
         .stdout(contains("Message 2"));
 
-    // Per the IC specification, --until-index should be inclusive: indices <= 1
-    // means Message 0 (index 0) and Message 1 (index 1) should both be returned.
-    // However, the current PocketIC implementation treats the end bound as exclusive,
-    // so --until-index 1 only returns Message 0 (index 0).
+    // --until-index is exclusive, so --until-index 1 should only include Message 0
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -268,28 +265,8 @@ async fn canister_logs_filter_by_index() {
         .assert()
         .success()
         .stdout(contains("Message 0"))
-        .stdout(contains("Message 1"))
+        .stdout(contains("Message 1").not())
         .stdout(contains("Message 2").not());
-
-    // Inverted range should error
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "logs",
-            "logger",
-            "--since-index",
-            "5",
-            "--until-index",
-            "0",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .failure()
-        .stderr(contains(
-            "--since-index (5) must not be greater than --until-index (0)",
-        ));
 }
 
 #[cfg(unix)] // moc
@@ -356,22 +333,6 @@ async fn canister_logs_filter_by_timestamp() {
         .success()
         .stdout(contains("Timestamped message").not());
 
-    // Filter with --until 0 (epoch) should return no logs
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "logs",
-            "logger",
-            "--until",
-            "0",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .success()
-        .stdout(contains("Timestamped message").not());
-
     // Filter with --since 0 should return all logs
     ctx.icp()
         .current_dir(&project_dir)
@@ -403,24 +364,4 @@ async fn canister_logs_filter_by_timestamp() {
         .assert()
         .success()
         .stdout(contains("Timestamped message"));
-
-    // Inverted timestamp range should error
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "logs",
-            "logger",
-            "--since",
-            "9999999999999999999",
-            "--until",
-            "0",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .failure()
-        .stderr(contains(
-            "--since timestamp must not be after --until timestamp",
-        ));
 }

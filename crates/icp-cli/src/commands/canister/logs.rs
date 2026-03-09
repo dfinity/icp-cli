@@ -25,12 +25,12 @@ pub(crate) struct LogsArgs {
     #[arg(long, requires = "follow", default_value = "2")]
     pub(crate) interval: u64,
 
-    /// Show logs at or after this timestamp. Accepts nanoseconds since Unix epoch or RFC3339
+    /// Show logs at or after this timestamp (inclusive). Accepts nanoseconds since Unix epoch or RFC3339
     /// (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
     #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["follow", "since_index", "until_index"], value_parser = parse_timestamp)]
     pub(crate) since: Option<u64>,
 
-    /// Show logs at or before this timestamp. Accepts nanoseconds since Unix epoch or RFC3339
+    /// Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339
     /// (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
     #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["follow", "since_index", "until_index"], value_parser = parse_timestamp)]
     pub(crate) until: Option<u64>,
@@ -39,7 +39,7 @@ pub(crate) struct LogsArgs {
     #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
     pub(crate) since_index: Option<u64>,
 
-    /// Show logs at or before this log index (inclusive). Cannot be used with --follow
+    /// Show logs before this log index (exclusive). Cannot be used with --follow
     #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
     pub(crate) until_index: Option<u64>,
 }
@@ -104,18 +104,18 @@ fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Er
     if args.since_index.is_some() || args.until_index.is_some() {
         let start = args.since_index.unwrap_or(0);
         let end = args.until_index.unwrap_or(u64::MAX);
-        if start > end {
+        if start >= end {
             return Err(anyhow!(
-                "--since-index ({start}) must not be greater than --until-index ({end})"
+                "--since-index ({start}) must be less than --until-index ({end})"
             ));
         }
         Ok(Some(CanisterLogFilter::ByIdx { start, end }))
     } else if args.since.is_some() || args.until.is_some() {
         let start = args.since.unwrap_or(0);
         let end = args.until.unwrap_or(u64::MAX);
-        if start > end {
+        if start >= end {
             return Err(anyhow!(
-                "--since timestamp must not be after --until timestamp"
+                "--since timestamp must be less than --until timestamp"
             ));
         }
         Ok(Some(CanisterLogFilter::ByTimestampNanos { start, end }))
@@ -161,7 +161,7 @@ async fn follow_logs(
     loop {
         let filter = match last_idx {
             Some(idx) => Some(CanisterLogFilter::ByIdx {
-                start: idx + 1,
+                start: idx + 1, // Start from the next log index after the last one we displayed
                 end: u64::MAX,
             }),
             None => {
@@ -407,7 +407,7 @@ mod tests {
     fn build_filter_inverted_indices_error() {
         let args = make_logs_args(None, None, Some(10), Some(5));
         let err = build_filter(&args).unwrap_err().to_string();
-        assert!(err.contains("--since-index (10) must not be greater than --until-index (5)"));
+        assert!(err.contains("--since-index (10) must be less than --until-index (5)"));
     }
 
     #[test]
@@ -453,6 +453,6 @@ mod tests {
     fn build_filter_inverted_timestamps_error() {
         let args = make_logs_args(Some(2000), Some(1000), None, None);
         let err = build_filter(&args).unwrap_err().to_string();
-        assert!(err.contains("--since timestamp must not be after --until timestamp"));
+        assert!(err.contains("--since timestamp must be less than --until timestamp"));
     }
 }

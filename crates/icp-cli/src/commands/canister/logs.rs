@@ -110,6 +110,11 @@ fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Er
     if args.since_index.is_some() || args.until_index.is_some() {
         let start = args.since_index.unwrap_or(0);
         let end = args.until_index.unwrap_or(u64::MAX);
+        if end == 0 {
+            return Err(anyhow!(
+                "--until-index must be greater than 0 (the end bound is exclusive)"
+            ));
+        }
         if start >= end {
             return Err(anyhow!(
                 "--since-index ({start}) must be less than --until-index ({end})"
@@ -119,6 +124,11 @@ fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Er
     } else if args.since.is_some() || args.until.is_some() {
         let start = args.since.unwrap_or(0);
         let end = args.until.unwrap_or(u64::MAX);
+        if end == 0 {
+            return Err(anyhow!(
+                "--until must be greater than 0 (the end bound is exclusive)"
+            ));
+        }
         if start >= end {
             return Err(anyhow!(
                 "--since timestamp must be less than --until timestamp"
@@ -472,5 +482,19 @@ mod tests {
         let args = make_logs_args(Some(2000), Some(1000), None, None);
         let err = build_filter(&args).unwrap_err().to_string();
         assert!(err.contains("--since timestamp must be less than --until timestamp"));
+    }
+
+    #[test]
+    fn build_filter_until_index_zero_error() {
+        let args = make_logs_args(None, None, None, Some(0));
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--until-index must be greater than 0"));
+    }
+
+    #[test]
+    fn build_filter_until_timestamp_zero_error() {
+        let args = make_logs_args(None, Some(0), None, None);
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--until must be greater than 0"));
     }
 }

@@ -58,7 +58,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
         sender_canister_version: None,
     };
 
-    mgmt.load_canister_snapshot(&cid, &load_args).await?;
+    mgmt.load_canister_snapshot(&load_args).await?;
 
     ctx.term.write_line(&format!(
         "Restored canister {name} ({cid}) from snapshot {id}",

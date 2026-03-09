@@ -231,6 +231,10 @@ pub struct Settings {
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
     pub wasm_memory_threshold: Option<MemoryAmount>,
 
+    /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
+    /// Supports suffixes in YAML: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    pub log_memory_limit: Option<MemoryAmount>,
+
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
@@ -389,6 +393,26 @@ allowed_viewers:
         assert_eq!(
             settings.wasm_memory_limit.as_ref().map(|m| m.get()),
             Some(1610612736)
+        );
+    }
+
+    #[test]
+    fn settings_log_memory_limit_parses_suffix() {
+        let yaml = "log_memory_limit: 256kib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.log_memory_limit.as_ref().map(|m| m.get()),
+            Some(256 * 1024)
+        );
+    }
+
+    #[test]
+    fn settings_log_memory_limit_parses_mib() {
+        let yaml = "log_memory_limit: 2mib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.log_memory_limit.as_ref().map(|m| m.get()),
+            Some(2 * 1024 * 1024)
         );
     }
 

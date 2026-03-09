@@ -439,12 +439,9 @@ pub async fn read_snapshot_metadata(
         snapshot_id: snapshot_id.to_vec(),
     };
 
-    let (metadata,) = with_retry(|| async {
-        mgmt.read_canister_snapshot_metadata(&canister_id, &args)
-            .await
-    })
-    .await
-    .context(ReadMetadataSnafu { canister_id })?;
+    let (metadata,) = with_retry(|| async { mgmt.read_canister_snapshot_metadata(&args).await })
+        .await
+        .context(ReadMetadataSnafu { canister_id })?;
 
     Ok(metadata)
 }
@@ -480,12 +477,9 @@ pub async fn upload_snapshot_metadata(
         on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status.clone(),
     };
 
-    let (result,) = with_retry(|| async {
-        mgmt.upload_canister_snapshot_metadata(&canister_id, &args)
-            .await
-    })
-    .await
-    .context(UploadMetadataSnafu { canister_id })?;
+    let (result,) = with_retry(|| async { mgmt.upload_canister_snapshot_metadata(&args).await })
+        .await
+        .context(UploadMetadataSnafu { canister_id })?;
 
     Ok(result)
 }
@@ -559,13 +553,11 @@ pub async fn download_blob_to_file(
 
             let mgmt = mgmt.clone();
             in_progress.push(async move {
-                let result = with_retry(|| async {
-                    mgmt.read_canister_snapshot_data(&canister_id, &args).await
-                })
-                .await
-                .context(ReadDataChunkSnafu {
-                    offset: chunk_offset,
-                })?;
+                let result = with_retry(|| async { mgmt.read_canister_snapshot_data(&args).await })
+                    .await
+                    .context(ReadDataChunkSnafu {
+                        offset: chunk_offset,
+                    })?;
                 Ok::<_, SnapshotTransferError>((chunk_offset, result.0.chunk))
             });
         }
@@ -629,10 +621,9 @@ pub async fn download_wasm_chunk(
     let hash_hex = hex::encode(&chunk_hash.hash);
     let output_path = paths.wasm_chunk_path(&chunk_hash.hash);
 
-    let (result,) =
-        with_retry(|| async { mgmt.read_canister_snapshot_data(&canister_id, &args).await })
-            .await
-            .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
+    let (result,) = with_retry(|| async { mgmt.read_canister_snapshot_data(&args).await })
+        .await
+        .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
 
     icp::fs::write(&output_path, &result.chunk)?;
 
@@ -706,12 +697,9 @@ pub async fn upload_blob_from_file(
 
         let mgmt = mgmt.clone();
         in_progress.push(async move {
-            with_retry(|| async {
-                mgmt.upload_canister_snapshot_data(&canister_id, &args)
-                    .await
-            })
-            .await
-            .context(UploadDataChunkSnafu { offset })?;
+            with_retry(|| async { mgmt.upload_canister_snapshot_data(&args).await })
+                .await
+                .context(UploadDataChunkSnafu { offset })?;
             Ok::<_, SnapshotTransferError>((offset, args.chunk.len() as u64))
         });
     }
@@ -782,12 +770,9 @@ pub async fn upload_wasm_chunk(
 
     let hash_hex = hex::encode(chunk_hash);
 
-    with_retry(|| async {
-        mgmt.upload_canister_snapshot_data(&canister_id, &args)
-            .await
-    })
-    .await
-    .context(UploadWasmChunkSnafu { hash: hash_hex })?;
+    with_retry(|| async { mgmt.upload_canister_snapshot_data(&args).await })
+        .await
+        .context(UploadWasmChunkSnafu { hash: hash_hex })?;
 
     Ok(())
 }

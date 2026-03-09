@@ -325,6 +325,7 @@ struct SerializableCanisterSettings {
     reserved_cycles_limit: String,
     wasm_memory_limit: String,
     wasm_memory_threshold: String,
+    log_memory_limit: String,
     log_visibility: SerializableLogVisibility,
     environment_variables: Vec<EnvironmentVariable>,
 }
@@ -377,6 +378,7 @@ impl SerializableCanisterSettings {
             reserved_cycles_limit: settings.reserved_cycles_limit.to_string(),
             wasm_memory_limit: settings.wasm_memory_limit.to_string(),
             wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
+            log_memory_limit: settings.log_memory_limit.to_string(),
             log_visibility: SerializableLogVisibility::from(&settings.log_visibility),
             environment_variables: settings.environment_variables.clone(),
         }
@@ -470,6 +472,11 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         &mut buf,
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
+    )?;
+    writeln!(
+        &mut buf,
+        "  Log memory limit: {}",
+        settings.log_memory_limit
     )?;
 
     let log_visibility = match settings.log_visibility.clone() {

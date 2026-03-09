@@ -1,7 +1,9 @@
 use anyhow::{Context as _, anyhow};
 use clap::Args;
-use ic_management_canister_types::{CanisterLogRecord, FetchCanisterLogsResult};
 use ic_utils::interfaces::ManagementCanister;
+use ic_utils::interfaces::management_canister::{
+    CanisterLogFilter, CanisterLogRecord, FetchCanisterLogsArgs, FetchCanisterLogsResult,
+};
 use icp::context::Context;
 use icp::signal::stop_signal;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -22,6 +24,51 @@ pub(crate) struct LogsArgs {
     /// Polling interval in seconds when following logs (requires --follow)
     #[arg(long, requires = "follow", default_value = "2")]
     pub(crate) interval: u64,
+
+    /// Show logs at or after this timestamp (inclusive). Accepts nanoseconds since Unix epoch or RFC3339
+    /// (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+    #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["follow", "since_index", "until_index"], value_parser = parse_timestamp)]
+    pub(crate) since: Option<u64>,
+
+    /// Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339
+    /// (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+    #[arg(long, value_name = "TIMESTAMP", conflicts_with_all = ["follow", "since_index", "until_index"], value_parser = parse_timestamp)]
+    pub(crate) until: Option<u64>,
+
+    /// Show logs at or after this log index (inclusive). Cannot be used with --follow
+    #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
+    pub(crate) since_index: Option<u64>,
+
+    /// Show logs before this log index (exclusive). Cannot be used with --follow
+    #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
+    pub(crate) until_index: Option<u64>,
+}
+
+fn parse_timestamp(s: &str) -> Result<u64, String> {
+    // Try raw nanoseconds first
+    if let Ok(nanos) = s.parse::<u64>() {
+        return Ok(nanos);
+    }
+    // Detect numeric overflow before falling back to RFC3339
+    if s.parse::<u128>().is_ok() {
+        return Err(format!(
+            "'{s}' overflows the nanosecond timestamp range (u64)"
+        ));
+    }
+    // Fall back to RFC3339
+    let dt = OffsetDateTime::parse(s, &Rfc3339)
+        .map_err(|_| format!("'{s}' is not a valid nanosecond timestamp or RFC3339 datetime"))?;
+    let nanos = dt.unix_timestamp_nanos();
+    u64::try_from(nanos).map_err(|_| {
+        if nanos < 0 {
+            format!(
+                "'{s}' is before the Unix epoch; timestamp must be a non-negative number \
+                 or an RFC3339 datetime at or after 1970-01-01T00:00:00Z"
+            )
+        } else {
+            format!("'{s}' overflows the nanosecond timestamp range (u64)")
+        }
+    })
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::Error> {
@@ -55,7 +102,41 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
         follow_logs(ctx, &mgmt, &canister_id, args.interval).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(ctx, &mgmt, &canister_id).await
+        fetch_and_display_logs(ctx, &mgmt, &canister_id, build_filter(args)?).await
+    }
+}
+
+fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Error> {
+    if args.since_index.is_some() || args.until_index.is_some() {
+        let start = args.since_index.unwrap_or(0);
+        let end = args.until_index.unwrap_or(u64::MAX);
+        if end == 0 {
+            return Err(anyhow!(
+                "--until-index must be greater than 0 (the end bound is exclusive)"
+            ));
+        }
+        if start >= end {
+            return Err(anyhow!(
+                "--since-index ({start}) must be less than --until-index ({end})"
+            ));
+        }
+        Ok(Some(CanisterLogFilter::ByIdx { start, end }))
+    } else if args.since.is_some() || args.until.is_some() {
+        let start = args.since.unwrap_or(0);
+        let end = args.until.unwrap_or(u64::MAX);
+        if end == 0 {
+            return Err(anyhow!(
+                "--until must be greater than 0 (the end bound is exclusive)"
+            ));
+        }
+        if start >= end {
+            return Err(anyhow!(
+                "--since timestamp must be less than --until timestamp"
+            ));
+        }
+        Ok(Some(CanisterLogFilter::ByTimestampNanos { start, end }))
+    } else {
+        Ok(None)
     }
 }
 
@@ -63,9 +144,14 @@ async fn fetch_and_display_logs(
     ctx: &Context,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
+    filter: Option<CanisterLogFilter>,
 ) -> Result<(), anyhow::Error> {
+    let fetch_args = FetchCanisterLogsArgs {
+        canister_id: *canister_id,
+        filter,
+    };
     let (result,): (FetchCanisterLogsResult,) = mgmt
-        .fetch_canister_logs(canister_id)
+        .fetch_canister_logs(&fetch_args)
         .await
         .context("Failed to fetch canister logs")?;
 
@@ -77,6 +163,8 @@ async fn fetch_and_display_logs(
     Ok(())
 }
 
+const FOLLOW_LOOKBACK_NANOS: u64 = 60 * 60 * 1_000_000_000; // 1 hour
+
 async fn follow_logs(
     ctx: &Context,
     mgmt: &ManagementCanister<'_>,
@@ -87,21 +175,34 @@ async fn follow_logs(
     let interval = std::time::Duration::from_secs(interval_seconds);
 
     loop {
-        // Fetch all logs
+        let filter = match last_idx {
+            Some(idx) => Some(CanisterLogFilter::ByIdx {
+                start: idx + 1, // Start from the next log index after the last one we displayed
+                end: u64::MAX,
+            }),
+            None => {
+                // First fetch: look back 1 hour from now
+                let now_nanos = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|d| u64::try_from(d.as_nanos()).ok())
+                    .unwrap_or(0);
+                Some(CanisterLogFilter::ByTimestampNanos {
+                    start: now_nanos.saturating_sub(FOLLOW_LOOKBACK_NANOS),
+                    end: u64::MAX,
+                })
+            }
+        };
+        let fetch_args = FetchCanisterLogsArgs {
+            canister_id: *canister_id,
+            filter,
+        };
         let (result,): (FetchCanisterLogsResult,) = mgmt
-            .fetch_canister_logs(canister_id)
+            .fetch_canister_logs(&fetch_args)
             .await
             .context("Failed to fetch canister logs")?;
 
-        // Filter to only new logs based on last_idx
-        let new_logs: Vec<_> = result
-            .canister_log_records
-            .into_iter()
-            .filter(|log| match last_idx {
-                None => true, // First iteration, show all logs
-                Some(idx) => log.idx > idx,
-            })
-            .collect();
+        let new_logs = result.canister_log_records;
 
         if !new_logs.is_empty() {
             for log in &new_logs {
@@ -174,6 +275,10 @@ fn format_content(content: &[u8]) -> String {
 mod tests {
     use super::*;
 
+    /// 2024-01-01T10:00:00.123456789Z as nanoseconds since Unix epoch.
+    const TEST_TIMESTAMP_NANOS: u64 = 1_704_103_200_123_456_789;
+    const TEST_TIMESTAMP_RFC3339: &str = "2024-01-01T10:00:00.123456789Z";
+
     #[test]
     fn test_format_content_valid_utf8() {
         let content = b"Hello, World!";
@@ -198,23 +303,198 @@ mod tests {
 
     #[test]
     fn test_format_timestamp() {
-        // Test timestamp: 2024-01-01T10:00:00.123456789Z
-        let nanos = 1704103200123456789u64;
-        let formatted = format_timestamp(nanos);
-        assert_eq!(formatted, "2024-01-01T10:00:00.123456789Z");
+        let formatted = format_timestamp(TEST_TIMESTAMP_NANOS);
+        assert_eq!(formatted, TEST_TIMESTAMP_RFC3339);
     }
 
     #[test]
     fn test_format_log() {
         let log = CanisterLogRecord {
             idx: 42,
-            timestamp_nanos: 1704103200123456789,
+            timestamp_nanos: TEST_TIMESTAMP_NANOS,
             content: b"Test message".to_vec(),
         };
         let formatted = format_log(&log);
         assert_eq!(
             formatted,
-            "[42. 2024-01-01T10:00:00.123456789Z]: Test message"
+            format!("[42. {TEST_TIMESTAMP_RFC3339}]: Test message")
         );
+    }
+
+    #[test]
+    fn test_parse_timestamp_raw_nanos() {
+        assert_eq!(
+            parse_timestamp(&TEST_TIMESTAMP_NANOS.to_string()),
+            Ok(TEST_TIMESTAMP_NANOS)
+        );
+        assert_eq!(parse_timestamp("0"), Ok(0));
+    }
+
+    #[test]
+    fn test_parse_timestamp_rfc3339() {
+        // 2024-01-01T10:00:00Z = 1704103200000000000 nanos
+        assert_eq!(
+            parse_timestamp("2024-01-01T10:00:00Z"),
+            Ok(1_704_103_200_000_000_000)
+        );
+    }
+
+    #[test]
+    fn test_parse_timestamp_rfc3339_with_nanos() {
+        assert_eq!(
+            parse_timestamp(TEST_TIMESTAMP_RFC3339),
+            Ok(TEST_TIMESTAMP_NANOS)
+        );
+    }
+
+    #[test]
+    fn test_parse_timestamp_invalid() {
+        assert!(parse_timestamp("not-a-timestamp").is_err());
+    }
+
+    #[test]
+    fn test_parse_timestamp_numeric_overflow() {
+        let result = parse_timestamp("99999999999999999999999");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .contains("overflows the nanosecond timestamp range")
+        );
+    }
+
+    #[test]
+    fn test_parse_timestamp_before_epoch() {
+        let result = parse_timestamp("1969-12-31T23:59:59Z");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("before the Unix epoch"));
+    }
+
+    fn make_logs_args(
+        since: Option<u64>,
+        until: Option<u64>,
+        since_index: Option<u64>,
+        until_index: Option<u64>,
+    ) -> LogsArgs {
+        LogsArgs {
+            cmd_args: args::CanisterCommandArgs {
+                canister: args::Canister::Name("test".to_string()),
+                network: Default::default(),
+                environment: Default::default(),
+                identity: Default::default(),
+            },
+            follow: false,
+            interval: 2,
+            since,
+            until,
+            since_index,
+            until_index,
+        }
+    }
+
+    #[test]
+    fn build_filter_no_flags() {
+        let args = make_logs_args(None, None, None, None);
+        assert!(build_filter(&args).unwrap().is_none());
+    }
+
+    #[test]
+    fn build_filter_since_index_only() {
+        let args = make_logs_args(None, None, Some(5), None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByIdx {
+                start: 5,
+                end: u64::MAX
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_until_index_only() {
+        let args = make_logs_args(None, None, None, Some(10));
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByIdx { start: 0, end: 10 }
+        ));
+    }
+
+    #[test]
+    fn build_filter_both_indices() {
+        let args = make_logs_args(None, None, Some(3), Some(7));
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByIdx { start: 3, end: 7 }
+        ));
+    }
+
+    #[test]
+    fn build_filter_inverted_indices_error() {
+        let args = make_logs_args(None, None, Some(10), Some(5));
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--since-index (10) must be less than --until-index (5)"));
+    }
+
+    #[test]
+    fn build_filter_since_timestamp_only() {
+        let args = make_logs_args(Some(1000), None, None, None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByTimestampNanos {
+                start: 1000,
+                end: u64::MAX
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_until_timestamp_only() {
+        let args = make_logs_args(None, Some(2000), None, None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByTimestampNanos {
+                start: 0,
+                end: 2000
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_both_timestamps() {
+        let args = make_logs_args(Some(1000), Some(2000), None, None);
+        let filter = build_filter(&args).unwrap().unwrap();
+        assert!(matches!(
+            filter,
+            CanisterLogFilter::ByTimestampNanos {
+                start: 1000,
+                end: 2000
+            }
+        ));
+    }
+
+    #[test]
+    fn build_filter_inverted_timestamps_error() {
+        let args = make_logs_args(Some(2000), Some(1000), None, None);
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--since timestamp must be less than --until timestamp"));
+    }
+
+    #[test]
+    fn build_filter_until_index_zero_error() {
+        let args = make_logs_args(None, None, None, Some(0));
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--until-index must be greater than 0"));
+    }
+
+    #[test]
+    fn build_filter_until_timestamp_zero_error() {
+        let args = make_logs_args(None, Some(0), None, None);
+        let err = build_filter(&args).unwrap_err().to_string();
+        assert!(err.contains("--until must be greater than 0"));
     }
 }

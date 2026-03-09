@@ -204,6 +204,7 @@
             "compute_allocation": null,
             "environment_variables": null,
             "freezing_threshold": null,
+            "log_memory_limit": null,
             "log_visibility": null,
             "memory_allocation": null,
             "reserved_cycles_limit": null,
@@ -834,6 +835,17 @@
             }
           ],
           "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.\nSupports duration suffixes in YAML: s, m, h, d, w (e.g. \"30d\" or \"4w\")."
+        },
+        "log_memory_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.\nSupports suffixes in YAML: kb, kib, mb, mib (e.g. \"2mib\" or \"256kib\"). Canister default is 4096 bytes."
         },
         "log_visibility": {
           "anyOf": [

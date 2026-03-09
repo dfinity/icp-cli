@@ -98,9 +98,9 @@ wslpath2 = "0.1"
 zeroize = "1.8.1"
 
 [workspace.dependencies.reqwest]
-version = "0.12.15"
+version = "0.13.2"
 default-features = false
-features = ["rustls-tls", "json", "stream"]
+features = ["rustls", "json", "stream"]
 
 [workspace.dependencies.schemars]
 version = "1.0.4"

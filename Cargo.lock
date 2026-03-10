@@ -2913,9 +2913,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.46.0"
+version = "0.46.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da4fb6055538a9f0ee634f0be865cafbe79e74b8addd1eeb05ba0b51d4e8271f"
+checksum = "223e34e74ee20df849226a45e14f6b47f4d53a97f34d571e7b6111728c965489"
 dependencies = [
  "arc-swap",
  "async-channel 2.5.0",
@@ -2938,6 +2938,7 @@ dependencies = [
  "ic-ed25519 0.6.0",
  "ic-transport-types",
  "ic-verify-bls-signature",
+ "ic_principal",
  "k256",
  "leb128",
  "p256",
@@ -3154,9 +3155,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.46.0"
+version = "0.46.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2957ed6ce101b3b6c4aa65bbcf8e92afdec42758b58cb03c7df76c96db13d0c0"
+checksum = "26448ff3dd1dc1afbfdd008153b2fde7ab117296e866cd7642c4a0cb9c88e421"
 dependencies = [
  "candid",
  "hex",
@@ -3235,6 +3236,7 @@ dependencies = [
  "arbitrary",
  "crc32fast",
  "data-encoding",
+ "rangemap",
  "serde",
  "sha2 0.10.9",
  "thiserror 1.0.69",

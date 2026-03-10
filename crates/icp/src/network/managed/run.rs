@@ -11,7 +11,7 @@ use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs,
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
     cycles_ledger::{
-        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs,
+        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs,
         CreateCanisterResponse, CreationArgs,
     },
     cycles_minting_canister::{
@@ -19,6 +19,7 @@ use icp_canister_interfaces::{
         NotifyMintArgs, NotifyMintResponse,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
+    management_canister::CanisterSettingsArg,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,

@@ -10,7 +10,7 @@ use icp::context::TermWriter;
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
@@ -23,6 +23,18 @@ pub enum InstallOperationError {
 
     #[snafu(display("agent error: {source}"))]
     Agent { source: AgentError },
+
+    #[snafu(display("Failed to stop canister '{canister_name}' before upgrade"))]
+    StopCanister {
+        canister_name: String,
+        source: AgentError,
+    },
+
+    #[snafu(display("Failed to start canister '{canister_name}' after upgrade"))]
+    StartCanister {
+        canister_name: String,
+        source: AgentError,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -143,9 +155,12 @@ async fn do_install_operation(
             builder = builder.with_raw_arg(args.into());
         }
 
-        builder
-            .await
-            .map_err(|source| InstallOperationError::Agent { source })?;
+        stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, async {
+            builder
+                .await
+                .map_err(|source| InstallOperationError::Agent { source })
+        })
+        .await?;
     } else {
         // Large wasm: use chunked installation
         debug!("Installing wasm for {canister_name} using chunked installation");
@@ -197,9 +212,12 @@ async fn do_install_operation(
             builder = builder.with_raw_arg(args.to_vec());
         }
 
-        builder
-            .await
-            .map_err(|source| InstallOperationError::Agent { source })?;
+        stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, async {
+            builder
+                .await
+                .map_err(|source| InstallOperationError::Agent { source })
+        })
+        .await?;
 
         // Clear chunk store after successful installation to free up storage
         mgmt.clear_chunk_store(canister_id)
@@ -208,6 +226,39 @@ async fn do_install_operation(
     }
 
     Ok(())
+}
+
+async fn stop_and_start_if_upgrade(
+    mgmt: &ManagementCanister<'_>,
+    canister_id: &Principal,
+    canister_name: &str,
+    mode: CanisterInstallMode,
+    f: impl Future<Output = Result<(), InstallOperationError>>,
+) -> Result<(), InstallOperationError> {
+    let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
+    // Stop the canister before proceeding
+    if is_upgrade {
+        mgmt.stop_canister(canister_id)
+            .await
+            .context(StopCanisterSnafu { canister_name })?;
+    }
+    // Install the canister
+    let install_result = f.await;
+    // Restart the canister whether or not the installation succeeded
+    if is_upgrade {
+        let start_result = mgmt.start_canister(canister_id).await;
+        if let Err(start_error) = start_result {
+            // If both install and start failed, report the install error since it's more likely to be the root cause
+            if let Err(install_error) = install_result {
+                warn!("Failed to start canister after failed upgrade: {start_error}");
+                return Err(install_error);
+            } else {
+                return Err(start_error).context(StartCanisterSnafu { canister_name });
+            }
+        }
+    }
+
+    install_result
 }
 
 /// Installs code to multiple canisters and displays progress bars.

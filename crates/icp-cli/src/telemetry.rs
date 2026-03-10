@@ -13,7 +13,7 @@ use clap::parser::ValueSource;
 use icp::prelude::*;
 use icp::settings::Settings;
 use icp::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
-use rand::Rng as _;
+use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 

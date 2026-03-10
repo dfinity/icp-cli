@@ -15,7 +15,9 @@ license = "Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+anstyle = "1.0.13"
 anyhow = "1.0.100"
+assert_cmd = "2"
 async-dropper = { version = "0.3.0", features = ["tokio", "simple"] }
 async-trait = "0.1.88"
 backoff = { version = "0.4", features = ["tokio"] }
@@ -24,6 +26,7 @@ bip32 = "0.5.0"
 bollard = "0.20.1"
 byte-unit = "5.1.6"
 camino = { version = "1.1.9", features = ["serde1"] }
+cargo-generate = "0.23.7"
 camino-tempfile = "1"
 candid = "0.10.19"
 candid_parser = "0.3.0"
@@ -61,19 +64,24 @@ k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 lazy_static = "1.5.0"
 mockall = "0.14.0"
+nix = { version = "0.30.1", features = ["process", "signal"] }
 notify = "8.2.0"
 num-bigint = "0.4.6"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
+predicates = "3"
 pem = "3.0.5"
 phf = { version = "0.13.1", features = ["macros"] }
 pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
 rand = "0.10.0"
+regex = "1.12.2"
 scrypt = "0.11.0"
 sec1 = { version = "0.7.3", features = ["pkcs8"] }
+send_ctrlc = "0.6"
 semver = "1"
+serial_test = { version = "3.2.0", features = ["file_locks"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9.34"
@@ -85,6 +93,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 sysinfo = "0.38.4"
 tar = "0.4.44"
 tempfile = "3"
+test-tag = "0.1"
 time = { version = "0.3.47", features = ["formatting", "macros"] }
 tiny-bip39 = "2.0.0"
 tokio = { version = "1.45.0", features = ["macros", "rt-multi-thread"] }

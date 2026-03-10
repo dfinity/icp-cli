@@ -1,0 +1,4 @@
+[formatting]
+array_auto_expand = false
+array_auto_collapse = true
+inline_table_expand = false

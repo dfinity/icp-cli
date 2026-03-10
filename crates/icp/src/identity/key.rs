@@ -15,7 +15,7 @@ use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
     pkcs5::pbes2::Parameters,
 };
-use rand::RngCore;
+use rand::Rng;
 use scrypt::Params;
 use sec1::{der::Decode, pem::PemLabel};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};

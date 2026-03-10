@@ -78,6 +78,23 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  toml-format:
+    name: toml-fmt:required
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Install taplo
+        run: |
+          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-linux-x86_64.gz \
+            | gunzip -c > taplo
+          chmod +x taplo
+          sudo mv taplo /usr/local/bin/taplo
+
+      - name: Check TOML formatting
+        run: taplo fmt --check
+
   #
   # Runs a series of checks to make sure that all the docs
   # that need to be generated have been genrated an are up

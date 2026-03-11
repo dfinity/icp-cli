@@ -212,17 +212,29 @@ async fn do_install_operation(
             builder = builder.with_raw_arg(args.to_vec());
         }
 
-        stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, async {
-            builder
-                .await
-                .map_err(|source| InstallOperationError::Agent { source })
-        })
-        .await?;
+        let install_res =
+            stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, async {
+                builder
+                    .await
+                    .map_err(|source| InstallOperationError::Agent { source })
+            })
+            .await;
 
         // Clear chunk store after successful installation to free up storage
-        mgmt.clear_chunk_store(canister_id)
+        let clear_res = mgmt
+            .clear_chunk_store(canister_id)
             .await
-            .map_err(|source| InstallOperationError::Agent { source })?;
+            .map_err(|source| InstallOperationError::Agent { source });
+
+        if let Err(clear_error) = clear_res {
+            if let Err(install_error) = install_res {
+                warn!("Failed to clear chunk store after failed install: {clear_error}");
+                return Err(install_error);
+            } else {
+                return Err(clear_error);
+            }
+        }
+        install_res?;
     }
 
     Ok(())

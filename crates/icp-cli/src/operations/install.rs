@@ -1,7 +1,7 @@
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{
-    CanisterId, ChunkHash, UpgradeFlags, UploadChunkArgs, WasmMemoryPersistence,
+    CanisterId, CanisterStatusType, ChunkHash, UpgradeFlags, UploadChunkArgs, WasmMemoryPersistence,
 };
 use ic_utils::interfaces::{
     ManagementCanister, management_canister::builders::CanisterInstallMode,
@@ -53,28 +53,26 @@ struct InstallFailure {
 /// Resolve a mode string ("auto", "install", "reinstall", "upgrade") into
 /// a [`CanisterInstallMode`]. For "auto", queries `canister_status` to
 /// determine whether the canister already has code installed.
-pub(crate) async fn resolve_install_mode(
+pub(crate) async fn resolve_install_mode_and_status(
     agent: &Agent,
     canister_name: &str,
     canister_id: &Principal,
     mode: &str,
-) -> Result<CanisterInstallMode, ResolveInstallModeError> {
+) -> Result<(CanisterInstallMode, CanisterStatusType), ResolveInstallModeError> {
+    let mgmt = ManagementCanister::create(agent);
+    let (status,) = mgmt
+        .canister_status(canister_id)
+        .await
+        .context(ResolveInstallModeSnafu { canister_name })?;
     match mode {
-        "auto" => {
-            let mgmt = ManagementCanister::create(agent);
-            let (status,) = mgmt
-                .canister_status(canister_id)
-                .await
-                .context(ResolveInstallModeSnafu { canister_name })?;
-            Ok(if status.module_hash.is_some() {
-                CanisterInstallMode::Upgrade(None)
-            } else {
-                CanisterInstallMode::Install
-            })
-        }
-        "install" => Ok(CanisterInstallMode::Install),
-        "reinstall" => Ok(CanisterInstallMode::Reinstall),
-        "upgrade" => Ok(CanisterInstallMode::Upgrade(None)),
+        "auto" => Ok(if status.module_hash.is_some() {
+            (CanisterInstallMode::Upgrade(None), status.status)
+        } else {
+            (CanisterInstallMode::Install, status.status)
+        }),
+        "install" => Ok((CanisterInstallMode::Install, status.status)),
+        "reinstall" => Ok((CanisterInstallMode::Reinstall, status.status)),
+        "upgrade" => Ok((CanisterInstallMode::Upgrade(None), status.status)),
         _ => panic!("invalid install mode: {mode}"),
     }
 }
@@ -92,6 +90,7 @@ pub(crate) async fn install_canister(
     canister_name: &str,
     wasm: &[u8],
     mode: CanisterInstallMode,
+    status: CanisterStatusType,
     init_args: Option<&[u8]>,
 ) -> Result<(), InstallOperationError> {
     let mode = match mode {
@@ -118,7 +117,16 @@ pub(crate) async fn install_canister(
         canister_name, mode
     );
 
-    do_install_operation(agent, canister_id, canister_name, wasm, mode, init_args).await
+    do_install_operation(
+        agent,
+        canister_id,
+        canister_name,
+        wasm,
+        mode,
+        status,
+        init_args,
+    )
+    .await
 }
 
 async fn do_install_operation(
@@ -127,6 +135,7 @@ async fn do_install_operation(
     canister_name: &str,
     wasm: &[u8],
     mode: CanisterInstallMode,
+    status: CanisterStatusType,
     init_args: Option<&[u8]>,
 ) -> Result<(), InstallOperationError> {
     let mgmt = ManagementCanister::create(agent);
@@ -155,7 +164,7 @@ async fn do_install_operation(
             builder = builder.with_raw_arg(args.into());
         }
 
-        stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, async {
+        stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, status, async {
             builder
                 .await
                 .map_err(|source| InstallOperationError::Agent { source })
@@ -213,7 +222,7 @@ async fn do_install_operation(
         }
 
         let install_res =
-            stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, async {
+            stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, status, async {
                 builder
                     .await
                     .map_err(|source| InstallOperationError::Agent { source })
@@ -245,11 +254,15 @@ async fn stop_and_start_if_upgrade(
     canister_id: &Principal,
     canister_name: &str,
     mode: CanisterInstallMode,
+    status: CanisterStatusType,
     f: impl Future<Output = Result<(), InstallOperationError>>,
 ) -> Result<(), InstallOperationError> {
-    let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
+    let should_guard = matches!(
+        mode,
+        CanisterInstallMode::Upgrade(_) | CanisterInstallMode::Reinstall
+    ) && matches!(status, CanisterStatusType::Running);
     // Stop the canister before proceeding
-    if is_upgrade {
+    if should_guard {
         mgmt.stop_canister(canister_id)
             .await
             .context(StopCanisterSnafu { canister_name })?;
@@ -257,7 +270,7 @@ async fn stop_and_start_if_upgrade(
     // Install the canister
     let install_result = f.await;
     // Restart the canister whether or not the installation succeeded
-    if is_upgrade {
+    if should_guard {
         let start_result = mgmt.start_canister(canister_id).await;
         if let Err(start_error) = start_result {
             // If both install and start failed, report the install error since it's more likely to be the root cause
@@ -276,7 +289,15 @@ async fn stop_and_start_if_upgrade(
 /// Installs code to multiple canisters and displays progress bars.
 pub(crate) async fn install_many(
     agent: Agent,
-    canisters: impl IntoIterator<Item = (String, Principal, CanisterInstallMode, Option<Vec<u8>>)>,
+    canisters: impl IntoIterator<
+        Item = (
+            String,
+            Principal,
+            CanisterInstallMode,
+            CanisterStatusType,
+            Option<Vec<u8>>,
+        ),
+    >,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     term: Arc<TermWriter>,
     debug: bool,
@@ -284,7 +305,7 @@ pub(crate) async fn install_many(
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
-    for (name, cid, mode, init_args) in canisters {
+    for (name, cid, mode, status, init_args) in canisters {
         let pb = progress_manager.create_progress_bar(&name);
         let agent = agent.clone();
         let install_fn = {
@@ -301,7 +322,16 @@ pub(crate) async fn install_many(
                     }
                 })?;
 
-                install_canister(&agent, &cid, &name, &wasm, mode, init_args.as_deref()).await
+                install_canister(
+                    &agent,
+                    &cid,
+                    &name,
+                    &wasm,
+                    mode,
+                    status,
+                    init_args.as_deref(),
+                )
+                .await
             }
         };
 

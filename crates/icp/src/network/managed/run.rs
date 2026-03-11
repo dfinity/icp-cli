@@ -26,7 +26,7 @@ use icrc_ledger_types::icrc1::{
     transfer::{TransferArg, TransferError},
 };
 use k256::SecretKey;
-use rand::{RngCore, rng};
+use rand::{Rng, rng};
 use snafu::prelude::*;
 use std::{io::Write, process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, time::sleep};

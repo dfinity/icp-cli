@@ -4,7 +4,7 @@ use clap::{ArgGroup, Args, Parser};
 use icp::context::Context;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
-use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
+use icp_canister_interfaces::management_canister::CanisterSettingsArg;
 
 use crate::{commands::args, operations::create::CreateOperation};
 

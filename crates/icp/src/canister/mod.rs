@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use candid::{Nat, Principal};
-use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
+use icp_canister_interfaces::management_canister::CanisterSettingsArg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -187,9 +187,9 @@ impl From<LogVisibility> for ic_management_canister_types::LogVisibility {
     }
 }
 
-impl From<LogVisibility> for icp_canister_interfaces::cycles_ledger::LogVisibility {
+impl From<LogVisibility> for icp_canister_interfaces::management_canister::LogVisibility {
     fn from(value: LogVisibility) -> Self {
-        use icp_canister_interfaces::cycles_ledger::LogVisibility as CyclesLedgerLogVisibility;
+        use icp_canister_interfaces::management_canister::LogVisibility as CyclesLedgerLogVisibility;
         match value {
             LogVisibility::Controllers => CyclesLedgerLogVisibility::Controllers,
             LogVisibility::Public => CyclesLedgerLogVisibility::Public,

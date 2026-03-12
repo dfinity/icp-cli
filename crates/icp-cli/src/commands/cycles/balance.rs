@@ -39,7 +39,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow
     };
 
     // Output information
-    let _ = ctx.term.write_line(&format!("Balance: {cycles_amount}"));
+    println!("Balance: {cycles_amount}");
 
     Ok(())
 }

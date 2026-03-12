@@ -1,5 +1,6 @@
 use clap::Parser;
 use icp::{context::Context, network::managed::cache::download_launcher_version};
+use tracing::info;
 
 /// Update icp-cli-network-launcher to the latest version.
 #[derive(Parser, Debug)]
@@ -14,8 +15,6 @@ pub async fn exec(ctx: &Context, _args: &UpdateArgs) -> Result<(), anyhow::Error
             anyhow::Ok(ver)
         })
         .await??;
-    ctx.term.write_line(&format!(
-        "icp-cli-network-launcher has been updated to the latest version {ver}."
-    ))?;
+    info!("icp-cli-network-launcher has been updated to the latest version {ver}.");
     Ok(())
 }

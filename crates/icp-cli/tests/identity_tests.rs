@@ -490,7 +490,7 @@ fn identity_rename() {
         .args(["identity", "rename", "alice", "bob"])
         .assert()
         .success()
-        .stdout(contains("Renamed identity `alice` to `bob`"));
+        .stderr(contains("Renamed identity `alice` to `bob`"));
 
     // Verify old name no longer exists
     ctx.icp()
@@ -635,7 +635,7 @@ fn identity_delete() {
         .args(["identity", "delete", "alice"])
         .assert()
         .success()
-        .stdout(contains("Deleted identity `alice`"));
+        .stderr(contains("Deleted identity `alice`"));
 
     // Verify it's gone
     ctx.icp()
@@ -1026,7 +1026,7 @@ async fn identity_link_hsm() {
         .arg(&pin_file)
         .assert()
         .success()
-        .stdout(contains("Identity \"hsm-identity\" linked to HSM"));
+        .stderr(contains("Identity \"hsm-identity\" linked to HSM"));
 
     // Verify the identity appears in the list
     ctx.icp()
@@ -1249,7 +1249,7 @@ fn identity_link_hsm_delete() {
         .args(["identity", "delete", "hsm-identity"])
         .assert()
         .success()
-        .stdout(contains("Deleted identity `hsm-identity`"));
+        .stderr(contains("Deleted identity `hsm-identity`"));
 
     // Verify it's gone
     ctx.icp()

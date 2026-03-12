@@ -8,6 +8,7 @@ use icp::context::{CanisterSelection, Context};
 use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
 use icp::{InitArgs, fs};
+use tracing::{info, warn};
 
 use crate::{
     commands::args,
@@ -138,7 +139,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                 );
 
                 if std::io::stdin().is_terminal() {
-                    let _ = ctx.term.write_line(&warning);
+                    warn!("{warning}");
                     let confirmed = Confirm::new()
                         .with_prompt("Do you want to proceed anyway?")
                         .default(false)
@@ -164,9 +165,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     )
     .await?;
 
-    let _ = ctx.term.write_line(&format!(
-        "Canister {canister_display} installed successfully"
-    ));
+    info!("Canister {canister_display} installed successfully");
 
     Ok(())
 }

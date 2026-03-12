@@ -332,8 +332,8 @@ async fn network_run_and_stop_background() {
         .assert()
         .success()
         .stderr(contains("Seeding ICP and cycles"))
-        .stdout(contains("Installed Candid UI canister with ID"))
-        .stdout(contains("Installed proxy canister with ID"));
+        .stderr(contains("Installed Candid UI canister with ID"))
+        .stderr(contains("Installed proxy canister with ID"));
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
@@ -396,19 +396,19 @@ async fn network_run_and_stop_background() {
         .success();
     #[cfg(unix)]
     {
-        stop = stop.stdout(contains(format!(
+        stop = stop.stderr(contains(format!(
             "Stopping background network (PID: {})",
             background_launcher_pid
         )));
     }
     #[cfg(windows)]
     {
-        stop = stop.stdout(contains(format!(
+        stop = stop.stderr(contains(format!(
             "Stopping background network (container ID: {})",
             &background_container_id[..12]
         )));
     }
-    stop.stdout(contains("Network stopped successfully"));
+    stop.stderr(contains("Network stopped successfully"));
 
     // Verify descriptor file is removed
     assert!(

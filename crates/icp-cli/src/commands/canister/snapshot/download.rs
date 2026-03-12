@@ -2,6 +2,7 @@ use byte_unit::{Byte, UnitType};
 use clap::Args;
 use icp::context::Context;
 use icp::prelude::*;
+use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
@@ -61,7 +62,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
 
             // Check if we should resume or start fresh
             let metadata = if args.resume && paths.metadata_path().exists() {
-                ctx.term.write_line("Resuming previous download...")?;
+                info!("Resuming previous download...");
                 load_metadata(paths)?
             } else if !args.resume {
                 // Check if directory has existing files (besides lock)
@@ -78,25 +79,25 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                 }
 
                 // Fetch metadata from canister
-                ctx.term.write_line(&format!(
+                info!(
                     "Downloading snapshot {id} from canister {name} ({cid})",
                     id = hex::encode(snapshot_id),
-                ))?;
+                );
 
                 let metadata = read_snapshot_metadata(&agent, cid, snapshot_id).await?;
 
-                ctx.term.write_line(&format!(
+                info!(
                     "  Timestamp: {}",
                     format_timestamp(metadata.taken_at_timestamp)
-                ))?;
+                );
 
                 let total_size = metadata.wasm_module_size
                     + metadata.wasm_memory_size
                     + metadata.stable_memory_size;
-                ctx.term.write_line(&format!(
+                info!(
                     "  Total size: {}",
                     Byte::from_u64(total_size).get_appropriate_unit(UnitType::Binary)
-                ))?;
+                );
 
                 // Save metadata
                 save_metadata(&metadata, paths)?;
@@ -129,7 +130,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                     .await?;
                     pb.finish_with_message("done");
                 } else {
-                    ctx.term.write_line("WASM module: already complete")?;
+                    info!("WASM module: already complete");
                 }
             }
 
@@ -150,7 +151,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                     .await?;
                     pb.finish_with_message("done");
                 } else {
-                    ctx.term.write_line("WASM memory: already complete")?;
+                    info!("WASM memory: already complete");
                 }
             }
 
@@ -175,7 +176,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                     .await?;
                     pb.finish_with_message("done");
                 } else {
-                    ctx.term.write_line("Stable memory: already complete")?;
+                    info!("Stable memory: already complete");
                 }
             } else {
                 // Create empty stable memory file
@@ -184,10 +185,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
 
             // Download WASM chunk store
             if !metadata.wasm_chunk_store.is_empty() {
-                ctx.term.write_line(&format!(
+                info!(
                     "Downloading {} WASM chunks...",
                     metadata.wasm_chunk_store.len()
-                ))?;
+                );
 
                 for chunk_hash in &metadata.wasm_chunk_store {
                     let chunk_path = paths.wasm_chunk_path(&chunk_hash.hash);
@@ -195,14 +196,13 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                         download_wasm_chunk(&agent, cid, snapshot_id, chunk_hash, paths).await?;
                     }
                 }
-                ctx.term.write_line("WASM chunks: done")?;
+                info!("WASM chunks: done");
             }
 
             // Clean up progress file on success
             delete_download_progress(paths)?;
 
-            ctx.term
-                .write_line(&format!("Snapshot downloaded to {}", args.output))?;
+            info!("Snapshot downloaded to {}", args.output);
 
             Ok::<_, anyhow::Error>(())
         })

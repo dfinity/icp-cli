@@ -68,7 +68,7 @@ async fn sync_adapter_script_single() {
         ])
         .assert()
         .success()
-        .stdout(contains("syncing").trim());
+        .stderr(contains("syncing").trim());
 
     // Invoke sync
     ctx.icp()
@@ -82,7 +82,7 @@ async fn sync_adapter_script_single() {
         ])
         .assert()
         .success()
-        .stdout(contains("syncing").trim());
+        .stderr(contains("syncing").trim());
 }
 
 #[tokio::test]
@@ -142,7 +142,7 @@ async fn sync_adapter_script_multiple() {
         ])
         .assert()
         .success()
-        .stdout(contains("first").and(contains("second")));
+        .stderr(contains("first").and(contains("second")));
 
     // Invoke sync
     ctx.icp()
@@ -156,7 +156,7 @@ async fn sync_adapter_script_multiple() {
         ])
         .assert()
         .success()
-        .stdout(contains("first").and(contains("second")));
+        .stderr(contains("first").and(contains("second")));
 }
 
 #[tokio::test]
@@ -404,11 +404,11 @@ async fn sync_multiple_canisters() {
         ])
         .assert()
         .success()
-        .stdout(contains("Syncing canisters"))
-        .stdout(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stdout(contains("DEBUG icp::progress: syncing canister-a"))
-        .stdout(contains("DEBUG icp::progress: syncing canister-b"))
-        .stdout(contains("DEBUG icp::progress: syncing canister-c").not());
+        .stderr(contains("Syncing canisters"))
+        .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
+        .stderr(contains("DEBUG icp::progress: syncing canister-a"))
+        .stderr(contains("DEBUG icp::progress: syncing canister-b"))
+        .stderr(contains("DEBUG icp::progress: syncing canister-c").not());
 }
 
 #[tokio::test]
@@ -496,10 +496,10 @@ async fn sync_all_canisters_in_environment() {
         .args(["--debug", "sync", "--environment", "test-env"])
         .assert()
         .success()
-        .stdout(contains("Syncing canisters"))
-        .stdout(contains(r#"canisters: []"#))
-        .stdout(contains(r#"environment: Some("test-env")"#))
-        .stdout(contains("DEBUG icp::progress: syncing canister-a"))
-        .stdout(contains("DEBUG icp::progress: syncing canister-b"))
-        .stdout(contains("DEBUG icp::progress: syncing canister-c").not()); // not in test-env
+        .stderr(contains("Syncing canisters"))
+        .stderr(contains(r#"canisters: []"#))
+        .stderr(contains(r#"environment: Some("test-env")"#))
+        .stderr(contains("DEBUG icp::progress: syncing canister-a"))
+        .stderr(contains("DEBUG icp::progress: syncing canister-b"))
+        .stderr(contains("DEBUG icp::progress: syncing canister-c").not()); // not in test-env
 }

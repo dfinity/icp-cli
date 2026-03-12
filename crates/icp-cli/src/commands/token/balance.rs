@@ -42,7 +42,7 @@ pub(crate) async fn exec(
     let balance = get_balance(&agent, args.subaccount, token).await?;
 
     // Output information
-    let _ = ctx.term.write_line(&format!("Balance: {balance}"));
+    println!("Balance: {balance}");
 
     Ok(())
 }

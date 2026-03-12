@@ -5,7 +5,7 @@ use snafu::prelude::*;
 use crate::canister::build::Builder;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::sync::Syncer;
-use crate::context::{Context, TermWriter};
+use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
@@ -35,7 +35,6 @@ pub enum ContextInitError {
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
-    term: TermWriter,
     debug: bool,
     password_func: PasswordFunc,
 ) -> Result<Context, ContextInitError> {
@@ -112,7 +111,6 @@ pub fn initialize(
 
     // Setup environment
     Ok(Context {
-        term,
         dirs,
         ids,
         artifacts,

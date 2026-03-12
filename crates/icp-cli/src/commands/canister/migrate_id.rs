@@ -10,6 +10,7 @@ use icp::context::Context;
 use icp_canister_interfaces::nns_migration::{MigrationStatus, NNS_MIGRATION_PRINCIPAL};
 use indicatif::{ProgressBar, ProgressStyle};
 use num_traits::ToPrimitive;
+use tracing::{info, warn};
 
 use crate::commands::args::{self, Canister};
 use crate::operations::canister_migration::{
@@ -87,12 +88,12 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
     if !args.resume_watch {
         let can_confirm = stdin().is_terminal();
         if !args.yes && can_confirm {
-            ctx.term.write_line(&format!(
+            info!(
                 "This will migrate canister '{source_name}' ({source_cid}) to replace '{target_name}' ({target_cid})."
-            ))?;
-            ctx.term.write_line(
-                "The target canister will be deleted and the source canister will take over its ID.",
-            )?;
+            );
+            info!(
+                "The target canister will be deleted and the source canister will take over its ID."
+            );
 
             let confirmed = Confirm::new()
                 .with_prompt("Do you want to proceed?")
@@ -136,11 +137,8 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
         if !args.yes && cycles > WARN_CYCLES_THRESHOLD {
             if can_confirm {
-                ctx.term.write_line(&format!(
-                    "Warning: Canister '{source_name}' has more than 15T cycles ({cycles} cycles)."
-                ))?;
-                ctx.term
-                    .write_line("The extra cycles will get burned during the migration.")?;
+                warn!("Canister '{source_name}' has more than 15T cycles ({cycles} cycles).");
+                warn!("The extra cycles will get burned during the migration.");
 
                 let confirmed = Confirm::new()
                     .with_prompt("Do you want to proceed?")
@@ -178,20 +176,16 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             );
         }
 
-        ctx.term.write_line(&format!(
+        info!(
             "Migrating canister '{source_name}' ({source_cid}) to replace '{target_name}' ({target_cid})"
-        ))?;
-        ctx.term
-            .write_line(&format!("  Source subnet: {source_subnet}"))?;
-        ctx.term
-            .write_line(&format!("  Target subnet: {target_subnet}"))?;
+        );
+        info!("  Source subnet: {source_subnet}");
+        info!("  Target subnet: {target_subnet}");
 
         // Add NNS migration canister as controller to both canisters if not already
         let source_controllers = source_status.settings.controllers;
         if !source_controllers.contains(&NNS_MIGRATION_PRINCIPAL) {
-            ctx.term.write_line(&format!(
-                "Adding NNS migration canister as controller of '{source_name}'..."
-            ))?;
+            info!("Adding NNS migration canister as controller of '{source_name}'...");
             let mut new_controllers = source_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             let mut builder = mgmt.update_settings(&source_cid);
@@ -203,9 +197,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
         let target_controllers = target_status.settings.controllers;
         if !target_controllers.contains(&NNS_MIGRATION_PRINCIPAL) {
-            ctx.term.write_line(&format!(
-                "Adding NNS migration canister as controller of '{target_name}'..."
-            ))?;
+            info!("Adding NNS migration canister as controller of '{target_name}'...");
             let mut new_controllers = target_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             let mut builder = mgmt.update_settings(&target_cid);
@@ -216,12 +208,12 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         }
 
         // Initiate migration
-        ctx.term.write_line("Initiating canister ID migration...")?;
+        info!("Initiating canister ID migration...");
         migrate_canister(&agent, source_cid, target_cid).await?;
     } else {
-        ctx.term.write_line(&format!(
+        info!(
             "Resuming watch for migration of '{source_name}' ({source_cid}) to '{target_name}' ({target_cid})"
-        ))?;
+        );
     }
 
     // Create spinner for polling
@@ -246,12 +238,12 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
                     spinner.finish_with_message(format!(
                         "Migration in progress: {status} (exiting early due to --skip-watch)"
                     ));
-                    ctx.term.write_line(&format!(
+                    info!(
                         "The source canister '{source_name}' has been deleted. Migration will continue in the background."
-                    ))?;
-                    ctx.term.write_line(&format!(
+                    );
+                    info!(
                         "Use `icp canister migrate-id {source_name} --replace {target_name} --resume-watch` to monitor completion."
-                    ))?;
+                    );
                     return Ok(());
                 }
             }
@@ -286,9 +278,9 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         }
     }
 
-    ctx.term.write_line(&format!(
+    info!(
         "Canister '{source_name}' ({source_cid}) has been successfully migrated to the new subnet, replacing {target_cid}"
-    ))?;
+    );
 
     Ok(())
 }

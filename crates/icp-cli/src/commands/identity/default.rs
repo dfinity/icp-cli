@@ -1,6 +1,7 @@
 use clap::Args;
 use icp::context::Context;
 use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
+use tracing::info;
 
 /// Display the currently selected identity
 #[derive(Debug, Args)]
@@ -18,7 +19,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), anyhow
             dirs.with_write(async |dirs| {
                 let list = IdentityList::load_from(dirs.read())?;
                 change_default_identity(dirs, &list, name)?;
-                println!("Set default identity to {name}");
+                info!("Set default identity to {name}");
                 Ok(())
             })
             .await?

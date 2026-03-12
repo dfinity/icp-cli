@@ -40,7 +40,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyho
 
     match metadata {
         Some(value) => {
-            ctx.term.write_line(&value)?;
+            println!("{value}");
             Ok(())
         }
         None => bail!(

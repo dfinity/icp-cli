@@ -2,7 +2,7 @@ use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
-use std::sync::Arc;
+use tracing::info;
 
 use crate::{
     operations::sync::sync_many,
@@ -71,22 +71,13 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .collect();
 
     if sync_canisters.is_empty() {
-        let _ = ctx
-            .term
-            .write_line("No canisters have sync steps configured");
+        info!("No canisters have sync steps configured");
         return Ok(());
     }
 
-    let _ = ctx.term.write_line("Syncing canisters:");
+    info!("Syncing canisters:");
 
-    sync_many(
-        ctx.syncer.clone(),
-        agent,
-        Arc::new(ctx.term.clone()),
-        sync_canisters,
-        ctx.debug,
-    )
-    .await?;
+    sync_many(ctx.syncer.clone(), agent, sync_canisters, ctx.debug).await?;
 
     Ok(())
 }

@@ -190,7 +190,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 
     if args.options.id_only {
         for (_, cid) in cids.iter() {
-            let _ = ctx.term.write_line(&format!("{cid}"));
+            println!("{cid}");
         }
         return Ok(());
     }
@@ -275,13 +275,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 
         // Space records out to make things more readable
         if i > 0 && !args.options.json_format {
-            ctx.term
-                .write_line("")
-                .expect("Failed to write output to terminal");
+            println!();
         }
-        ctx.term
-            .write_line(output.trim())
-            .expect("Failed to write output to the terminal");
+        println!("{}", output.trim());
     }
 
     Ok(())

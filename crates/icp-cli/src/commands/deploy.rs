@@ -20,7 +20,7 @@ use crate::{
         build::build_many_with_progress_bar,
         candid_compat::check_candid_compatibility_many,
         create::CreateOperation,
-        install::{install_many, resolve_install_mode},
+        install::{install_many, resolve_install_mode_and_status},
         settings::sync_settings_many,
         sync::sync_many,
     },
@@ -233,7 +233,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .await
                 .map_err(|e| anyhow!(e))?;
 
-            let mode = resolve_install_mode(&agent, name, &cid, &args.mode).await?;
+            let (mode, status) =
+                resolve_install_mode_and_status(&agent, name, &cid, &args.mode).await?;
 
             let env = ctx.get_environment(&environment_selection).await?;
             let (_canister_path, canister_info) =
@@ -245,7 +246,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map(|ia| ia.to_bytes())
                 .transpose()?;
 
-            Ok::<_, anyhow::Error>((name.clone(), cid, mode, init_args_bytes))
+            Ok::<_, anyhow::Error>((name.clone(), cid, mode, status, init_args_bytes))
         }
     }))
     .await?;
@@ -256,7 +257,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             agent.clone(),
             canisters
                 .iter()
-                .map(|(name, cid, mode, _)| (&**name, *cid, *mode)),
+                .map(|(name, cid, mode, _, _)| (&**name, *cid, *mode)),
             ctx.artifacts.clone(),
             ctx.debug,
         )

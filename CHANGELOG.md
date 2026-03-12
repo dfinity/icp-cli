@@ -1,6 +1,9 @@
 # Unreleased
 
+# v0.2.1-beta.0
+
 * feat: Added support for creating canisters on cloud engine subnets. Note that local networks cannot yet create these subnets.
+* feat: Upgrading canisters now stops them before the upgrade and starts them again afterwards
 * feat: `icp canister logs` supports filtering by timestamp (`--since`, `--until`) and log index (`--since-index`, `--until-index`)
 * feat: Support `log_memory_limit` canister setting in `icp canister settings update` and `icp canister settings sync`
 * feat: Leaving off the method name parameter in `icp canister call` prompts you with an interactive list of methods

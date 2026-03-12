@@ -14,7 +14,7 @@ use crate::{
     commands::args,
     operations::{
         candid_compat::{CandidCompatibility, check_candid_compatibility},
-        install::{install_canister, resolve_install_mode},
+        install::{install_canister, resolve_install_mode_and_status},
     },
 };
 
@@ -121,8 +121,9 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .transpose()?;
 
     let canister_display = args.cmd_args.canister.to_string();
-    let install_mode =
-        resolve_install_mode(&agent, &canister_display, &canister_id, &args.mode).await?;
+    let (install_mode, status) =
+        resolve_install_mode_and_status(&agent, &canister_display, &canister_id, &args.mode)
+            .await?;
 
     // Candid interface compatibility check for upgrades
     if !args.yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
@@ -159,6 +160,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         &canister_display,
         &wasm,
         install_mode,
+        status,
         init_args_bytes.as_deref(),
     )
     .await?;

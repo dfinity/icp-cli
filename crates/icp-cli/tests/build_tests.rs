@@ -350,15 +350,15 @@ fn build_adapter_display_script_multiple_commands_output() {
     // Invoke build
     let expected_output = indoc! {r#"
          ----- Failed to build canister 'my-canister' -----
-        Error: 'build did not produce a wasm output file'
-        [my-canister] Build output:
-        [my-canister] Building: step 1 of 1 (script):
-        [my-canister] echo "command 1":
-        [my-canister] echo "command 2":
-        [my-canister] echo "command 3":
-        [my-canister] > command 1
-        [my-canister] > command 2
-        [my-canister] > command 3
+        ERR 'build did not produce a wasm output file'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 1 of 1 (script):
+        ERR [my-canister] echo "command 1":
+        ERR [my-canister] echo "command 2":
+        ERR [my-canister] echo "command 3":
+        ERR [my-canister] > command 1
+        ERR [my-canister] > command 2
+        ERR [my-canister] > command 3
     "#};
 
     ctx.icp()
@@ -445,10 +445,10 @@ fn build_multiple_canisters() {
         .args(["--debug", "build", "canister-a", "canister-b"])
         .assert()
         .success()
-        .stdout(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stdout(contains("DEBUG icp::progress: building canister-a"))
-        .stdout(contains("DEBUG icp::progress: building canister-b"))
-        .stdout(contains("DEBUG icp::progress: building canister-c").not());
+        .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
+        .stderr(contains("DEBUG icp::progress: building canister-a"))
+        .stderr(contains("DEBUG icp::progress: building canister-b"))
+        .stderr(contains("DEBUG icp::progress: building canister-c").not());
 }
 
 #[test]
@@ -501,9 +501,9 @@ fn build_all_canisters_in_environment() {
         .args(["--debug", "build", "--environment", "test-env"])
         .assert()
         .success()
-        .stdout(contains(r#"canisters: []"#))
-        .stdout(contains(r#"environment: Some("test-env")"#))
-        .stdout(contains("DEBUG icp::progress: building canister-a"))
-        .stdout(contains("DEBUG icp::progress: building canister-b"))
-        .stdout(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
+        .stderr(contains(r#"canisters: []"#))
+        .stderr(contains(r#"environment: Some("test-env")"#))
+        .stderr(contains("DEBUG icp::progress: building canister-a"))
+        .stderr(contains("DEBUG icp::progress: building canister-b"))
+        .stderr(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
 }

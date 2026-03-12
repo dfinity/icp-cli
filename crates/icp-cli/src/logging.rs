@@ -16,7 +16,12 @@ fn should_color() -> bool {
 // Debug layer (used with --debug)
 
 type DebugLayer<S> = Filtered<
-    tracing_subscriber::fmt::Layer<S, format::DefaultFields, format::Format<format::Full, ()>>,
+    tracing_subscriber::fmt::Layer<
+        S,
+        format::DefaultFields,
+        format::Format<format::Full, ()>,
+        fn() -> io::Stderr,
+    >,
     Targets,
     S,
 >;
@@ -27,6 +32,7 @@ pub(crate) fn debug_layer<S: Subscriber + for<'a> LookupSpan<'a>>() -> DebugLaye
         .with_target("icp", Level::DEBUG);
 
     tracing_subscriber::fmt::layer()
+        .with_writer(io::stderr as _)
         .without_time()
         .with_filter(workspace_targets)
 }

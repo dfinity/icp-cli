@@ -4,14 +4,10 @@ use commands::Command;
 use console::Term;
 use icp::{context::TermWriter, prelude::*};
 use tracing::{Instrument, debug, subscriber::set_global_default, trace_span};
-use tracing_subscriber::{
-    Layer, Registry,
-    filter::{self, FilterExt},
-    layer::SubscriberExt,
-};
+use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 use crate::{
-    logging::debug_layer,
+    logging::{UserLayer, debug_layer},
     version::{git_sha, icp_cli_version_str},
 };
 
@@ -125,15 +121,11 @@ async fn main() -> Result<(), Error> {
         raw_term: Term::stdout(),
     };
 
-    // Logging
-    let debug_layer = debug_layer();
-
-    let reg = Registry::default().with(
-        debug_layer
-            .with_filter(filter::filter_fn(|_| true).and(filter::filter_fn(move |_| cli.debug))),
-    );
-
-    // Set the configured subscriber registry as the global default for tracing
+    // Logging: --debug gets the detailed tracing layer; otherwise plain user-facing output
+    let debug = cli.debug;
+    let reg = Registry::default()
+        .with(debug.then(debug_layer))
+        .with((!debug).then_some(UserLayer));
     set_global_default(reg)?;
 
     // Execute the command within a span that includes version and SHA context

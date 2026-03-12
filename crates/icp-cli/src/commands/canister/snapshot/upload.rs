@@ -189,7 +189,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Clean up progress file on success
             delete_upload_progress(paths)?;
 
-            println!("Snapshot {} uploaded successfully", progress.snapshot_id);
+            info!("Snapshot {} uploaded successfully", progress.snapshot_id);
 
             Ok::<_, anyhow::Error>(progress.snapshot_id)
         })

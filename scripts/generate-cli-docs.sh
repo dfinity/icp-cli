@@ -14,7 +14,7 @@ echo "Building the CLI..."
 cargo build
 
 echo "Generating markdown documentation..."
-$(git rev-parse --show-toplevel)/target/debug/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/reference/cli.md
+$(cargo metadata --no-deps --format-version=1 | jq -r .target_directory)/debug/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/reference/cli.md
 
 # Fix clap-markdown behavior where it prepends command path to override_usage.
 # The token subcommands use override_usage to show the full usage including the

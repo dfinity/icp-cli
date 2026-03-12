@@ -24,7 +24,6 @@ candid.workspace = true
 cargo-generate.workspace = true
 clap-markdown.workspace = true
 clap.workspace = true
-console.workspace = true
 dialoguer.workspace = true
 dunce.workspace = true
 elliptic-curve.workspace = true

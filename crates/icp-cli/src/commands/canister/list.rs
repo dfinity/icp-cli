@@ -15,7 +15,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
     let env = ctx.get_environment(&environment_selection).await?;
 
     for c in env.canisters.keys() {
-        ctx.term.write_line(c)?;
+        println!("{c}");
     }
 
     Ok(())

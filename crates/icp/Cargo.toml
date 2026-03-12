@@ -16,7 +16,6 @@ camino-tempfile = { workspace = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 clap = { workspace = true, optional = true }
-console = { workspace = true }
 directories = { workspace = true }
 dunce = { workspace = true }
 ed25519-consensus = { workspace = true }

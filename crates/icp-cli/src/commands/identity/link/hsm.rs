@@ -2,6 +2,7 @@ use clap::Args;
 use dialoguer::Password;
 use icp::{context::Context, identity::key::link_hsm_identity, prelude::*};
 use snafu::{ResultExt, Snafu};
+use tracing::info;
 
 /// Link an HSM key to a new identity
 #[derive(Debug, Args)]
@@ -59,7 +60,7 @@ pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> 
         .await?
         .context(LinkHsmSnafu)?;
 
-    println!("Identity \"{}\" linked to HSM", args.name);
+    info!("Identity \"{}\" linked to HSM", args.name);
 
     Ok(())
 }

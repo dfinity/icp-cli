@@ -1,8 +1,8 @@
-use std::sync::Arc;
-
 use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{Context, EnvironmentSelection};
+
+use tracing::info;
 
 use crate::{operations::build::build_many_with_progress_bar, options::EnvironmentOpt};
 
@@ -44,19 +44,18 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
     )
     .await?;
     // Build the selected canisters
-    let _ = ctx.term.write_line("Building canisters:");
+    info!("Building canisters:");
 
     build_many_with_progress_bar(
         canisters_to_build,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,
-        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;
 
-    let _ = ctx.term.write_line("\nCanisters built successfully");
+    info!("Canisters built successfully");
 
     Ok(())
 }

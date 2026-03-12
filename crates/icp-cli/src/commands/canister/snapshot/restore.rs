@@ -3,6 +3,7 @@ use clap::Args;
 use ic_management_canister_types::{CanisterStatusType, LoadCanisterSnapshotArgs};
 use ic_utils::interfaces::ManagementCanister;
 use icp::context::Context;
+use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
@@ -60,10 +61,10 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
 
     mgmt.load_canister_snapshot(&load_args).await?;
 
-    ctx.term.write_line(&format!(
+    info!(
         "Restored canister {name} ({cid}) from snapshot {id}",
         id = hex::encode(&args.snapshot_id.0),
-    ))?;
+    );
 
     Ok(())
 }

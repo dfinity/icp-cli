@@ -28,9 +28,9 @@ use icrc_ledger_types::icrc1::{
 use k256::SecretKey;
 use rand::{Rng, rng};
 use snafu::prelude::*;
-use std::{io::Write, process::ExitStatus, time::Duration};
+use std::{process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, time::sleep};
-use tracing::debug;
+use tracing::{debug, info};
 use url::Url;
 use uuid::Uuid;
 
@@ -238,7 +238,7 @@ async fn run_network_launcher(
     let status_dir_path = status_dir.keep();
     if background {
         // background means we're using stdio files - otherwise the launcher already prints this
-        eprintln!("Network started on port {}", instance.gateway_port);
+        info!("Network started on port {}", instance.gateway_port);
     }
 
     let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
@@ -285,10 +285,10 @@ async fn run_network_launcher(
         })
         .await??;
     if background {
-        eprintln!("To stop the network, run `icp network stop`");
+        info!("To stop the network, run `icp network stop`");
         guard.defuse();
     } else {
-        eprintln!("Network ready. Press Ctrl-C to exit.");
+        info!("Network ready. Press Ctrl-C to exit.");
 
         let _ = wait_for_shutdown(&mut guard).await;
         guard.async_drop().await;
@@ -438,28 +438,21 @@ pub enum ShutdownReason {
     ChildExited,
 }
 
-/// Write to stderr, ignoring any errors. This is safe to use even when stderr is closed
-/// (e.g., in a background process after the parent exits), unlike eprintln! which panics.
-fn safe_eprintln(msg: &str) {
-    let _ = std::io::stderr().write_all(msg.as_bytes());
-    let _ = std::io::stderr().write_all(b"\n");
-}
-
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
         ShutdownGuard::Container(_) => {
             stop_signal().await;
-            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
+            info!("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {
             select!(
                 _ = stop_signal() => {
-                    safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
+                    info!("Received Ctrl-C, shutting down PocketIC...");
                     ShutdownReason::CtrlC
                 }
                 res = notice_child_exit(child.child.as_mut().unwrap()) => {
-                    safe_eprintln(&format!("PocketIC exited with status: {:?}", res.status));
+                    info!("PocketIC exited with status: {:?}", res.status);
                     ShutdownReason::ChildExited
                 }
             )
@@ -505,7 +498,7 @@ pub async fn initialize_network(
     candid_ui_wasm: Option<&[u8]>,
     proxy_wasm: Option<&[u8]>,
 ) -> Result<(Option<Principal>, Option<Principal>), InitializeNetworkError> {
-    eprintln!("Seeding ICP and cycles account balances");
+    info!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
         .with_url(api_url.as_str())
         .with_identity(AnonymousIdentity)

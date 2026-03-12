@@ -64,18 +64,18 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     let (snapshot,) = mgmt.take_canister_snapshot(&take_args).await?;
 
-    ctx.term.write_line(&format!(
+    println!(
         "Created snapshot {id} for canister {name} ({cid})",
         id = hex::encode(&snapshot.id),
-    ))?;
-    ctx.term.write_line(&format!(
+    );
+    println!(
         "  Timestamp: {}",
         format_timestamp(snapshot.taken_at_timestamp)
-    ))?;
-    ctx.term.write_line(&format!(
+    );
+    println!(
         "  Size: {}",
         Byte::from_u64(snapshot.total_size).get_appropriate_unit(UnitType::Binary)
-    ))?;
+    );
 
     Ok(())
 }

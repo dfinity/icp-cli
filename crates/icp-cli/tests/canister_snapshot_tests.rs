@@ -203,7 +203,7 @@ async fn canister_snapshot_workflow() {
         ])
         .assert()
         .success()
-        .stdout(contains("Restored canister"));
+        .stderr(contains("Restored canister"));
 
     // Start the canister again
     ctx.icp()
@@ -248,7 +248,7 @@ async fn canister_snapshot_workflow() {
         ])
         .assert()
         .success()
-        .stdout(contains("Deleted snapshot"));
+        .stderr(contains("Deleted snapshot"));
 
     // List snapshots - should be empty now
     ctx.icp()
@@ -520,7 +520,7 @@ async fn canister_snapshot_download_upload_roundtrip() {
         ])
         .assert()
         .success()
-        .stdout(contains("Snapshot downloaded"));
+        .stderr(contains("Snapshot downloaded"));
 
     // Verify metadata file was created
     assert!(
@@ -1048,7 +1048,7 @@ async fn canister_snapshot_download_resume() {
         ])
         .assert()
         .success()
-        .stdout(contains("Snapshot downloaded"));
+        .stderr(contains("Snapshot downloaded"));
 
     // Progress file should be cleaned up
     assert!(
@@ -1427,7 +1427,7 @@ async fn canister_migrate_id() {
         ])
         .assert()
         .success()
-        .stdout(contains("Migration will continue in the background"));
+        .stderr(contains("Migration will continue in the background"));
 
     ctx.pocketic_time_fastforward(Duration::from_secs(360))
         .await;
@@ -1448,7 +1448,7 @@ async fn canister_migrate_id() {
         ])
         .assert()
         .success()
-        .stdout(contains(format!(
+        .stderr(contains(format!(
             "Canister 'source-canister' ({source_cid}) has been successfully migrated"
         )));
 

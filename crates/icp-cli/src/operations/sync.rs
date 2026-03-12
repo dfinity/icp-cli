@@ -3,11 +3,11 @@ use ic_agent::{Agent, export::Principal};
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
-    context::TermWriter,
     prelude::PathBuf,
 };
 use snafu::prelude::*;
 use std::sync::Arc;
+use tracing::error;
 
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
@@ -29,7 +29,6 @@ struct SyncFailure {
 async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
-    _term: &TermWriter,
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
@@ -70,7 +69,6 @@ async fn sync_canister(
 pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
-    term: Arc<TermWriter>,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     debug: bool,
 ) -> Result<(), SyncOperationError> {
@@ -83,20 +81,12 @@ pub(crate) async fn sync_many(
         let fut = {
             let agent = agent.clone();
             let syncer = syncer.clone();
-            let term = term.clone();
 
             async move {
                 // Define the sync logic
-                let sync_result = sync_canister(
-                    &syncer,
-                    &agent,
-                    &term,
-                    canister_path,
-                    cid,
-                    &canister_info,
-                    &mut pb,
-                )
-                .await;
+                let sync_result =
+                    sync_canister(&syncer, &agent, canister_path, cid, &canister_info, &mut pb)
+                        .await;
 
                 // Execute with progress tracking for final state
                 let result = ProgressManager::execute_with_progress(
@@ -131,19 +121,14 @@ pub(crate) async fn sync_many(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            // Print progress output
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
-                " ----- Failed to sync canister '{}': {} -----",
+            error!(
+                "----- Failed to sync canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            );
+            error!("'{}'", failure.error);
             for line in &failure.progress_output {
-                let _ = term.write_line(line);
+                error!("{line}");
             }
-
-            let _ = term.write_line("");
         }
 
         return SyncOperationSnafu {

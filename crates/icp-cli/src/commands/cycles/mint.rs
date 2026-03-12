@@ -61,10 +61,10 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
     .await?;
 
     // Display results
-    let _ = ctx.term.write_line(&format!(
+    println!(
         "Minted {} to your account, new balance: {}.",
         mint_info.deposited, mint_info.new_balance
-    ));
+    );
 
     Ok(())
 }

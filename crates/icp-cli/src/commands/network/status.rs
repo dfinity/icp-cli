@@ -112,9 +112,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         output
     };
 
-    for line in output.lines() {
-        ctx.term.write_line(line)?;
-    }
+    print!("{output}");
 
     Ok(())
 }

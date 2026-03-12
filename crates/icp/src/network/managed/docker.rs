@@ -16,6 +16,7 @@ use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;
+use tracing::info;
 use wslpath2::Conversion;
 
 use crate::network::{
@@ -326,7 +327,7 @@ pub async fn spawn_docker_launcher(
         Err(BollardError::DockerResponseServerError {
             status_code: 404, ..
         }) => {
-            eprintln!("Pulling image {image}");
+            info!("Pulling image {image}");
             docker
                 .create_image(
                     Some(CreateImageOptions {
@@ -383,7 +384,7 @@ pub async fn spawn_docker_launcher(
         .await
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
-    eprintln!("Created container {}", &container_id[..12]);
+    info!("Created container {}", &container_id[..12]);
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),

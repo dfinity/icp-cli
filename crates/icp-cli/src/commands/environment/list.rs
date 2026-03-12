@@ -10,7 +10,7 @@ pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), anyhow::Erro
     let pm = ctx.project.load().await?;
 
     for e in pm.environments.keys() {
-        ctx.term.write_line(e)?;
+        println!("{e}");
     }
 
     Ok(())

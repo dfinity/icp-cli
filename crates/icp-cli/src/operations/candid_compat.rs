@@ -8,9 +8,8 @@ use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::CanisterInstallMode;
-use icp::context::TermWriter;
 use snafu::Snafu;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{
     operations::{misc::fetch_canister_metadata, wasm::extract_candid_service},
@@ -23,7 +22,6 @@ pub(crate) async fn check_candid_compatibility_many(
     agent: Agent,
     canisters: impl IntoIterator<Item = (&str, Principal, CanisterInstallMode)>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), CandidCheckManyError> {
     let mut check_futs = FuturesOrdered::new();
@@ -62,20 +60,17 @@ pub(crate) async fn check_candid_compatibility_many(
 
     if !check_failures.is_empty() {
         for failure in &check_failures {
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
+            error!(
                 " ----- Candid interface compatibility check failed: '{}' ({}) -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!(
+            );
+            error!(
                 "You are making a BREAKING change. Other canisters or frontend clients \
                  relying on your canister may stop working.\n\n{}",
                 failure.details,
-            ));
-            let _ = term.write_line("");
+            );
         }
-        let _ = term.write_line("Use --yes to bypass this check.");
+        error!("Use --yes to bypass this check.");
 
         return CandidCheckManySnafu {
             names: check_failures

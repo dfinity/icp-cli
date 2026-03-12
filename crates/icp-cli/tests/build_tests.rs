@@ -119,7 +119,7 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR ----- Failed to build canister 'my-canister' -----
         ERR 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
         ERR [my-canister] Build output:
         ERR [my-canister] Building: step 3 of 3 (script):
@@ -172,7 +172,7 @@ fn build_adapter_display_failing_middle_step_output() {
 
     // Only step 2 output should be shown, not step 1 or step 3
     let expected_output = indoc! {r#"
-        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR ----- Failed to build canister 'my-canister' -----
         ERR 'command 'echo "step 2 failing"; exit 1' failed with status code 1'
         ERR [my-canister] Build output:
         ERR [my-canister] Building: step 2 of 3 (script):
@@ -219,7 +219,7 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR ----- Failed to build canister 'my-canister' -----
         ERR 'failed to read prebuilt canister file'
         ERR [my-canister] Build output:
         ERR [my-canister] Building: step 2 of 2 (pre-built):
@@ -263,7 +263,7 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR ----- Failed to build canister 'my-canister' -----
         ERR 'command 'exit 1' failed with status code 1'
         ERR [my-canister] Build output:
         ERR [my-canister] Building: step 2 of 2 (script):
@@ -349,7 +349,7 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
+        ERR ----- Failed to build canister 'my-canister' -----
         ERR 'build did not produce a wasm output file'
         ERR [my-canister] Build output:
         ERR [my-canister] Building: step 1 of 1 (script):

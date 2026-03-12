@@ -360,7 +360,7 @@ pub(crate) async fn install_many(
     if !errors.is_empty() {
         for failure in &errors {
             error!(
-                " ----- Failed to install canister '{}': {} -----",
+                "----- Failed to install canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
             error!("'{}'", failure.error);

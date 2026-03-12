@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write, stderr};
 
 use anstyle::{AnsiColor, Style};
 use tracing::field::{Field, Visit};
@@ -10,7 +10,7 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{Layer, fmt::format};
 
 fn should_color() -> bool {
-    std::env::var_os("NO_COLOR").is_none()
+    std::env::var_os("NO_COLOR").is_none() && stderr().is_terminal()
 }
 
 // Debug layer (used with --debug)
@@ -28,7 +28,7 @@ type DebugLayer<S> = Filtered<
 
 pub(crate) fn debug_layer<S: Subscriber + for<'a> LookupSpan<'a>>() -> DebugLayer<S> {
     let workspace_targets = Targets::new()
-        .with_target("icp-cli", Level::DEBUG)
+        .with_default(Level::WARN)
         .with_target("icp", Level::DEBUG);
 
     tracing_subscriber::fmt::layer()

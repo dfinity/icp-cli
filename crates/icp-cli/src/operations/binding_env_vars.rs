@@ -93,7 +93,7 @@ pub(crate) async fn set_binding_env_vars_many(
 
     if !missing_canisters.is_empty() {
         error!(
-            " ----- Error: Could not find canister id(s) for {} in environment '{}' -----",
+            "----- Error: Could not find canister id(s) for {} in environment '{}' -----",
             missing_canisters.join(", "),
             environment_name
         );
@@ -158,7 +158,7 @@ pub(crate) async fn set_binding_env_vars_many(
         // Print all errors in batch
         for failure in &errors {
             error!(
-                " ----- Failed to update environment variables for canister '{}': {} -----",
+                "----- Failed to update environment variables for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
             error!("'{}'", failure.error);

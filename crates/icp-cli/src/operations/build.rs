@@ -150,7 +150,7 @@ pub(crate) async fn build_many_with_progress_bar(
         // Print all errors in batch
         for failure in &errors {
             error!(
-                " ----- Failed to build canister '{}' -----",
+                "----- Failed to build canister '{}' -----",
                 failure.canister_name,
             );
             error!("'{}'", failure.error);

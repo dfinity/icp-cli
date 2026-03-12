@@ -237,7 +237,7 @@ pub(crate) async fn sync_settings_many(
         // Print all errors in batch
         for failure in &errors {
             error!(
-                " ----- Failed to update settings for canister '{}': {} -----",
+                "----- Failed to update settings for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
             error!("'{}'", failure.error);

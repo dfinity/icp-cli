@@ -396,19 +396,19 @@ async fn network_run_and_stop_background() {
         .success();
     #[cfg(unix)]
     {
-        stop = stop.stdout(contains(format!(
+        stop = stop.stderr(contains(format!(
             "Stopping background network (PID: {})",
             background_launcher_pid
         )));
     }
     #[cfg(windows)]
     {
-        stop = stop.stdout(contains(format!(
+        stop = stop.stderr(contains(format!(
             "Stopping background network (container ID: {})",
             &background_container_id[..12]
         )));
     }
-    stop.stdout(contains("Network stopped successfully"));
+    stop.stderr(contains("Network stopped successfully"));
 
     // Verify descriptor file is removed
     assert!(

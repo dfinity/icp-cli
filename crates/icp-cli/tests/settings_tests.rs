@@ -1,4 +1,4 @@
-use predicates::{ord::eq, prelude::*};
+use predicates::{ord::eq, prelude::*, str::contains};
 
 mod common;
 use common::TestContext;
@@ -28,7 +28,7 @@ fn settings_autocontainerize_set_true() {
         .args(["settings", "autocontainerize", "true"])
         .assert()
         .success()
-        .stdout(eq("Set autocontainerize to true").trim());
+        .stderr(contains("Set autocontainerize to true"));
 
     // Verify it's now true
     ctx.icp()
@@ -53,7 +53,7 @@ fn settings_autocontainerize_set_false() {
         .args(["settings", "autocontainerize", "false"])
         .assert()
         .success()
-        .stdout(eq("Set autocontainerize to false").trim());
+        .stderr(contains("Set autocontainerize to false"));
 
     // Verify it's now false
     ctx.icp()
@@ -111,7 +111,7 @@ fn settings_telemetry_set_false() {
         .args(["settings", "telemetry", "false"])
         .assert()
         .success()
-        .stdout(eq("Set telemetry to false").trim());
+        .stderr(contains("Set telemetry to false"));
 
     ctx.icp()
         .args(["settings", "telemetry"])
@@ -134,7 +134,7 @@ fn settings_telemetry_set_true() {
         .args(["settings", "telemetry", "true"])
         .assert()
         .success()
-        .stdout(eq("Set telemetry to true").trim());
+        .stderr(contains("Set telemetry to true"));
 
     ctx.icp()
         .args(["settings", "telemetry"])

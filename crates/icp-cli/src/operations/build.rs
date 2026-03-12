@@ -153,7 +153,7 @@ pub(crate) async fn build_many_with_progress_bar(
                 " ----- Failed to build canister '{}' -----",
                 failure.canister_name,
             );
-            error!("Error: '{}'", failure.error);
+            error!("'{}'", failure.error);
             for line in &failure.progress_output {
                 error!("{line}");
             }

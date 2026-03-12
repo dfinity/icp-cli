@@ -133,13 +133,14 @@ fn build_adapter_display_failing_build_output() {
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output))
-        .stdout(contains("hide this").not())
-        .stdout(contains("success 1").not())
-        .stdout(contains("success 2").not());
+        .stderr(contains(expected_output))
+        .stderr(contains("hide this").not())
+        .stderr(contains("success 1").not())
+        .stderr(contains("success 2").not());
 }
 
 #[test]
@@ -181,12 +182,13 @@ fn build_adapter_display_failing_middle_step_output() {
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output))
-        .stdout(contains("step 1 ok").not())
-        .stdout(contains("step 3 should not run").not());
+        .stderr(contains(expected_output))
+        .stderr(contains("step 1 ok").not())
+        .stderr(contains("step 3 should not run").not());
 }
 
 #[test]
@@ -227,10 +229,11 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stderr(contains(expected_output));
 }
 
 #[test]
@@ -270,10 +273,11 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stderr(contains(expected_output));
 }
 
 #[test]
@@ -359,10 +363,11 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stderr(contains(expected_output));
 }
 
 #[test]

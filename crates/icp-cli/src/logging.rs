@@ -9,6 +9,10 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{Layer, fmt::format};
 
+fn should_color() -> bool {
+    std::env::var_os("NO_COLOR").is_none()
+}
+
 // Debug layer (used with --debug)
 
 type DebugLayer<S> = Filtered<
@@ -29,7 +33,17 @@ pub(crate) fn debug_layer<S: Subscriber + for<'a> LookupSpan<'a>>() -> DebugLaye
 
 // User-facing layer (always active, info/warn/error only)
 
-pub(crate) struct UserLayer;
+pub(crate) struct UserLayer {
+    color: bool,
+}
+
+impl UserLayer {
+    pub(crate) fn new() -> Self {
+        Self {
+            color: should_color(),
+        }
+    }
+}
 
 impl<S: Subscriber> Layer<S> for UserLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
@@ -47,19 +61,33 @@ impl<S: Subscriber> Layer<S> for UserLayer {
         let stderr = io::stderr();
         let mut handle = stderr.lock();
 
-        const ERROR_STYLE: Style = AnsiColor::BrightRed.on_default();
-        const WARN_STYLE: Style = AnsiColor::Yellow.on_default();
-        const RESET: anstyle::Reset = anstyle::Reset;
+        if self.color {
+            const ERROR_STYLE: Style = AnsiColor::BrightRed.on_default();
+            const WARN_STYLE: Style = AnsiColor::Yellow.on_default();
+            const RESET: anstyle::Reset = anstyle::Reset;
 
-        match level {
-            Level::ERROR => {
-                let _ = writeln!(handle, "{ERROR_STYLE}ERR {RESET}{msg}");
+            match level {
+                Level::ERROR => {
+                    let _ = writeln!(handle, "{ERROR_STYLE}ERR {RESET}{msg}");
+                }
+                Level::WARN => {
+                    let _ = writeln!(handle, "{WARN_STYLE}WARN {RESET}{msg}");
+                }
+                _ => {
+                    let _ = writeln!(handle, "{msg}");
+                }
             }
-            Level::WARN => {
-                let _ = writeln!(handle, "{WARN_STYLE}WARN {RESET}{msg}");
-            }
-            _ => {
-                let _ = writeln!(handle, "{msg}");
+        } else {
+            match level {
+                Level::ERROR => {
+                    let _ = writeln!(handle, "ERR {msg}");
+                }
+                Level::WARN => {
+                    let _ = writeln!(handle, "WARN {msg}");
+                }
+                _ => {
+                    let _ = writeln!(handle, "{msg}");
+                }
             }
         }
     }

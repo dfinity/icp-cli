@@ -119,7 +119,7 @@ async fn main() -> Result<(), Error> {
     let debug = cli.debug;
     let reg = Registry::default()
         .with(debug.then(debug_layer))
-        .with((!debug).then_some(UserLayer));
+        .with((!debug).then(UserLayer::new));
     set_global_default(reg)?;
 
     // Execute the command within a span that includes version and SHA context

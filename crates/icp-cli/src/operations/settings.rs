@@ -240,7 +240,7 @@ pub(crate) async fn sync_settings_many(
                 " ----- Failed to update settings for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
-            error!("Error: '{}'", failure.error);
+            error!("'{}'", failure.error);
         }
 
         return SyncSettingsManySnafu {

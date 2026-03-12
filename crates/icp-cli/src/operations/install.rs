@@ -270,7 +270,7 @@ pub(crate) async fn install_many(
                 " ----- Failed to install canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
-            error!("Error: '{}'", failure.error);
+            error!("'{}'", failure.error);
         }
 
         return InstallManySnafu {

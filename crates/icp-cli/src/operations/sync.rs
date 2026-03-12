@@ -125,7 +125,7 @@ pub(crate) async fn sync_many(
                 " ----- Failed to sync canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
-            error!("Error: '{}'", failure.error);
+            error!("'{}'", failure.error);
             for line in &failure.progress_output {
                 error!("{line}");
             }

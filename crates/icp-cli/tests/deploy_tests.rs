@@ -568,7 +568,7 @@ async fn deploy_upgrade_rejects_incompatible_candid() {
         ])
         .assert()
         .failure()
-        .stdout(contains("Candid interface compatibility check failed"));
+        .stderr(contains("Candid interface compatibility check failed"));
 
     // Deploy with --yes should succeed
     ctx.icp()

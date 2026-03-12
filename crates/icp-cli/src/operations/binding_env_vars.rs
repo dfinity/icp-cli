@@ -161,7 +161,7 @@ pub(crate) async fn set_binding_env_vars_many(
                 " ----- Failed to update environment variables for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
             );
-            error!("Error: '{}'", failure.error);
+            error!("'{}'", failure.error);
         }
 
         return SetBindingEnvVarsManySnafu {

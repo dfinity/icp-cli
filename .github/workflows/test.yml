@@ -86,6 +86,8 @@ jobs:
     name: ${{ matrix.test }} on ${{ matrix.os }}
     # Wait until unit tests have run so we can reuse the cache
     needs: [discover, unit-tests]
+    # Check discover's result (not changes.outputs.src) because this job
+    # needs discover's matrix output, which is only available when it ran.
     if: needs.discover.result == 'success'
     runs-on: ${{ matrix.os }}
     strategy:

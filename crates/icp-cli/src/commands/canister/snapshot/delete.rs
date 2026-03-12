@@ -2,6 +2,7 @@ use clap::Args;
 use ic_management_canister_types::DeleteCanisterSnapshotArgs;
 use ic_utils::interfaces::ManagementCanister;
 use icp::context::Context;
+use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
@@ -44,10 +45,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
     mgmt.delete_canister_snapshot(&delete_args).await?;
 
     let name = &args.cmd_args.canister;
-    ctx.term.write_line(&format!(
+    info!(
         "Deleted snapshot {id} from canister {name} ({cid})",
         id = hex::encode(&args.snapshot_id.0),
-    ))?;
+    );
 
     Ok(())
 }

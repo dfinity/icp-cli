@@ -36,18 +36,16 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
 
     let name = &args.cmd_args.canister;
     if snapshots.is_empty() {
-        ctx.term
-            .write_line(&format!("No snapshots found for canister {name} ({cid})"))?;
+        println!("No snapshots found for canister {name} ({cid})");
     } else {
-        ctx.term
-            .write_line(&format!("Snapshots for canister {name} ({cid}):"))?;
+        println!("Snapshots for canister {name} ({cid}):");
         for snapshot in snapshots {
-            ctx.term.write_line(&format!(
+            println!(
                 "  {id}: {size}, taken at {timestamp}",
                 id = hex::encode(&snapshot.id),
                 size = Byte::from_u64(snapshot.total_size).get_appropriate_unit(UnitType::Binary),
                 timestamp = format_timestamp(snapshot.taken_at_timestamp),
-            ))?;
+            );
         }
     }
 

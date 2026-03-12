@@ -119,16 +119,16 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
-        [my-canister] Build output:
-        [my-canister] Building: step 3 of 3 (script):
-        [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
-        [my-canister] > failing build step 1
-        [my-canister] > failing build step 2
-        [my-canister] > failing build step 3
-        [my-canister] > failing build step 4
-        [my-canister] > failing build step 5
+        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 3 of 3 (script):
+        ERR [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
+        ERR [my-canister] > failing build step 1
+        ERR [my-canister] > failing build step 2
+        ERR [my-canister] > failing build step 3
+        ERR [my-canister] > failing build step 4
+        ERR [my-canister] > failing build step 5
     "#};
 
     ctx.icp()
@@ -171,12 +171,12 @@ fn build_adapter_display_failing_middle_step_output() {
 
     // Only step 2 output should be shown, not step 1 or step 3
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'command 'echo "step 2 failing"; exit 1' failed with status code 1'
-        [my-canister] Build output:
-        [my-canister] Building: step 2 of 3 (script):
-        [my-canister] echo "step 2 failing"; exit 1:
-        [my-canister] > step 2 failing
+        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR 'command 'echo "step 2 failing"; exit 1' failed with status code 1'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 2 of 3 (script):
+        ERR [my-canister] echo "step 2 failing"; exit 1:
+        ERR [my-canister] > step 2 failing
     "#};
 
     ctx.icp()
@@ -217,12 +217,12 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'failed to read prebuilt canister file'
-        [my-canister] Build output:
-        [my-canister] Building: step 2 of 2 (pre-built):
-        [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
-        [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
+        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR 'failed to read prebuilt canister file'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 2 of 2 (pre-built):
+        ERR [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
+        ERR [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
     "#};
 
     ctx.icp()
@@ -260,12 +260,12 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'command 'exit 1' failed with status code 1'
-        [my-canister] Build output:
-        [my-canister] Building: step 2 of 2 (script):
-        [my-canister] exit 1:
-        [my-canister] <no output>
+        ERR  ----- Failed to build canister 'my-canister' -----
+        ERR 'command 'exit 1' failed with status code 1'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 2 of 2 (script):
+        ERR [my-canister] exit 1:
+        ERR [my-canister] <no output>
     "#};
 
     ctx.icp()

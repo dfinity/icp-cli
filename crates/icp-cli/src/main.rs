@@ -1,8 +1,7 @@
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
-use console::Term;
-use icp::{context::TermWriter, prelude::*};
+use icp::prelude::*;
 use tracing::{Instrument, debug, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
@@ -116,11 +115,6 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    let term = TermWriter {
-        debug: cli.debug,
-        raw_term: Term::stdout(),
-    };
-
     // Logging: --debug gets the detailed tracing layer; otherwise plain user-facing output
     let debug = cli.debug;
     let reg = Registry::default()
@@ -155,7 +149,7 @@ async fn main() -> Result<(), Error> {
                 .map_err(|e| e.to_string())
         }),
     };
-    let ctx = icp::context::initialize(cli.project_root_override, term, cli.debug, password_func)?;
+    let ctx = icp::context::initialize(cli.project_root_override, cli.debug, password_func)?;
 
     let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
     let result = dispatch(&ctx, command).instrument(trace_span).await;

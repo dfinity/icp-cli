@@ -7,6 +7,7 @@ use icp::parsers::CyclesAmount;
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
 };
+use tracing::info;
 
 use crate::commands::args;
 use crate::operations::token::TokenAmount;
@@ -63,10 +64,10 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
         symbol: "cycles".to_string(),
     };
 
-    let _ = ctx.term.write_line(&format!(
+    info!(
         "Topped up canister {} with {}",
         args.cmd_args.canister, amount
-    ));
+    );
 
     Ok(())
 }

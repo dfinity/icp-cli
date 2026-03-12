@@ -2,6 +2,7 @@ use byte_unit::{Byte, UnitType};
 use clap::Args;
 use icp::context::Context;
 use icp::prelude::*;
+use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
@@ -59,28 +60,24 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Load metadata
             let metadata = load_metadata(paths)?;
 
-            ctx.term
-                .write_line(&format!("Uploading snapshot to canister {name} ({cid})",))?;
-            ctx.term.write_line(&format!(
+            info!("Uploading snapshot to canister {name} ({cid})");
+            info!(
                 "  Original timestamp: {}",
                 format_timestamp(metadata.taken_at_timestamp)
-            ))?;
+            );
 
             let total_size =
                 metadata.wasm_module_size + metadata.wasm_memory_size + metadata.stable_memory_size;
-            ctx.term.write_line(&format!(
+            info!(
                 "  Total size: {}",
                 Byte::from_u64(total_size).get_appropriate_unit(UnitType::Binary)
-            ))?;
+            );
 
             // Load or create upload progress
             let mut progress = if args.resume {
                 match load_upload_progress(paths) {
                     Ok(progress) => {
-                        ctx.term.write_line(&format!(
-                            "Resuming upload to snapshot {}",
-                            progress.snapshot_id
-                        ))?;
+                        info!("Resuming upload to snapshot {}", progress.snapshot_id);
                         progress
                     }
                     Err(SnapshotTransferError::NoUploadProgress { .. }) => {
@@ -98,8 +95,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     upload_snapshot_metadata(&agent, cid, &metadata, replace_snapshot).await?;
 
                 let snapshot_id_hex = hex::encode(&result.snapshot_id);
-                ctx.term
-                    .write_line(&format!("Created snapshot {} for upload", snapshot_id_hex))?;
+                info!("Created snapshot {snapshot_id_hex} for upload");
 
                 let mut progress = UploadProgress::new(snapshot_id_hex);
                 progress.metadata_uploaded = true;
@@ -126,7 +122,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     .await?;
                     pb.finish_with_message("done");
                 } else {
-                    ctx.term.write_line("WASM module: already complete")?;
+                    info!("WASM module: already complete");
                 }
             }
 
@@ -146,7 +142,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     .await?;
                     pb.finish_with_message("done");
                 } else {
-                    ctx.term.write_line("WASM memory: already complete")?;
+                    info!("WASM memory: already complete");
                 }
             }
 
@@ -167,16 +163,16 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     .await?;
                     pb.finish_with_message("done");
                 } else {
-                    ctx.term.write_line("Stable memory: already complete")?;
+                    info!("Stable memory: already complete");
                 }
             }
 
             // Upload WASM chunk store
             if !metadata.wasm_chunk_store.is_empty() {
-                ctx.term.write_line(&format!(
+                info!(
                     "Uploading {} WASM chunks...",
                     metadata.wasm_chunk_store.len()
-                ))?;
+                );
 
                 for chunk_hash in &metadata.wasm_chunk_store {
                     let hash_hex = hex::encode(&chunk_hash.hash);
@@ -187,24 +183,19 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         save_upload_progress(&progress, paths)?;
                     }
                 }
-                ctx.term.write_line("WASM chunks: done")?;
+                info!("WASM chunks: done");
             }
 
             // Clean up progress file on success
             delete_upload_progress(paths)?;
 
-            ctx.term.write_line(&format!(
-                "Snapshot {} uploaded successfully",
-                progress.snapshot_id
-            ))?;
+            println!("Snapshot {} uploaded successfully", progress.snapshot_id);
 
             Ok::<_, anyhow::Error>(progress.snapshot_id)
         })
         .await??;
 
-    ctx.term.write_line(&format!(
-        "Use `icp canister snapshot restore {name} {snapshot_id}` to restore from this snapshot"
-    ))?;
+    info!("Use `icp canister snapshot restore {name} {snapshot_id}` to restore from this snapshot");
 
     Ok(())
 }

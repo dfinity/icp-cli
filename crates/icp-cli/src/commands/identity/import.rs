@@ -18,6 +18,7 @@ use pkcs8::{
 };
 use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
+use tracing::{info, warn};
 
 use icp::context::Context;
 
@@ -105,11 +106,11 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
         unreachable!();
     }
 
-    println!("Identity \"{}\" created", args.name);
+    info!("Identity \"{}\" created", args.name);
 
     if matches!(args.storage, StorageMode::Plaintext) {
-        eprintln!(
-            "WARNING: This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
+        warn!(
+            "This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
         );
     }
 

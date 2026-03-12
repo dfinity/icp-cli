@@ -11,7 +11,7 @@ use icp::{
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
-use std::sync::Arc;
+use tracing::info;
 
 use crate::{
     commands::canister::create,
@@ -89,20 +89,19 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await?;
 
     // Build the selected canisters
-    let _ = ctx.term.write_line("Building canisters:");
+    info!("Building canisters:");
 
     build_many_with_progress_bar(
         canisters_to_build,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,
-        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await?;
 
     // Create the selected canisters
-    let _ = ctx.term.write_line("\n\nCreating canisters:");
+    info!("Creating canisters:");
 
     let env = ctx
         .get_environment(&environment_selection)
@@ -122,7 +121,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .collect::<Vec<_>>();
 
     if canisters_to_create.is_empty() {
-        let _ = ctx.term.write_line("All canisters already exist");
+        info!("All canisters already exist");
     } else {
         let create_operation = CreateOperation::new(
             agent.clone(),
@@ -158,9 +157,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                     let canister_name = canisters_to_create
                         .get(idx)
                         .expect("should have tried to create every canister");
-                    let _ = ctx
-                        .term
-                        .write_line(&format!("Created canister {canister_name} with ID {id}"));
+                    println!("Created canister {canister_name} with ID {id}");
                     ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
                         .await
                         .map_err(|e| anyhow!(e))?;
@@ -178,7 +175,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     ctx.update_custom_domains(&environment_selection).await;
 
-    let _ = ctx.term.write_line("\n\nSetting environment variables:");
+    info!("Setting environment variables:");
     let env = ctx
         .get_environment(&environment_selection)
         .await
@@ -213,20 +210,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         &env.name,
         target_canisters.clone(),
         canister_list,
-        Arc::new(ctx.term.clone()),
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(
-        agent.clone(),
-        target_canisters,
-        Arc::new(ctx.term.clone()),
-        ctx.debug,
-    )
-    .await
-    .map_err(|e| anyhow!(e))?;
+    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
 
@@ -260,30 +251,22 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await?;
 
     if !args.yes {
-        let _ = ctx.term.write_line("\n\nChecking compatibility:");
+        info!("Checking compatibility:");
         check_candid_compatibility_many(
             agent.clone(),
             canisters
                 .iter()
                 .map(|(name, cid, mode, _)| (&**name, *cid, *mode)),
             ctx.artifacts.clone(),
-            Arc::new(ctx.term.clone()),
             ctx.debug,
         )
         .await
         .map_err(|e| anyhow!(e))?;
     }
 
-    let _ = ctx.term.write_line("\n\nInstalling canisters:");
+    info!("Installing canisters:");
 
-    install_many(
-        agent.clone(),
-        canisters,
-        ctx.artifacts.clone(),
-        Arc::new(ctx.term.clone()),
-        ctx.debug,
-    )
-    .await?;
+    install_many(agent.clone(), canisters, ctx.artifacts.clone(), ctx.debug).await?;
 
     // Sync the selected canisters
 
@@ -319,20 +302,11 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .collect();
 
     if sync_canisters.is_empty() {
-        let _ = ctx
-            .term
-            .write_line("\nNo canisters have sync steps configured");
+        info!("No canisters have sync steps configured");
     } else {
-        let _ = ctx.term.write_line("\n\nSyncing canisters:");
+        info!("Syncing canisters:");
 
-        sync_many(
-            ctx.syncer.clone(),
-            agent.clone(),
-            Arc::new(ctx.term.clone()),
-            sync_canisters,
-            ctx.debug,
-        )
-        .await?;
+        sync_many(ctx.syncer.clone(), agent.clone(), sync_canisters, ctx.debug).await?;
     }
 
     // Print URLs for deployed canisters
@@ -394,7 +368,7 @@ async fn print_canister_urls(
         }
     };
 
-    let _ = ctx.term.write_line("\n\nDeployed canisters:");
+    println!("Deployed canisters:");
 
     for name in canister_names {
         let canister_id = match ctx
@@ -418,9 +392,7 @@ async fn print_canister_urls(
 
             if has_http {
                 let canister_url = canister_gateway_url(http_gateway_url, canister_id, friendly);
-                let _ = ctx
-                    .term
-                    .write_line(&format!("  {}: {}", name, canister_url));
+                println!("  {name}: {canister_url}");
             } else {
                 // For canisters without http_request, show the Candid UI URL
                 if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
@@ -431,19 +403,13 @@ async fn print_canister_urls(
                     } else {
                         candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
                     }
-                    let _ = ctx
-                        .term
-                        .write_line(&format!("  {name} (Candid UI): {candid_url}"));
+                    println!("  {name} (Candid UI): {candid_url}");
                 } else {
-                    let _ = ctx.term.write_line(&format!(
-                        "  {name}: {canister_id} (Candid UI not available)",
-                    ));
+                    println!("  {name}: {canister_id} (Candid UI not available)");
                 }
             }
         } else {
-            let _ = ctx.term.write_line(&format!(
-                "  {name}: {canister_id} (No gateway URL available)",
-            ));
+            println!("  {name}: {canister_id} (No gateway URL available)");
         }
     }
 

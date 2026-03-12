@@ -1,17 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
 
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{EnvironmentVariable, LogVisibility as IcLogVisibility};
 use ic_utils::interfaces::ManagementCanister;
-use icp::{Canister, canister::Settings, context::TermWriter};
+use icp::{Canister, canister::Settings};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
+use tracing::error;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
@@ -188,7 +186,6 @@ pub(crate) async fn sync_settings(
 pub(crate) async fn sync_settings_many(
     agent: Agent,
     target_canisters: Vec<(Principal, Canister)>,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), SyncSettingsManyError> {
     let mgmt = ManagementCanister::create(&agent);
@@ -239,14 +236,11 @@ pub(crate) async fn sync_settings_many(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
+            error!(
                 " ----- Failed to update settings for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
-            let _ = term.write_line("");
+            );
+            error!("Error: '{}'", failure.error);
         }
 
         return SyncSettingsManySnafu {

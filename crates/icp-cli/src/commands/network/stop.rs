@@ -4,6 +4,7 @@ use icp::{
     fs::remove_file,
     network::{Configuration, config::ChildLocator, managed::run::stop_network},
 };
+use tracing::info;
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
@@ -55,15 +56,13 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
 
     match &descriptor.child_locator {
         ChildLocator::Pid { pid, .. } => {
-            let _ = ctx
-                .term
-                .write_line(&format!("Stopping background network (PID: {})...", pid));
+            info!("Stopping background network (PID: {pid})...");
         }
         ChildLocator::Container { id, .. } => {
-            let _ = ctx.term.write_line(&format!(
+            info!(
                 "Stopping background network (container ID: {})...",
                 &id[..12]
-            ));
+            );
         }
     }
 
@@ -79,7 +78,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
         })
         .await??;
 
-    let _ = ctx.term.write_line("Network stopped successfully");
+    info!("Network stopped successfully");
 
     Ok(())
 }

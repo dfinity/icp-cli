@@ -66,10 +66,10 @@ pub(crate) async fn exec(
         transfer(&agent, args.from_subaccount, token, &args.amount, &receiver).await?;
 
     // Output information
-    let _ = ctx.term.write_line(&format!(
+    println!(
         "Transferred {} to {} in block {}",
         transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
-    ));
+    );
 
     Ok(())
 }

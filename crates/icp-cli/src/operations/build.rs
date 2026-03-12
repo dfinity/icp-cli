@@ -5,11 +5,11 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     Canister,
     canister::build::{Build, BuildError, Params},
-    context::TermWriter,
     package::PackageCache,
     prelude::*,
 };
 use snafu::{ResultExt, Snafu};
+use tracing::error;
 
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
@@ -99,7 +99,6 @@ pub(crate) async fn build_many_with_progress_bar(
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     pkg_cache: &PackageCache,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
@@ -150,19 +149,14 @@ pub(crate) async fn build_many_with_progress_bar(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            // Print progress output
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
+            error!(
                 " ----- Failed to build canister '{}' -----",
                 failure.canister_name,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            );
+            error!("Error: '{}'", failure.error);
             for line in &failure.progress_output {
-                let _ = term.write_line(line);
+                error!("{line}");
             }
-
-            let _ = term.write_line("");
         }
 
         return BuildManySnafu {

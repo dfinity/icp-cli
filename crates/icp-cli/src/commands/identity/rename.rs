@@ -1,6 +1,7 @@
 use clap::Args;
 use icp::context::Context;
 use icp::identity::key::rename_identity;
+use tracing::info;
 
 /// Rename an identity
 #[derive(Debug, Args)]
@@ -17,10 +18,10 @@ pub(crate) async fn exec(ctx: &Context, args: &RenameArgs) -> Result<(), anyhow:
 
     dirs.with_write(async |dirs| {
         rename_identity(dirs, &args.old_name, &args.new_name)?;
-        let _ = ctx.term.write_line(&format!(
+        info!(
             "Renamed identity `{}` to `{}`",
             args.old_name, args.new_name
-        ));
+        );
         Ok(())
     })
     .await?

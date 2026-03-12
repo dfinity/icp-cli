@@ -1,5 +1,6 @@
 use clap::{Args, Subcommand};
 use icp::{context::Context, settings::Settings};
+use tracing::{info, warn};
 
 /// Configure user settings
 #[derive(Debug, Args)]
@@ -53,10 +54,10 @@ async fn exec_autocontainerize(
                 let mut settings = Settings::load_from(dirs.read())?;
                 settings.autocontainerize = value;
                 settings.write_to(dirs)?;
-                println!("Set autocontainerize to {value}");
+                info!("Set autocontainerize to {value}");
                 if cfg!(windows) {
-                    eprintln!(
-                        "Warning: This setting is ignored on Windows. \
+                    warn!(
+                        "This setting is ignored on Windows. \
                         Docker is always used because the network launcher does not run natively."
                     );
                 }
@@ -84,7 +85,7 @@ async fn exec_telemetry(ctx: &Context, args: &TelemetryArgs) -> Result<(), anyho
                 let mut settings = Settings::load_from(dirs.read())?;
                 settings.telemetry_enabled = value;
                 settings.write_to(dirs)?;
-                println!("Set telemetry to {value}");
+                info!("Set telemetry to {value}");
                 Ok(())
             })
             .await?

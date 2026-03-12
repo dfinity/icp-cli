@@ -5,6 +5,7 @@ use icp::context::Context;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::management_canister::CanisterSettingsArg;
+use tracing::info;
 
 use crate::{commands::args, operations::create::CreateOperation};
 
@@ -191,11 +192,9 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
     let id = create_operation.create(&canister_settings).await?;
 
     if args.quiet {
-        let _ = ctx.term.write_line(&format!("{id}"));
+        println!("{id}");
     } else {
-        let _ = ctx
-            .term
-            .write_line(&format!("Created canister with ID {id}"));
+        println!("Created canister with ID {id}");
     }
 
     Ok(())
@@ -224,9 +223,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         .await
         .is_ok()
     {
-        let _ = ctx
-            .term
-            .write_line(&format!("Canister {canister} already exists"));
+        info!("Canister {canister} already exists");
         return Ok(());
     }
 
@@ -251,11 +248,9 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
     ctx.update_custom_domains(&selections.environment).await;
 
     if args.quiet {
-        let _ = ctx.term.write_line(&format!("{id}"));
+        println!("{id}");
     } else {
-        let _ = ctx
-            .term
-            .write_line(&format!("Created canister {canister} with ID {id}"));
+        println!("Created canister {canister} with ID {id}");
     }
 
     Ok(())

@@ -13,6 +13,7 @@ use icp::{
 };
 
 use icp::context::Context;
+use tracing::{info, warn};
 
 use crate::commands::identity::StorageMode;
 
@@ -76,23 +77,23 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
         .await??;
 
     if matches!(args.storage, StorageMode::Plaintext) {
-        eprintln!(
-            "WARNING: This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
+        warn!(
+            "This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
         );
     }
 
     match &args.output_seed {
         Some(path) => {
             write_string(path, mnemonic.as_ref()).context("failed to write seed file")?;
-            println!(
-                "WARNING: Store the seed phrase file in a secure location. If you lose it, you will lose access to your identity."
+            warn!(
+                "Store the seed phrase file in a secure location. If you lose it, you will lose access to your identity."
             );
-            println!("Seed phrase written to file {path}");
+            info!("Seed phrase written to file {path}");
         }
 
         None => {
-            println!(
-                "WARNING: Write the seed phrase down and store it in a secure location. If you lose it, you will lose access to your identity."
+            warn!(
+                "Write the seed phrase down and store it in a secure location. If you lose it, you will lose access to your identity."
             );
             println!("Your seed phrase: {mnemonic}");
         }

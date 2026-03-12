@@ -1,6 +1,4 @@
-use console::Term;
-use std::{io::Write, sync::Arc};
-use tracing::info;
+use std::sync::Arc;
 use url::Url;
 
 use crate::{
@@ -72,9 +70,6 @@ pub enum CanisterSelection {
 }
 
 pub struct Context {
-    /// Terminal for printing messages for the user to see
-    pub term: TermWriter,
-
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Arc<dyn directories::Access>,
 
@@ -563,10 +558,6 @@ impl Context {
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {
         Context {
-            term: TermWriter {
-                debug: false,
-                raw_term: Term::stderr(),
-            },
             dirs: Arc::new(crate::directories::UnimplementedMockDirs),
             ids: Arc::new(crate::store_id::mock::MockInMemoryIdStore::new()),
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
@@ -579,51 +570,6 @@ impl Context {
             debug: false,
             telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TermWriter {
-    pub debug: bool,
-    pub raw_term: Term,
-}
-
-impl TermWriter {
-    pub fn write_line(&self, line: &str) -> std::io::Result<()> {
-        if self.debug {
-            info!("{line}");
-        } else {
-            writeln!(&self.raw_term, "{line}")?;
-        }
-        Ok(())
-    }
-}
-
-impl Write for TermWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        (&*self).write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        (&*self).flush()
-    }
-}
-
-impl Write for &TermWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        if self.debug {
-            info!("{}", String::from_utf8_lossy(buf).trim());
-            Ok(buf.len())
-        } else {
-            (&self.raw_term).write(buf)
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        if !self.debug {
-            self.raw_term.flush()?;
-        }
-        Ok(())
     }
 }
 

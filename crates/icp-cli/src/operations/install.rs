@@ -6,11 +6,10 @@ use ic_management_canister_types::{
 use ic_utils::interfaces::{
     ManagementCanister, management_canister::builders::CanisterInstallMode,
 };
-use icp::context::TermWriter;
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
@@ -215,7 +214,6 @@ pub(crate) async fn install_many(
     agent: Agent,
     canisters: impl IntoIterator<Item = (String, Principal, CanisterInstallMode, Option<Vec<u8>>)>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
@@ -268,14 +266,11 @@ pub(crate) async fn install_many(
 
     if !errors.is_empty() {
         for failure in &errors {
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
+            error!(
                 " ----- Failed to install canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
-            let _ = term.write_line("");
+            );
+            error!("Error: '{}'", failure.error);
         }
 
         return InstallManySnafu {

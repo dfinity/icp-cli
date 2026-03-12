@@ -7,6 +7,7 @@ use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
+use tracing::{info, warn};
 
 use crate::{
     network::{ManagedLauncherConfig, Port, config::ChildLocator},
@@ -87,9 +88,9 @@ pub async fn spawn_network_launcher(
     cmd.args(["--status-dir", status_dir.as_str()]);
     cmd.args(launcher_settings_flags(launcher_config));
     if background {
-        eprintln!("For background mode, network output will be redirected:");
-        eprintln!("  stdout: {}", stdout_file);
-        eprintln!("  stderr: {}", stderr_file);
+        info!("For background mode, network output will be redirected:");
+        info!("  stdout: {stdout_file}");
+        info!("  stderr: {stderr_file}");
         let stdout = std::fs::File::create(stdout_file)
             .context(CreateStdioFileSnafu { path: &stdout_file })?;
         let stderr = std::fs::File::create(stderr_file)
@@ -161,7 +162,7 @@ pub async fn stop_launcher(pid: Pid) {
             None => break,
             Some(_) => {
                 if Instant::now() >= expire {
-                    eprintln!("process {pid} did not exit within 10 seconds");
+                    warn!("process {pid} did not exit within 10 seconds");
                     break;
                 }
             }

@@ -15,7 +15,7 @@ use icp::{
     },
     settings::Settings,
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
@@ -141,10 +141,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
                 {
                     // The version has already been downloaded. Use it, but first, check for updates and nag if so
                     if let Some(update) = check_launcher_update_available(pkg, &resolved, &client).await {
-                        _ = ctx.term.write_line(&format!(
-                            "A newer network launcher version is available: {update} (current: {resolved}). \
-                            Run `icp network update` to update."
-                        ));
+                        info!("A newer network launcher version is available: {update} (current: {resolved}). Run `icp network update` to update.");
                     }
                     anyhow::Ok(Some(path))
                 } else {

@@ -99,10 +99,10 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
 
     if args.follow {
         // Follow mode: continuously fetch and display new logs
-        follow_logs(ctx, &mgmt, &canister_id, args.interval).await
+        follow_logs(&mgmt, &canister_id, args.interval).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(ctx, &mgmt, &canister_id, build_filter(args)?).await
+        fetch_and_display_logs(&mgmt, &canister_id, build_filter(args)?).await
     }
 }
 
@@ -141,7 +141,6 @@ fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Er
 }
 
 async fn fetch_and_display_logs(
-    ctx: &Context,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     filter: Option<CanisterLogFilter>,
@@ -157,7 +156,7 @@ async fn fetch_and_display_logs(
 
     for log in result.canister_log_records {
         let formatted = format_log(&log);
-        let _ = ctx.term.write_line(&formatted);
+        println!("{formatted}");
     }
 
     Ok(())
@@ -166,7 +165,6 @@ async fn fetch_and_display_logs(
 const FOLLOW_LOOKBACK_NANOS: u64 = 60 * 60 * 1_000_000_000; // 1 hour
 
 async fn follow_logs(
-    ctx: &Context,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     interval_seconds: u64,
@@ -207,7 +205,7 @@ async fn follow_logs(
         if !new_logs.is_empty() {
             for log in &new_logs {
                 let formatted = format_log(log);
-                let _ = ctx.term.write_line(&formatted);
+                println!("{formatted}");
             }
             // Update last_idx to the highest idx we've displayed
             if let Some(last_log) = new_logs.last() {

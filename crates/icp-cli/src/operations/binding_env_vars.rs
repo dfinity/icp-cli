@@ -1,15 +1,13 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{BTreeMap, HashSet};
 
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_utils::interfaces::{
     ManagementCanister, management_canister::builders::EnvironmentVariable,
 };
-use icp::{Canister, context::TermWriter};
+use icp::Canister;
 use snafu::Snafu;
+use tracing::error;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
@@ -73,7 +71,6 @@ pub(crate) async fn set_binding_env_vars_many(
     environment_name: &str,
     target_canisters: Vec<(Principal, Canister)>,
     canister_list: BTreeMap<String, Principal>,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), SetBindingEnvVarsManyError> {
     let mgmt = ManagementCanister::create(&agent);
@@ -95,15 +92,12 @@ pub(crate) async fn set_binding_env_vars_many(
         .collect();
 
     if !missing_canisters.is_empty() {
-        let _ = term.write_line("");
-        let _ = term.write_line("");
-        let _ = term.write_line(&format!(
+        error!(
             " ----- Error: Could not find canister id(s) for {} in environment '{}' -----",
             missing_canisters.join(", "),
             environment_name
-        ));
-        let _ = term.write_line("Make sure they are created first");
-        let _ = term.write_line("");
+        );
+        error!("Make sure they are created first");
 
         return SetBindingEnvVarsManySnafu {
             names: missing_canisters,
@@ -163,14 +157,11 @@ pub(crate) async fn set_binding_env_vars_many(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
+            error!(
                 " ----- Failed to update environment variables for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
-            let _ = term.write_line("");
+            );
+            error!("Error: '{}'", failure.error);
         }
 
         return SetBindingEnvVarsManySnafu {

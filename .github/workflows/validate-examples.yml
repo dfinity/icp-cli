@@ -4,20 +4,7 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      # NOTE: all docs/ markdown files are covered by "**.md" above. The only
-      # docs/ files that still trigger this workflow are docs/schemas/*.json —
-      # intentionally, since this workflow validates project manifests against
-      # those schemas.
-      - "**.md"
-      - "docs-site/**"
-      - "npm/**"
   pull_request:
-    paths-ignore:
-      # See push paths-ignore NOTE above.
-      - "**.md"
-      - "docs-site/**"
-      - "npm/**"
 
 env:
   # When getting Rust dependencies, retry on network error:
@@ -26,8 +13,30 @@ env:
   CURL_HOME: .
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          # 'src' is true when any changed file matches a positive pattern
+          # and does not match a negative pattern (! prefix).
+          filters: |
+            src:
+              - '**'
+              - '!**.md'
+              - '!docs-site/**'
+              - '!npm/**'
+
   validate-examples:
     name: Validate Examples on ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -54,10 +63,10 @@ jobs:
 
   aggregate:
     name: validate-examples:required
-    if: ${{ always() }}
+    if: always() && needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
-    needs: [validate-examples]
+    needs: [changes, validate-examples]
     steps:
-      - name: check result
+      - name: check validate-examples result
         if: ${{ needs.validate-examples.result != 'success' }}
         run: exit 1

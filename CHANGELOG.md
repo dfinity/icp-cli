@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat!: Remove `--set-controller` and replace with a new flag `--remove-all-controllers`. For the old behavior, combine this flag with `--add-controller`
 * fix: Duplicate identities no longer cause an error when starting a network
 
 # v0.2.1-beta.0

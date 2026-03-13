@@ -124,24 +124,35 @@ Notify the release driver: "PR has failing CI: ${PR_URL} — please fix or rerun
 
 ## Task 2: Tag
 
-Wait for the release PR to be approved and merged, then:
+Wait for the release PR to be approved and merged. Poll until the PR is merged:
+```bash
+PR_STATE=$(gh pr view --json state --jq '.state')
+echo "PR state: ${PR_STATE}"
+```
+If `PR_STATE` is `OPEN`, notify the release driver: "Waiting for PR to be approved and merged. Let me know when it's merged, or I can check again." Do **not** proceed until the PR state is `MERGED`.
 
+Once merged:
 ```bash
 git checkout main && git pull origin main
 git tag v$ARGUMENTS
 git push origin v$ARGUMENTS
 ```
 
-**After the tag is pushed, start Task 3 in background. If `$ARGUMENTS` is a beta release, also start Task 5 concurrently in background.**
+**After the tag is pushed, start Task 3 in background. If `$ARGUMENTS` is a beta release, also start Task 5 concurrently in background. If `$ARGUMENTS` is a stable release, also start Task 7 concurrently in background.**
 
 ---
 
 ## Task 3: Monitor Release workflow
 
+The Release workflow is triggered by the tag push. Find the run that matches the tag:
 ```bash
-sleep 5
-RELEASE_RUN_ID=$(gh run list --limit 5 --json databaseId,workflowName \
-  --jq '[.[] | select(.workflowName == "Release")] | .[0].databaseId')
+sleep 10
+RELEASE_RUN_ID=$(gh run list --workflow release.yml --branch "v$ARGUMENTS" --limit 1 \
+  --json databaseId --jq '.[0].databaseId')
+if [ -z "$RELEASE_RUN_ID" ]; then
+  echo "ERROR: Could not find Release workflow run for tag v$ARGUMENTS"
+  exit 1
+fi
 RELEASE_RUN_URL="https://github.com/dfinity/icp-cli/actions/runs/${RELEASE_RUN_ID}"
 echo "Watching: ${RELEASE_RUN_URL}"
 gh run watch ${RELEASE_RUN_ID} --exit-status
@@ -164,10 +175,15 @@ gh workflow run "Publish to npm" \
   --field beta=$([[ "$ARGUMENTS" =~ -beta\. ]] && echo true || echo false)
 ```
 
-Wait a moment for GitHub to register the run, then get its ID and watch it:
+Wait for GitHub to register the run, then find the run triggered after the dispatch:
 ```bash
-sleep 5
-NPM_RUN_ID=$(gh run list --workflow "Publish to npm" --limit 1 --json databaseId --jq '.[0].databaseId')
+sleep 10
+NPM_RUN_ID=$(gh run list --workflow "Publish to npm" --limit 1 --json databaseId,status \
+  --jq '[.[] | select(.status != "completed")] | .[0].databaseId // empty')
+if [ -z "$NPM_RUN_ID" ]; then
+  # All runs completed — just grab the latest one
+  NPM_RUN_ID=$(gh run list --workflow "Publish to npm" --limit 1 --json databaseId --jq '.[0].databaseId')
+fi
 NPM_RUN_URL="https://github.com/dfinity/icp-cli/actions/runs/${NPM_RUN_ID}"
 echo "Watching: ${NPM_RUN_URL}"
 gh run watch ${NPM_RUN_ID} --exit-status
@@ -189,9 +205,13 @@ Formula: `Formula/icp-cli-beta.rb` in `dfinity/homebrew-tap`. Only `url` (line 4
 ```bash
 BRANCH="bump-icp-cli-beta-$ARGUMENTS"
 
-# Compute tarball SHA256
-NEW_SHA=$(curl -sL "https://github.com/dfinity/icp-cli/archive/refs/tags/v$ARGUMENTS.tar.gz" \
+# Compute tarball SHA256 (--fail ensures we don't hash an error page)
+NEW_SHA=$(curl -sfL "https://github.com/dfinity/icp-cli/archive/refs/tags/v$ARGUMENTS.tar.gz" \
   | shasum -a 256 | awk '{print $1}')
+if [ -z "$NEW_SHA" ]; then
+  echo "ERROR: Failed to download tarball for v$ARGUMENTS — tag may not exist yet on GitHub"
+  exit 1
+fi
 
 # Create branch on dfinity/homebrew-tap
 BASE=$(gh api repos/dfinity/homebrew-tap/git/ref/heads/main --jq '.object.sha')
@@ -234,10 +254,18 @@ gh pr edit --repo dfinity/homebrew-tap --add-label '!add-bottles' "bump-icp-cli-
 
 **4. After `github-actions` bot commits bottle hashes**
 
-Wait for the bot to push bottle SHA256s and initial checks to settle:
+Wait for the bot to push bottle SHA256s. The `confirm-publish:required` check will fail — that is expected and does not mean the process has failed. Poll for the bot commit by checking the PR commit count:
 ```bash
-gh pr checks --repo dfinity/homebrew-tap "bump-icp-cli-beta-$ARGUMENTS" --watch
+INITIAL_COMMITS=$(gh pr view --repo dfinity/homebrew-tap "bump-icp-cli-beta-$ARGUMENTS" --json commits --jq '.commits | length')
+echo "Initial commits: ${INITIAL_COMMITS}. Waiting for bot to add bottle hashes..."
 ```
+
+Poll every 30 seconds until the commit count increases (the bot has pushed):
+```bash
+CURRENT_COMMITS=$(gh pr view --repo dfinity/homebrew-tap "bump-icp-cli-beta-$ARGUMENTS" --json commits --jq '.commits | length')
+echo "Current commits: ${CURRENT_COMMITS}"
+```
+Once `CURRENT_COMMITS` > `INITIAL_COMMITS`, the bot has committed.
 
 `External PR Ruleset` will be stuck (bot commit doesn't trigger it). Close and reopen to retrigger:
 ```bash
@@ -245,14 +273,14 @@ gh pr close --repo dfinity/homebrew-tap "bump-icp-cli-beta-$ARGUMENTS"
 gh pr reopen --repo dfinity/homebrew-tap "bump-icp-cli-beta-$ARGUMENTS"
 ```
 
-Monitor checks:
+Monitor checks (ignore `confirm-publish:required` failures — they are expected):
 ```bash
 gh pr checks --repo dfinity/homebrew-tap "bump-icp-cli-beta-$ARGUMENTS" --watch
 ```
 
-If any check fails, stop and notify the driver to investigate.
+If any check **other than `confirm-publish:required`** fails, stop and notify the driver to investigate.
 
-If all checks pass, proceed to Step 5.
+If all other checks pass, proceed to Step 5.
 
 **5. Convert to ready for review and notify**
 ```bash
@@ -285,7 +313,7 @@ Determine the **homebrew status line** to use in the release announcement:
   `- Homebrew: stable release will be published to homebrew-core — formula PR is in review: $HBC_PR_URL`
 - If `$HBC_PR_STATE` is `MERGED`: check whether the new version is live:
   ```bash
-  curl -s https://formulae.brew.sh/api/formula/icp-cli.json | jq -r '.versions.stable'
+  curl -sf https://formulae.brew.sh/api/formula/icp-cli.json | jq -r '.versions.stable'
   ```
   - If the returned version equals `$ARGUMENTS`:
     `- Homebrew: stable release has been published to homebrew-core. \`brew install icp-cli\` (or \`brew upgrade icp-cli\`)`
@@ -304,8 +332,13 @@ The tag push triggers a docs deployment workflow that builds and publishes the v
 
 **1. Wait for the docs deployment triggered by the tag**
 ```bash
-sleep 5
-DOCS_RUN_ID=$(gh run list --workflow docs.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+sleep 10
+DOCS_RUN_ID=$(gh run list --workflow docs.yml --branch "v$ARGUMENTS" --limit 1 \
+  --json databaseId --jq '.[0].databaseId')
+if [ -z "$DOCS_RUN_ID" ]; then
+  echo "ERROR: Could not find docs workflow run for tag v$ARGUMENTS"
+  exit 1
+fi
 DOCS_RUN_URL="https://github.com/dfinity/icp-cli/actions/runs/${DOCS_RUN_ID}"
 echo "Watching docs deploy: ${DOCS_RUN_URL}"
 gh run watch ${DOCS_RUN_ID} --exit-status
@@ -320,10 +353,9 @@ git checkout main && git pull origin main
 USERNAME=$(gh api user --jq '.login')
 git checkout -b ${USERNAME}/docs-versions-$ARGUMENTS
 
-UPDATED=$(jq --arg v "$MINOR_VERSION" \
+jq --arg v "$MINOR_VERSION" \
   '.versions = [{version: $v, latest: true}] + (.versions | map(del(.latest)))' \
-  docs-site/versions.json)
-echo "$UPDATED" > docs-site/versions.json
+  docs-site/versions.json > docs-site/versions.json.tmp && mv docs-site/versions.json.tmp docs-site/versions.json
 ```
 
 **3. Commit and draft PR**
@@ -383,3 +415,21 @@ If `$ARGUMENTS` is a beta release, output:
 - Homebrew: beta release has been published to dfinity/homebrew-tap.
     `brew install dfinity/tap/icp-cli-beta`
 ```
+
+---
+
+## Rollback guidance
+
+If something fails mid-release, here's how to clean up depending on how far you got:
+
+- **Task 1 failed (PR)**: Close the PR and delete the branch. No external state was changed.
+- **Task 2 failed (tag pushed but workflows fail)**: The tag can be deleted if the Release workflow hasn't created a GitHub Release yet:
+  ```bash
+  git push origin --delete v$ARGUMENTS
+  git tag -d v$ARGUMENTS
+  ```
+  If a GitHub Release was already created, delete it first via `gh release delete v$ARGUMENTS --yes`, then delete the tag.
+- **Task 3 failed (Release workflow)**: Investigate the failure. The tag still exists. Once fixed, you can re-run the workflow from the GitHub Actions UI. Do **not** delete and re-push the tag — that creates duplicate runs.
+- **Task 4 failed (NPM publish)**: NPM publishes are not easily reversible. If the publish partially succeeded, check `npm info @icp-sdk/icp-cli versions` and coordinate with the team. The workflow can be re-triggered from the GitHub Actions UI.
+- **Task 5 failed (homebrew-tap)**: Close the PR on `dfinity/homebrew-tap` and delete the branch via the GitHub UI. No packages were published.
+- **Task 7 failed (docs versions)**: Close the PR and delete the branch. The versioned docs are deployed independently and are unaffected.

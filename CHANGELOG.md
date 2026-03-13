@@ -1,5 +1,7 @@
 # Unreleased
 
+* fix: Duplicate identities no longer cause an error when starting a network
+
 # v0.2.1-beta.0
 
 * feat: Added support for creating canisters on cloud engine subnets. Note that local networks cannot yet create these subnets.

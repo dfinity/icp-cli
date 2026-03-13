@@ -493,11 +493,14 @@ pub enum WaitForPortError {
 pub async fn initialize_network(
     api_url: &Url,
     root_key: &[u8],
-    all_identities: Vec<Principal>,
+    mut all_identities: Vec<Principal>,
     default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
     proxy_wasm: Option<&[u8]>,
 ) -> Result<(Option<Principal>, Option<Principal>), InitializeNetworkError> {
+    all_identities.sort_unstable();
+    all_identities.dedup();
+
     info!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
         .with_url(api_url.as_str())

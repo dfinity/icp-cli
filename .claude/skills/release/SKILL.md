@@ -39,17 +39,18 @@ Task 2 (tag)
     |
     +-------------------+
     |                   |
-Task 3              Task 7
+Task 3              Task 6
 (Release workflow)  (docs site versions)
     |               [stable only]
-    +-------+-------+
-    |       |       |
-Task 4  Task 5  Task 6
-(NPM)   (tap)   (homebrew-core check)
-                [stable only]
+    +-------+
+    |       |
+Task 4  Task 5
+(NPM)   (tap)
+    |
+Task 7 (homebrew-core check) [stable only]
 ```
 
-Task 4 requires Task 3 to complete first (needs GitHub release artifacts). Task 5 also requires Task 3 (needs release binaries). Task 6 runs after Task 4 and is only for stable releases. Tasks 4, 5, and 6 can start concurrently once Task 3 completes. Task 7 starts immediately after the tag is pushed (concurrently with Task 3) and is only for stable releases; it must wait for the docs deployment triggered by the tag before its PR can be merged.
+Task 4 requires Task 3 to complete first (needs GitHub release artifacts). Task 5 also requires Task 3 (needs release binaries). Tasks 4 and 5 can start concurrently once Task 3 completes. Task 6 starts immediately after the tag is pushed (concurrently with Task 3) and is only for stable releases; it must wait for the docs deployment triggered by the tag before its PR can be merged. Task 7 runs last, after all other tasks are complete, and is only for stable releases — it checks the status of the Homebrew bot's homebrew-core PR just before the final announcement.
 
 ---
 
@@ -139,7 +140,7 @@ git tag v$ARGUMENTS
 git push origin v$ARGUMENTS
 ```
 
-**After the tag is pushed, start Task 3 in background. If `$ARGUMENTS` is a stable release, also start Task 7 concurrently in background.**
+**After the tag is pushed, start Task 3 in background. If `$ARGUMENTS` is a stable release, also start Task 6 concurrently in background.**
 
 ---
 
@@ -159,7 +160,7 @@ echo "Watching: ${RELEASE_RUN_URL}"
 gh run watch ${RELEASE_RUN_ID} --exit-status
 ```
 
-If it succeeds, start Tasks 4 and 5 concurrently (and Task 6 if stable — but Task 6 requires Task 4, so it runs after Task 4 completes).
+If it succeeds, start Tasks 4 and 5 concurrently.
 
 If it fails, notify the release driver: "Release workflow failed for v$ARGUMENTS: ${RELEASE_RUN_URL} — please investigate before proceeding."
 
@@ -246,42 +247,9 @@ If the PR has failing checks or is not progressing, notify the release driver: "
 
 ---
 
-## Task 6: Check homebrew-core status (stable releases only)
+## Task 6: Update docs site versions (stable releases only)
 
-*Skip if `$ARGUMENTS` is a beta release. Requires Task 4 to be complete.*
-
-Check the homebrew-core PR and extract its URL and state:
-```bash
-HBC_PR=$(gh pr list --repo Homebrew/homebrew-core \
-  --search "icp-cli $ARGUMENTS" \
-  --json number,state,url,mergedAt \
-  --state all)
-HBC_PR_URL=$(echo "$HBC_PR" | jq -r '.[0].url // ""')
-HBC_PR_STATE=$(echo "$HBC_PR" | jq -r '.[0].state // ""')
-```
-
-Determine the **homebrew status line** to use in the release announcement:
-
-- If `$HBC_PR_URL` is empty (no PR found):
-  `- Homebrew: stable release will be published to homebrew-core — BrewTestBot hasn't created the PR yet, check https://github.com/Homebrew/homebrew-core/pulls?q=is%3Apr+icp-cli+$ARGUMENTS later`
-- If `$HBC_PR_STATE` is `OPEN`:
-  `- Homebrew: stable release will be published to homebrew-core — formula PR is in review: $HBC_PR_URL`
-- If `$HBC_PR_STATE` is `MERGED`: check whether the new version is live:
-  ```bash
-  curl -sf https://formulae.brew.sh/api/formula/icp-cli.json | jq -r '.versions.stable'
-  ```
-  - If the returned version equals `$ARGUMENTS`:
-    `- Homebrew: stable release has been published to homebrew-core. \`brew install icp-cli\` (or \`brew upgrade icp-cli\`)`
-  - If the returned version does not equal `$ARGUMENTS`:
-    `- Homebrew: stable release will be published to homebrew-core — formula PR merged but not yet propagated: $HBC_PR_URL`
-
-Proceed to the release announcement with the homebrew status line determined above.
-
----
-
-## Task 7: Update docs site versions (stable releases only)
-
-*Skip if `$ARGUMENTS` is a beta release. Requires Task 2. Runs concurrently with Tasks 3 & 4.*
+*Skip if `$ARGUMENTS` is a beta release. Requires Task 2. Runs concurrently with Task 3.*
 
 The tag push triggers a docs deployment workflow that builds and publishes the versioned docs to `/icp-cli/X.Y/`. The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
 
@@ -350,17 +318,52 @@ Notify the release driver: "Docs versions PR has failing CI: ${DOCS_PR_URL} — 
 
 ---
 
+## Task 7: Check homebrew-core status (stable releases only)
+
+*Skip if `$ARGUMENTS` is a beta release. Runs after all other tasks are complete, just before the release announcement.*
+
+This task checks the status of the BrewTestBot's automatic PR to homebrew-core. This is managed externally by Homebrew — we just check its current state to include in the announcement.
+
+Check the homebrew-core PR and extract its URL and state:
+```bash
+HBC_PR=$(gh pr list --repo Homebrew/homebrew-core \
+  --search "icp-cli $ARGUMENTS" \
+  --json number,state,url,mergedAt \
+  --state all)
+HBC_PR_URL=$(echo "$HBC_PR" | jq -r '.[0].url // ""')
+HBC_PR_STATE=$(echo "$HBC_PR" | jq -r '.[0].state // ""')
+```
+
+Determine the **homebrew-core status line** to use in the release announcement:
+
+- If `$HBC_PR_URL` is empty (no PR found):
+  `- Homebrew (core): BrewTestBot hasn't created the PR yet, check https://github.com/Homebrew/homebrew-core/pulls?q=is%3Apr+icp-cli+$ARGUMENTS later`
+- If `$HBC_PR_STATE` is `OPEN`:
+  `- Homebrew (core): formula PR is in review: $HBC_PR_URL`
+- If `$HBC_PR_STATE` is `MERGED`: check whether the new version is live:
+  ```bash
+  curl -sf https://formulae.brew.sh/api/formula/icp-cli.json | jq -r '.versions.stable'
+  ```
+  - If the returned version equals `$ARGUMENTS`:
+    `- Homebrew (core): published. \`brew install icp-cli\` (or \`brew upgrade icp-cli\`)`
+  - If the returned version does not equal `$ARGUMENTS`:
+    `- Homebrew (core): formula PR merged but not yet propagated: $HBC_PR_URL`
+
+Proceed to the release announcement with the homebrew-core status line determined above.
+
+---
+
 ## Release announcement
 
 When all tasks are complete, output a message ready to copy to the team channel.
 
-If `$ARGUMENTS` is a stable release, output (using the homebrew status line from Task 6):
+If `$ARGUMENTS` is a stable release, output (using the homebrew-core status line from Task 7):
 ```
 🚀 icp-cli v$ARGUMENTS released!
 - Release: https://github.com/dfinity/icp-cli/releases/tag/v$ARGUMENTS
 - NPM: https://www.npmjs.com/package/@icp-sdk/icp-cli/v/$ARGUMENTS
 - Homebrew (tap): published to dfinity/homebrew-tap. `brew install dfinity/tap/icp-cli-beta`
-- <homebrew-core status line from Task 6>
+- <homebrew-core status line from Task 7>
 ```
 
 If `$ARGUMENTS` is a beta release, output:
@@ -387,4 +390,5 @@ If something fails mid-release, here's how to clean up depending on how far you 
 - **Task 3 failed (Release workflow)**: Investigate the failure. The tag still exists. Once fixed, you can re-run the workflow from the GitHub Actions UI. Do **not** delete and re-push the tag — that creates duplicate runs.
 - **Task 4 failed (NPM publish)**: NPM publishes are not easily reversible. If the publish partially succeeded, check `npm info @icp-sdk/icp-cli versions` and coordinate with the team. The workflow can be re-triggered from the GitHub Actions UI.
 - **Task 5 failed (homebrew-tap)**: If the workflow failed, it can be re-triggered. If the PR was created but has issues, close it and delete the branch `update/icp-cli-beta-$ARGUMENTS` on `dfinity/homebrew-tap` via the GitHub UI. No packages were published.
-- **Task 7 failed (docs versions)**: Close the PR and delete the branch. The versioned docs are deployed independently and are unaffected.
+- **Task 6 failed (docs versions)**: Close the PR and delete the branch. The versioned docs are deployed independently and are unaffected.
+- **Task 7 (homebrew-core check)**: This task is read-only — no cleanup needed. If it fails, just check manually.

@@ -282,9 +282,10 @@ async fn canister_settings_update_controllers() {
             "--environment",
             "random-environment",
             "--force",
-            "--set-controller",
+            "--remove-all-controllers",
+            "--add-controller",
             principal_alice.as_str(),
-            "--set-controller",
+            "--add-controller",
             principal_bob.as_str(),
         ])
         .assert()

@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat!: Remove `--set-controller` and replace with a new flag `--remove-all-controllers`. For the old behavior, combine this flag with `--add-controller`
+
 # v0.2.1-beta.0
 
 * feat: Added support for creating canisters on cloud engine subnets. Note that local networks cannot yet create these subnets.

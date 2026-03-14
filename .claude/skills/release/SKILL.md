@@ -3,7 +3,7 @@ name: release
 description: Release a new version of icp-cli. Use when the user asks to do a release or cut a new version. Requires a semver VERSION argument.
 argument-hint: <VERSION>
 disable-model-invocation: true
-allowed-tools: Read, Edit, Bash(git *), Bash(gh *), Bash(cargo check -q), Bash(curl *), Bash(jq *), Bash(shasum *), Bash(awk *), Bash(sed *), Bash(base64 *), Bash(tr *), Bash(uname *), Bash(sleep *), Bash(echo *)
+allowed-tools: Read, Edit, Write, Bash(*), Agent
 ---
 
 Release VERSION: **$ARGUMENTS**

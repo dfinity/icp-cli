@@ -26,14 +26,16 @@ gh run watch --repo dfinity/homebrew-tap ${TAP_RUN_ID} --exit-status
 
 If it fails, notify the release driver: "homebrew-tap workflow failed for $ARGUMENTS: ${TAP_RUN_URL} — please investigate."
 
-**3. Watch the generated PR until merge**
+**3. Ask the release driver to approve and merge the generated PR**
 
-The workflow creates a PR titled `icp-cli-beta $ARGUMENTS` with the `merge-without-publishing` label. Find the PR and watch its status:
+The workflow creates a PR titled `icp-cli-beta $ARGUMENTS` from the `update/icp-cli-beta-$ARGUMENTS` branch. Find the PR URL:
 ```bash
 TAP_PR_URL=$(gh pr list --repo dfinity/homebrew-tap \
   --search "icp-cli-beta $ARGUMENTS" --json url --jq '.[0].url')
 echo "homebrew-tap PR: ${TAP_PR_URL}"
 ```
+
+Notify the release driver: "Please approve and merge the homebrew-tap PR: ${TAP_PR_URL}"
 
 Poll until the PR is merged:
 ```bash

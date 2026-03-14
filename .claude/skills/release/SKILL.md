@@ -50,7 +50,9 @@ Task 4  Task 5
 Task 7 (homebrew-core check) [stable only]
 ```
 
-Task 4 requires Task 3 to complete first (needs GitHub release artifacts). Task 5 also requires Task 3 (needs release binaries). Tasks 4 and 5 can start concurrently once Task 3 completes. Task 6 starts immediately after the tag is pushed (concurrently with Task 3) and is only for stable releases; it must wait for the docs deployment triggered by the tag before its PR can be merged. Task 7 runs last, after all other tasks are complete, and is only for stable releases — it checks the status of the Homebrew bot's homebrew-core PR just before the final announcement.
+- **Tasks 4 & 5** require Task 3 (need GitHub release artifacts) and can start concurrently once it completes.
+- **Task 6** starts immediately after Task 2 (the tag push), running concurrently with Task 3. Stable-only; must wait for the docs deployment triggered by the tag before its PR can be merged.
+- **Task 7** runs last, after all other tasks complete. Stable-only — checks the Homebrew bot's homebrew-core PR status before the final announcement.
 
 ## Tasks
 

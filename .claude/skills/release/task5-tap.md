@@ -4,7 +4,7 @@
 
 **1. Trigger the update workflow**
 
-The `update-icp-cli-beta.yml` workflow in `dfinity/homebrew-tap` handles formula updates and PR creation. The version input must be **without** the `v` prefix:
+The `dfinity/homebrew-tap` repo names everything with `icp-cli-beta` (formula, workflow, branches) to distinguish from the `icp-cli` formula in homebrew-core. This workflow is used for both stable and beta releases. The version input must be **without** the `v` prefix:
 ```bash
 gh workflow run update-icp-cli-beta.yml --repo dfinity/homebrew-tap \
   --field version=$ARGUMENTS

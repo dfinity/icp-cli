@@ -3,6 +3,7 @@
 *Requires Task 3 to be complete.*
 
 ```bash
+# "Publish to npm" is the workflow *name* (not filename release-npm.yml)
 gh workflow run "Publish to npm" \
   --field version=v$ARGUMENTS \
   --field npm_package_version=$ARGUMENTS \

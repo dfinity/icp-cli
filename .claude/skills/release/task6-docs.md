@@ -37,16 +37,16 @@ jq --arg v "$MINOR_VERSION" \
 git add docs-site/versions.json
 git commit -m "chore: update docs site to v${MINOR_VERSION}"
 git push -u origin ${USERNAME}/docs-versions-$ARGUMENTS
-gh pr create --draft \
-  --title "chore: update docs site to v${MINOR_VERSION}" \
-  --body "$(cat <<'EOF'
+cat > /tmp/docs-pr-body.md <<EOF
 ## Summary
 
-- `docs-site/versions.json`: add v${MINOR_VERSION} as the new latest version
+- \`docs-site/versions.json\`: add v${MINOR_VERSION} as the new latest version
 
-Updates the version switcher and root redirect (`dfinity.github.io/icp-cli/`) to point to the new stable release. Must be merged only after the versioned docs are confirmed deployed.
+Updates the version switcher and root redirect (\`dfinity.github.io/icp-cli/\`) to point to the new stable release. Must be merged only after the versioned docs are confirmed deployed.
 EOF
-)"
+gh pr create --draft \
+  --title "chore: update docs site to v${MINOR_VERSION}" \
+  --body-file /tmp/docs-pr-body.md
 ```
 
 **4. Monitor CI and notify**

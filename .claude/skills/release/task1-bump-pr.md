@@ -31,21 +31,21 @@ git commit -m "chore: release v$ARGUMENTS"
 **4. Draft PR**
 ```bash
 git push -u origin "$(gh api user --jq '.login')/release_$ARGUMENTS"
-gh pr create --draft \
-  --title "chore: release v$ARGUMENTS" \
-  --body "$(cat <<'EOF'
+cat > /tmp/release-pr-body.md <<EOF
 ## Summary
 
-- `Cargo.toml`: version bumped to `$ARGUMENTS`
-- `Cargo.lock`: updated
-- `CHANGELOG.md`: entries consolidated under `# v$ARGUMENTS`
+- \`Cargo.toml\`: version bumped to \`$ARGUMENTS\`
+- \`Cargo.lock\`: updated
+- \`CHANGELOG.md\`: entries consolidated under \`# v$ARGUMENTS\`
 
 ### Review checklist
 - [ ] CI passes
 - [ ] Changelog entries look correct
 - [ ] Version number is correct
 EOF
-)"
+gh pr create --draft \
+  --title "chore: release v$ARGUMENTS" \
+  --body-file /tmp/release-pr-body.md
 ```
 
 **5. Monitor CI and notify**

@@ -162,9 +162,12 @@
 <p>When the canister already exists:</p>
 <ol>
 <li>The existing canister is located by ID</li>
+<li>The canister is <strong>stopped</strong> (waits for in-flight messages to finish)</li>
 <li>New WASM code is <strong>upgraded</strong> (preserving stable memory)</li>
+<li>The canister is <strong>started</strong> again</li>
 <li>Settings are updated if changed</li>
 </ol>
+<p>Stopping the canister before upgrading ensures no messages are being processed during the code swap, preventing potential data inconsistencies.</p>
 <h2 id="sync-phase">Sync Phase</h2>
 <p>The sync phase handles post-deployment operations that depend on the canister being deployed.</p>
 <h3 id="common-use-cases">Common Use Cases</h3>
@@ -223,7 +226,7 @@
 <ul>
 <li>Skip the canister creation</li>
 <li>Settings and Canister Environment Variables are applied if they’ve changed.</li>
-<li>WASM code is upgraded, preserving canister state</li>
+<li>Canisters are stopped, WASM code is upgraded (preserving canister state), then canisters are restarted</li>
 </ul>
 <p>Unlike <code>icp canister create</code> (which prints “already exists” and exits), <code>icp deploy</code> silently skips creation for existing canisters and continues with the remaining steps.</p>
 <h3 id="install-modes">Install Modes</h3>

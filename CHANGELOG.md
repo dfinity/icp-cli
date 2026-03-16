@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: `icp new` now always creates `.icp/data/.gitkeep` in the generated project, ensuring the data directory (which stores mainnet canister ID mappings) is tracked in version control even when the template does not include it
 * fix: Duplicate identities no longer cause an error when starting a network
 
 # v0.2.1-beta.0

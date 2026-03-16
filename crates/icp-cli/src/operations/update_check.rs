@@ -45,6 +45,7 @@ pub(crate) async fn update_check(ctx: &icp::context::Context) -> Option<String> 
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("since epoch")
         .as_secs();
+    let _ = icp::fs::create_dir_all(nag_path.parent().unwrap());
     let _ = icp::fs::write(&nag_path, format!("{now}\n").as_bytes());
 
     let client = reqwest::Client::new();

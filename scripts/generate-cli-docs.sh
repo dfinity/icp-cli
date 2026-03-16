@@ -14,7 +14,18 @@ echo "Building the CLI..."
 cargo build
 
 echo "Generating markdown documentation..."
-$(cargo metadata --no-deps --format-version=1 | jq -r .target_directory)/debug/icp --markdown-help > $(git rev-parse --show-toplevel)/docs/reference/cli.md
+CLI_DOC=$(git rev-parse --show-toplevel)/docs/reference/cli.md
+{
+  cat <<'FRONTMATTER'
+---
+title: CLI Reference
+description: Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+---
+FRONTMATTER
+  # Strip the auto-generated H1 heading — Starlight renders the frontmatter title as H1.
+  # The blank line after the H1 is kept, serving as the separator after the frontmatter.
+  $(cargo metadata --no-deps --format-version=1 | jq -r .target_directory)/debug/icp --markdown-help | sed '1{/^# /d;}'
+} > "$CLI_DOC"
 
 # Fix clap-markdown behavior where it prepends command path to override_usage.
 # The token subcommands use override_usage to show the full usage including the
@@ -22,9 +33,9 @@ $(cargo metadata --no-deps --format-version=1 | jq -r .target_directory)/debug/i
 # resulting in "icp token icp token ...". This sed command removes the duplication.
 # Note: sed -i has different syntax on macOS vs Linux
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' -e 's/icp token icp token/icp token/g' -e 's/icp icp settings/icp settings/g' $(git rev-parse --show-toplevel)/docs/reference/cli.md
+    sed -i '' -e 's/icp token icp token/icp token/g' -e 's/icp icp settings/icp settings/g' "$CLI_DOC"
 else
-    sed -i -e 's/icp token icp token/icp token/g' -e 's/icp icp settings/icp settings/g' $(git rev-parse --show-toplevel)/docs/reference/cli.md
+    sed -i -e 's/icp token icp token/icp token/g' -e 's/icp icp settings/icp settings/g' "$CLI_DOC"
 fi
 
 echo "Documentation generated successfully at docs/reference/cli.md"

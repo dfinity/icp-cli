@@ -1,4 +1,7 @@
-# Quickstart
+---
+title: Quickstart
+description: Install icp-cli and deploy a full-stack Internet Computer app to a local network in under 5 minutes.
+---
 
 Deploy a full-stack app to a local network in under 5 minutes.
 

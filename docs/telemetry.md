@@ -1,4 +1,7 @@
-# Telemetry
+---
+title: Telemetry
+description: Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
+---
 
 `icp` collects anonymous usage data to help the team understand how the tool is used, prioritize features, and identify issues. This page describes what is collected, how to opt out, and how the system works.
 

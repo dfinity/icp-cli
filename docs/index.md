@@ -1,3 +1,8 @@
+---
+title: icp-cli Documentation
+description: Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
+---
+
 Build and deploy applications on the [Internet Computer](https://internetcomputer.org).
 
 ## Start Here

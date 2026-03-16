@@ -42,7 +42,7 @@ Documentation follows the Diátaxis framework:
 Source documentation in `docs/` must work in two contexts:
 
 1. **GitHub**: Renders Markdown directly with `.md` extensions
-2. **Starlight docs site**: `scripts/prepare-docs.sh` transforms links to clean URLs
+2. **Starlight docs site**: A rehype plugin (`docs-site/plugins/rehype-rewrite-links.mjs`) transforms links to clean URLs at build time
 
 **Link format rules:**
 
@@ -62,4 +62,4 @@ Source documentation in `docs/` must work in two contexts:
 [root-level link](../tutorial.md)
 ```
 
-The `prepare-docs.sh` script handles the transformation to Starlight's URL structure. If you add new link patterns, verify they work by building the docs site locally with `cd docs-site && npm run build`.
+The rehype plugin handles the transformation to Starlight's URL structure at build time. If you add new link patterns, verify they work by building the docs site locally with `cd docs-site && npm run build`.

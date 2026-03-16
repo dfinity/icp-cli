@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeExternalLinks from 'rehype-external-links';
+import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
 
 // https://astro.build/config
 export default defineConfig({
@@ -11,6 +12,8 @@ export default defineConfig({
   base: process.env.PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? process.env.PUBLIC_BASE_PREFIX + '/' : '/'),
   markdown: {
     rehypePlugins: [
+      // Rewrite relative .md links for Astro's directory-based output
+      rehypeRewriteLinks,
       // Open external links in new tab
       [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
     ],
@@ -22,6 +25,7 @@ export default defineConfig({
       favicon: '/favicon.png',
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
+        Banner: './src/components/Banner.astro',
       },
       head: [
         {

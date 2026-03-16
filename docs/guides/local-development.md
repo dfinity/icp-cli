@@ -1,4 +1,7 @@
-# Local Development
+---
+title: Local Development
+description: Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
+---
 
 This guide covers the day-to-day development workflow with icp-cli.
 

@@ -1,4 +1,7 @@
-# Canister Snapshots
+---
+title: Canister Snapshots
+description: Back up, transfer, and restore full canister state using snapshots.
+---
 
 Snapshots capture a canister's full state — WASM module, WASM memory, stable memory, and chunk store. Use them to back up canister state, transfer state between canisters, or recover from failed upgrades.
 

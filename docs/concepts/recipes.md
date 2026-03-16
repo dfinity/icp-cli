@@ -1,4 +1,7 @@
-# Recipes
+---
+title: Recipes
+description: How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
+---
 
 Recipes are templated build configurations that generate build and sync steps. They reduce boilerplate and encode best practices for common patterns.
 

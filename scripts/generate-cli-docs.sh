@@ -22,8 +22,9 @@ title: CLI Reference
 description: Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
 ---
 FRONTMATTER
-  echo ""
-  $(cargo metadata --no-deps --format-version=1 | jq -r .target_directory)/debug/icp --markdown-help
+  # Strip the auto-generated H1 heading — Starlight renders the frontmatter title as H1.
+  # The blank line after the H1 is kept, serving as the separator after the frontmatter.
+  $(cargo metadata --no-deps --format-version=1 | jq -r .target_directory)/debug/icp --markdown-help | sed '1{/^# /d;}'
 } > "$CLI_DOC"
 
 # Fix clap-markdown behavior where it prepends command path to override_usage.

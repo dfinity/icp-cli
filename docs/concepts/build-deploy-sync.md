@@ -98,8 +98,12 @@ When deploying a canister for the first time:
 When the canister already exists:
 
 1. The existing canister is located by ID
-2. New WASM code is **upgraded** (preserving stable memory)
-3. Settings are updated if changed
+2. The canister is **stopped** (waits for in-flight messages to finish)
+3. New WASM code is **upgraded** (preserving stable memory)
+4. The canister is **started** again
+5. Settings are updated if changed
+
+Stopping the canister before upgrading ensures no messages are being processed during the code swap, preventing potential data inconsistencies.
 
 ## Sync Phase
 
@@ -161,7 +165,7 @@ The `icp deploy` command is a composite command that executes multiple steps in 
 **Subsequent deployments:**
 - Skip the canister creation
 - Settings and Canister Environment Variables are applied if they've changed.
-- WASM code is upgraded, preserving canister state
+- Canisters are stopped, WASM code is upgraded (preserving canister state), then canisters are restarted
 
 Unlike `icp canister create` (which prints "already exists" and exits), `icp deploy` silently skips creation for existing canisters and continues with the remaining steps.
 

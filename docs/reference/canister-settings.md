@@ -111,6 +111,24 @@ settings:
   wasm_memory_threshold: 512mib
 ```
 
+### log_memory_limit
+
+Maximum memory for storing canister logs. Oldest logs are purged when usage exceeds this limit.
+
+| Property | Value |
+|----------|-------|
+| Type | Integer or string with suffix |
+| Unit | Bytes (accepts suffixes) |
+| Max | 2 MiB |
+| Default | 4096 bytes |
+
+```yaml
+settings:
+  log_memory_limit: 2mib
+```
+
+Memory values accept suffixes: `kb` (1,000), `kib` (1,024), `mb` (1,000,000), `mib` (1,048,576). Raw byte counts are also accepted.
+
 ### log_visibility
 
 Controls who can read canister logs.
@@ -176,6 +194,7 @@ canisters:
       wasm_memory_limit: 1gib
       wasm_memory_threshold: 512mib
       log_visibility: controllers
+      log_memory_limit: 2mib
       environment_variables:
         ENV: "production"
         API_BASE_URL: "https://api.example.com"

@@ -62,6 +62,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp settings`↴](#icp-settings)
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp settings telemetry`↴](#icp-settings-telemetry)
+* [`icp settings update-check`↴](#icp-settings-update-check)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -1305,6 +1306,7 @@ Configure user settings
 
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
 * `telemetry` — Enable or disable anonymous usage telemetry
+* `update-check` — Enable or disable the CLI update check
 
 
 
@@ -1334,6 +1336,21 @@ Enable or disable anonymous usage telemetry
 * `<VALUE>` — Set to true or false. If omitted, prints the current value
 
   Possible values: `true`, `false`
+
+
+
+
+## `icp settings update-check`
+
+Enable or disable the CLI update check
+
+**Usage:** `icp settings update-check [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to releases, betas, or disabled. If omitted, prints the current value
+
+  Possible values: `releases`, `betas`, `disabled`
 
 
 

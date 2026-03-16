@@ -10,4 +10,5 @@ pub(crate) mod sync;
 pub(crate) mod token;
 
 pub(crate) mod misc;
+pub(crate) mod update_check;
 pub(crate) mod wasm;

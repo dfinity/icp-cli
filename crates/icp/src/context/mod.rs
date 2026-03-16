@@ -69,6 +69,7 @@ pub enum CanisterSelection {
     Principal(Principal),
 }
 
+#[derive(Clone)]
 pub struct Context {
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Arc<dyn directories::Access>,

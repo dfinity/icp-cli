@@ -505,6 +505,8 @@ If you have existing canisters on mainnet that you want to continue managing wit
 - **Connected networks (ic, mainnet):** `.icp/data/mappings/<environment>.ids.json`
 - **Managed networks (local):** `.icp/cache/mappings/<environment>.ids.json`
 
+> **Important:** Unlike `.dfx/` (which was typically gitignored entirely), `.icp/data/` contains your mainnet canister ID mappings and should be committed to version control. Only `.icp/cache/` should be gitignored. Losing these mappings means you'll need to manually look up your canister IDs.
+
 For the ic environment, create `.icp/data/mappings/ic.ids.json`:
 
 ```json

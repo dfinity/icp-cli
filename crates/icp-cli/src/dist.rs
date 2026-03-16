@@ -23,6 +23,7 @@ static DIST_CHANNEL: LazyLock<DistChannel> = LazyLock::new(|| {
         Some("homebrew-core") => DistChannel::HomebrewCore,
         Some("homebrew-beta") => DistChannel::HomebrewBeta,
         Some("npm") => DistChannel::Npm,
+        Some("dist") => DistChannel::AxoDist, // envvar is not used for dist currently, this is just for testing
         Some(_) => DistChannel::Custom,
         None => {
             let mut updater = AxoUpdater::new_for("icp-cli");
@@ -120,10 +121,9 @@ async fn check_github(
             })
         })
         .and_then(|r| r["tag_name"].as_str());
-
     Ok(tag
-        .filter(|t| newer_than_current(t.strip_prefix(prefix).unwrap_or(t)))
-        .map(|v| v.to_string()))
+        .map(|t| t.strip_prefix(prefix).unwrap_or(t).to_string())
+        .filter(|t| newer_than_current(t)))
 }
 
 async fn check_homebrew(client: &Client, formula: &str) -> reqwest::Result<Option<String>> {

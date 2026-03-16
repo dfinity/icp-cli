@@ -19,4 +19,3 @@ docs-site/.astro/
 docs-site/dist/
 docs-site/dist-test/
 docs-site/node_modules/
-docs-site/.docs-temp/

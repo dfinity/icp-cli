@@ -10,13 +10,11 @@ on:
     paths:
       - 'docs/**'
       - 'docs-site/**'
-      - 'scripts/prepare-docs.sh'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs/**'
       - 'docs-site/**'
-      - 'scripts/prepare-docs.sh'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 

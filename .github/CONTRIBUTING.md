@@ -94,15 +94,12 @@ Documentation follows the [Diátaxis framework](https://diataxis.fr/):
 
 The documentation site uses [Astro](https://astro.build/) with [Starlight](https://starlight.astro.build/):
 
-1. **Source files** (`docs/`) are plain Markdown without frontmatter
-2. **Build script** (`scripts/prepare-docs.sh`) runs before each build and:
-   - Copies docs to `.docs-temp/` directory (excluding schemas and READMEs)
-   - Adjusts relative paths and strips `.md` extensions for Starlight's clean URLs
-   - Extracts titles from H1 headings and adds frontmatter
-3. **Starlight** reads from `.docs-temp/` and builds the site
+1. **Source files** (`docs/`) are Markdown with minimal YAML frontmatter (title + description)
+2. **Starlight** reads directly from `docs/` via the glob content loader
+3. **Rehype plugin** (`docs-site/plugins/rehype-rewrite-links.mjs`) rewrites `.md` links at build time for Starlight's clean URLs
 4. **GitHub Actions** automatically deploys to GitHub Pages on push to main
 
-This architecture keeps source docs clean and GitHub-friendly while providing a polished documentation site.
+This architecture keeps source docs GitHub-friendly (`.md` links work on GitHub) while producing clean URLs on the documentation site.
 
 ### Versioned Documentation Deployment
 
@@ -194,7 +191,7 @@ When submitting a documentation PR:
 - Check that all links work (both in GitHub and on the site)
 - Follow the Diátaxis framework for placing content in the right section
 - Verify your examples work by testing them
-- Run `./scripts/prepare-docs.sh` locally to check for build errors
+- Run `npm run build` in `docs-site/` locally to check for build errors
 
 For more details on the documentation system, see:
 - [docs/README.md](../docs/README.md) - Documentation writing guide

@@ -1,4 +1,7 @@
-# Deploying to Specific Subnets
+---
+title: Deploying to Specific Subnets
+description: Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.
+---
 
 The Internet Computer is composed of independent [subnets](https://learn.internetcomputer.org/hc/en-us/articles/34209955782420-Subnet-Creation) — each a blockchain that hosts canisters. By default, icp-cli selects a subnet automatically, but you can target specific subnets when needed.
 

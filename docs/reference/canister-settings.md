@@ -1,4 +1,7 @@
-# Canister Settings Reference
+---
+title: Canister Settings Reference
+description: All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
+---
 
 Complete reference for all canister settings available in icp-cli.
 

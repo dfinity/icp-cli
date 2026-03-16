@@ -1,4 +1,7 @@
-# Tutorial
+---
+title: Tutorial
+description: Step-by-step walkthrough of deploying a full-stack Motoko and React app on the Internet Computer.
+---
 
 This tutorial walks through deploying a full-stack app on the Internet Computer, explaining each step along the way.
 

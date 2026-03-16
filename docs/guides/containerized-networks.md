@@ -1,4 +1,7 @@
-# Using Containerized Networks
+---
+title: Using Containerized Networks
+description: Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
+---
 
 Run ICP test networks in Docker containers for isolated, reproducible development environments.
 

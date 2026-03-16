@@ -1,4 +1,7 @@
-# Configuration Reference
+---
+title: Configuration Reference
+description: Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
+---
 
 Complete reference for `icp.yaml` project configuration.
 

@@ -17,21 +17,24 @@ docs/
 
 ## Writing Documentation
 
-Write plain Markdown without frontmatter:
+Each Markdown file needs minimal YAML frontmatter with a title and description:
 
 ```markdown
-# Your Page Title
+---
+title: Your Page Title
+description: A brief summary of what this page covers.
+---
 
 Content here...
 ```
 
-The build process automatically extracts the title from the first `# Heading` and adds frontmatter to a temporary copy.
+Starlight renders the `title` as the page's H1 heading, so do **not** add a separate `# Heading` in the content.
 
 ### Best Practices
 
 - Use standard Markdown - keep it simple and GitHub-friendly
-- Start with H1 heading: `# Title`
-- Use relative links: `[text](./other-doc.md)`
+- Always include `title` and `description` in frontmatter
+- Use relative links with `.md` extensions: `[text](./other-doc.md)` (works on GitHub; a rehype plugin strips `.md` at build time)
 - Use `.md` files (not `.mdx`) for better GitHub rendering
 - Code blocks with language: ` ```bash `
 
@@ -46,17 +49,9 @@ Run these scripts when command-line options or config types change.
 
 ## Build Process
 
-The documentation website is built using [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/). The build process is handled by `scripts/prepare-docs.sh`, which:
+The documentation website is built using [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/). Starlight reads directly from the `docs/` directory via a glob content loader — no preprocessing step is needed.
 
-1. Copies markdown files from `docs/` to `docs-site/.docs-temp/` (excluding schemas and READMEs)
-2. Adjusts relative paths and strips `.md` extensions for Starlight's clean URLs
-3. Adds frontmatter (extracts title from H1 heading)
-
-This keeps source docs clean and framework-agnostic while enabling a polished documentation site. The script runs automatically during the build process (`npm run build` in `docs-site/`), but you can also run it manually:
-
-```bash
-./scripts/prepare-docs.sh
-```
+A rehype plugin (`docs-site/plugins/rehype-rewrite-links.mjs`) rewrites `.md` links at build time so that relative links with `.md` extensions work on both GitHub and the documentation site.
 
 ## Preview
 
@@ -85,8 +80,8 @@ The documentation website is automatically built and deployed to GitHub Pages:
 ## Adding New Documentation
 
 1. Create a `.md` file in the appropriate directory
-2. Start with a `# Heading` (used as page title)
-3. Write standard Markdown content
+2. Add YAML frontmatter with `title` and `description`
+3. Write standard Markdown content (no H1 heading — Starlight renders the title)
 4. Add the page to the sidebar in `../docs-site/astro.config.mjs` under the appropriate section:
    ```js
    {

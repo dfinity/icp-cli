@@ -1,4 +1,7 @@
-# Build, Deploy, Sync
+---
+title: Build, Deploy, Sync
+description: Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
+---
 
 Canisters go through three distinct phases when moving from source code to running on the Internet Computer.
 

@@ -1,4 +1,7 @@
-# Creating Recipes
+---
+title: Creating Recipes
+description: Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
+---
 
 Recipes are reusable build templates that you can create to encode your team's build conventions or share them with the community.
 

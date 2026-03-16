@@ -4,11 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "prepare-docs": "../scripts/prepare-docs.sh ../docs .docs-temp",
-    "dev": "npm run clean && npm run prepare-docs && astro dev",
-    "build": "npm run prepare-docs && astro build",
-    "preview": "astro preview",
-    "clean": "rm -rf .docs-temp dist .astro"
+    "dev": "npm run clean && astro dev",
+    "build": "astro build",
+    "preview": "npm run build && astro preview",
+    "clean": "rm -rf dist .astro"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
@@ -18,6 +17,7 @@
   },
   "devDependencies": {
     "rehype-external-links": "^3.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "unist-util-visit": "^5.1.0"
   }
 }

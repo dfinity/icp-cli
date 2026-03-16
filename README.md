@@ -107,9 +107,6 @@ cargo fmt && cargo clippy
 # Preview documentation site locally
 cd docs-site && npm install && npm run dev
 # Opens at http://localhost:4321
-
-# Prepare docs for build (runs automatically during build)
-./scripts/prepare-docs.sh
 ```
 
 Documentation structure follows the [Diátaxis framework](https://diataxis.fr/):

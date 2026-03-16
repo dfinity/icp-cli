@@ -212,7 +212,23 @@ pub(crate) async fn exec(
 
     debug!("Generating project with {generate_args:#?}");
 
-    generate(generate_args).context("Error generating project")?;
+    let project_path = generate(generate_args).context("Error generating project")?;
+    let project_path =
+        icp::prelude::PathBuf::try_from(project_path).context("Project path is not UTF-8")?;
+
+    let gitkeep = project_path.join(".icp/data/.gitkeep");
+    if !gitkeep.exists() {
+        icp::fs::create_dir_all(
+            gitkeep
+                .parent()
+                .expect(".icp/data/.gitkeep always has a parent"),
+        )
+        .context("Failed to create .icp/data directory")?;
+        icp::fs::write(&gitkeep, &[]).context("Failed to create .icp/data/.gitkeep")?;
+        tracing::info!(
+            "Added .icp/data/.gitkeep to ensure the data directory is tracked in version control"
+        );
+    }
 
     Ok(())
 }

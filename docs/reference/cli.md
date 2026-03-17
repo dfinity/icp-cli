@@ -445,9 +445,9 @@ Change a canister's settings to specified values
 * `--remove-controller <REMOVE_CONTROLLER>` — Remove one or more principals from the canister's controller list.
 
    Warning: Removing yourself will cause you to lose control of the canister.
-* `--set-controller <SET_CONTROLLER>` — Replace the canister's controller list with the specified principals.
+* `--remove-all-controllers` — Remove all controllers.
 
-   Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
+   Warning: This will cause you to lose control of the canister, unless you add your user principal back in `--add-controller` in the same command.
 * `--compute-allocation <COMPUTE_ALLOCATION>`
 * `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds

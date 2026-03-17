@@ -15,26 +15,27 @@ use crate::commands::args;
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
     /// Add one or more principals to the canister's controller list.
-    #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
+    #[arg(long, action = ArgAction::Append)]
     add_controller: Option<Vec<Principal>>,
 
     /// Remove one or more principals from the canister's controller list.
     ///
     /// Warning: Removing yourself will cause you to lose control of the canister.
-    #[arg(long, action = ArgAction::Append, conflicts_with("set_controller"))]
+    #[arg(long, action = ArgAction::Append)]
     remove_controller: Option<Vec<Principal>>,
 
-    /// Replace the canister's controller list with the specified principals.
+    /// Remove all controllers.
     ///
-    /// Warning: This removes all existing controllers not in the new list.
-    /// If you don't include yourself, you will lose control of the canister.
-    #[arg(long, action = ArgAction::Append)]
-    set_controller: Option<Vec<Principal>>,
+    /// Warning: This will cause you to lose control of the canister, unless you
+    /// add your user principal back in `--add-controller` in the same command.
+    #[arg(long, conflicts_with = "remove_controller")]
+    remove_all_controllers: bool,
 }
 
 impl ControllerOpt {
     pub(crate) fn require_current_settings(&self) -> bool {
-        self.add_controller.is_some() || self.remove_controller.is_some()
+        !self.remove_all_controllers
+            && (self.add_controller.is_some() || self.remove_controller.is_some())
     }
 }
 
@@ -344,9 +345,7 @@ fn get_controllers(
     controllers: &ControllerOpt,
     current_status: Option<&CanisterStatusResult>,
 ) -> Option<Vec<Principal>> {
-    if let Some(controllers) = controllers.set_controller.as_ref() {
-        return Some(controllers.clone());
-    } else if controllers.require_current_settings() {
+    if controllers.require_current_settings() {
         let mut current_controllers: HashSet<Principal> = current_status
             .as_ref()
             .expect("current status should be ready")
@@ -365,10 +364,12 @@ fn get_controllers(
             }
         }
 
-        return Some(current_controllers.into_iter().collect::<Vec<Principal>>());
+        Some(current_controllers.into_iter().collect::<Vec<Principal>>())
+    } else if controllers.remove_all_controllers {
+        Some(controllers.add_controller.clone().unwrap_or_default())
+    } else {
+        None
     }
-
-    None
 }
 
 fn get_log_visibility(

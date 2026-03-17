@@ -6,10 +6,9 @@ import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
 // https://astro.build/config
 export default defineConfig({
   site: process.env.PUBLIC_SITE,
-  // For versioned deployments: /icp-cli/0.1/, /icp-cli/0.2/, etc.
-  // For non-versioned: /icp-cli/ in production, / in development
-  // Defaults are set in the workflow, not here
-  base: process.env.PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? process.env.PUBLIC_BASE_PREFIX + '/' : '/'),
+  // For versioned deployments: /0.1/, /0.2/, etc.
+  // PUBLIC_BASE_PATH is set per-version in CI (e.g., /0.2/, /main/)
+  base: process.env.PUBLIC_BASE_PATH || '/',
   markdown: {
     rehypePlugins: [
       // Rewrite relative .md links for Astro's directory-based output

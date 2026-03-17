@@ -96,7 +96,7 @@ Removes `dist/` and `.astro/` directories
 
 ## Deployment
 
-The site is hosted on an IC asset canister and served at `https://cli.icp.build`.
+The site is hosted on an IC asset canister and served at `https://cli.internetcomputer.org`.
 
 **Canister ID**: `ak73b-maaaa-aaaad-qlbgq-cai`
 
@@ -113,13 +113,13 @@ The site is hosted on an IC asset canister and served at `https://cli.icp.build`
 
 ### Legacy redirect
 
-The old GitHub Pages site at `https://dfinity.github.io/icp-cli/` redirects all paths to `https://cli.icp.build/`.
+The old GitHub Pages site at `https://dfinity.github.io/icp-cli/` redirects all paths to `https://cli.internetcomputer.org/`.
 
 ## Configuration
 
 ### Site Settings
 In `astro.config.mjs`:
-- `site`: Base URL (`https://cli.icp.build` in production)
+- `site`: Base URL (`https://cli.internetcomputer.org` in production)
 - `base`: Version path (set via `PUBLIC_BASE_PATH`, e.g., `/0.2/`, `/main/`)
 - `title`, `description`: Site metadata
 - `logo`: ICP logo configuration

@@ -80,7 +80,7 @@ If you want to submit a pull request to fix an issue or add a feature, here's a 
 
 ## Contributing to Documentation
 
-The documentation lives in the `docs/` directory and is deployed to https://cli.icp.build.
+The documentation lives in the `docs/` directory and is deployed to https://cli.internetcomputer.org.
 
 ### Documentation Structure
 

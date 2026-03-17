@@ -5,16 +5,16 @@ This document explains how the versioned documentation system works for the ICP 
 ## Overview
 
 The documentation site supports multiple versions simultaneously:
-- `https://cli.icp.build/` → Redirects to latest version
-- `https://cli.icp.build/0.1/` → Version 0.1 docs
-- `https://cli.icp.build/0.2/` → Version 0.2 docs
-- `https://cli.icp.build/main/` → Main branch docs (preview)
+- `https://cli.internetcomputer.org/` → Redirects to latest version
+- `https://cli.internetcomputer.org/0.1/` → Version 0.1 docs
+- `https://cli.internetcomputer.org/0.2/` → Version 0.2 docs
+- `https://cli.internetcomputer.org/main/` → Main branch docs (preview)
 
 Users can switch between versions using the version switcher dropdown in the header.
 
 ## Architecture
 
-The site is hosted on an IC asset canister (`ak73b-maaaa-aaaad-qlbgq-cai`) and served via the custom domain `cli.icp.build`.
+The site is hosted on an IC asset canister (`ak73b-maaaa-aaaad-qlbgq-cai`) and served via the custom domain `cli.internetcomputer.org`.
 
 ### Deployment branch
 

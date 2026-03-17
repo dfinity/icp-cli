@@ -2,13 +2,11 @@
 .DS_Store
 .cursor
 
-# Local (directories)
-.icp
+# icp-cli internal cache directory
+.icp/cache
 
-# This directory contains canister ID mappings which are encouraged
-# to be included in source control of icp canister projects.
-# They are ignored here because we are developing icp-cli itself.
-.icpdata
+# icp-cli state in examples (not source-controlled in this repo)
+examples/*/.icp/
 
 # often-used binaries
 pocket-ic

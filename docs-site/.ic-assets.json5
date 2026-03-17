@@ -1,0 +1,30 @@
+[
+  {
+    // Static assets built by Astro — content-hashed filenames, cache forever
+    "match": "**/_astro/**",
+    "headers": {
+      "Cache-Control": "public, max-age=31536000, immutable"
+    }
+  },
+  {
+    // Search index
+    "match": "**/pagefind/**",
+    "headers": {
+      "Cache-Control": "public, max-age=31536000, immutable"
+    }
+  },
+  {
+    // HTML pages — short cache so updates are visible quickly
+    "match": "**/*.html",
+    "headers": {
+      "Cache-Control": "public, max-age=300"
+    }
+  },
+  {
+    // Version list — very short cache so version switcher sees updates quickly
+    "match": "versions.json",
+    "headers": {
+      "Cache-Control": "public, max-age=60"
+    }
+  }
+]

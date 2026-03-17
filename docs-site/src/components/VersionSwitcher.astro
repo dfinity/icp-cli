@@ -3,15 +3,11 @@
 const isDev = import.meta.env.DEV;
 const isMainBranch = import.meta.env.BASE_URL?.includes('/main/');
 
-// Extract base prefix and version from BASE_URL
-// Examples: "/icp-cli/0.1/" -> prefix="/icp-cli", version="0.1"
-//           "/your-repo/0.2/" -> prefix="/your-repo", version="0.2"
-const baseUrl = import.meta.env.BASE_URL || '/';
-const basePrefixMatch = baseUrl.match(/^(\/[^\/]+)/);
-const basePrefix = basePrefixMatch ? basePrefixMatch[1] : '';
+// No base prefix — versions live at the domain root (/0.1/, /0.2/, /main/)
+const basePrefix = '';
 
-// Extract version from BASE_URL (e.g., "/icp-cli/0.1/" -> "0.1")
-const versionMatch = baseUrl.match(/\/(\d+\.\d+)\//);
+// Extract version from BASE_URL (e.g., "/0.1/" -> "0.1")
+const versionMatch = (import.meta.env.BASE_URL || '/').match(/\/(\d+\.\d+)\//);
 const currentVersion = versionMatch ? versionMatch[1] : 'unknown';
 ---
 

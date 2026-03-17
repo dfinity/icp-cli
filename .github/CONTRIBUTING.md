@@ -80,7 +80,7 @@ If you want to submit a pull request to fix an issue or add a feature, here's a 
 
 ## Contributing to Documentation
 
-The documentation lives in the `docs/` directory and is deployed to https://dfinity.github.io/icp-cli/.
+The documentation lives in the `docs/` directory and is deployed to https://cli.internetcomputer.org.
 
 ### Documentation Structure
 
@@ -97,7 +97,7 @@ The documentation site uses [Astro](https://astro.build/) with [Starlight](https
 1. **Source files** (`docs/`) are Markdown with minimal YAML frontmatter (title + description)
 2. **Starlight** reads directly from `docs/` via the glob content loader
 3. **Rehype plugin** (`docs-site/plugins/rehype-rewrite-links.mjs`) rewrites `.md` links at build time for Starlight's clean URLs
-4. **GitHub Actions** automatically deploys to GitHub Pages on push to main
+4. **GitHub Actions** automatically builds and deploys to an IC asset canister on push to main
 
 This architecture keeps source docs GitHub-friendly (`.md` links work on GitHub) while producing clean URLs on the documentation site.
 

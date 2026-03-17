@@ -96,23 +96,31 @@ Removes `dist/` and `.astro/` directories
 
 ## Deployment
 
-The site is automatically deployed to GitHub Pages:
-- **URL**: https://dfinity.github.io/icp-cli/
-- **Workflow**: `.github/workflows/docs.yml`
-- **Trigger**: Push to `main` branch (docs or docs-site changes)
+The site is hosted on an IC asset canister and served at `https://cli.internetcomputer.org`.
 
-The workflow:
-1. Installs dependencies
-2. Runs `npm run build`
-3. Uploads the `dist/` directory as a GitHub Pages artifact
-4. Deploys to GitHub Pages
+**Canister ID**: `ak73b-maaaa-aaaad-qlbgq-cai`
+
+### How it works
+
+1. **`.github/workflows/docs.yml`** builds documentation and pushes built files to the `docs-deployment` branch (one directory per version: `0.1/`, `0.2/`, `main/`, etc.)
+2. **`.github/workflows/docs-deploy.yml`** triggers on pushes to `docs-deployment` and deploys the entire branch to the IC asset canister
+
+### Triggers
+
+- **Push to `main`**: Rebuilds `/main/` docs and root files (`index.html`, `versions.json`, IC config)
+- **Tags (`v*`)**: Builds versioned docs (e.g., `v0.2.0` → `/0.2/`)
+- **Branches (`docs/v*`)**: Updates versioned docs (e.g., `docs/v0.1` → `/0.1/`)
+
+### Legacy redirect
+
+The old GitHub Pages site at `https://dfinity.github.io/icp-cli/` redirects all paths to `https://cli.internetcomputer.org/`.
 
 ## Configuration
 
 ### Site Settings
 In `astro.config.mjs`:
-- `site`: Base URL for the site
-- `base`: Base path (currently `/` for root domain)
+- `site`: Base URL (`https://cli.internetcomputer.org` in production)
+- `base`: Version path (set via `PUBLIC_BASE_PATH`, e.g., `/0.2/`, `/main/`)
 - `title`, `description`: Site metadata
 - `logo`: ICP logo configuration
 - `favicon`: Site favicon

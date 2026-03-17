@@ -60,7 +60,8 @@ function run() {
   const args = process.argv.slice(2);
 
   const child = spawn(binaryPath, args, {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    env: { ...process.env, ICP_CLI_DIST: 'npm' },
   });
 
   child.on('exit', (code) => {

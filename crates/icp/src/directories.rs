@@ -30,6 +30,9 @@ pub trait Access: Sync + Send {
 
     /// Returns the path to the telemetry data directory.
     fn telemetry_data(&self) -> PathBuf;
+
+    /// Returns the path to the CLI update-nag timestamp file.
+    fn cli_update_nag_timestamp(&self) -> PathBuf;
 }
 
 /// Inner structure holding data and cache directory paths.
@@ -211,6 +214,10 @@ impl Access for Directories {
     fn telemetry_data(&self) -> PathBuf {
         self.data().join("telemetry")
     }
+
+    fn cli_update_nag_timestamp(&self) -> PathBuf {
+        self.cache().join(".cli-update-nag-timestamp")
+    }
 }
 
 #[cfg(test)]
@@ -239,5 +246,9 @@ impl Access for UnimplementedMockDirs {
 
     fn telemetry_data(&self) -> PathBuf {
         unimplemented!("UnimplementedMockDirs::telemetry_data")
+    }
+
+    fn cli_update_nag_timestamp(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::cli_update_nag_timestamp")
     }
 }

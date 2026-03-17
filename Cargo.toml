@@ -20,6 +20,7 @@ anyhow = "1.0.100"
 assert_cmd = "2"
 async-dropper = { version = "0.3.0", features = ["tokio", "simple"] }
 async-trait = "0.1.88"
+axoupdater = "0.10.0"
 backoff = { version = "0.4", features = ["tokio"] }
 bigdecimal = "0.4.10"
 bip32 = "0.5.0"

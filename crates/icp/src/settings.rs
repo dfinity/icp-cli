@@ -61,6 +61,23 @@ pub struct Settings {
     /// Whether telemetry collection is enabled.
     #[serde(default = "default_telemetry_enabled")]
     pub telemetry_enabled: bool,
+
+    /// Whether the CLI update check is enabled.
+    #[serde(default)]
+    pub update_check: UpdateCheck,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, strum::Display, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum UpdateCheck {
+    #[default]
+    #[cfg_attr(feature = "clap", value(alias = "true"))]
+    Releases,
+    Betas,
+    #[cfg_attr(feature = "clap", value(alias = "false"))]
+    Disabled,
 }
 
 fn default_telemetry_enabled() -> bool {
@@ -73,6 +90,7 @@ impl Default for Settings {
             v: 1,
             autocontainerize: false,
             telemetry_enabled: true,
+            update_check: UpdateCheck::default(),
         }
     }
 }

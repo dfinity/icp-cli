@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: icp-cli will now inform you if a new version is released. This can be disabled with `icp settings update-check`
 * fix: Duplicate identities no longer cause an error when starting a network
 
 # v0.2.1-beta.0

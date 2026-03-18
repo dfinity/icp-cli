@@ -1,0 +1,37 @@
+name: Deploy Docs to Internet Computer
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ic-docs-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: IC mainnet
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout docs-deployment branch
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: docs-deployment
+
+      - name: Install icp-cli
+        run: npm i -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
+
+      - name: Import deploy identity
+        run: |
+          mkdir -p ~/.local/share/icp-cli/identity/keys
+          echo "$ICP_IDENTITY" | base64 -d > ~/.local/share/icp-cli/identity/keys/deployer.pem
+          sed -i 's/\\r\\n/\r\n/g' ~/.local/share/icp-cli/identity/keys/deployer.pem
+          icp identity import deployer --from-pem ~/.local/share/icp-cli/identity/keys/deployer.pem --storage plaintext
+          icp identity default deployer
+        env:
+          ICP_IDENTITY: ${{ secrets.DFX_IDENTITY_DESIGN_TEAM }}
+
+      - name: Deploy to IC mainnet
+        run: icp deploy -e ic docs

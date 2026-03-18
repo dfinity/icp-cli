@@ -215,8 +215,9 @@ jobs:
 
   # Deploy docs-deployment branch to IC asset canister.
   # Runs when at least one publish job succeeded (skipped on PR builds).
+  # always() prevents auto-skip when publish-versioned-docs is skipped (e.g. on main branch pushes).
   deploy-to-ic:
     needs: [publish-root-files, publish-main-docs, publish-versioned-docs]
-    if: github.event_name != 'pull_request'
+    if: always() && github.event_name != 'pull_request' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/docs-deploy.yml
     secrets: inherit

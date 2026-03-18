@@ -103,7 +103,7 @@ The site is hosted on an IC asset canister and served at `https://cli.internetco
 ### How it works
 
 1. **`.github/workflows/docs.yml`** builds documentation and pushes built files to the `docs-deployment` branch (one directory per version: `0.1/`, `0.2/`, `main/`, etc.)
-2. **`.github/workflows/docs-deploy.yml`** triggers on pushes to `docs-deployment` and deploys the entire branch to the IC asset canister
+2. **`.github/workflows/docs-deploy.yml`** is called by `docs.yml` after publish jobs complete and deploys the entire `docs-deployment` branch to the IC asset canister
 
 ### Triggers
 

@@ -45,7 +45,7 @@ All built assets live on the `docs-deployment` branch:
 
 **`.github/workflows/docs-deploy.yml`** — deploys `docs-deployment` to the IC:
 
-- Triggers automatically whenever `docs.yml` pushes to `docs-deployment`
+- Called directly by `docs.yml` after publish jobs complete (avoids `GITHUB_TOKEN` cross-workflow trigger limitations)
 - Runs `icp deploy -e ic docs` using the `DFX_IDENTITY_DESIGN_TEAM` secret
 - Requires the **IC mainnet** GitHub environment
 

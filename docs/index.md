@@ -43,3 +43,5 @@ Complete technical specifications:
 
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
 - [Examples](../examples/) — Sample projects for various use cases
+
+<!-- https://cli.internetcomputer.org -->

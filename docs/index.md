@@ -53,5 +53,3 @@ Complete technical specifications:
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
 - [Telemetry](telemetry.md) — What data is collected and how to opt out
 - [Examples](https://github.com/dfinity/icp-cli/tree/main/examples) — Sample projects for various use cases
-
-<!-- https://cli.internetcomputer.org -->

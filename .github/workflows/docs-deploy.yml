@@ -1,8 +1,7 @@
 name: Deploy Docs to Internet Computer
 
 on:
-  push:
-    branches: [docs-deployment]
+  workflow_call:
   workflow_dispatch:
 
 concurrency:

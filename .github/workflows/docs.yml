@@ -212,3 +212,11 @@ jobs:
           publish_dir: ./docs-site/dist
           publish_branch: docs-deployment
           destination_dir: ${{ env.DOCS_VERSION }}
+
+  # Deploy docs-deployment branch to IC asset canister.
+  # Runs when at least one publish job succeeded (skipped on PR builds).
+  deploy-to-ic:
+    needs: [publish-root-files, publish-main-docs, publish-versioned-docs]
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/docs-deploy.yml
+    secrets: inherit

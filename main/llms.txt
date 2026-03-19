@@ -1,6 +1,8 @@
-# ICP CLI Documentation
+# ICP CLI Documentation (vmain)
 
 > Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).
+
+Agent skills for IC development: https://skills.internetcomputer.org/.well-known/skills/index.json
 
 - [icp-cli Documentation](https://cli.internetcomputer.org/main/index.md): Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
 

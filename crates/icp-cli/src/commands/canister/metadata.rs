@@ -17,6 +17,7 @@ pub(crate) struct MetadataArgs {
     pub(crate) metadata_name: String,
 
     /// Output command results as JSON
+    #[arg(long)]
     pub(crate) json: bool,
 }
 

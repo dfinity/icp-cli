@@ -1,4 +1,6 @@
-﻿# Command-Line Help for `icp`
+﻿# CLI Reference
+
+# Command-Line Help for `icp`
 
 This document contains the help content for the `icp` command-line program.
 

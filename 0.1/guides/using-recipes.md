@@ -1,5 +1,7 @@
 ﻿# Using Recipes
 
+# Using Recipes
+
 Recipes are reusable build templates that simplify canister configuration. Instead of writing build steps from scratch, you reference a recipe that expands into the full configuration.
 
 ## Why Use Recipes?

@@ -1,5 +1,7 @@
 ﻿# Tokens and Cycles
 
+# Tokens and Cycles
+
 This is a command reference for managing ICP tokens and cycles. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
 
 The Internet Computer uses two primary currencies:

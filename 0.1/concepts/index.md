@@ -1,5 +1,7 @@
 ﻿# Concepts
 
+# Concepts
+
 Understanding how icp-cli organizes and manages your project.
 
 ## Core Concepts

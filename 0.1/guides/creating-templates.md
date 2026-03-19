@@ -1,5 +1,7 @@
 ﻿# Creating Project Templates
 
+# Creating Project Templates
+
 Project templates let users scaffold new ICP projects with `icp new`. This guide covers creating custom templates for your team or the community.
 
 icp-cli uses [cargo-generate](https://cargo-generate.github.io/cargo-generate/) for project templating. Templates are folders or git repositories containing:

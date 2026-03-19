@@ -1,5 +1,7 @@
 ﻿# Managing Identities
 
+# Managing Identities
+
 This is a detailed reference for identity management. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
 
 This guide covers:

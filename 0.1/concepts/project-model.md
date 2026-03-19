@@ -1,5 +1,7 @@
 ﻿# Project Model
 
+# Project Model
+
 This document explains how icp-cli discovers, loads, and consolidates your project configuration.
 
 ## Project Structure

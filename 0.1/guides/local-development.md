@@ -1,5 +1,7 @@
 ﻿# Local Development
 
+# Local Development
+
 This guide covers the day-to-day development workflow with icp-cli.
 
 ## The Development Cycle

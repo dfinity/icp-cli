@@ -1,5 +1,7 @@
 ﻿# Creating Recipes
 
+# Creating Recipes
+
 Recipes are reusable build templates that you can create to encode your team's build conventions or share them with the community.
 
 ## Recipe File Structure

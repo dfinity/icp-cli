@@ -1,5 +1,7 @@
 ﻿# Environments and Networks
 
+# Environments and Networks
+
 Understanding the relationship between networks and environments is key to effective deployment management.
 
 ## Networks

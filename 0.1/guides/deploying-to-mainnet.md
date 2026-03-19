@@ -1,5 +1,7 @@
 ﻿# Deploying to IC Mainnet
 
+# Deploying to IC Mainnet
+
 This guide walks through deploying your canisters to the Internet Computer mainnet.
 
 ## Understanding Mainnet Deployment

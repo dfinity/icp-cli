@@ -1,5 +1,7 @@
 ﻿# Guides
 
+# Guides
+
 Step-by-step instructions for common tasks. Each guide assumes you've completed the [Tutorial](../tutorial.md).
 
 ## Getting Started

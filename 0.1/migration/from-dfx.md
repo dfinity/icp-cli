@@ -1,5 +1,7 @@
 ﻿# Migrating from dfx
 
+# Migrating from dfx
+
 This guide helps developers familiar with dfx transition to icp-cli.
 
 ## Key Differences

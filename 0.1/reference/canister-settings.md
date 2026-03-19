@@ -1,5 +1,7 @@
 ﻿# Canister Settings Reference
 
+# Canister Settings Reference
+
 Complete reference for all canister settings available in icp-cli.
 
 Canister settings control resource allocation, behavior, and runtime configuration. They can be specified:

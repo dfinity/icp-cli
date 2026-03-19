@@ -1,5 +1,7 @@
 ﻿# Build, Deploy, Sync
 
+# Build, Deploy, Sync
+
 Canisters go through three distinct phases when moving from source code to running on the Internet Computer.
 
 ```

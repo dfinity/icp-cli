@@ -1,5 +1,7 @@
 ﻿# Configuration Reference
 
+# Configuration Reference
+
 Complete reference for `icp.yaml` project configuration.
 
 For conceptual explanation, see [Project Model](../concepts/project-model.md).

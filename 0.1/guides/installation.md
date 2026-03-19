@@ -1,5 +1,7 @@
 ﻿# Installation
 
+# Installation
+
 Set up everything you need to build and deploy canisters on the Internet Computer.
 
 **What you'll install:**

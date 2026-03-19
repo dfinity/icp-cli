@@ -1,5 +1,7 @@
 ﻿# Recipes
 
+# Recipes
+
 Recipes are templated build configurations that generate build and sync steps. They reduce boilerplate and encode best practices for common patterns.
 
 ## How Recipes Work

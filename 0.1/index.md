@@ -1,4 +1,6 @@
-﻿Build and deploy applications on the [Internet Computer](https://internetcomputer.org).
+﻿# icp-cli Documentation
+
+Build and deploy applications on the [Internet Computer](https://internetcomputer.org).
 
 ## Start Here
 

@@ -1,5 +1,7 @@
 ﻿# Tutorial
 
+# Tutorial
+
 This tutorial walks through deploying a full-stack app on the Internet Computer, explaining each step along the way.
 
 > **Already did the Quickstart?** This tutorial covers the same steps with detailed explanations. The Quickstart used `--define` flags to skip the interactive prompts — here you'll see what those prompts are and what they mean.

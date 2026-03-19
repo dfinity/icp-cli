@@ -1,6 +1,8 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeExternalLinks from 'rehype-external-links';
+import rehypeAgentSignaling from './plugins/rehype-agent-signaling.mjs';
+import agentDocs from './plugins/astro-agent-docs.mjs';
 
 // https://astro.build/config
 export default defineConfig({
@@ -13,9 +15,13 @@ export default defineConfig({
     rehypePlugins: [
       // Open external links in new tab
       [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
+      // Inject hidden llms.txt directive for agent discovery
+      rehypeAgentSignaling,
     ],
   },
   integrations: [
+    // Generate .md endpoints and llms.txt for agent-friendly docs
+    agentDocs(),
     starlight({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',

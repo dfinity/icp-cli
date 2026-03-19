@@ -1,5 +1,6 @@
 use std::io::stdout;
 
+use candid::Principal;
 use clap::Args;
 use icp::identity::manifest::{IdentityDefaults, IdentityList};
 use itertools::Itertools;
@@ -42,7 +43,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
                     .iter()
                     .map(|(name, id)| JsonIdentity {
                         name: name.to_string(),
-                        principal: id.principal().to_string(),
+                        principal: id.principal(),
                     })
                     .collect(),
             },
@@ -85,5 +86,5 @@ struct JsonIdentityList {
 #[derive(Serialize)]
 struct JsonIdentity {
     name: String,
-    principal: String,
+    principal: Principal,
 }

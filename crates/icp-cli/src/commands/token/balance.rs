@@ -1,5 +1,8 @@
+use std::io::stdout;
+
 use clap::Args;
 use icp::context::Context;
+use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
@@ -15,6 +18,14 @@ pub(crate) struct BalanceArgs {
     /// The subaccount to check the balance for
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) subaccount: Option<[u8; 32]>,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
+
+    /// Suppress human-readable output; print only the balance
+    #[arg(long, short)]
+    pub(crate) quiet: bool,
 }
 
 /// Check the token balance of a given identity
@@ -41,8 +52,23 @@ pub(crate) async fn exec(
     // Get the balance from the ledger
     let balance = get_balance(&agent, args.subaccount, token).await?;
 
-    // Output information
-    println!("Balance: {balance}");
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonBalance {
+                balance: balance.to_string(),
+            },
+        )?;
+    } else if args.quiet {
+        println!("{balance}");
+    } else {
+        println!("Balance: {balance}");
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonBalance {
+    balance: String,
 }

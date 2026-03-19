@@ -1,9 +1,12 @@
+use std::io::stdout;
+
 use anyhow::ensure;
 use clap::Args;
 use icp::context::Context;
 use icp::parsers::CyclesAmount;
 use icp_canister_interfaces::cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL};
 use icrc_ledger_types::icrc1::account::Account;
+use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
@@ -29,6 +32,14 @@ pub(crate) struct TransferArgs {
 
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
+
+    /// Suppress human-readable output; print only the block index
+    #[arg(long, short)]
+    pub(crate) quiet: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), anyhow::Error> {
@@ -64,11 +75,26 @@ pub(crate) async fn exec(ctx: &Context, args: &TransferArgs) -> Result<(), anyho
     )
     .await?;
 
-    // Output information
-    println!(
-        "Transferred {} to {} in block {}",
-        transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
-    );
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonTransfer {
+                block_index: transfer_info.block_index.to_string(),
+            },
+        )?;
+    } else if args.quiet {
+        println!("{}", transfer_info.block_index);
+    } else {
+        println!(
+            "Transferred {} to {} in block {}",
+            transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
+        );
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonTransfer {
+    block_index: String,
 }

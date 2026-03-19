@@ -1,3 +1,5 @@
+use std::io::stdout;
+
 use anyhow::Context as _;
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Args;
@@ -13,6 +15,7 @@ use icp::{
 };
 
 use icp::context::Context;
+use serde::Serialize;
 use tracing::{info, warn};
 
 use crate::commands::identity::StorageMode;
@@ -34,6 +37,14 @@ pub(crate) struct NewArgs {
     /// Write the seed phrase to a file instead of printing to stdout
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    json: bool,
+
+    /// Suppress human-readable output; print only the seed phrase
+    #[arg(long, short)]
+    quiet: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Error> {
@@ -95,9 +106,25 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
             warn!(
                 "Write the seed phrase down and store it in a secure location. If you lose it, you will lose access to your identity."
             );
-            println!("Your seed phrase: {mnemonic}");
+            if args.json {
+                serde_json::to_writer(
+                    stdout(),
+                    &JsonNew {
+                        seed_phrase: mnemonic.to_string(),
+                    },
+                )?;
+            } else if args.quiet {
+                println!("{mnemonic}");
+            } else {
+                println!("Your seed phrase: {mnemonic}");
+            }
         }
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonNew {
+    seed_phrase: String,
 }

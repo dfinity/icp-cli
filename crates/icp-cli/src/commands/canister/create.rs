@@ -1,3 +1,5 @@
+use std::io::stdout;
+
 use anyhow::anyhow;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
@@ -5,6 +7,7 @@ use icp::context::Context;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use icp_canister_interfaces::management_canister::CanisterSettingsArg;
+use serde::Serialize;
 use tracing::info;
 
 use crate::{commands::args, operations::create::CreateOperation};
@@ -91,6 +94,10 @@ pub(crate) struct CreateArgs {
         required_unless_present = "canister"
     )]
     pub detached: bool,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
 }
 
 impl CreateArgs {
@@ -193,6 +200,14 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     if args.quiet {
         println!("{id}");
+    } else if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonCreate {
+                canister_id: id,
+                canister_name: None,
+            },
+        )?;
     } else {
         println!("Created canister with ID {id}");
     }
@@ -249,9 +264,23 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 
     if args.quiet {
         println!("{id}");
+    } else if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonCreate {
+                canister_id: id,
+                canister_name: Some(canister.clone()),
+            },
+        )?;
     } else {
         println!("Created canister {canister} with ID {id}");
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonCreate {
+    canister_id: Principal,
+    canister_name: Option<String>,
 }

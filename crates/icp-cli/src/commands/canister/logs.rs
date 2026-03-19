@@ -1,3 +1,5 @@
+use std::io::stdout;
+
 use anyhow::{Context as _, anyhow};
 use clap::Args;
 use ic_utils::interfaces::ManagementCanister;
@@ -6,6 +8,8 @@ use ic_utils::interfaces::management_canister::{
 };
 use icp::context::Context;
 use icp::signal::stop_signal;
+use itertools::Itertools;
+use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::select;
 
@@ -42,6 +46,10 @@ pub(crate) struct LogsArgs {
     /// Show logs before this log index (exclusive). Cannot be used with --follow
     #[arg(long, value_name = "INDEX", conflicts_with_all = ["follow", "since", "until"])]
     pub(crate) until_index: Option<u64>,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 fn parse_timestamp(s: &str) -> Result<u64, String> {
@@ -99,11 +107,22 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
 
     if args.follow {
         // Follow mode: continuously fetch and display new logs
-        follow_logs(&mgmt, &canister_id, args.interval).await
+        follow_logs(args, &mgmt, &canister_id, args.interval).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(&mgmt, &canister_id, build_filter(args)?).await
+        fetch_and_display_logs(args, &mgmt, &canister_id, build_filter(args)?).await
     }
+}
+
+#[derive(Serialize)]
+struct JsonFollowRecord {
+    timestamp: u64,
+    index: u64,
+    content: String,
+}
+#[derive(Serialize)]
+struct JsonListRecord {
+    log_records: Vec<JsonFollowRecord>,
 }
 
 fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Error> {
@@ -141,6 +160,7 @@ fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Er
 }
 
 async fn fetch_and_display_logs(
+    args: &LogsArgs,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     filter: Option<CanisterLogFilter>,
@@ -154,9 +174,30 @@ async fn fetch_and_display_logs(
         .await
         .context("Failed to fetch canister logs")?;
 
-    for log in result.canister_log_records {
-        let formatted = format_log(&log);
-        println!("{formatted}");
+    if args.json {
+        println!(
+            "{}",
+            result
+                .canister_log_records
+                .iter()
+                .map(format_log)
+                .format("\n")
+        );
+    } else {
+        serde_json::to_writer(
+            stdout(),
+            &JsonListRecord {
+                log_records: result
+                    .canister_log_records
+                    .iter()
+                    .map(|log| JsonFollowRecord {
+                        timestamp: log.timestamp_nanos,
+                        index: log.idx,
+                        content: String::from_utf8_lossy(&log.content).into_owned(),
+                    })
+                    .collect(),
+            },
+        )?;
     }
 
     Ok(())
@@ -165,6 +206,7 @@ async fn fetch_and_display_logs(
 const FOLLOW_LOOKBACK_NANOS: u64 = 60 * 60 * 1_000_000_000; // 1 hour
 
 async fn follow_logs(
+    args: &LogsArgs,
     mgmt: &ManagementCanister<'_>,
     canister_id: &candid::Principal,
     interval_seconds: u64,
@@ -204,8 +246,18 @@ async fn follow_logs(
 
         if !new_logs.is_empty() {
             for log in &new_logs {
-                let formatted = format_log(log);
-                println!("{formatted}");
+                if args.json {
+                    serde_json::to_writer(
+                        stdout(),
+                        &JsonFollowRecord {
+                            timestamp: log.timestamp_nanos,
+                            index: log.idx,
+                            content: String::from_utf8_lossy(&log.content).into_owned(),
+                        },
+                    )?;
+                } else {
+                    println!("{}", format_log(log));
+                }
             }
             // Update last_idx to the highest idx we've displayed
             if let Some(last_log) = new_logs.last() {
@@ -387,6 +439,7 @@ mod tests {
             until,
             since_index,
             until_index,
+            json: false,
         }
     }
 

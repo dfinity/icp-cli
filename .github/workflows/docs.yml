@@ -18,6 +18,7 @@ on:
       - 'docs/**'
       - 'docs-site/**'
       - '.github/workflows/docs.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -59,7 +60,7 @@ jobs:
 
   # Publish root index, versions list, and IC config files - only runs on main branch
   publish-root-files:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -154,7 +155,7 @@ jobs:
 
   # Publish main branch docs for preview (always available at /main/)
   publish-main-docs:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
     runs-on: ubuntu-latest
     steps:

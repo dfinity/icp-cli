@@ -1,0 +1,45 @@
+# ICP CLI Documentation
+
+> Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).
+
+- [index](https://cli.internetcomputer.org/0.1/index.md): 
+
+## Start Here
+
+- [quickstart](https://cli.internetcomputer.org/0.1/quickstart.md)
+- [tutorial](https://cli.internetcomputer.org/0.1/tutorial.md)
+
+## Guides
+
+- [containerized-networks](https://cli.internetcomputer.org/0.1/guides/containerized-networks.md)
+- [creating-recipes](https://cli.internetcomputer.org/0.1/guides/creating-recipes.md)
+- [creating-templates](https://cli.internetcomputer.org/0.1/guides/creating-templates.md)
+- [deploying-to-mainnet](https://cli.internetcomputer.org/0.1/guides/deploying-to-mainnet.md)
+- [deploying-to-specific-subnets](https://cli.internetcomputer.org/0.1/guides/deploying-to-specific-subnets.md)
+- [index](https://cli.internetcomputer.org/0.1/guides/index.md)
+- [installation](https://cli.internetcomputer.org/0.1/guides/installation.md)
+- [local-development](https://cli.internetcomputer.org/0.1/guides/local-development.md)
+- [managing-environments](https://cli.internetcomputer.org/0.1/guides/managing-environments.md)
+- [managing-identities](https://cli.internetcomputer.org/0.1/guides/managing-identities.md)
+- [tokens-and-cycles](https://cli.internetcomputer.org/0.1/guides/tokens-and-cycles.md)
+- [using-recipes](https://cli.internetcomputer.org/0.1/guides/using-recipes.md)
+
+## Concepts
+
+- [build-deploy-sync](https://cli.internetcomputer.org/0.1/concepts/build-deploy-sync.md)
+- [environments](https://cli.internetcomputer.org/0.1/concepts/environments.md)
+- [index](https://cli.internetcomputer.org/0.1/concepts/index.md)
+- [project-model](https://cli.internetcomputer.org/0.1/concepts/project-model.md)
+- [recipes](https://cli.internetcomputer.org/0.1/concepts/recipes.md)
+
+## Reference
+
+- [canister-settings](https://cli.internetcomputer.org/0.1/reference/canister-settings.md)
+- [cli](https://cli.internetcomputer.org/0.1/reference/cli.md)
+- [configuration](https://cli.internetcomputer.org/0.1/reference/configuration.md)
+- [environment-variables](https://cli.internetcomputer.org/0.1/reference/environment-variables.md)
+- [index](https://cli.internetcomputer.org/0.1/reference/index.md)
+
+## Other
+
+- [from-dfx](https://cli.internetcomputer.org/0.1/migration/from-dfx.md)

@@ -1,0 +1,50 @@
+# ICP CLI Documentation
+
+> Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).
+
+- [icp-cli Documentation](https://cli.internetcomputer.org/0.2/index.md): Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
+
+## Start Here
+
+- [Quickstart](https://cli.internetcomputer.org/0.2/quickstart.md): Install icp-cli and deploy a full-stack Internet Computer app to a local network in under 5 minutes.
+- [Telemetry](https://cli.internetcomputer.org/0.2/telemetry.md): Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
+- [Tutorial](https://cli.internetcomputer.org/0.2/tutorial.md): Step-by-step walkthrough of deploying a full-stack Motoko and React app on the Internet Computer.
+
+## Guides
+
+- [Canister Migration](https://cli.internetcomputer.org/0.2/guides/canister-migration.md): Move a canister to a different subnet while optionally preserving its state and canister ID.
+- [Canister Snapshots](https://cli.internetcomputer.org/0.2/guides/canister-snapshots.md): Back up, transfer, and restore full canister state using snapshots.
+- [Using Containerized Networks](https://cli.internetcomputer.org/0.2/guides/containerized-networks.md): Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
+- [Creating Recipes](https://cli.internetcomputer.org/0.2/guides/creating-recipes.md): Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
+- [Creating Project Templates](https://cli.internetcomputer.org/0.2/guides/creating-templates.md): Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
+- [Deploying to IC Mainnet](https://cli.internetcomputer.org/0.2/guides/deploying-to-mainnet.md): Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.
+- [Deploying to Specific Subnets](https://cli.internetcomputer.org/0.2/guides/deploying-to-specific-subnets.md): Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.
+- [Guides](https://cli.internetcomputer.org/0.2/guides/index.md): Step-by-step guides covering installation, local development, deployment, identity management, and more.
+- [Installation](https://cli.internetcomputer.org/0.2/guides/installation.md): Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
+- [Local Development](https://cli.internetcomputer.org/0.2/guides/local-development.md): Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
+- [Managing Environments](https://cli.internetcomputer.org/0.2/guides/managing-environments.md): Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
+- [Managing Identities](https://cli.internetcomputer.org/0.2/guides/managing-identities.md): Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+- [Tokens and Cycles](https://cli.internetcomputer.org/0.2/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
+- [Using Recipes](https://cli.internetcomputer.org/0.2/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
+
+## Concepts
+
+- [Binding Generation](https://cli.internetcomputer.org/0.2/concepts/binding-generation.md): Generate type-safe client code from Candid interface files to call canister methods with full type checking.
+- [Build, Deploy, Sync](https://cli.internetcomputer.org/0.2/concepts/build-deploy-sync.md): Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
+- [Canister Discovery](https://cli.internetcomputer.org/0.2/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
+- [Environments and Networks](https://cli.internetcomputer.org/0.2/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
+- [Concepts](https://cli.internetcomputer.org/0.2/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+- [Project Model](https://cli.internetcomputer.org/0.2/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
+- [Recipes](https://cli.internetcomputer.org/0.2/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
+
+## Reference
+
+- [Canister Settings Reference](https://cli.internetcomputer.org/0.2/reference/canister-settings.md): All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
+- [CLI Reference](https://cli.internetcomputer.org/0.2/reference/cli.md): Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+- [Configuration Reference](https://cli.internetcomputer.org/0.2/reference/configuration.md): Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
+- [Environment Variables Reference](https://cli.internetcomputer.org/0.2/reference/environment-variables.md): All environment variables used by icp-cli during builds, deployments, and script execution.
+- [Reference](https://cli.internetcomputer.org/0.2/reference/index.md): Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.
+
+## Other
+
+- [Migrating from dfx](https://cli.internetcomputer.org/0.2/migration/from-dfx.md): Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.

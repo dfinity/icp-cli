@@ -77,6 +77,8 @@ function generateLlmsTxt(pages, siteUrl, basePath) {
     "",
     "> Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).",
     "",
+    "Agent skills for IC development: https://skills.internetcomputer.org/.well-known/skills/index.json",
+    "",
   ];
 
   // Root index page

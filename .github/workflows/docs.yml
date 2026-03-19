@@ -109,6 +109,21 @@ jobs:
           </html>
           EOF
 
+          echo "LATEST_VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
+
+      - name: Copy llms.txt from latest version on docs-deployment branch
+        run: |
+          # Fetch the llms.txt from the latest version's folder on docs-deployment.
+          # This file was deployed by publish-versioned-docs and is always in sync
+          # with the versioned .md endpoints it links to.
+          git fetch origin docs-deployment --depth=1
+          if git show "origin/docs-deployment:${LATEST_VERSION}/llms.txt" > root/llms.txt 2>/dev/null; then
+            echo "✅ Copied llms.txt from /${LATEST_VERSION}/llms.txt to root"
+          else
+            echo "⚠️  No llms.txt found at /${LATEST_VERSION}/llms.txt on docs-deployment — skipping"
+            rm -f root/llms.txt
+          fi
+
       - name: Deploy root files to docs-deployment branch
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
         with:
@@ -213,33 +228,6 @@ jobs:
           publish_dir: ./docs-site/dist
           publish_branch: docs-deployment
           destination_dir: ${{ env.DOCS_VERSION }}
-
-      - name: Check if this is the latest version
-        id: check-latest
-        run: |
-          LATEST=$(jq -r '.versions[] | select(.latest == true) | .version' docs-site/versions.json)
-          if [[ "$LATEST" == "$DOCS_VERSION" ]]; then
-            echo "is_latest=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Version ${DOCS_VERSION} is latest — will deploy llms.txt to root"
-          else
-            echo "is_latest=false" >> "$GITHUB_OUTPUT"
-            echo "ℹ️  Version ${DOCS_VERSION} is not latest (${LATEST}) — skipping root llms.txt"
-          fi
-
-      - name: Deploy llms.txt to root
-        if: steps.check-latest.outputs.is_latest == 'true'
-        run: |
-          mkdir -p root-llms
-          cp docs-site/dist/llms.txt root-llms/llms.txt
-
-      - name: Publish root llms.txt to docs-deployment branch
-        if: steps.check-latest.outputs.is_latest == 'true'
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./root-llms
-          publish_branch: docs-deployment
-          keep_files: true
 
   # Deploy docs-deployment branch to IC asset canister.
   # Runs when at least one publish job succeeded (skipped on PR builds).

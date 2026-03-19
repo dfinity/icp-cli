@@ -1,3 +1,8 @@
+---
+title: CLI Reference
+description: Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+---
+
 # Command-Line Help for `icp`
 
 This document contains the help content for the `icp` command-line program.

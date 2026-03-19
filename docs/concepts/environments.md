@@ -1,3 +1,8 @@
+---
+title: Environments and Networks
+description: Learn how networks and environments relate to control where and how canisters are deployed.
+---
+
 # Environments and Networks
 
 Understanding the relationship between networks and environments is key to effective deployment management.

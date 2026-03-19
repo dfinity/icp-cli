@@ -1,3 +1,8 @@
+---
+title: Managing Identities
+description: Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+---
+
 # Managing Identities
 
 This is a detailed reference for identity management. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.

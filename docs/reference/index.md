@@ -1,3 +1,8 @@
+---
+title: Reference
+description: Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.
+---
+
 # Reference
 
 Complete technical specifications for icp-cli.

@@ -1,3 +1,8 @@
+---
+title: Environment Variables Reference
+description: All environment variables used by icp-cli during builds, deployments, and script execution.
+---
+
 # Environment Variables Reference
 
 Environment variables used by icp-cli.

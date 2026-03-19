@@ -1,3 +1,8 @@
+---
+title: Project Model
+description: How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
+---
+
 # Project Model
 
 This document explains how icp-cli discovers, loads, and consolidates your project configuration.

@@ -1,3 +1,8 @@
+---
+title: Concepts
+description: Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+---
+
 # Concepts
 
 Understanding how icp-cli organizes and manages your project.

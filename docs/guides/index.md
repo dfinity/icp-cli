@@ -1,3 +1,8 @@
+---
+title: Guides
+description: Step-by-step guides covering installation, local development, deployment, identity management, and more.
+---
+
 # Guides
 
 Step-by-step instructions for common tasks. Each guide assumes you've completed the [Tutorial](../tutorial.md).

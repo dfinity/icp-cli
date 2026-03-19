@@ -1,3 +1,8 @@
+---
+title: Migrating from dfx
+description: Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.
+---
+
 # Migrating from dfx
 
 This guide helps developers familiar with dfx transition to icp-cli.

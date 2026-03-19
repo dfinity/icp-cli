@@ -1,3 +1,8 @@
+---
+title: Installation
+description: Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
+---
+
 # Installation
 
 Set up everything you need to build and deploy canisters on the Internet Computer.

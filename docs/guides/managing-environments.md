@@ -1,3 +1,8 @@
+---
+title: Managing Environments
+description: Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
+---
+
 # Managing Environments
 
 Environments allow you to deploy multiple instances of a set of canisters to the same network, with each set having independent settings. This guide covers setting up development, staging, and production environments.

@@ -268,9 +268,9 @@ The anonymous principal must have sufficient ICP balance to fund all identities 
 ### Required System Canisters
 
 The network must include these system canisters:
-- **ICP ledger** - For ICP token transfers during seeding
-- **Cycles ledger** - For cycles management
-- **Cycles minting canister (CMC)** - For converting ICP to cycles
+- **ICP ledger** — For ICP token transfers during seeding
+- **Cycles ledger** — For cycles management
+- **Cycles minting canister (CMC)** — For converting ICP to cycles
 
 ## Troubleshooting
 
@@ -453,9 +453,9 @@ ENTRYPOINT ["/app/start-network.sh"]
 Your custom network must include the system canisters and pre-funded accounts described in [Image Contract](#image-contract). In summary:
 
 **Required system canisters:**
-- **ICP ledger canister** (`ryjl3-tyaaa-aaaaa-aaaba-cai`) - For ICP token transfers
-- **Cycles ledger canister** (`um5iw-rqaaa-aaaaq-qaaba-cai`) - For cycles management
-- **Cycles minting canister** (`rkp4c-7iaaa-aaaaa-aaaca-cai`) - For converting ICP to cycles
+- **ICP ledger canister** (`ryjl3-tyaaa-aaaaa-aaaba-cai`) — For ICP token transfers
+- **Cycles ledger canister** (`um5iw-rqaaa-aaaaq-qaaba-cai`) — For cycles management
+- **Cycles minting canister** (`rkp4c-7iaaa-aaaaa-aaaca-cai`) — For converting ICP to cycles
 
 **Pre-funded anonymous principal:**
 

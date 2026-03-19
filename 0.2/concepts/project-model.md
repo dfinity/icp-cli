@@ -56,8 +56,8 @@ Networks can be defined in three ways:
 ### Implicit networks
 
 There are two implicit networks defined:
-- `local` - is a local managed network
-- `ic` - is the IC mainnet (connected network)
+- `local` — is a local managed network
+- `ic` — is the IC mainnet (connected network)
 
 Their configuration is equivalent to:
 
@@ -106,8 +106,8 @@ Environments can be defined in three ways:
 ### Implicit Environments
 
 There are two implicit environments:
-- `local` - uses the local managed network
-- `ic` - uses the IC mainnet
+- `local` — uses the local managed network
+- `ic` — uses the IC mainnet
 
 They are defined like this:
 

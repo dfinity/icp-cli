@@ -475,10 +475,10 @@ environments:
 ## Schema
 
 JSON schemas for editor integration are available in [docs/schemas/](https://github.com/dfinity/icp-cli/tree/main/docs/schemas):
-- [`icp-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/icp-yaml-schema.json) - Main project configuration
-- [`canister-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/canister-yaml-schema.json) - Canister configuration
-- [`network-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/network-yaml-schema.json) - Network configuration
-- [`environment-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/environment-yaml-schema.json) - Environment configuration
+- [`icp-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/icp-yaml-schema.json) — Main project configuration
+- [`canister-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/canister-yaml-schema.json) — Canister configuration
+- [`network-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/network-yaml-schema.json) — Network configuration
+- [`environment-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/environment-yaml-schema.json) — Environment configuration
 
 Configure your editor to use them for autocomplete and validation:
 

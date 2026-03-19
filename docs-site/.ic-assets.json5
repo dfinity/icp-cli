@@ -21,6 +21,13 @@
     }
   },
   {
+    // Markdown endpoints and llms.txt — short cache so updates are visible quickly
+    "match": "**/*.{md,txt}",
+    "headers": {
+      "Cache-Control": "public, max-age=300"
+    }
+  },
+  {
     // Version list — very short cache so version switcher sees updates quickly
     "match": "versions.json",
     "headers": {

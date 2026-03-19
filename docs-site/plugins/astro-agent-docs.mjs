@@ -66,10 +66,18 @@ function findSection(filePath) {
 function generateLlmsTxt(pages, siteUrl, basePath) {
   const base = (siteUrl + basePath).replace(/\/$/, "");
 
+  // Extract version from base path (e.g., "/0.2/" → "0.2", "/main/" → "main")
+  const version = basePath.replace(/^\/|\/$/g, "") || null;
+  const title = version
+    ? `# ICP CLI Documentation (v${version})`
+    : "# ICP CLI Documentation";
+
   const lines = [
-    "# ICP CLI Documentation",
+    title,
     "",
     "> Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).",
+    "",
+    "Agent skills for IC development: https://skills.internetcomputer.org/.well-known/skills/index.json",
     "",
   ];
 

@@ -2,7 +2,6 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeExternalLinks from 'rehype-external-links';
 import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
-import rehypeAgentSignaling from './plugins/rehype-agent-signaling.mjs';
 import agentDocs from './plugins/astro-agent-docs.mjs';
 
 // https://astro.build/config
@@ -17,8 +16,6 @@ export default defineConfig({
       rehypeRewriteLinks,
       // Open external links in new tab
       [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
-      // Inject hidden llms.txt directive for agent discovery
-      rehypeAgentSignaling,
     ],
   },
   integrations: [
@@ -33,6 +30,17 @@ export default defineConfig({
         Banner: './src/components/Banner.astro',
       },
       head: [
+        {
+          // Agent-friendly docs: surface llms.txt directive early in <head>
+          // so crawlers find it before the content area (agentdocsspec.com)
+          tag: 'link',
+          attrs: {
+            rel: 'help',
+            href: `${process.env.PUBLIC_BASE_PATH || '/'}llms.txt`,
+            type: 'text/plain',
+            title: 'LLM-friendly documentation index',
+          },
+        },
         {
           tag: 'script',
           attrs: {},

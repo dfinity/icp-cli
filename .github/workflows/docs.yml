@@ -124,6 +124,26 @@ jobs:
             rm -f root/llms.txt
           fi
 
+      - name: Prepend version navigation to root llms.txt
+        if: hashFiles('root/llms.txt') != ''
+        run: |
+          # Build a version navigation header from versions.json.
+          # Only the root llms.txt gets this — versioned copies stay static.
+          SITE="${PUBLIC_SITE}"
+          HEADER="This documentation is for v${LATEST_VERSION}. Other versions are available:"
+
+          VERSION_LINES=""
+          for version in $(jq -r '.versions[].version' docs-site/versions.json); do
+            if [[ "$version" != "$LATEST_VERSION" ]]; then
+              VERSION_LINES="${VERSION_LINES}\n- [v${version}](${SITE}/${version}/llms.txt)"
+            fi
+          done
+          VERSION_LINES="${VERSION_LINES}\n- [Development (main)](${SITE}/main/llms.txt)"
+
+          # Insert after the description blockquote (line starting with ">")
+          sed -i "s|^> .*|&\n\n${HEADER}${VERSION_LINES}|" root/llms.txt
+          echo "✅ Added version navigation to root llms.txt"
+
       - name: Deploy root files to docs-deployment branch
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
         with:

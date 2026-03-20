@@ -3,7 +3,7 @@ use icp::context::Context;
 use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use tracing::info;
 
-/// Display the currently selected identity
+/// Display or set the currently selected identity
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {
     /// Identity to set as default. If omitted, prints the current default.

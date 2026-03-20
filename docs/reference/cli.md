@@ -835,7 +835,7 @@ Manage your identities
 ###### **Subcommands:**
 
 * `account-id` — Display the ICP ledger or ICRC-1 account identifier for the current identity
-* `default` — Display the currently selected identity
+* `default` — Display or set the currently selected identity
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
 * `import` — Import a new identity
@@ -873,7 +873,7 @@ Display the ICP ledger or ICRC-1 account identifier for the current identity
 
 ## `icp identity default`
 
-Display the currently selected identity
+Display or set the currently selected identity
 
 **Usage:** `icp identity default [NAME]`
 

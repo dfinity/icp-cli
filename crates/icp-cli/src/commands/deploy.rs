@@ -60,6 +60,10 @@ pub(crate) struct DeployArgs {
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
@@ -157,7 +161,9 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                     let canister_name = canisters_to_create
                         .get(idx)
                         .expect("should have tried to create every canister");
-                    println!("Created canister {canister_name} with ID {id}");
+                    if !args.json {
+                        println!("Created canister {canister_name} with ID {id}");
+                    }
                     ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
                         .await
                         .map_err(|e| anyhow!(e))?;
@@ -311,7 +317,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     }
 
     // Print URLs for deployed canisters
-    print_canister_urls(ctx, &environment_selection, agent.clone(), &cnames).await?;
+    print_canister_urls(
+        ctx,
+        &environment_selection,
+        agent.clone(),
+        &cnames,
+        args.json,
+    )
+    .await?;
 
     Ok(())
 }
@@ -353,6 +366,7 @@ async fn print_canister_urls(
     environment_selection: &EnvironmentSelection,
     agent: Agent,
     canister_names: &[String],
+    json: bool,
 ) -> Result<(), anyhow::Error> {
     use icp::network::custom_domains::{canister_gateway_url, gateway_domain};
 
@@ -369,7 +383,11 @@ async fn print_canister_urls(
         }
     };
 
-    println!("Deployed canisters:");
+    let mut json_canisters = Vec::new();
+
+    if !json {
+        println!("Deployed canisters:");
+    }
 
     for name in canister_names {
         let canister_id = match ctx
@@ -393,10 +411,18 @@ async fn print_canister_urls(
 
             if has_http {
                 let canister_url = canister_gateway_url(http_gateway_url, canister_id, friendly);
-                println!("  {name}: {canister_url}");
+                if json {
+                    json_canisters.push(JsonDeployedCanister {
+                        name: name.clone(),
+                        canister_id,
+                        url: Some(canister_url.to_string()),
+                    });
+                } else {
+                    println!("  {name}: {canister_url}");
+                }
             } else {
                 // For canisters without http_request, show the Candid UI URL
-                if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                let url = if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
                     let domain = gateway_domain(http_gateway_url);
                     let mut candid_url = canister_gateway_url(http_gateway_url, ui_id, None);
                     if domain.is_some() {
@@ -404,17 +430,57 @@ async fn print_canister_urls(
                     } else {
                         candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
                     }
-                    println!("  {name} (Candid UI): {candid_url}");
+                    if !json {
+                        println!("  {name} (Candid UI): {candid_url}");
+                    }
+                    Some(candid_url.to_string())
                 } else {
-                    println!("  {name}: {canister_id} (Candid UI not available)");
+                    if !json {
+                        println!("  {name}: {canister_id} (Candid UI not available)");
+                    }
+                    None
+                };
+                if json {
+                    json_canisters.push(JsonDeployedCanister {
+                        name: name.clone(),
+                        canister_id,
+                        url,
+                    });
                 }
             }
+        } else if json {
+            json_canisters.push(JsonDeployedCanister {
+                name: name.clone(),
+                canister_id,
+                url: None,
+            });
         } else {
             println!("  {name}: {canister_id} (No gateway URL available)");
         }
     }
 
+    if json {
+        serde_json::to_writer(
+            std::io::stdout(),
+            &JsonDeploy {
+                canisters: json_canisters,
+            },
+        )?;
+    }
+
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonDeploy {
+    canisters: Vec<JsonDeployedCanister>,
+}
+
+#[derive(Serialize)]
+struct JsonDeployedCanister {
+    name: String,
+    canister_id: Principal,
+    url: Option<String>,
 }
 
 /// Gets the Candid UI canister ID for the network

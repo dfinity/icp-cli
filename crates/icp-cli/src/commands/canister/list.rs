@@ -1,5 +1,8 @@
+use std::io::stdout;
+
 use clap::Args;
 use icp::context::Context;
+use serde::Serialize;
 
 use crate::options::EnvironmentOpt;
 
@@ -8,15 +11,24 @@ use crate::options::EnvironmentOpt;
 pub(crate) struct ListArgs {
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::Error> {
     let environment_selection = args.environment.clone().into();
     let env = ctx.get_environment(&environment_selection).await?;
-
-    for c in env.canisters.keys() {
-        println!("{c}");
+    let canisters = env.canisters.keys().cloned().collect();
+    if args.json {
+        serde_json::to_writer(stdout(), &JsonList { canisters })?;
+    } else {
+        println!("{}", canisters.join("\n"));
     }
-
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonList {
+    canisters: Vec<String>,
 }

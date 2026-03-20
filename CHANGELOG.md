@@ -1,5 +1,7 @@
 # Unreleased
 
+* feat: Many more commands support `--json` and `--quiet`.
+
 # v0.2.1
 
 * feat: icp-cli will now inform you if a new version is released. This can be disabled with `icp settings update-check`

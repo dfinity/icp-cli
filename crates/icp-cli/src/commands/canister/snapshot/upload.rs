@@ -1,7 +1,10 @@
+use std::io::stdout;
+
 use byte_unit::{Byte, UnitType};
 use clap::Args;
 use icp::context::Context;
 use icp::prelude::*;
+use serde::Serialize;
 use tracing::info;
 
 use super::SnapshotId;
@@ -30,6 +33,14 @@ pub(crate) struct UploadArgs {
     /// Resume a previously interrupted upload
     #[arg(long)]
     resume: bool,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    json: bool,
+
+    /// Suppress human-readable output; print only snapshot ID
+    #[arg(long, short, conflicts_with = "json")]
+    quiet: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow::Error> {
@@ -189,7 +200,18 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Clean up progress file on success
             delete_upload_progress(paths)?;
 
-            println!("Snapshot {} uploaded successfully", progress.snapshot_id);
+            if args.json {
+                serde_json::to_writer(
+                    stdout(),
+                    &JsonSnapshotUpload {
+                        snapshot_id: progress.snapshot_id.clone(),
+                    },
+                )?;
+            } else if args.quiet {
+                println!("{}", progress.snapshot_id);
+            } else {
+                println!("Snapshot {} uploaded successfully", progress.snapshot_id);
+            }
 
             Ok::<_, anyhow::Error>(progress.snapshot_id)
         })
@@ -198,4 +220,9 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
     info!("Use `icp canister snapshot restore {name} {snapshot_id}` to restore from this snapshot");
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonSnapshotUpload {
+    snapshot_id: String,
 }

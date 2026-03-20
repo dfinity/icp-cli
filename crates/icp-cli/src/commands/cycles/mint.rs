@@ -1,8 +1,11 @@
+use std::io::stdout;
+
 use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
 use icp::parsers::{CyclesAmount, parse_token_amount};
+use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
@@ -31,6 +34,10 @@ pub(crate) struct MintArgs {
 
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::Error> {
@@ -60,11 +67,26 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
     )
     .await?;
 
-    // Display results
-    println!(
-        "Minted {} to your account, new balance: {}.",
-        mint_info.deposited, mint_info.new_balance
-    );
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonMint {
+                deposited: mint_info.deposited.to_string(),
+                new_balance: mint_info.new_balance.to_string(),
+            },
+        )?;
+    } else {
+        println!(
+            "Minted {} to your account, new balance: {}.",
+            mint_info.deposited, mint_info.new_balance
+        );
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonMint {
+    deposited: String,
+    new_balance: String,
 }

@@ -1,6 +1,9 @@
+use std::io::stdout;
+
 use anyhow::bail;
 use clap::Args;
 use icp::context::Context;
+use serde::Serialize;
 
 use crate::{commands::args, operations::misc::fetch_canister_metadata};
 
@@ -12,6 +15,10 @@ pub(crate) struct MetadataArgs {
 
     /// The name of the metadata section to read
     pub(crate) metadata_name: String,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyhow::Error> {
@@ -40,7 +47,11 @@ pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyho
 
     match metadata {
         Some(value) => {
-            println!("{value}");
+            if args.json {
+                serde_json::to_writer(stdout(), &JsonMetadata { value })?;
+            } else {
+                println!("{value}");
+            }
             Ok(())
         }
         None => bail!(
@@ -49,4 +60,9 @@ pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyho
             canister_id
         ),
     }
+}
+
+#[derive(Serialize)]
+struct JsonMetadata {
+    value: String,
 }

@@ -120,7 +120,7 @@ The `@dfinity/asset-canister` recipe deploys this pre-built canister and syncs y
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister"
+      type: "@dfinity/asset-canister@v2.1.0"
       configuration:
         dir: dist  # Your built frontend files
 ```

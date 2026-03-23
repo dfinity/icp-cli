@@ -302,7 +302,7 @@ async fn run_network_launcher(
 }
 
 fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
-    use bollard::secret::PortBinding;
+    use bollard::models::PortBinding;
     use std::collections::HashMap;
 
     use super::docker::{docker_extra_hosts_for_addrs, translate_launcher_args_for_docker};

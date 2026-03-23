@@ -54,6 +54,18 @@ Always prefer skill guidance over general documentation when both cover the same
 
 - [Canister Settings Reference](https://cli.internetcomputer.org/main/reference/canister-settings.md): All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
 - [CLI Reference](https://cli.internetcomputer.org/main/reference/cli.md): Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+  - [`icp build`](https://cli.internetcomputer.org/main/reference/cli/build.md): Build canisters
+  - [`icp canister`](https://cli.internetcomputer.org/main/reference/cli/canister.md): Perform canister operations against a network
+  - [`icp cycles`](https://cli.internetcomputer.org/main/reference/cli/cycles.md): Mint and manage cycles
+  - [`icp deploy`](https://cli.internetcomputer.org/main/reference/cli/deploy.md): Deploy a project to an environment
+  - [`icp environment`](https://cli.internetcomputer.org/main/reference/cli/environment.md): Show information about the current project environments
+  - [`icp identity`](https://cli.internetcomputer.org/main/reference/cli/identity.md): Manage your identities
+  - [`icp network`](https://cli.internetcomputer.org/main/reference/cli/network.md): Launch and manage local test networks
+  - [`icp new`](https://cli.internetcomputer.org/main/reference/cli/new.md): Create a new ICP project from a template
+  - [`icp project`](https://cli.internetcomputer.org/main/reference/cli/project.md): Display information about the current project
+  - [`icp settings`](https://cli.internetcomputer.org/main/reference/cli/settings.md): Configure user settings
+  - [`icp sync`](https://cli.internetcomputer.org/main/reference/cli/sync.md): Synchronize canisters
+  - [`icp token`](https://cli.internetcomputer.org/main/reference/cli/token.md): Perform token transactions
 - [Configuration Reference](https://cli.internetcomputer.org/main/reference/configuration.md): Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
 - [Environment Variables Reference](https://cli.internetcomputer.org/main/reference/environment-variables.md): All environment variables used by icp-cli during builds, deployments, and script execution.
 - [Reference](https://cli.internetcomputer.org/main/reference/index.md): Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.

@@ -4,6 +4,8 @@
  *
  * 1. Markdown endpoints — serves a clean .md file alongside every HTML page
  * 2. llms.txt — discovery index listing all pages with links to .md endpoints
+ * 3. Agent signaling — injects a hidden llms.txt directive right after <body>
+ *    in every HTML page so agents discover it early (before nav/sidebar)
  *
  * Runs in the astro:build:done hook so it operates on the final build output.
  */
@@ -62,8 +64,119 @@ function findSection(filePath) {
   return best;
 }
 
+// Path to the CLI reference page — split into per-command endpoints for agents.
+const CLI_REFERENCE = "reference/cli.md";
+
+/**
+ * Split the CLI reference into per-command markdown files.
+ * Each `## \`icp ...\`` heading becomes its own file under reference/cli/.
+ * Returns metadata for each generated sub-page (for llms.txt).
+ */
+function splitCliReference(outDir) {
+  const cliMd = path.join(outDir, CLI_REFERENCE);
+  if (!fs.existsSync(cliMd)) return [];
+
+  const content = fs
+    .readFileSync(cliMd, "utf-8")
+    // Strip the clap-markdown generation footer that appears at the end.
+    .replace(/\n*<hr\/>\s*\n*<small>[\s\S]*?<\/small>\s*$/, "\n");
+  // Split on ## `icp ...` headings, keeping the heading with the section.
+  const sections = content.split(/^(?=## `icp\b)/m).filter((s) => s.trim());
+
+  const subDir = path.join(outDir, "reference", "cli");
+  fs.mkdirSync(subDir, { recursive: true });
+
+  const subPages = [];
+  const seenSlugs = new Map(); // slug → command name, for collision detection
+  for (const section of sections) {
+    const match = section.match(/^## `(icp[\w\s-]*?)`/);
+    if (!match) continue;
+
+    const command = match[1].trim();
+    // icp build → build, icp canister call → canister-call
+    const slug = command === "icp" ? "index" : command.replace(/^icp /, "").replace(/ /g, "-");
+    const fileName = `${slug}.md`;
+
+    // Detect slug collisions (e.g., "icp foo-bar" vs "icp foo bar").
+    if (seenSlugs.has(slug)) {
+      throw new Error(
+        `CLI reference split: slug collision for "${fileName}" ` +
+        `between commands "${seenSlugs.get(slug)}" and "${command}"`
+      );
+    }
+    seenSlugs.set(slug, command);
+
+    // Extract the description: first plain-text line after the heading,
+    // skipping **Usage:**, ###### headings, list items, and empty lines.
+    const lines = section.split("\n");
+    const descLine = lines.find(
+      (l, i) =>
+        i > 0 &&
+        l.trim() &&
+        !l.startsWith("**Usage") &&
+        !l.startsWith("#") &&
+        !l.startsWith("*")
+    );
+    const description = descLine ? descLine.trim() : "";
+
+    // Rewrite subcommand list items to link to their per-command endpoints.
+    // e.g., `* \`call\` — ...` → `* [\`call\`](canister-call.md) — ...`
+    // The parent prefix (e.g., "canister") is used to build the slug.
+    const parentSlug = command.replace(/^icp ?/, "").replace(/ /g, "-");
+    const body = section.replace(/^## [^\n]+\n+/, "").replace(
+      /^\* `(\w[\w-]*)` —/gm,
+      (_, sub) => {
+        const subSlug = parentSlug ? `${parentSlug}-${sub}` : sub;
+        return `* [\`${sub}\`](${subSlug}.md) —`;
+      }
+    );
+
+    fs.writeFileSync(
+      path.join(subDir, fileName),
+      BOM + `# ${command}\n\n` + body + "\n"
+    );
+
+    subPages.push({
+      file: `reference/cli/${fileName}`,
+      title: `\`${command}\``,
+      description,
+      // Top-level commands have exactly one space (e.g., "icp build").
+      // The bare "icp" root and deep subcommands are excluded from llms.txt.
+      isTopLevel: (command.match(/ /g) || []).length === 1,
+    });
+  }
+
+  // Validate: the CLI reference should contain commands. If the format changed
+  // and nothing was extracted, fail loudly rather than silently producing no output.
+  if (subPages.length === 0) {
+    throw new Error(
+      "CLI reference split: no commands found. " +
+      "Expected ## `icp ...` headings in " + CLI_REFERENCE
+    );
+  }
+
+  // Validate: all subcommand links in generated files point to existing files.
+  for (const { file } of subPages) {
+    const filePath = path.join(outDir, file);
+    const md = fs.readFileSync(filePath, "utf-8");
+    const linkPattern = /\]\((\S+\.md)\)/g;
+    let linkMatch;
+    while ((linkMatch = linkPattern.exec(md)) !== null) {
+      const target = path.join(path.dirname(filePath), linkMatch[1]);
+      if (!fs.existsSync(target)) {
+        throw new Error(
+          `CLI reference split: broken link in ${file}: ` +
+          `${linkMatch[1]} does not exist`
+        );
+      }
+    }
+  }
+
+  return subPages;
+}
+
 /** Generate llms.txt content from collected page metadata. */
-function generateLlmsTxt(pages, siteUrl, basePath) {
+function generateLlmsTxt(pages, siteUrl, basePath, cliSubPages) {
   const base = (siteUrl + basePath).replace(/\/$/, "");
 
   const skillsBase =
@@ -149,6 +262,20 @@ function generateLlmsTxt(pages, siteUrl, basePath) {
         ? `- [${page.title}](${url}): ${page.description}`
         : `- [${page.title}](${url})`;
       lines.push(entry);
+
+      // Nest top-level command endpoints under the CLI Reference entry.
+      // Subcommands (e.g., "icp canister call") are omitted from the index
+      // but still available as .md endpoints for agents to fetch on demand.
+      if (page.file === CLI_REFERENCE && cliSubPages.length > 0) {
+        for (const sub of cliSubPages) {
+          if (!sub.isTopLevel) continue;
+          const subUrl = `${base}/${sub.file}`;
+          const subEntry = sub.description
+            ? `  - [${sub.title}](${subUrl}): ${sub.description}`
+            : `  - [${sub.title}](${subUrl})`;
+          lines.push(subEntry);
+        }
+      }
     }
     lines.push("");
   }
@@ -200,12 +327,58 @@ export default function agentDocs() {
 
         logger.info(`Generated ${pages.length} markdown endpoints`);
 
+        // 1b. Split CLI reference into per-command endpoints for agents
+        const cliSubPages = splitCliReference(outDir);
+        if (cliSubPages.length > 0) {
+          logger.info(
+            `Split CLI reference into ${cliSubPages.length} per-command endpoints`
+          );
+        }
+
         // 2. Generate llms.txt
-        const llmsTxt = generateLlmsTxt(pages, siteUrl, basePath);
+        const llmsTxt = generateLlmsTxt(pages, siteUrl, basePath, cliSubPages);
         fs.writeFileSync(path.join(outDir, "llms.txt"), llmsTxt);
         logger.info(
           `Generated llms.txt (${llmsTxt.length} chars, ${pages.length} pages)`
         );
+
+        // 3. Inject agent signaling directive into HTML pages
+        // Places a visually-hidden blockquote right after <body> so it appears
+        // early in the document (within the first ~15%), before nav/sidebar.
+        // Uses CSS clip-rect (not display:none) so it survives HTML-to-markdown
+        // conversion. See: https://agentdocsspec.com
+        const llmsTxtUrl = `${basePath}llms.txt`;
+        const directive =
+          `<blockquote class="agent-signaling" data-pagefind-ignore>` +
+          `<p>For AI agents: Documentation index at ` +
+          `<a href="${llmsTxtUrl}">${llmsTxtUrl}</a></p></blockquote>`;
+        const htmlFiles = fs.globSync("**/*.html", { cwd: outDir });
+        let injected = 0;
+        for (const file of htmlFiles) {
+          const filePath = path.join(outDir, file);
+          const html = fs.readFileSync(filePath, "utf-8");
+          const bodyIdx = html.indexOf("<body");
+          if (bodyIdx === -1) continue;
+          const closeIdx = html.indexOf(">", bodyIdx);
+          if (closeIdx === -1) continue;
+          const insertAt = closeIdx + 1;
+          fs.writeFileSync(
+            filePath,
+            html.slice(0, insertAt) + directive + html.slice(insertAt)
+          );
+          injected++;
+        }
+        logger.info(`Injected agent signaling into ${injected} HTML pages`);
+
+        // 4. Alias sitemap-index.xml → sitemap.xml
+        // Astro's sitemap integration outputs sitemap-index.xml, but crawlers
+        // and the agentdocsspec checker expect /sitemap.xml by convention.
+        const sitemapIndex = path.join(outDir, "sitemap-index.xml");
+        const sitemapAlias = path.join(outDir, "sitemap.xml");
+        if (fs.existsSync(sitemapIndex) && !fs.existsSync(sitemapAlias)) {
+          fs.copyFileSync(sitemapIndex, sitemapAlias);
+          logger.info("Copied sitemap-index.xml → sitemap.xml");
+        }
       },
     },
   };

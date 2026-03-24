@@ -20,8 +20,6 @@ export default defineConfig({
     ],
   },
   integrations: [
-    // Generate .md endpoints and llms.txt for agent-friendly docs
-    agentDocs(),
     starlight({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
@@ -125,5 +123,8 @@ export default defineConfig({
         },
       ],
     }),
+    // Generate .md endpoints, llms.txt, and agent signaling for agent-friendly docs.
+    // Listed after starlight() so the astro:build:done hook runs after sitemap generation.
+    agentDocs(),
   ],
 });

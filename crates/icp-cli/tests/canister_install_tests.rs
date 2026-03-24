@@ -479,7 +479,7 @@ async fn canister_install_with_environment_settings_override() {
                 - type: script
                   command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             settings:
-              memory_allocation: 1073741824
+              memory_allocation: 10485760
 
         {NETWORK_RANDOM_PORT}
 
@@ -488,7 +488,7 @@ async fn canister_install_with_environment_settings_override() {
             network: random-network
             settings:
               my-canister:
-                memory_allocation: 2147483648
+                memory_allocation: 20971520
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
@@ -497,7 +497,7 @@ async fn canister_install_with_environment_settings_override() {
     let _g = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
-    // Deploy should use the environment override (memory_allocation: 2GB)
+    // Deploy should use the environment override (memory_allocation: 20MiB)
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
@@ -532,8 +532,8 @@ async fn canister_install_with_environment_settings_override() {
 
     let output_str = String::from_utf8_lossy(&output);
     assert!(
-        output_str.contains("Memory allocation: 2_147_483_648"),
-        "Expected memory_allocation to be 2_147_483_648 (2GB) from environment override, got: {}",
+        output_str.contains("Memory allocation: 20_971_520"),
+        "Expected memory_allocation to be 20_971_520 (20MiB) from environment override, got: {}",
         output_str
     );
 }

@@ -1,6 +1,7 @@
 # Unreleased
 
 * feat: Many more commands support `--json` and `--quiet`.
+* fix: Network would fail to start if a stale descriptor was present
 
 # v0.2.1
 

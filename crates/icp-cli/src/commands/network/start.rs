@@ -91,10 +91,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
                  Cleaning up and starting fresh.",
                 network.name
             );
+            nd.cleanup_port_descriptor(descriptor.gateway_port())
+                .await?;
             nd.cleanup_project_network_descriptor().await?;
-            if let Some(port) = descriptor.gateway_port() {
-                nd.cleanup_port_descriptor(Some(port)).await?;
-            }
         }
     }
 

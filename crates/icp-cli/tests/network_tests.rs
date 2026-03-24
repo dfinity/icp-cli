@@ -916,7 +916,8 @@ async fn network_recovers_from_stale_descriptor() {
     });
 
     // Write the stale descriptor
-    let descriptor_bytes = serde_json::to_vec(&stale_descriptor).expect("failed to serialize descriptor");
+    let descriptor_bytes =
+        serde_json::to_vec(&stale_descriptor).expect("failed to serialize descriptor");
     ctx.write_network_descriptor(&project_dir, "random-network", &descriptor_bytes);
 
     // Start network - should succeed and clean up the stale descriptor

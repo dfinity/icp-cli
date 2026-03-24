@@ -79,7 +79,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         .context("failed to create network directory")?;
 
     if let Some(descriptor) = nd.load_network_descriptor().await? {
-        debug!("Found network descriptor for {} in: {}", nd.network_name, nd.network_root);
+        debug!(
+            "Found network descriptor for {} in: {}",
+            nd.network_name, nd.network_root
+        );
         if descriptor.child_locator.is_alive().await {
             bail!("network '{}' is already running", network.name);
         } else {

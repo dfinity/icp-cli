@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.2.2
+
 Important: A network launcher more recent than v12.0.0-83c3f95e8c4ce28e02493df83df5f84a166451c0 is
 required to use internet identity.
 

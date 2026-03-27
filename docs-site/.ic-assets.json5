@@ -33,5 +33,12 @@
     "headers": {
       "Cache-Control": "public, max-age=60"
     }
+  },
+  {
+    // Matomo analytics — short cache so site ID changes are picked up quickly
+    "match": "matomo.js",
+    "headers": {
+      "Cache-Control": "public, max-age=300"
+    }
   }
 ]

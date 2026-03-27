@@ -52,6 +52,12 @@ export default defineConfig({
             });
           `,
         },
+        // Matomo analytics — loaded from root so the site ID is defined once,
+        // not baked into each versioned build
+        {
+          tag: 'script',
+          attrs: { src: '/matomo.js', async: true },
+        },
       ],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/dfinity/icp-cli' },

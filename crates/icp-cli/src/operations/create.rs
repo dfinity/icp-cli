@@ -15,6 +15,7 @@ use icp_canister_interfaces::{
 };
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
+use tracing::debug;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
@@ -107,11 +108,14 @@ impl CreateOperation {
             .get_subnet_by_id(&selected_subnet)
             .await
             .context(GetSubnetSnafu)?;
+        debug!("Found subnet type: {subnet_info:?}");
         let cid = if let Some(SubnetType::Unknown(kind)) = subnet_info.subnet_type()
             && kind == "cloud_engine"
         {
+            debug!("Attempting to create a canister on a cloud engine");
             self.create_mgmt(settings, &subnet_info).await?
         } else {
+            debug!("Attempting to create a canister through the ledger");
             self.create_ledger(settings, selected_subnet).await?
         };
         Ok(cid)

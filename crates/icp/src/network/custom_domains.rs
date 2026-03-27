@@ -11,13 +11,17 @@ use crate::{prelude::*, store_id::IdMapping};
 /// Each line has the format `<canister_name>.<env_name>.<domain>:<principal>`.
 /// The file is written fresh each time from the full set of current mappings
 /// across all environments sharing this network.
+///
+/// `extra_entries` are raw `(full_domain, canister_id)` pairs appended after the
+/// environment-based entries (e.g. system canisters like Internet Identity).
 pub fn write_custom_domains(
     status_dir: &Path,
     domain: &str,
     env_mappings: &BTreeMap<String, IdMapping>,
+    extra_entries: &[(String, String)],
 ) -> Result<(), WriteCustomDomainsError> {
     let file_path = status_dir.join("custom-domains.txt");
-    let content: String = env_mappings
+    let mut content: String = env_mappings
         .iter()
         .flat_map(|(env_name, mappings)| {
             mappings
@@ -25,8 +29,23 @@ pub fn write_custom_domains(
                 .map(move |(name, principal)| format!("{name}.{env_name}.{domain}:{principal}\n"))
         })
         .collect();
+    for (full_domain, canister_id) in extra_entries {
+        content.push_str(&format!("{full_domain}:{canister_id}\n"));
+    }
     crate::fs::write(&file_path, content.as_bytes())?;
     Ok(())
+}
+
+/// Returns the custom domain entry for the II frontend canister, if II is enabled.
+pub fn ii_custom_domain_entry(ii: bool, domain: &str) -> Option<(String, String)> {
+    if ii {
+        Some((
+            format!("id.ai.{domain}"),
+            icp_canister_interfaces::internet_identity::INTERNET_IDENTITY_FRONTEND_CID.to_string(),
+        ))
+    } else {
+        None
+    }
 }
 
 /// Extracts the domain authority from a gateway URL for use in subdomain-based
@@ -110,7 +129,7 @@ mod tests {
         );
         env_mappings.insert("staging".to_string(), staging_mappings);
 
-        write_custom_domains(dir.path(), "localhost", &env_mappings).unwrap();
+        write_custom_domains(dir.path(), "localhost", &env_mappings, &[]).unwrap();
 
         let content = std::fs::read_to_string(dir.path().join("custom-domains.txt")).unwrap();
         // BTreeMap is ordered, so local comes before staging
@@ -120,6 +139,38 @@ mod tests {
              frontend.local.localhost:bd3sg-teaaa-aaaaa-qaaba-cai\n\
              backend.staging.localhost:aaaaa-aa\n"
         );
+    }
+
+    #[test]
+    fn write_custom_domains_with_extra_entries() {
+        let dir = camino_tempfile::Utf8TempDir::new().unwrap();
+        let env_mappings = BTreeMap::new();
+        let extra = vec![(
+            "id.ai.localhost".to_string(),
+            "uqzsh-gqaaa-aaaaq-qaada-cai".to_string(),
+        )];
+
+        write_custom_domains(dir.path(), "localhost", &env_mappings, &extra).unwrap();
+
+        let content = std::fs::read_to_string(dir.path().join("custom-domains.txt")).unwrap();
+        assert_eq!(content, "id.ai.localhost:uqzsh-gqaaa-aaaaq-qaada-cai\n");
+    }
+
+    #[test]
+    fn ii_custom_domain_entry_returns_entry_when_enabled() {
+        let entry = ii_custom_domain_entry(true, "localhost");
+        assert_eq!(
+            entry,
+            Some((
+                "id.ai.localhost".to_string(),
+                "uqzsh-gqaaa-aaaaq-qaada-cai".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn ii_custom_domain_entry_returns_none_when_disabled() {
+        assert_eq!(ii_custom_domain_entry(false, "localhost"), None);
     }
 
     #[test]

@@ -241,10 +241,12 @@ async fn run_network_launcher(
         info!("Network started on port {}", instance.gateway_port);
     }
 
+    let gateway_url: Url = format!("http://{}:{}", gateway.host, gateway.port)
+        .parse()
+        .unwrap();
+
     let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
-        &format!("http://{}:{}", gateway.host, gateway.port)
-            .parse()
-            .unwrap(),
+        &gateway_url,
         &instance.root_key,
         all_identities,
         default_identity,
@@ -252,6 +254,8 @@ async fn run_network_launcher(
         proxy_wasm,
     )
     .await?;
+
+    let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.ii);
 
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
@@ -274,6 +278,7 @@ async fn run_network_launcher(
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
                 proxy_canister_id,
+                ii,
                 status_dir: Some(status_dir_path.clone()),
                 use_friendly_domains: instance.use_friendly_domains,
             };
@@ -284,6 +289,23 @@ async fn run_network_launcher(
             Ok(())
         })
         .await??;
+
+    // Write initial custom-domains.txt with system canister entries (e.g. II)
+    if instance.use_friendly_domains
+        && let Some(domain) = crate::network::custom_domains::gateway_domain(&gateway_url)
+    {
+        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(ii, domain)
+            .into_iter()
+            .collect();
+        if !extra.is_empty() {
+            let _ = crate::network::custom_domains::write_custom_domains(
+                &status_dir_path,
+                domain,
+                &std::collections::BTreeMap::new(),
+                &extra,
+            );
+        }
+    }
     if background {
         info!("To stop the network, run `icp network stop`");
         guard.defuse();

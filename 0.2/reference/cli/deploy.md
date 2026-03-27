@@ -24,6 +24,7 @@ Deploy a project to an environment
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--json` — Output command results as JSON
 
 
 

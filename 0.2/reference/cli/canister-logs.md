@@ -22,6 +22,7 @@ Fetch and display canister logs
 * `--until <TIMESTAMP>` — Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
 * `--since-index <INDEX>` — Show logs at or after this log index (inclusive). Cannot be used with --follow
 * `--until-index <INDEX>` — Show logs before this log index (exclusive). Cannot be used with --follow
+* `--json` — Output command results as JSON
 
 
 

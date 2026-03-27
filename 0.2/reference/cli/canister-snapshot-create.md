@@ -15,6 +15,8 @@ Create a snapshot of a canister's state
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
 
 
 

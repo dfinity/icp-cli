@@ -7,7 +7,7 @@ Manage your identities
 ###### **Subcommands:**
 
 * [`account-id`](identity-account-id.md) — Display the ICP ledger or ICRC-1 account identifier for the current identity
-* [`default`](identity-default.md) — Display the currently selected identity
+* [`default`](identity-default.md) — Display or set the currently selected identity
 * [`delete`](identity-delete.md) — Delete an identity
 * [`export`](identity-export.md) — Print the PEM file for the identity
 * [`import`](identity-import.md) — Import a new identity

@@ -17,6 +17,8 @@ Upload a snapshot from local disk
 * `-i`, `--input <INPUT>` — Input directory containing the snapshot files
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one
 * `--resume` — Resume a previously interrupted upload
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
 
 
 

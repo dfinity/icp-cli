@@ -4,6 +4,7 @@ use candid::Principal;
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
+    internet_identity::INTERNET_IDENTITY_FRONTEND_PRINCIPAL,
     internet_identity::INTERNET_IDENTITY_PRINCIPAL, registry::REGISTRY_PRINCIPAL,
 };
 use indoc::{formatdoc, indoc};
@@ -496,6 +497,10 @@ async fn network_starts_with_canisters_preset() {
     // Internet identity
     agent
         .read_state_canister_module_hash(INTERNET_IDENTITY_PRINCIPAL)
+        .await
+        .unwrap();
+    agent
+        .read_state_canister_module_hash(INTERNET_IDENTITY_FRONTEND_PRINCIPAL)
         .await
         .unwrap();
 }

@@ -86,6 +86,9 @@ jobs:
           # Copy custom domain file
           cp docs-site/public/.well-known/ic-domains root/.well-known/ic-domains
 
+          # Copy Matomo analytics script (site ID defined once here, not per-version)
+          cp docs-site/matomo.js root/matomo.js
+
           # Extract the latest version from versions.json
           LATEST_VERSION=$(jq -r ".versions[] | select(.latest == true) | .version" docs-site/versions.json)
 

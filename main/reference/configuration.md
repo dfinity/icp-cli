@@ -211,7 +211,7 @@ networks:
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
 | `gateway.domains` | array | No | Custom domain names the gateway responds to (e.g. `my-app.localhost`) |
 | `artificial-delay-ms` | integer | No | Artificial delay for update calls (ms) |
-| `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. |
+| `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. When enabled, the internet identity frontend is available at id.ai.localhost:<port> |
 | `nns` | boolean | No | Install NNS and SNS canisters (default: false). Implies `ii` and adds an SNS subnet. |
 | `subnets` | array | No | Configure subnet types. See [Subnet Configuration](#subnet-configuration). |
 | `bitcoind-addr` | array | No | Bitcoin P2P node addresses (e.g. `127.0.0.1:18444`). Adds a bitcoin and II subnet. |

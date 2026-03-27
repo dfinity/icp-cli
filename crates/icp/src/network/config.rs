@@ -75,7 +75,7 @@ pub struct NetworkDescriptorModel {
     pub candid_ui_canister_id: Option<Principal>,
     /// Canister ID of the deployed proxy canister, if any.
     pub proxy_canister_id: Option<Principal>,
-    /// Whether the Internet Identity canister is deployed on this network.
+    /// Whether Internet Identity is deployed on this network.
     #[serde(default)]
     pub ii: bool,
     /// Path to the status directory shared with the network launcher.

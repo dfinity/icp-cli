@@ -18,8 +18,6 @@ Create a new identity
 
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only the seed phrase
 
 
 

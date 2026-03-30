@@ -194,7 +194,6 @@ Make a canister call
   - `hex`:
     Print raw response as hex
 
-* `--json` — Output command results as JSON
 
 
 
@@ -240,7 +239,6 @@ Examples:
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
 * `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
-* `--json` — Output command results as JSON
 
 
 
@@ -313,7 +311,6 @@ List the canisters in an environment
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--json` — Output command results as JSON
 
 
 
@@ -341,7 +338,6 @@ Fetch and display canister logs
 * `--until <TIMESTAMP>` — Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
 * `--since-index <INDEX>` — Show logs at or after this log index (inclusive). Cannot be used with --follow
 * `--until-index <INDEX>` — Show logs before this log index (exclusive). Cannot be used with --follow
-* `--json` — Output command results as JSON
 
 
 
@@ -362,7 +358,6 @@ Read a metadata section from a canister
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--json` — Output command results as JSON
 
 
 
@@ -520,8 +515,6 @@ Create a snapshot of a canister's state
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
 
 
 
@@ -583,8 +576,6 @@ List all snapshots for a canister
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only snapshot IDs
 
 
 
@@ -627,8 +618,6 @@ Upload a snapshot from local disk
 * `-i`, `--input <INPUT>` — Input directory containing the snapshot files
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one
 * `--resume` — Resume a previously interrupted upload
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
 
 
 
@@ -741,8 +730,6 @@ Display the cycles balance
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
 
 
@@ -762,7 +749,6 @@ Convert icp to cycles
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--json` — Output command results as JSON
 
 
 
@@ -785,8 +771,6 @@ Transfer cycles to another principal
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
 
 
@@ -816,7 +800,6 @@ Deploy a project to an environment
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
-* `--json` — Output command results as JSON
 
 
 
@@ -849,7 +832,7 @@ Manage your identities
 ###### **Subcommands:**
 
 * `account-id` — Display the ICP ledger or ICRC-1 account identifier for the current identity
-* `default` — Display or set the currently selected identity
+* `default` — Display the currently selected identity
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
 * `import` — Import a new identity
@@ -887,7 +870,7 @@ Display the ICP ledger or ICRC-1 account identifier for the current identity
 
 ## `icp identity default`
 
-Display or set the currently selected identity
+Display the currently selected identity
 
 **Usage:** `icp identity default [NAME]`
 
@@ -994,12 +977,7 @@ Link an HSM key to a new identity
 
 List the identities
 
-**Usage:** `icp identity list [OPTIONS]`
-
-###### **Options:**
-
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only identity names
+**Usage:** `icp identity list`
 
 
 
@@ -1023,8 +1001,6 @@ Create a new identity
 
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only the seed phrase
 
 
 
@@ -1428,8 +1404,6 @@ Display the token balance on the ledger (default token: icp)
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
 
 
@@ -1452,8 +1426,6 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--json` — Output command results as JSON
-* `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
 
 

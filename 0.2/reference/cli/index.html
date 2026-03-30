@@ -283,9 +283,6 @@ Parse as UTF-8 text; error if invalid</li>
 Print raw response as hex</li>
 </ul>
 </li>
-<li>
-<p><code>--json</code> — Output command results as JSON</p>
-</li>
 </ul>
 <h2 id="icp-canister-create"><code>icp canister create</code></h2>
 <p>Create a canister on a network</p>
@@ -341,9 +338,6 @@ or a “detached” canister on a network.</p>
 </li>
 <li>
 <p><code>--detached</code> — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if <code>Canister</code> is provided</p>
-</li>
-<li>
-<p><code>--json</code> — Output command results as JSON</p>
 </li>
 </ul>
 <h2 id="icp-canister-delete"><code>icp canister delete</code></h2>
@@ -418,7 +412,6 @@ Raw binary (only valid for file references)</li>
 <h6 id="options-6"><strong>Options:</strong></h6>
 <ul>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
-<li><code>--json</code> — Output command results as JSON</li>
 </ul>
 <h2 id="icp-canister-logs"><code>icp canister logs</code></h2>
 <p>Fetch and display canister logs</p>
@@ -460,9 +453,6 @@ Raw binary (only valid for file references)</li>
 <li>
 <p><code>--until-index &#x3C;INDEX></code> — Show logs before this log index (exclusive). Cannot be used with —follow</p>
 </li>
-<li>
-<p><code>--json</code> — Output command results as JSON</p>
-</li>
 </ul>
 <h2 id="icp-canister-metadata"><code>icp canister metadata</code></h2>
 <p>Read a metadata section from a canister</p>
@@ -478,7 +468,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--json</code> — Output command results as JSON</li>
 </ul>
 <h2 id="icp-canister-migrate-id"><code>icp canister migrate-id</code></h2>
 <p>Migrate a canister ID from one subnet to another</p>
@@ -640,8 +629,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--replace &#x3C;REPLACE></code> — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only snapshot ID</li>
 </ul>
 <h2 id="icp-canister-snapshot-delete"><code>icp canister snapshot delete</code></h2>
 <p>Delete a canister snapshot</p>
@@ -688,8 +675,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only snapshot IDs</li>
 </ul>
 <h2 id="icp-canister-snapshot-restore"><code>icp canister snapshot restore</code></h2>
 <p>Restore a canister from a snapshot</p>
@@ -722,8 +707,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-i</code>, <code>--input &#x3C;INPUT></code> — Input directory containing the snapshot files</li>
 <li><code>--replace &#x3C;REPLACE></code> — Replace an existing snapshot instead of creating a new one</li>
 <li><code>--resume</code> — Resume a previously interrupted upload</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only snapshot ID</li>
 </ul>
 <h2 id="icp-canister-start"><code>icp canister start</code></h2>
 <p>Start a canister on a network</p>
@@ -805,8 +788,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--subaccount &#x3C;SUBACCOUNT></code> — The subaccount to check the balance for</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only the balance</li>
 </ul>
 <h2 id="icp-cycles-mint"><code>icp cycles mint</code></h2>
 <p>Convert icp to cycles</p>
@@ -821,7 +802,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--json</code> — Output command results as JSON</li>
 </ul>
 <h2 id="icp-cycles-transfer"><code>icp cycles transfer</code></h2>
 <p>Transfer cycles to another principal</p>
@@ -839,8 +819,6 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only the block index</li>
 </ul>
 <h2 id="icp-deploy"><code>icp deploy</code></h2>
 <p>Deploy a project to an environment</p>
@@ -875,9 +853,6 @@ Raw binary (only valid for file references)</li>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</p>
 </li>
-<li>
-<p><code>--json</code> — Output command results as JSON</p>
-</li>
 </ul>
 <h2 id="icp-environment"><code>icp environment</code></h2>
 <p>Show information about the current project environments</p>
@@ -895,7 +870,7 @@ Raw binary (only valid for file references)</li>
 <h6 id="subcommands-6"><strong>Subcommands:</strong></h6>
 <ul>
 <li><code>account-id</code> — Display the ICP ledger or ICRC-1 account identifier for the current identity</li>
-<li><code>default</code> — Display or set the currently selected identity</li>
+<li><code>default</code> — Display the currently selected identity</li>
 <li><code>delete</code> — Delete an identity</li>
 <li><code>export</code> — Print the PEM file for the identity</li>
 <li><code>import</code> — Import a new identity</li>
@@ -932,7 +907,7 @@ ICRC-1 account identifier</li>
 </li>
 </ul>
 <h2 id="icp-identity-default"><code>icp identity default</code></h2>
-<p>Display or set the currently selected identity</p>
+<p>Display the currently selected identity</p>
 <p><strong>Usage:</strong> <code>icp identity default [NAME]</code></p>
 <h6 id="arguments-23"><strong>Arguments:</strong></h6>
 <ul>
@@ -1024,12 +999,7 @@ ICRC-1 account identifier</li>
 </ul>
 <h2 id="icp-identity-list"><code>icp identity list</code></h2>
 <p>List the identities</p>
-<p><strong>Usage:</strong> <code>icp identity list [OPTIONS]</code></p>
-<h6 id="options-31"><strong>Options:</strong></h6>
-<ul>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only identity names</li>
-</ul>
+<p><strong>Usage:</strong> <code>icp identity list</code></p>
 <h2 id="icp-identity-new"><code>icp identity new</code></h2>
 <p>Create a new identity</p>
 <p><strong>Usage:</strong> <code>icp identity new [OPTIONS] &#x3C;NAME></code></p>
@@ -1037,7 +1007,7 @@ ICRC-1 account identifier</li>
 <ul>
 <li><code>&#x3C;NAME></code> — Name for the new identity</li>
 </ul>
-<h6 id="options-32"><strong>Options:</strong></h6>
+<h6 id="options-31"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>--storage &#x3C;STORAGE></code> — Where to store the private key</p>
@@ -1050,17 +1020,11 @@ ICRC-1 account identifier</li>
 <li>
 <p><code>--output-seed &#x3C;FILE></code> — Write the seed phrase to a file instead of printing to stdout</p>
 </li>
-<li>
-<p><code>--json</code> — Output command results as JSON</p>
-</li>
-<li>
-<p><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only the seed phrase</p>
-</li>
 </ul>
 <h2 id="icp-identity-principal"><code>icp identity principal</code></h2>
 <p>Display the principal for the current identity</p>
 <p><strong>Usage:</strong> <code>icp identity principal [OPTIONS]</code></p>
-<h6 id="options-33"><strong>Options:</strong></h6>
+<h6 id="options-32"><strong>Options:</strong></h6>
 <ul>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 </ul>
@@ -1104,7 +1068,7 @@ ICRC-1 account identifier</li>
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-34"><strong>Options:</strong></h6>
+<h6 id="options-33"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -1132,7 +1096,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-35"><strong>Options:</strong></h6>
+<h6 id="options-34"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -1160,7 +1124,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-36"><strong>Options:</strong></h6>
+<h6 id="options-35"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -1187,7 +1151,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p>Takes precedence over -e/—environment and the ICP_ENVIRONMENT environment variable when specified explicitly.</p>
 </li>
 </ul>
-<h6 id="options-37"><strong>Options:</strong></h6>
+<h6 id="options-36"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Use the network configured in the specified environment.</p>
@@ -1206,7 +1170,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <ul>
 <li><code>&#x3C;NAME></code> — Directory to create / project name; if the name isn’t in kebab-case, it will be converted to kebab-case unless <code>--force</code> is given</li>
 </ul>
-<h6 id="options-38"><strong>Options:</strong></h6>
+<h6 id="options-37"><strong>Options:</strong></h6>
 <ul>
 <li>
 <p><code>--subfolder &#x3C;SUBFOLDER></code> — Specifies the subfolder within the template repository to be used as the actual template</p>
@@ -1335,7 +1299,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <ul>
 <li><code>&#x3C;CANISTERS></code> — Canister names (if empty, sync all canisters in environment)</li>
 </ul>
-<h6 id="options-39"><strong>Options:</strong></h6>
+<h6 id="options-38"><strong>Options:</strong></h6>
 <ul>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
@@ -1358,15 +1322,13 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <h2 id="icp-token-balance"><code>icp token balance</code></h2>
 <p>Display the token balance on the ledger (default token: icp)</p>
 <p><strong>Usage:</strong> <code>icp token [TOKEN|LEDGER_ID] balance [OPTIONS]</code></p>
-<h6 id="options-40"><strong>Options:</strong></h6>
+<h6 id="options-39"><strong>Options:</strong></h6>
 <ul>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--subaccount &#x3C;SUBACCOUNT></code> — The subaccount to check the balance for</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only the balance</li>
 </ul>
 <h2 id="icp-token-transfer"><code>icp token transfer</code></h2>
 <p>Transfer ICP or ICRC1 tokens through their ledger (default token: icp)</p>
@@ -1376,7 +1338,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>&#x3C;AMOUNT></code> — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)</li>
 <li><code>&#x3C;RECEIVER></code> — The receiver of the token transfer. Can be a principal, an ICRC1 account ID, or an ICP ledger account ID (hex)</li>
 </ul>
-<h6 id="options-41"><strong>Options:</strong></h6>
+<h6 id="options-40"><strong>Options:</strong></h6>
 <ul>
 <li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — The subaccount to transfer to (only if the receiver is a principal)</li>
 <li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — The subaccount to transfer from</li>
@@ -1384,8 +1346,6 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--json</code> — Output command results as JSON</li>
-<li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only the block index</li>
 </ul>
 <hr>
 <p><small><i>

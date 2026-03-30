@@ -26,7 +26,7 @@ Managed networks can run natively on your machine or inside a [docker container]
 
 Unless a custom Docker image is used, the following settings can be specified:
 
-* `ii` (bool): Enable Internet Identity
+* `ii` (bool): Enable the Internet Identity canister
 * `nns` (bool): Enable the NNS and SNS system
 * `artificial-delay-ms` (int): Add artificial latency to update calls to simulate mainnet conditions
 * `subnets` ([]string): Configure the subnet layout (by default, one application subnet is created). See [Deploying to Specific Subnets](../guides/deploying-to-specific-subnets.md) for mainnet subnet selection.
@@ -80,7 +80,7 @@ networks:
     mode: managed
     gateway:
       port: 9999  # Different port
-    ii: true # Enable Internet Identity canisters
+    ii: true # Use the Internet Identity canister
     artificial-delay-ms: 1000 # Slow down the network to simulate mainnet latency
 ```
 

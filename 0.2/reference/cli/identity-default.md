@@ -1,6 +1,6 @@
 ﻿# icp identity default
 
-Display the currently selected identity
+Display or set the currently selected identity
 
 **Usage:** `icp identity default [NAME]`
 

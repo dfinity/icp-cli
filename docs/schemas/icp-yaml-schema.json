@@ -634,7 +634,7 @@
               "description": "HTTP gateway configuration"
             },
             "ii": {
-              "description": "Set up the Internet Identity canister",
+              "description": "Set up the Internet Identity canister. Makes internet identity available at\nid.ai.localhost:<port>",
               "type": [
                 "boolean",
                 "null"

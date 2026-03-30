@@ -15,11 +15,12 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
-          # 'src' is true when any changed file matches a positive pattern
-          # and does not match a negative pattern (! prefix).
+          # With 'every', a changed file is matched only when it satisfies
+          # ALL rules: the positive pattern AND every negated pattern.
+          predicate-quantifier: 'every'
           filters: |
             src:
               - '**'

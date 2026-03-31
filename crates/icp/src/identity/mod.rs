@@ -251,3 +251,45 @@ impl Load for MockIdentityLoader {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use k256::SecretKey;
+    use rand::{Rng, rng};
+
+    use crate::identity::key::{CreateFormat, IdentityKey};
+
+    use super::*;
+    #[tokio::test]
+    async fn cached_identities() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let dirs = IdentityPaths::new(tmp.path().to_path_buf()).unwrap();
+        let mut k = [0; 32];
+        rng().fill_bytes(&mut k);
+        dirs.with_write(async |dirs| {
+            crate::identity::key::create_identity(
+                dirs,
+                "test",
+                IdentityKey::Secp256k1(SecretKey::from_bytes(&k.into()).unwrap()),
+                CreateFormat::Plaintext,
+            )
+            .unwrap();
+        })
+        .await
+        .unwrap();
+        let loader = Loader::new(
+            dirs,
+            Box::new(|| unimplemented!()),
+            Arc::new(TelemetryData::default()),
+        );
+        let i1 = loader
+            .load(IdentitySelection::Named("test".to_string()))
+            .await
+            .unwrap();
+        let i2 = loader
+            .load(IdentitySelection::Named("test".to_string()))
+            .await
+            .unwrap();
+        assert!(Arc::ptr_eq(&i1, &i2));
+    }
+}

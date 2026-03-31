@@ -654,6 +654,7 @@ async fn deploy_cloud_engine() {
         .expect("no CloudEngine subnet found in topology");
 
     // Deploy to the CloudEngine subnet
+    // Only the admin can do this. In local envs, the admin is the anonymous principal
     ctx.icp()
         .current_dir(&project_dir)
         .args([

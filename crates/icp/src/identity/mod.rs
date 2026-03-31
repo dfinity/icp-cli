@@ -111,7 +111,7 @@ pub struct Loader {
     dir: IdentityDirectories,
     password_func: PasswordFunc,
     telemetry_data: Arc<TelemetryData>,
-    cache: Mutex<HashMap<IdentitySelection, Arc<dyn Identity>>>,
+    cache: Mutex<HashMap<IdentitySelection, (Arc<dyn Identity>, Option<IdentityStorageType>)>>,
 }
 
 impl Loader {
@@ -132,37 +132,40 @@ impl Loader {
 #[async_trait]
 impl Load for Loader {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
-        if let Some(cached) = self.cache.lock().unwrap().get(&id) {
+        if let Some((cached, storage_type)) = self.cache.lock().unwrap().get(&id) {
+            if let Some(t) = storage_type {
+                self.telemetry_data.set_identity_type(*t);
+            }
             return Ok(Arc::clone(cached));
         }
 
         let password_func = &self.password_func;
-        let telemetry_data = &self.telemetry_data;
-        let identity = match &id {
+        let (identity, storage_type) = match &id {
             IdentitySelection::Default => {
                 self.dir
                     .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
                         let default_name = manifest::IdentityDefaults::load_from(dirs)?.default;
                         let identity = load_identity(dirs, &list, &default_name, password_func)?;
-                        if let Some(spec) = list.identities.get(&default_name) {
-                            telemetry_data.set_identity_type(spec.into());
-                        }
-                        Ok(identity)
+                        let storage_type =
+                            list.identities.get(&default_name).map(|spec| spec.into());
+                        Ok((identity, storage_type))
                     })
                     .await??
             }
 
             IdentitySelection::Anonymous => {
-                telemetry_data.set_identity_type(IdentityStorageType::Anonymous);
                 self.dir
                     .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
-                        Ok(load_identity(
-                            dirs,
-                            &IdentityList::load_from(dirs)?,
-                            "anonymous",
-                            || unreachable!(),
-                        )?)
+                        Ok((
+                            load_identity(
+                                dirs,
+                                &IdentityList::load_from(dirs)?,
+                                "anonymous",
+                                || unreachable!(),
+                            )?,
+                            Some(IdentityStorageType::Anonymous),
+                        ))
                     })
                     .await??
             }
@@ -172,16 +175,20 @@ impl Load for Loader {
                     .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
                         let identity = load_identity(dirs, &list, name, password_func)?;
-                        if let Some(spec) = list.identities.get(name) {
-                            telemetry_data.set_identity_type(spec.into());
-                        }
-                        Ok(identity)
+                        let storage_type = list.identities.get(name).map(|spec| spec.into());
+                        Ok((identity, storage_type))
                     })
                     .await??
             }
         };
 
-        self.cache.lock().unwrap().insert(id, Arc::clone(&identity));
+        if let Some(t) = storage_type {
+            self.telemetry_data.set_identity_type(t);
+        }
+        self.cache
+            .lock()
+            .unwrap()
+            .insert(id, (Arc::clone(&identity), storage_type));
         Ok(identity)
     }
 }

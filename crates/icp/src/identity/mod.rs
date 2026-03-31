@@ -111,6 +111,7 @@ pub struct Loader {
     dir: IdentityDirectories,
     password_func: PasswordFunc,
     telemetry_data: Arc<TelemetryData>,
+    #[allow(clippy::type_complexity)]
     cache: Mutex<HashMap<IdentitySelection, (Arc<dyn Identity>, Option<IdentityStorageType>)>>,
 }
 

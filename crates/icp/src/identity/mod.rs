@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use ic_agent::Identity;
 use snafu::prelude::*;
+
+use std::collections::HashMap;
 
 use crate::{
     fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
@@ -70,7 +72,7 @@ impl PathsAccess for IdentityPaths {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum IdentitySelection {
     /// Current default
     Default,
@@ -106,20 +108,40 @@ pub trait Load: Sync + Send {
 pub type PasswordFunc = Box<dyn Fn() -> Result<String, String> + Send + Sync>;
 
 pub struct Loader {
-    pub dir: IdentityDirectories,
-    pub password_func: PasswordFunc,
-    pub telemetry_data: Arc<TelemetryData>,
+    dir: IdentityDirectories,
+    password_func: PasswordFunc,
+    telemetry_data: Arc<TelemetryData>,
+    cache: Mutex<HashMap<IdentitySelection, Arc<dyn Identity>>>,
+}
+
+impl Loader {
+    pub fn new(
+        dir: IdentityDirectories,
+        password_func: PasswordFunc,
+        telemetry_data: Arc<TelemetryData>,
+    ) -> Self {
+        Self {
+            dir,
+            password_func,
+            telemetry_data,
+            cache: Mutex::new(HashMap::new()),
+        }
+    }
 }
 
 #[async_trait]
 impl Load for Loader {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+        if let Some(cached) = self.cache.lock().unwrap().get(&id) {
+            return Ok(Arc::clone(cached));
+        }
+
         let password_func = &self.password_func;
         let telemetry_data = &self.telemetry_data;
-        match id {
+        let identity = match &id {
             IdentitySelection::Default => {
                 self.dir
-                    .with_read(async |dirs| {
+                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
                         let default_name = manifest::IdentityDefaults::load_from(dirs)?.default;
                         let identity = load_identity(dirs, &list, &default_name, password_func)?;
@@ -128,13 +150,13 @@ impl Load for Loader {
                         }
                         Ok(identity)
                     })
-                    .await?
+                    .await??
             }
 
             IdentitySelection::Anonymous => {
                 telemetry_data.set_identity_type(IdentityStorageType::Anonymous);
                 self.dir
-                    .with_read(async |dirs| {
+                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         Ok(load_identity(
                             dirs,
                             &IdentityList::load_from(dirs)?,
@@ -142,27 +164,27 @@ impl Load for Loader {
                             || unreachable!(),
                         )?)
                     })
-                    .await?
+                    .await??
             }
 
             IdentitySelection::Named(name) => {
                 self.dir
-                    .with_read(async |dirs| {
+                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
-                        let identity = load_identity(dirs, &list, &name, password_func)?;
-                        if let Some(spec) = list.identities.get(&name) {
+                        let identity = load_identity(dirs, &list, name, password_func)?;
+                        if let Some(spec) = list.identities.get(name) {
                             telemetry_data.set_identity_type(spec.into());
                         }
                         Ok(identity)
                     })
-                    .await?
+                    .await??
             }
-        }
+        };
+
+        self.cache.lock().unwrap().insert(id, Arc::clone(&identity));
+        Ok(identity)
     }
 }
-
-#[cfg(test)]
-use std::collections::HashMap;
 
 #[cfg(test)]
 pub struct MockIdentityLoader {

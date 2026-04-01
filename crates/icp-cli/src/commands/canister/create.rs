@@ -85,8 +85,16 @@ pub(crate) struct CreateArgs {
     pub(crate) cycles: CyclesAmount,
 
     /// The subnet to create canisters on.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "proxy")]
     pub(crate) subnet: Option<Principal>,
+
+    /// Principal of a proxy canister to route the create_canister call through.
+    ///
+    /// When specified, the canister will be created on the same subnet as the
+    /// proxy canister by forwarding the management canister call through the
+    /// proxy's `proxy` method.
+    #[arg(long, conflicts_with = "subnet")]
+    pub(crate) proxy: Option<Principal>,
 
     /// Create a canister detached from any project configuration. The canister id will be
     /// printed out but not recorded in the project configuration. Not valid if `Canister`
@@ -139,10 +147,11 @@ impl CreateArgs {
         }
     }
 
-    pub(crate) fn create_target(&self) -> CreateTarget {
-        match self.subnet {
-            Some(subnet) => CreateTarget::Subnet(subnet),
-            None => CreateTarget::None,
+    fn create_target(&self) -> CreateTarget {
+        match (self.subnet, self.proxy) {
+            (Some(subnet), _) => CreateTarget::Subnet(subnet),
+            (_, Some(proxy)) => CreateTarget::Proxy(proxy),
+            _ => CreateTarget::None,
         }
     }
 

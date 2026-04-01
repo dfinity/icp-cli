@@ -58,10 +58,22 @@ pub enum CreateOperationError {
     ProxyDecode { source: candid::Error },
 }
 
+/// Determines how a new canister is created.
+pub enum CreateTarget {
+    /// Create the canister on a specific subnet, chosen by the caller.
+    Subnet(Principal),
+    /// Create the canister via a proxy canister. The `create_canister` call is
+    /// forwarded through the proxy's `proxy` method to the management canister,
+    /// so the new canister will be placed on the same subnet as the proxy.
+    Proxy(Principal),
+    /// No explicit target. The subnet is resolved automatically: either from an
+    /// existing canister in the project or by picking a random available subnet.
+    None,
+}
+
 struct CreateOperationInner {
     agent: Agent,
-    proxy: Option<Principal>,
-    subnet: Option<Principal>,
+    target: CreateTarget,
     cycles: u128,
     existing_canisters: Vec<Principal>,
     resolved_subnet: OnceCell<Result<Principal, String>>,
@@ -82,16 +94,14 @@ impl Clone for CreateOperation {
 impl CreateOperation {
     pub fn new(
         agent: Agent,
-        proxy: Option<Principal>,
-        subnet: Option<Principal>,
+        target: CreateTarget,
         cycles: u128,
         existing_canisters: Vec<Principal>,
     ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
                 agent,
-                proxy,
-                subnet,
+                target,
                 cycles,
                 existing_canisters,
                 resolved_subnet: OnceCell::new(),
@@ -107,7 +117,7 @@ impl CreateOperation {
         &self,
         settings: &CanisterSettingsArg,
     ) -> Result<Principal, CreateOperationError> {
-        if let Some(proxy) = self.inner.proxy {
+        if let CreateTarget::Proxy(proxy) = self.inner.target {
             return self.create_proxy(settings, proxy).await;
         }
 
@@ -257,7 +267,7 @@ impl CreateOperation {
             .resolved_subnet
             .get_or_init(|| async {
                 // If subnet is explicitly provided, use it
-                if let Some(subnet) = self.inner.subnet {
+                if let CreateTarget::Subnet(subnet) = self.inner.target {
                     return Ok(subnet);
                 }
 

@@ -10,7 +10,10 @@ use icp_canister_interfaces::management_canister::CanisterSettingsArg;
 use serde::Serialize;
 use tracing::info;
 
-use crate::{commands::args, operations::create::CreateOperation};
+use crate::{
+    commands::args,
+    operations::create::{CreateOperation, CreateTarget},
+};
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -136,6 +139,13 @@ impl CreateArgs {
         }
     }
 
+    pub(crate) fn create_target(&self) -> CreateTarget {
+        match self.subnet {
+            Some(subnet) => CreateTarget::Subnet(subnet),
+            None => CreateTarget::None,
+        }
+    }
+
     pub(crate) fn canister_settings(&self) -> CanisterSettingsArg {
         CanisterSettingsArg {
             freezing_threshold: self
@@ -193,7 +203,7 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .await?;
 
     let create_operation =
-        CreateOperation::new(agent, None, args.subnet, args.cycles.get(), vec![]);
+        CreateOperation::new(agent, args.create_target(), args.cycles.get(), vec![]);
 
     let canister_settings = args.canister_settings();
 
@@ -255,8 +265,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 
     let create_operation = CreateOperation::new(
         agent,
-        None,
-        args.subnet,
+        args.create_target(),
         args.cycles.get(),
         existing_canisters,
     );

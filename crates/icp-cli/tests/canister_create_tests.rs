@@ -537,3 +537,68 @@ async fn canister_create_detached() {
         .assert()
         .failure();
 }
+
+#[tokio::test]
+async fn canister_create_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Get the proxy canister ID from network status
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args(["network", "status", "random-network", "--json"])
+        .output()
+        .expect("failed to get network status");
+    let status_json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("failed to parse network status JSON");
+    let proxy_cid = status_json
+        .get("proxy_canister_principal")
+        .and_then(|v| v.as_str())
+        .expect("proxy canister principal not found in network status")
+        .to_string();
+
+    // Create canister through the proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Created canister my-canister with ID"));
+
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("random-environment.ids.json");
+    assert!(
+        id_mapping_path.exists(),
+        "ID mapping file should exist at {id_mapping_path}"
+    );
+}

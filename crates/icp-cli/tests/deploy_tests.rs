@@ -3,8 +3,12 @@ use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
 };
+use test_tag::tag;
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
+    TestContext, clients,
+};
 use icp::{
     fs::{create_dir_all, write_string},
     prelude::*,
@@ -598,4 +602,84 @@ async fn deploy_upgrade_rejects_incompatible_candid() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, 42!\")").trim());
+}
+
+#[tag(docker)]
+#[tokio::test]
+async fn deploy_cloud_engine() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_DOCKER_ENGINE}
+        {ENVIRONMENT_DOCKER_ENGINE}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.docker_pull_engine_network();
+    let _guard = ctx
+        .start_network_in(&project_dir, "docker-engine-network")
+        .await;
+    ctx.ping_until_healthy(&project_dir, "docker-engine-network");
+
+    // Find the CloudEngine subnet by querying the topology endpoint
+    // TODO replace with a subnet selection parameter once we have one
+    let topology_url = ctx.gateway_url().join("/_/topology").unwrap();
+    let topology: serde_json::Value = reqwest::get(topology_url)
+        .await
+        .expect("failed to fetch topology")
+        .json()
+        .await
+        .expect("failed to parse topology");
+
+    let subnet_configs = topology["subnet_configs"]
+        .as_object()
+        .expect("subnet_configs should be an object");
+    let cloud_engine_subnet_id = subnet_configs
+        .iter()
+        .find_map(|(id, config)| {
+            (config["subnet_kind"].as_str()? == "CloudEngine").then_some(id.clone())
+        })
+        .expect("no CloudEngine subnet found in topology");
+
+    // Deploy to the CloudEngine subnet
+    // Only the admin can do this. In local envs, the admin is the anonymous principal
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            &cloud_engine_subnet_id,
+            "--environment",
+            "docker-engine-environment",
+        ])
+        .assert()
+        .success();
+
+    // Query canister to verify it works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "docker-engine-environment",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
 }

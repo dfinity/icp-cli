@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use ic_agent::Identity;
 use snafu::prelude::*;
+
+use std::collections::HashMap;
 
 use crate::{
     fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
@@ -70,7 +72,7 @@ impl PathsAccess for IdentityPaths {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum IdentitySelection {
     /// Current default
     Default,
@@ -106,63 +108,91 @@ pub trait Load: Sync + Send {
 pub type PasswordFunc = Box<dyn Fn() -> Result<String, String> + Send + Sync>;
 
 pub struct Loader {
-    pub dir: IdentityDirectories,
-    pub password_func: PasswordFunc,
-    pub telemetry_data: Arc<TelemetryData>,
+    dir: IdentityDirectories,
+    password_func: PasswordFunc,
+    telemetry_data: Arc<TelemetryData>,
+    #[allow(clippy::type_complexity)]
+    cache: Mutex<HashMap<IdentitySelection, (Arc<dyn Identity>, Option<IdentityStorageType>)>>,
+}
+
+impl Loader {
+    pub fn new(
+        dir: IdentityDirectories,
+        password_func: PasswordFunc,
+        telemetry_data: Arc<TelemetryData>,
+    ) -> Self {
+        Self {
+            dir,
+            password_func,
+            telemetry_data,
+            cache: Mutex::new(HashMap::new()),
+        }
+    }
 }
 
 #[async_trait]
 impl Load for Loader {
     async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+        if let Some((cached, storage_type)) = self.cache.lock().unwrap().get(&id) {
+            if let Some(t) = storage_type {
+                self.telemetry_data.set_identity_type(*t);
+            }
+            return Ok(Arc::clone(cached));
+        }
+
         let password_func = &self.password_func;
-        let telemetry_data = &self.telemetry_data;
-        match id {
+        let (identity, storage_type) = match &id {
             IdentitySelection::Default => {
                 self.dir
-                    .with_read(async |dirs| {
+                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
                         let default_name = manifest::IdentityDefaults::load_from(dirs)?.default;
                         let identity = load_identity(dirs, &list, &default_name, password_func)?;
-                        if let Some(spec) = list.identities.get(&default_name) {
-                            telemetry_data.set_identity_type(spec.into());
-                        }
-                        Ok(identity)
+                        let storage_type =
+                            list.identities.get(&default_name).map(|spec| spec.into());
+                        Ok((identity, storage_type))
                     })
-                    .await?
+                    .await??
             }
 
             IdentitySelection::Anonymous => {
-                telemetry_data.set_identity_type(IdentityStorageType::Anonymous);
                 self.dir
-                    .with_read(async |dirs| {
-                        Ok(load_identity(
-                            dirs,
-                            &IdentityList::load_from(dirs)?,
-                            "anonymous",
-                            || unreachable!(),
-                        )?)
+                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        Ok((
+                            load_identity(
+                                dirs,
+                                &IdentityList::load_from(dirs)?,
+                                "anonymous",
+                                || unreachable!(),
+                            )?,
+                            Some(IdentityStorageType::Anonymous),
+                        ))
                     })
-                    .await?
+                    .await??
             }
 
             IdentitySelection::Named(name) => {
                 self.dir
-                    .with_read(async |dirs| {
+                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
-                        let identity = load_identity(dirs, &list, &name, password_func)?;
-                        if let Some(spec) = list.identities.get(&name) {
-                            telemetry_data.set_identity_type(spec.into());
-                        }
-                        Ok(identity)
+                        let identity = load_identity(dirs, &list, name, password_func)?;
+                        let storage_type = list.identities.get(name).map(|spec| spec.into());
+                        Ok((identity, storage_type))
                     })
-                    .await?
+                    .await??
             }
+        };
+
+        if let Some(t) = storage_type {
+            self.telemetry_data.set_identity_type(t);
         }
+        self.cache
+            .lock()
+            .unwrap()
+            .insert(id, (Arc::clone(&identity), storage_type));
+        Ok(identity)
     }
 }
-
-#[cfg(test)]
-use std::collections::HashMap;
 
 #[cfg(test)]
 pub struct MockIdentityLoader {
@@ -219,5 +249,47 @@ impl Load for MockIdentityLoader {
                     })?
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use k256::SecretKey;
+    use rand::{Rng, rng};
+
+    use crate::identity::key::{CreateFormat, IdentityKey};
+
+    use super::*;
+    #[tokio::test]
+    async fn cached_identities() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let dirs = IdentityPaths::new(tmp.path().to_path_buf()).unwrap();
+        let mut k = [0; 32];
+        rng().fill_bytes(&mut k);
+        dirs.with_write(async |dirs| {
+            crate::identity::key::create_identity(
+                dirs,
+                "test",
+                IdentityKey::Secp256k1(SecretKey::from_bytes(&k.into()).unwrap()),
+                CreateFormat::Plaintext,
+            )
+            .unwrap();
+        })
+        .await
+        .unwrap();
+        let loader = Loader::new(
+            dirs,
+            Box::new(|| unimplemented!()),
+            Arc::new(TelemetryData::default()),
+        );
+        let i1 = loader
+            .load(IdentitySelection::Named("test".to_string()))
+            .await
+            .unwrap();
+        let i2 = loader
+            .load(IdentitySelection::Named("test".to_string()))
+            .await
+            .unwrap();
+        assert!(Arc::ptr_eq(&i1, &i2));
     }
 }

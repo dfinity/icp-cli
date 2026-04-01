@@ -192,7 +192,8 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         )
         .await?;
 
-    let create_operation = CreateOperation::new(agent, args.subnet, args.cycles.get(), vec![]);
+    let create_operation =
+        CreateOperation::new(agent, None, args.subnet, args.cycles.get(), vec![]);
 
     let canister_settings = args.canister_settings();
 
@@ -252,8 +253,13 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         .into_values()
         .collect();
 
-    let create_operation =
-        CreateOperation::new(agent, args.subnet, args.cycles.get(), existing_canisters);
+    let create_operation = CreateOperation::new(
+        agent,
+        None,
+        args.subnet,
+        args.cycles.get(),
+        existing_canisters,
+    );
 
     let canister_settings = args.canister_settings_with_default(&canister_info);
     let id = create_operation.create(&canister_settings).await?;

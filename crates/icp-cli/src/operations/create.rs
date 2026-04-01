@@ -12,6 +12,7 @@ use icp_canister_interfaces::{
     management_canister::{
         CanisterSettingsArg, MgmtCreateCanisterArgs, MgmtCreateCanisterResponse,
     },
+    proxy::{ProxyArgs, ProxyResult},
 };
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
@@ -49,10 +50,17 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to resolve subnet: {message}"))]
     SubnetResolution { message: String },
+
+    #[snafu(display("proxy call failed: {message}"))]
+    ProxyCall { message: String },
+
+    #[snafu(display("failed to decode proxy canister response: {source}"))]
+    ProxyDecode { source: candid::Error },
 }
 
 struct CreateOperationInner {
     agent: Agent,
+    proxy: Option<Principal>,
     subnet: Option<Principal>,
     cycles: u128,
     existing_canisters: Vec<Principal>,
@@ -74,6 +82,7 @@ impl Clone for CreateOperation {
 impl CreateOperation {
     pub fn new(
         agent: Agent,
+        proxy: Option<Principal>,
         subnet: Option<Principal>,
         cycles: u128,
         existing_canisters: Vec<Principal>,
@@ -81,6 +90,7 @@ impl CreateOperation {
         Self {
             inner: Arc::new(CreateOperationInner {
                 agent,
+                proxy,
                 subnet,
                 cycles,
                 existing_canisters,
@@ -97,6 +107,10 @@ impl CreateOperation {
         &self,
         settings: &CanisterSettingsArg,
     ) -> Result<Principal, CreateOperationError> {
+        if let Some(proxy) = self.inner.proxy {
+            return self.create_proxy(settings, proxy).await;
+        }
+
         let selected_subnet = self
             .get_subnet()
             .await
@@ -187,6 +201,49 @@ impl CreateOperation {
             .context(AgentSnafu)?;
         let resp = Decode!(&resp, MgmtCreateCanisterResponse).context(CandidDecodeSnafu)?;
         Ok(resp.canister_id)
+    }
+
+    async fn create_proxy(
+        &self,
+        settings: &CanisterSettingsArg,
+        proxy: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let mgmt_arg = MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
+            sender_canister_version: None,
+        };
+        let mgmt_arg_bytes = Encode!(&mgmt_arg).context(CandidEncodeSnafu)?;
+
+        let proxy_args = ProxyArgs {
+            canister_id: Principal::management_canister(),
+            method: "create_canister".to_string(),
+            args: mgmt_arg_bytes,
+            cycles: Nat::from(self.inner.cycles),
+        };
+        let proxy_arg_bytes = Encode!(&proxy_args).context(CandidEncodeSnafu)?;
+
+        let proxy_res = self
+            .inner
+            .agent
+            .update(&proxy, "proxy")
+            .with_arg(proxy_arg_bytes)
+            .await
+            .context(AgentSnafu)?;
+
+        let proxy_result: (ProxyResult,) =
+            candid::decode_args(&proxy_res).context(ProxyDecodeSnafu)?;
+
+        match proxy_result.0 {
+            ProxyResult::Ok(ok) => {
+                let resp =
+                    Decode!(&ok.result, MgmtCreateCanisterResponse).context(CandidDecodeSnafu)?;
+                Ok(resp.canister_id)
+            }
+            ProxyResult::Err(err) => ProxyCallSnafu {
+                message: err.format_error(),
+            }
+            .fail(),
+        }
     }
 
     /// 1. If a subnet is explicitly provided, use it

@@ -129,6 +129,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     } else {
         let create_operation = CreateOperation::new(
             agent.clone(),
+            None,
             args.subnet,
             args.cycles.get(),
             existing_canisters.into_values().collect(),

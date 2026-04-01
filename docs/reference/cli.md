@@ -48,7 +48,9 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity import`↴](#icp-identity-import)
 * [`icp identity link`↴](#icp-identity-link)
 * [`icp identity link hsm`↴](#icp-identity-link-hsm)
+* [`icp identity link ii`↴](#icp-identity-link-ii)
 * [`icp identity list`↴](#icp-identity-list)
+* [`icp identity login`↴](#icp-identity-login)
 * [`icp identity new`↴](#icp-identity-new)
 * [`icp identity principal`↴](#icp-identity-principal)
 * [`icp identity rename`↴](#icp-identity-rename)
@@ -904,6 +906,7 @@ Manage your identities
 * `import` — Import a new identity
 * `link` — Link an external key to a new identity
 * `list` — List the identities
+* `login` — Re-authenticate an Internet Identity delegation
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
 * `rename` — Rename an identity
@@ -1015,6 +1018,7 @@ Link an external key to a new identity
 ###### **Subcommands:**
 
 * `hsm` — Link an HSM key to a new identity
+* `ii` — Link an Internet Identity to a new identity
 
 
 
@@ -1039,6 +1043,22 @@ Link an HSM key to a new identity
 
 
 
+## `icp identity link ii`
+
+Link an Internet Identity to a new identity
+
+**Usage:** `icp identity link ii [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name for the linked identity
+
+###### **Options:**
+
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+
+
+
 ## `icp identity list`
 
 List the identities
@@ -1049,6 +1069,22 @@ List the identities
 
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only identity names
+
+
+
+## `icp identity login`
+
+Re-authenticate an Internet Identity delegation
+
+**Usage:** `icp identity login [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the identity to re-authenticate
+
+###### **Options:**
+
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 
 
 

@@ -16,6 +16,7 @@ use crate::{
     telemetry_data::{IdentityStorageType, TelemetryData},
 };
 
+pub mod delegation;
 pub mod key;
 pub mod keyring_mock;
 pub mod manifest;
@@ -61,6 +62,15 @@ impl IdentityPaths {
     pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, crate::fs::IoError> {
         crate::fs::create_dir_all(&self.dir.join("keys"))?;
         Ok(self.dir.join(format!("keys/{name}.pem")))
+    }
+
+    pub fn delegation_chain_path(&self, name: &str) -> PathBuf {
+        self.dir.join(format!("delegations/{name}.json"))
+    }
+
+    pub fn ensure_delegation_chain_path(&self, name: &str) -> Result<PathBuf, crate::fs::IoError> {
+        crate::fs::create_dir_all(&self.dir.join("delegations"))?;
+        Ok(self.dir.join(format!("delegations/{name}.json")))
     }
 }
 

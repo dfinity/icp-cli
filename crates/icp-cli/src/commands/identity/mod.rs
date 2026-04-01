@@ -4,9 +4,11 @@ pub(crate) mod account_id;
 pub(crate) mod default;
 pub(crate) mod delete;
 pub(crate) mod export;
+pub(crate) mod ii_poll;
 pub(crate) mod import;
 pub(crate) mod link;
 pub(crate) mod list;
+pub(crate) mod login;
 pub(crate) mod new;
 pub(crate) mod principal;
 pub(crate) mod rename;
@@ -22,6 +24,7 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Link(link::Command),
     List(list::ListArgs),
+    Login(login::LoginArgs),
     New(new::NewArgs),
     Principal(principal::PrincipalArgs),
     Rename(rename::RenameArgs),

@@ -333,6 +333,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::link::Command::Hsm(args) => {
                     commands::identity::link::hsm::exec(ctx, &args).await?
                 }
+                commands::identity::link::Command::Ii(args) => {
+                    commands::identity::link::ii::exec(ctx, &args).await?
+                }
             },
 
             commands::identity::Command::List(args) => {
@@ -345,6 +348,10 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
 
             commands::identity::Command::Principal(args) => {
                 commands::identity::principal::exec(ctx, &args).await?
+            }
+
+            commands::identity::Command::Login(args) => {
+                commands::identity::login::exec(ctx, &args).await?
             }
 
             commands::identity::Command::Rename(args) => {

@@ -128,6 +128,12 @@ pub enum IdentitySpec {
         slot: usize,
         key_id: String,
     },
+    InternetIdentity {
+        algorithm: IdentityKeyAlgorithm,
+        /// The principal at the root of the delegation chain
+        /// (`Principal::self_authenticating(from_key)`), not the session key.
+        principal: Principal,
+    },
 }
 
 impl IdentitySpec {
@@ -137,6 +143,7 @@ impl IdentitySpec {
             IdentitySpec::Anonymous => Principal::anonymous(),
             IdentitySpec::Keyring { principal, .. } => *principal,
             IdentitySpec::Hsm { principal, .. } => *principal,
+            IdentitySpec::InternetIdentity { principal, .. } => *principal,
         }
     }
 }

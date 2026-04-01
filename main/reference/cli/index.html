@@ -340,6 +340,10 @@ or a “detached” canister on a network.</p>
 <p><code>--subnet &#x3C;SUBNET></code> — The subnet to create canisters on</p>
 </li>
 <li>
+<p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the create_canister call through.</p>
+<p>When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy’s <code>proxy</code> method.</p>
+</li>
+<li>
 <p><code>--detached</code> — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if <code>Canister</code> is provided</p>
 </li>
 <li>

@@ -49,6 +49,22 @@ environments:
     network: docker-network
 "#;
 
+pub(crate) const NETWORK_DOCKER_ENGINE: &str = r#"
+networks:
+  - name: docker-engine-network
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher:engine-beta
+    port-mapping:
+      - 0:4943
+      - 0:4942
+"#;
+
+pub(crate) const ENVIRONMENT_DOCKER_ENGINE: &str = r#"
+environments:
+  - name: docker-engine-environment
+    network: docker-engine-network
+"#;
+
 /// This ID is dependent on the toplogy being served by pocket-ic
 /// NOTE: If the topology is changed (another subnet is added, etc) the ID may change.
 /// References:

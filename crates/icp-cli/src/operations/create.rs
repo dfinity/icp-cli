@@ -107,9 +107,7 @@ impl CreateOperation {
             .get_subnet_by_id(&selected_subnet)
             .await
             .context(GetSubnetSnafu)?;
-        let cid = if let Some(SubnetType::Unknown(kind)) = subnet_info.subnet_type()
-            && kind == "cloud_engine"
-        {
+        let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
             self.create_mgmt(settings, &subnet_info).await?
         } else {
             self.create_ledger(settings, selected_subnet).await?

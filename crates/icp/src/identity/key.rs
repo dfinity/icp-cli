@@ -121,9 +121,6 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to convert delegation chain"))]
     DelegationConversion { source: delegation::ConversionError },
-
-    #[snafu(display("delegation chain for identity `{name}` is invalid: {message}"))]
-    DelegationChainInvalid { name: String, message: String },
 }
 
 pub fn load_identity(
@@ -358,12 +355,10 @@ fn load_ii_identity(
         }
     };
 
-    let delegated = DelegatedIdentity::new(from_key, inner, signed_delegations).map_err(|e| {
-        LoadIdentityError::DelegationChainInvalid {
-            name: name.to_string(),
-            message: e.to_string(),
-        }
-    })?;
+    // Use new_unchecked because the root of the II delegation chain uses
+    // canister signatures (OID 1.3.6.1.4.1.56387.1.2) which DelegatedIdentity::new
+    // cannot verify client-side. The replica validates the chain on each request.
+    let delegated = DelegatedIdentity::new_unchecked(from_key, inner, signed_delegations);
 
     Ok(Arc::new(delegated))
 }

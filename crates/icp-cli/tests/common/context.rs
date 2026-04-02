@@ -444,6 +444,23 @@ impl TestContext {
             .as_ref()
     }
 
+    /// Get the proxy canister principal from network status JSON output.
+    pub(crate) fn get_proxy_cid(&self, project_dir: &Path, network: &str) -> String {
+        let output = self
+            .icp()
+            .current_dir(project_dir)
+            .args(["network", "status", network, "--json"])
+            .output()
+            .expect("failed to get network status");
+        let status_json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("failed to parse network status JSON");
+        status_json
+            .get("proxy_canister_principal")
+            .and_then(|v| v.as_str())
+            .expect("proxy canister principal not found in network status")
+            .to_string()
+    }
+
     pub(crate) fn docker_pull_network(&self) {
         self.docker_pull_image("ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0");
     }

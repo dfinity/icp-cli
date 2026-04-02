@@ -120,3 +120,106 @@ async fn canister_start() {
                 .and(contains("Controllers: 2vxsx-fae")),
         );
 }
+
+#[tokio::test]
+async fn canister_start_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Stop canister through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Verify stopped
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Stopped"));
+
+    // Start canister through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "start",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Verify running
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Running"));
+}

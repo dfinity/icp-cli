@@ -319,6 +319,87 @@ fn get_principal(client: &icp_cli::Client<'_>, identity: &str) -> String {
 }
 
 #[tokio::test]
+async fn canister_settings_update_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    let principal_alice = get_principal(&client, "alice");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Add controller through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+            "--add-controller",
+            principal_alice.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Verify the controller was added
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            starts_with("Canister Id:")
+                .and(contains(&proxy_cid))
+                .and(contains(principal_alice.as_str())),
+        );
+}
+
+#[tokio::test]
 async fn canister_settings_update_log_visibility() {
     let ctx = TestContext::new();
 
@@ -1292,4 +1373,94 @@ async fn canister_settings_sync_log_visibility() {
         .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
     confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
+}
+
+#[tokio::test]
+async fn canister_settings_sync_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Update manifest with memory_allocation setting
+    let pm_with_settings = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              memory_allocation: 10485760
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm_with_settings)
+        .expect("failed to write project manifest");
+
+    // Sync settings through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Verify the setting was applied
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Memory allocation: 10_485_760"));
 }

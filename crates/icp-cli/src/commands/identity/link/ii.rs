@@ -7,7 +7,7 @@ use icp::{
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
-use crate::{commands::identity::ii_poll, options::EnvironmentOpt};
+use crate::{operations::ii_poll, options::EnvironmentOpt};
 
 /// Link an Internet Identity to a new identity
 #[derive(Debug, Args)]

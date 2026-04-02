@@ -3,6 +3,7 @@ pub(crate) mod build;
 pub(crate) mod candid_compat;
 pub(crate) mod canister_migration;
 pub(crate) mod create;
+pub(crate) mod ii_poll;
 pub(crate) mod install;
 pub(crate) mod proxy;
 pub(crate) mod proxy_management;

@@ -191,13 +191,25 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     if let Some(controllers_opt) = &args.controllers {
         controllers = get_controllers(controllers_opt, current_status.as_ref());
 
-        // Check if the caller is being removed from controllers
+        // Check if the effective controller is being removed from the controller list.
+        // When --proxy is set, the proxy canister is the one making management calls and
+        // is the effective controller. Without --proxy, it's the caller's identity.
+        let effective_controller = args.proxy.unwrap_or(caller_principal);
         if let Some(new_controllers) = &controllers
-            && !new_controllers.contains(&caller_principal)
+            && !new_controllers.contains(&effective_controller)
             && !args.force
         {
-            warn!("You are about to remove yourself from the controllers list.");
-            warn!("This will cause you to lose control of the canister and cannot be undone.");
+            if args.proxy.is_some() {
+                warn!(
+                    "You are about to remove the proxy canister ({effective_controller}) from the controllers list."
+                );
+                warn!(
+                    "This will prevent further management calls through this proxy and cannot be undone."
+                );
+            } else {
+                warn!("You are about to remove yourself from the controllers list.");
+                warn!("This will cause you to lose control of the canister and cannot be undone.");
+            }
 
             let confirmed = Confirm::new()
                 .with_prompt("Do you want to proceed?")

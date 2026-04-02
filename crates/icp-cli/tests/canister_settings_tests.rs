@@ -389,6 +389,8 @@ async fn canister_settings_update_through_proxy() {
             "my-canister",
             "--environment",
             "random-environment",
+            "--proxy",
+            &proxy_cid,
         ])
         .assert()
         .success()
@@ -1459,6 +1461,8 @@ async fn canister_settings_sync_through_proxy() {
             "my-canister",
             "--environment",
             "random-environment",
+            "--proxy",
+            &proxy_cid,
         ])
         .assert()
         .success()

@@ -51,7 +51,10 @@ pub(crate) struct LogsArgs {
     pub(crate) json: bool,
 
     /// Principal of a proxy canister to route the management canister call through.
-    #[arg(long)]
+    ///
+    /// Hidden until the IC supports fetch_canister_logs in replicated mode.
+    /// Tracking: https://github.com/dfinity/portal/pull/6106
+    #[arg(long, hide = true)]
     pub(crate) proxy: Option<Principal>,
 }
 

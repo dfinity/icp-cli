@@ -350,7 +350,6 @@ Fetch and display canister logs
 * `--since-index <INDEX>` — Show logs at or after this log index (inclusive). Cannot be used with --follow
 * `--until-index <INDEX>` — Show logs before this log index (exclusive). Cannot be used with --follow
 * `--json` — Output command results as JSON
-* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 

@@ -13,7 +13,7 @@ use sec1::pem::PemLabel as _;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
-use crate::{commands::identity::ii_poll, options::EnvironmentOpt};
+use crate::{operations::ii_poll, options::EnvironmentOpt};
 
 /// Re-authenticate an Internet Identity delegation
 #[derive(Debug, Args)]

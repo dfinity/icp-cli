@@ -1,7 +1,9 @@
 use anyhow::{anyhow, bail};
 use clap::Args;
 use ic_agent::{Agent, AgentError, export::Principal};
-use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
+};
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
@@ -10,7 +12,11 @@ use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;
 
-use crate::{commands::args, options};
+use crate::{
+    commands::args,
+    operations::{proxy::UpdateOrProxyError, proxy_management},
+    options,
+};
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";
@@ -203,9 +209,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         )
         .await?;
 
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
     for (i, (maybe_name, cid)) in cids.iter().enumerate() {
         let output = match args.options.public {
             true => {
@@ -222,8 +225,14 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             }
             false => {
                 // Retrieve canister status from management canister
-                match mgmt.canister_status(cid).await {
-                    Ok((result,)) => {
+                match proxy_management::canister_status(
+                    &agent,
+                    None,
+                    CanisterIdRecord { canister_id: *cid },
+                )
+                .await
+                {
+                    Ok(result) => {
                         let status = SerializableCanisterStatusResult::from(
                             cid.to_owned(),
                             maybe_name.clone(),
@@ -237,17 +246,18 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                                 .expect("Failed to build canister status output"),
                         }
                     }
-                    Err(AgentError::UncertifiedReject {
-                        reject,
-                        operation: _,
+                    Err(UpdateOrProxyError::DirectUpdateCall {
+                        source:
+                            AgentError::UncertifiedReject {
+                                reject,
+                                operation: _,
+                            },
                     }) => {
                         if reject.error_code.as_deref() == Some(E_CANISTER_NOT_FOUND) {
-                            // The canister does not exist
                             bail!("Canister {cid} was not found.");
                         }
 
                         if reject.error_code.as_deref() != Some(E_NOT_A_CONTROLLER) {
-                            // We don't know this error code
                             bail!(
                                 "Error looking up canister {cid}: {:?} - {}",
                                 reject.error_code,

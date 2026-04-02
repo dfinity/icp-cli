@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use anyhow::{Context as _, anyhow, bail};
 use clap::Args;
 use dialoguer::Confirm;
-use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use icp::context::{CanisterSelection, Context};
 use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
@@ -122,7 +122,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     let canister_display = args.cmd_args.canister.to_string();
     let (install_mode, status) =
-        resolve_install_mode_and_status(&agent, &canister_display, &canister_id, &args.mode)
+        resolve_install_mode_and_status(&agent, None, &canister_display, &canister_id, &args.mode)
             .await?;
 
     // Candid interface compatibility check for upgrades
@@ -156,6 +156,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     install_canister(
         &agent,
+        None,
         &canister_id,
         &canister_display,
         &wasm,

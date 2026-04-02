@@ -1,16 +1,20 @@
 use anyhow::bail;
+use candid::Nat;
 use clap::{ArgAction, Args};
 use dialoguer::Confirm;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
-use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable, LogVisibility,
+    UpdateSettingsArgs,
+};
 use icp::ProjectLoadError;
 use icp::context::{CanisterSelection, Context};
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
-use crate::commands::args;
+use crate::{commands::args, operations::proxy_management};
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -164,12 +168,12 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         <_>::default()
     };
 
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
     let mut current_status: Option<CanisterStatusResult> = None;
     if require_current_settings(args) {
-        current_status = Some(mgmt.canister_status(&cid).await?.0);
+        current_status = Some(
+            proxy_management::canister_status(&agent, None, CanisterIdRecord { canister_id: cid })
+                .await?,
+        );
     }
 
     // TODO(VZ): Ask for consent if the freezing threshold is too long or too short.
@@ -212,81 +216,77 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             get_environment_variables(environment_variables_opt, current_status.as_ref());
     }
 
-    // Update settings.
-    let mut update = mgmt.update_settings(&cid);
-    if let Some(controllers) = controllers {
-        for controller in controllers {
-            update = update.with_controller(controller);
-        }
+    // Build settings with warnings for configured values
+    if args.compute_allocation.is_some() && configured_settings.compute_allocation.is_some() {
+        warn!(
+            "Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(compute_allocation) = args.compute_allocation {
-        if configured_settings.compute_allocation.is_some() {
-            warn!(
-                "Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_compute_allocation(compute_allocation);
+    if args.memory_allocation.is_some() && configured_settings.memory_allocation.is_some() {
+        warn!(
+            "Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(memory_allocation) = &args.memory_allocation {
-        if configured_settings.memory_allocation.is_some() {
-            warn!(
-                "Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_memory_allocation(memory_allocation.get());
+    if args.freezing_threshold.is_some() && configured_settings.freezing_threshold.is_some() {
+        warn!(
+            "Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(freezing_threshold) = &args.freezing_threshold {
-        if configured_settings.freezing_threshold.is_some() {
-            warn!(
-                "Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_freezing_threshold(freezing_threshold.get());
+    if args.reserved_cycles_limit.is_some() && configured_settings.reserved_cycles_limit.is_some() {
+        warn!(
+            "Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(reserved_cycles_limit) = &args.reserved_cycles_limit {
-        if configured_settings.reserved_cycles_limit.is_some() {
-            warn!(
-                "Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_reserved_cycles_limit(reserved_cycles_limit.get());
+    if args.wasm_memory_limit.is_some() && configured_settings.wasm_memory_limit.is_some() {
+        warn!(
+            "Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(wasm_memory_limit) = &args.wasm_memory_limit {
-        if configured_settings.wasm_memory_limit.is_some() {
-            warn!(
-                "Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_wasm_memory_limit(wasm_memory_limit.get());
+    if args.wasm_memory_threshold.is_some() && configured_settings.wasm_memory_threshold.is_some() {
+        warn!(
+            "Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(wasm_memory_threshold) = &args.wasm_memory_threshold {
-        if configured_settings.wasm_memory_threshold.is_some() {
-            warn!(
-                "Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_wasm_memory_threshold(wasm_memory_threshold.get());
+    if args.log_memory_limit.is_some() && configured_settings.log_memory_limit.is_some() {
+        warn!(
+            "Log memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(log_memory_limit) = &args.log_memory_limit {
-        if configured_settings.log_memory_limit.is_some() {
-            warn!(
-                "Log memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_log_memory_limit(log_memory_limit.get());
+    if log_visibility.is_some() && configured_settings.log_visibility.is_some() {
+        warn!(
+            "Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(log_visibility) = log_visibility {
-        if configured_settings.log_visibility.is_some() {
-            warn!(
-                "Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
-            );
-        }
-        update = update.with_log_visibility(log_visibility);
-    }
-    if let Some(environment_variables) = environment_variables {
-        update = update.with_environment_variables(environment_variables);
-    }
-    update.await?;
+
+    let settings = CanisterSettings {
+        controllers,
+        compute_allocation: args.compute_allocation.map(|v| Nat::from(v as u64)),
+        memory_allocation: args.memory_allocation.as_ref().map(|m| Nat::from(m.get())),
+        freezing_threshold: args.freezing_threshold.as_ref().map(|d| Nat::from(d.get())),
+        reserved_cycles_limit: args
+            .reserved_cycles_limit
+            .as_ref()
+            .map(|r| Nat::from(r.get())),
+        wasm_memory_limit: args.wasm_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        wasm_memory_threshold: args
+            .wasm_memory_threshold
+            .as_ref()
+            .map(|m| Nat::from(m.get())),
+        log_memory_limit: args.log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        log_visibility,
+        environment_variables,
+    };
+
+    proxy_management::update_settings(
+        &agent,
+        None,
+        UpdateSettingsArgs {
+            canister_id: cid,
+            settings,
+            sender_canister_version: None,
+        },
+    )
+    .await?;
 
     Ok(())
 }

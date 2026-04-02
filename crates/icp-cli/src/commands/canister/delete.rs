@@ -1,7 +1,8 @@
 use clap::Args;
+use ic_management_canister_types::CanisterIdRecord;
 use icp::context::{CanisterSelection, Context};
 
-use crate::commands::args;
+use crate::{commands::args, operations::proxy_management};
 
 /// Delete a canister from a network
 #[derive(Debug, Args)]
@@ -28,11 +29,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
         )
         .await?;
 
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
-    // Instruct management canister to delete canister
-    mgmt.delete_canister(&cid).await?;
+    proxy_management::delete_canister(&agent, None, CanisterIdRecord { canister_id: cid }).await?;
 
     // Remove canister ID from the id store if it was referenced by name
     if let CanisterSelection::Named(canister_name) = &selections.canister {

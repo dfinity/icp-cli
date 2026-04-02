@@ -2,12 +2,12 @@ use std::io::stdout;
 
 use byte_unit::{Byte, UnitType};
 use clap::Args;
-use ic_utils::interfaces::ManagementCanister;
+use ic_management_canister_types::CanisterIdRecord;
 use icp::context::Context;
 use itertools::Itertools;
 use serde::Serialize;
 
-use crate::{commands::args, operations::misc::format_timestamp};
+use crate::{commands::args, operations::misc::format_timestamp, operations::proxy_management};
 
 /// List all snapshots for a canister
 #[derive(Debug, Args)]
@@ -42,9 +42,12 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let mgmt = ManagementCanister::create(&agent);
-
-    let (snapshots,) = mgmt.list_canister_snapshots(&cid).await?;
+    let snapshots = proxy_management::list_canister_snapshots(
+        &agent,
+        None,
+        CanisterIdRecord { canister_id: cid },
+    )
+    .await?;
 
     let name = &args.cmd_args.canister;
     if args.json {

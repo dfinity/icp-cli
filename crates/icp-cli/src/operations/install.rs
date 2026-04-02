@@ -1,10 +1,9 @@
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, AgentError, export::Principal};
+use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{
-    CanisterId, CanisterStatusType, ChunkHash, UpgradeFlags, UploadChunkArgs, WasmMemoryPersistence,
-};
-use ic_utils::interfaces::{
-    ManagementCanister, management_canister::builders::CanisterInstallMode,
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterStatusType, ChunkHash,
+    ClearChunkStoreArgs, InstallChunkedCodeArgs, InstallCodeArgs, UpgradeFlags, UploadChunkArgs,
+    WasmMemoryPersistence,
 };
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
@@ -14,26 +13,28 @@ use tracing::{debug, error, warn};
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::misc::fetch_canister_metadata;
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 pub enum InstallOperationError {
     #[snafu(display("Could not find build artifact for canister '{canister_name}'"))]
     ArtifactNotFound { canister_name: String },
 
-    #[snafu(display("agent error: {source}"))]
-    Agent { source: AgentError },
-
     #[snafu(display("Failed to stop canister '{canister_name}' before upgrade"))]
     StopCanister {
         canister_name: String,
-        source: AgentError,
+        source: UpdateOrProxyError,
     },
 
     #[snafu(display("Failed to start canister '{canister_name}' after upgrade"))]
     StartCanister {
         canister_name: String,
-        source: AgentError,
+        source: UpdateOrProxyError,
     },
+
+    #[snafu(transparent)]
+    UpdateOrProxy { source: UpdateOrProxyError },
 }
 
 #[derive(Debug, Snafu)]
@@ -54,24 +55,30 @@ struct InstallFailure {
 /// determine whether the canister already has code installed.
 pub(crate) async fn resolve_install_mode_and_status(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_name: &str,
     canister_id: &Principal,
     mode: &str,
 ) -> Result<(CanisterInstallMode, CanisterStatusType), ResolveInstallModeError> {
-    let mgmt = ManagementCanister::create(agent);
-    let (status,) = mgmt
-        .canister_status(canister_id)
-        .await
-        .context(ResolveInstallModeSnafu { canister_name })?;
+    let status = proxy_management::canister_status(
+        agent,
+        proxy,
+        CanisterIdRecord {
+            canister_id: CanisterId::from(*canister_id),
+        },
+    )
+    .await
+    .context(ResolveInstallModeSnafu { canister_name })?;
+    let canister_status = status.status;
     match mode {
         "auto" => Ok(if status.module_hash.is_some() {
-            (CanisterInstallMode::Upgrade(None), status.status)
+            (CanisterInstallMode::Upgrade(None), canister_status)
         } else {
-            (CanisterInstallMode::Install, status.status)
+            (CanisterInstallMode::Install, canister_status)
         }),
-        "install" => Ok((CanisterInstallMode::Install, status.status)),
-        "reinstall" => Ok((CanisterInstallMode::Reinstall, status.status)),
-        "upgrade" => Ok((CanisterInstallMode::Upgrade(None), status.status)),
+        "install" => Ok((CanisterInstallMode::Install, canister_status)),
+        "reinstall" => Ok((CanisterInstallMode::Reinstall, canister_status)),
+        "upgrade" => Ok((CanisterInstallMode::Upgrade(None), canister_status)),
         _ => panic!("invalid install mode: {mode}"),
     }
 }
@@ -80,11 +87,12 @@ pub(crate) async fn resolve_install_mode_and_status(
 #[snafu(display("Failed to resolve install mode for canister {canister_name}"))]
 pub(crate) struct ResolveInstallModeError {
     canister_name: String,
-    source: AgentError,
+    source: UpdateOrProxyError,
 }
 
 pub(crate) async fn install_canister(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: &Principal,
     canister_name: &str,
     wasm: &[u8],
@@ -118,6 +126,7 @@ pub(crate) async fn install_canister(
 
     do_install_operation(
         agent,
+        proxy,
         canister_id,
         canister_name,
         wasm,
@@ -130,6 +139,7 @@ pub(crate) async fn install_canister(
 
 async fn do_install_operation(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: &Principal,
     canister_name: &str,
     wasm: &[u8],
@@ -137,8 +147,6 @@ async fn do_install_operation(
     status: CanisterStatusType,
     init_args: Option<&[u8]>,
 ) -> Result<(), InstallOperationError> {
-    let mgmt = ManagementCanister::create(agent);
-
     // Threshold for chunked installation: 2 MB
     // Raw install_code messages are limited to 2 MiB
     const CHUNK_THRESHOLD: usize = 2 * 1024 * 1024;
@@ -153,30 +161,40 @@ async fn do_install_operation(
     let init_args_len = init_args.map_or(0, |args| args.len());
     let total_install_size = wasm.len() + init_args_len + ENCODING_OVERHEAD;
 
+    let cid = CanisterId::from(*canister_id);
+
     if total_install_size <= CHUNK_THRESHOLD {
         // Small wasm: use regular install_code
         debug!("Installing wasm for {canister_name} using install_code");
 
-        let mut builder = mgmt.install_code(canister_id, wasm).with_mode(mode);
+        let install_args = InstallCodeArgs {
+            mode,
+            canister_id: cid,
+            wasm_module: wasm.to_vec(),
+            arg: init_args.map(|a| a.to_vec()).unwrap_or_default(),
+            sender_canister_version: None,
+        };
 
-        if let Some(args) = init_args {
-            builder = builder.with_raw_arg(args.into());
-        }
-
-        stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, status, async {
-            builder
-                .await
-                .map_err(|source| InstallOperationError::Agent { source })
-        })
+        stop_and_start_if_upgrade(
+            agent,
+            proxy,
+            canister_id,
+            canister_name,
+            mode,
+            status,
+            async {
+                proxy_management::install_code(agent, proxy, install_args).await?;
+                Ok(())
+            },
+        )
         .await?;
     } else {
         // Large wasm: use chunked installation
         debug!("Installing wasm for {canister_name} using chunked installation");
 
         // Clear any existing chunks to ensure a clean state
-        mgmt.clear_chunk_store(canister_id)
-            .await
-            .map_err(|source| InstallOperationError::Agent { source })?;
+        proxy_management::clear_chunk_store(agent, proxy, ClearChunkStoreArgs { canister_id: cid })
+            .await?;
 
         // Split wasm into chunks and upload them
         let chunks: Vec<&[u8]> = wasm.chunks(CHUNK_SIZE).collect();
@@ -191,14 +209,11 @@ async fn do_install_operation(
             );
 
             let upload_args = UploadChunkArgs {
-                canister_id: CanisterId::from(*canister_id),
+                canister_id: cid,
                 chunk: chunk.to_vec(),
             };
 
-            let (chunk_hash,) = mgmt
-                .upload_chunk(canister_id, &upload_args)
-                .await
-                .map_err(|source| InstallOperationError::Agent { source })?;
+            let chunk_hash = proxy_management::upload_chunk(agent, proxy, upload_args).await?;
 
             chunk_hashes.push(chunk_hash);
         }
@@ -210,29 +225,38 @@ async fn do_install_operation(
 
         debug!("Installing chunked code with {} chunks", chunk_hashes.len());
 
-        // Build and execute install_chunked_code
-        let mut builder = mgmt
-            .install_chunked_code(canister_id, &wasm_module_hash)
-            .with_chunk_hashes(chunk_hashes)
-            .with_install_mode(mode);
+        let chunked_args = InstallChunkedCodeArgs {
+            mode,
+            target_canister: cid,
+            store_canister: None,
+            chunk_hashes_list: chunk_hashes,
+            wasm_module_hash,
+            arg: init_args.map(|a| a.to_vec()).unwrap_or_default(),
+            sender_canister_version: None,
+        };
 
-        if let Some(args) = init_args {
-            builder = builder.with_raw_arg(args.to_vec());
-        }
-
-        let install_res =
-            stop_and_start_if_upgrade(&mgmt, canister_id, canister_name, mode, status, async {
-                builder
-                    .await
-                    .map_err(|source| InstallOperationError::Agent { source })
-            })
-            .await;
+        let install_res = stop_and_start_if_upgrade(
+            agent,
+            proxy,
+            canister_id,
+            canister_name,
+            mode,
+            status,
+            async {
+                proxy_management::install_chunked_code(agent, proxy, chunked_args).await?;
+                Ok(())
+            },
+        )
+        .await;
 
         // Clear chunk store after successful installation to free up storage
-        let clear_res = mgmt
-            .clear_chunk_store(canister_id)
-            .await
-            .map_err(|source| InstallOperationError::Agent { source });
+        let clear_res = proxy_management::clear_chunk_store(
+            agent,
+            proxy,
+            ClearChunkStoreArgs { canister_id: cid },
+        )
+        .await
+        .map_err(InstallOperationError::from);
 
         if let Err(clear_error) = clear_res {
             if let Err(install_error) = install_res {
@@ -249,7 +273,8 @@ async fn do_install_operation(
 }
 
 async fn stop_and_start_if_upgrade(
-    mgmt: &ManagementCanister<'_>,
+    agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: &Principal,
     canister_name: &str,
     mode: CanisterInstallMode,
@@ -260,9 +285,12 @@ async fn stop_and_start_if_upgrade(
         mode,
         CanisterInstallMode::Upgrade(_) | CanisterInstallMode::Reinstall
     ) && matches!(status, CanisterStatusType::Running);
+    let cid_record = CanisterIdRecord {
+        canister_id: CanisterId::from(*canister_id),
+    };
     // Stop the canister before proceeding
     if should_guard {
-        mgmt.stop_canister(canister_id)
+        proxy_management::stop_canister(agent, proxy, cid_record.clone())
             .await
             .context(StopCanisterSnafu { canister_name })?;
     }
@@ -270,7 +298,7 @@ async fn stop_and_start_if_upgrade(
     let install_result = f.await;
     // Restart the canister whether or not the installation succeeded
     if should_guard {
-        let start_result = mgmt.start_canister(canister_id).await;
+        let start_result = proxy_management::start_canister(agent, proxy, cid_record).await;
         if let Err(start_error) = start_result {
             // If both install and start failed, report the install error since it's more likely to be the root cause
             if let Err(install_error) = install_result {
@@ -288,6 +316,7 @@ async fn stop_and_start_if_upgrade(
 /// Installs code to multiple canisters and displays progress bars.
 pub(crate) async fn install_many(
     agent: Agent,
+    proxy: Option<Principal>,
     canisters: impl IntoIterator<
         Item = (
             String,
@@ -322,6 +351,7 @@ pub(crate) async fn install_many(
 
                 install_canister(
                     &agent,
+                    proxy,
                     &cid,
                     &name,
                     &wasm,

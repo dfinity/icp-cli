@@ -12,7 +12,9 @@ use ic_management_canister_types::{
     UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadCanisterSnapshotMetadataResult,
 };
-use ic_utils::interfaces::ManagementCanister;
+
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
 use icp::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
@@ -105,43 +107,43 @@ pub enum SnapshotTransferError {
     #[snafu(display("Failed to read snapshot metadata for canister {canister_id}"))]
     ReadMetadata {
         canister_id: Principal,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
+        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
+        source: Box<UpdateOrProxyError>,
     },
 
     #[snafu(display("Failed to read snapshot data chunk at offset {offset}"))]
     ReadDataChunk {
         offset: u64,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
+        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
+        source: Box<UpdateOrProxyError>,
     },
 
     #[snafu(display("Failed to read WASM chunk with hash {hash}"))]
     ReadWasmChunk {
         hash: String,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
+        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
+        source: Box<UpdateOrProxyError>,
     },
 
     #[snafu(display("Failed to upload snapshot metadata for canister {canister_id}"))]
     UploadMetadata {
         canister_id: Principal,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
+        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
+        source: Box<UpdateOrProxyError>,
     },
 
     #[snafu(display("Failed to upload snapshot data chunk at offset {offset}"))]
     UploadDataChunk {
         offset: u64,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
+        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
+        source: Box<UpdateOrProxyError>,
     },
 
     #[snafu(display("Failed to upload WASM chunk with hash {hash}"))]
     UploadWasmChunk {
         hash: String,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
+        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
+        source: Box<UpdateOrProxyError>,
     },
 
     #[snafu(transparent)]
@@ -379,18 +381,27 @@ impl BlobType {
 }
 
 /// Check if an agent error is retryable.
-fn is_retryable(error: &AgentError) -> bool {
+fn is_retryable_agent_error(error: &AgentError) -> bool {
     matches!(
         error,
         AgentError::TimeoutWaitingForResponse() | AgentError::TransportError(_)
     )
 }
 
+/// Check if an `UpdateOrProxyError` is retryable (by inspecting the inner agent error).
+fn is_retryable(error: &UpdateOrProxyError) -> bool {
+    match error {
+        UpdateOrProxyError::DirectUpdateCall { source }
+        | UpdateOrProxyError::ProxyUpdateCall { source } => is_retryable_agent_error(source),
+        _ => false,
+    }
+}
+
 /// Execute an async operation with exponential backoff retry.
-async fn with_retry<F, Fut, T>(operation: F) -> Result<T, AgentError>
+async fn with_retry<F, Fut, T>(operation: F) -> Result<T, UpdateOrProxyError>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = Result<T, AgentError>>,
+    Fut: std::future::Future<Output = Result<T, UpdateOrProxyError>>,
 {
     let mut backoff = ExponentialBackoff {
         max_elapsed_time: Some(std::time::Duration::from_secs(60)),
@@ -432,16 +443,17 @@ pub async fn read_snapshot_metadata(
     canister_id: Principal,
     snapshot_id: &[u8],
 ) -> Result<ReadCanisterSnapshotMetadataResult, SnapshotTransferError> {
-    let mgmt = ManagementCanister::create(agent);
-
     let args = ReadCanisterSnapshotMetadataArgs {
         canister_id,
         snapshot_id: snapshot_id.to_vec(),
     };
 
-    let (metadata,) = with_retry(|| async { mgmt.read_canister_snapshot_metadata(&args).await })
-        .await
-        .context(ReadMetadataSnafu { canister_id })?;
+    let metadata = with_retry(|| {
+        let args = args.clone();
+        async move { proxy_management::read_canister_snapshot_metadata(agent, None, args).await }
+    })
+    .await
+    .context(ReadMetadataSnafu { canister_id })?;
 
     Ok(metadata)
 }
@@ -453,8 +465,6 @@ pub async fn upload_snapshot_metadata(
     metadata: &ReadCanisterSnapshotMetadataResult,
     replace_snapshot: Option<&[u8]>,
 ) -> Result<UploadCanisterSnapshotMetadataResult, SnapshotTransferError> {
-    let mgmt = ManagementCanister::create(agent);
-
     // Convert Option<SnapshotMetadataGlobal> to SnapshotMetadataGlobal, failing on None
     let globals = metadata
         .globals
@@ -477,9 +487,12 @@ pub async fn upload_snapshot_metadata(
         on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status.clone(),
     };
 
-    let (result,) = with_retry(|| async { mgmt.upload_canister_snapshot_metadata(&args).await })
-        .await
-        .context(UploadMetadataSnafu { canister_id })?;
+    let result = with_retry(|| {
+        let args = args.clone();
+        async move { proxy_management::upload_canister_snapshot_metadata(agent, None, args).await }
+    })
+    .await
+    .context(UploadMetadataSnafu { canister_id })?;
 
     Ok(result)
 }
@@ -510,8 +523,6 @@ pub async fn download_blob_to_file(
     if blob_progress.is_complete(total_size) {
         return Ok(());
     }
-
-    let mgmt = ManagementCanister::create(agent);
 
     // Create or open file for random-access writing
     let file = if output_path.exists() {
@@ -551,14 +562,19 @@ pub async fn download_blob_to_file(
                 kind: blob_type.make_read_kind(chunk_offset, chunk_size),
             };
 
-            let mgmt = mgmt.clone();
             in_progress.push(async move {
-                let result = with_retry(|| async { mgmt.read_canister_snapshot_data(&args).await })
+                let result =
+                    with_retry(|| {
+                        let args = args.clone();
+                        async move {
+                            proxy_management::read_canister_snapshot_data(agent, None, args).await
+                        }
+                    })
                     .await
                     .context(ReadDataChunkSnafu {
                         offset: chunk_offset,
                     })?;
-                Ok::<_, SnapshotTransferError>((chunk_offset, result.0.chunk))
+                Ok::<_, SnapshotTransferError>((chunk_offset, result.chunk))
             });
         }
 
@@ -608,8 +624,6 @@ pub async fn download_wasm_chunk(
     chunk_hash: &ChunkHash,
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
-    let mgmt = ManagementCanister::create(agent);
-
     let args = ReadCanisterSnapshotDataArgs {
         canister_id,
         snapshot_id: snapshot_id.to_vec(),
@@ -621,9 +635,12 @@ pub async fn download_wasm_chunk(
     let hash_hex = hex::encode(&chunk_hash.hash);
     let output_path = paths.wasm_chunk_path(&chunk_hash.hash);
 
-    let (result,) = with_retry(|| async { mgmt.read_canister_snapshot_data(&args).await })
-        .await
-        .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
+    let result = with_retry(|| {
+        let args = args.clone();
+        async move { proxy_management::read_canister_snapshot_data(agent, None, args).await }
+    })
+    .await
+    .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
 
     icp::fs::write(&output_path, &result.chunk)?;
 
@@ -659,8 +676,6 @@ pub async fn upload_blob_from_file(
         BlobType::StableMemory => progress.stable_memory_offset,
     };
 
-    let mgmt = ManagementCanister::create(agent);
-
     let mut file = File::open(&input_path)
         .await
         .context(OpenBlobForUploadSnafu { path: &input_path })?;
@@ -695,12 +710,17 @@ pub async fn upload_blob_from_file(
             chunk,
         };
 
-        let mgmt = mgmt.clone();
+        let chunk_len = args.chunk.len() as u64;
         in_progress.push(async move {
-            with_retry(|| async { mgmt.upload_canister_snapshot_data(&args).await })
-                .await
-                .context(UploadDataChunkSnafu { offset })?;
-            Ok::<_, SnapshotTransferError>((offset, args.chunk.len() as u64))
+            with_retry(|| {
+                let args = args.clone();
+                async move {
+                    proxy_management::upload_canister_snapshot_data(agent, None, args).await
+                }
+            })
+            .await
+            .context(UploadDataChunkSnafu { offset })?;
+            Ok::<_, SnapshotTransferError>((offset, chunk_len))
         });
     }
 
@@ -756,8 +776,6 @@ pub async fn upload_wasm_chunk(
     chunk_hash: &[u8],
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
-    let mgmt = ManagementCanister::create(agent);
-
     let chunk_path = paths.wasm_chunk_path(chunk_hash);
     let chunk = icp::fs::read(&chunk_path)?;
 
@@ -770,9 +788,12 @@ pub async fn upload_wasm_chunk(
 
     let hash_hex = hex::encode(chunk_hash);
 
-    with_retry(|| async { mgmt.upload_canister_snapshot_data(&args).await })
-        .await
-        .context(UploadWasmChunkSnafu { hash: hash_hex })?;
+    with_retry(|| {
+        let args = args.clone();
+        async move { proxy_management::upload_canister_snapshot_data(agent, None, args).await }
+    })
+    .await
+    .context(UploadWasmChunkSnafu { hash: hash_hex })?;
 
     Ok(())
 }

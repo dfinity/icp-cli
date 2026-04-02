@@ -217,6 +217,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     set_binding_env_vars_many(
         agent.clone(),
+        None,
         &env.name,
         target_canisters.clone(),
         canister_list,
@@ -225,7 +226,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
+    sync_settings_many(agent.clone(), None, target_canisters, ctx.debug)
         .await
         .map_err(|e| anyhow!(e))?;
 
@@ -244,7 +245,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map_err(|e| anyhow!(e))?;
 
             let (mode, status) =
-                resolve_install_mode_and_status(&agent, name, &cid, &args.mode).await?;
+                resolve_install_mode_and_status(&agent, None, name, &cid, &args.mode).await?;
 
             let env = ctx.get_environment(&environment_selection).await?;
             let (_canister_path, canister_info) =
@@ -277,7 +278,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     info!("Installing canisters:");
 
-    install_many(agent.clone(), canisters, ctx.artifacts.clone(), ctx.debug).await?;
+    install_many(
+        agent.clone(),
+        None,
+        canisters,
+        ctx.artifacts.clone(),
+        ctx.debug,
+    )
+    .await?;
 
     // Sync the selected canisters
 

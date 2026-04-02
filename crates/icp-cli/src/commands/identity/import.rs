@@ -106,7 +106,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
         unreachable!();
     }
 
-    info!("Identity \"{}\" created", args.name);
+    info!("Identity `{}` created", args.name);
 
     if matches!(args.storage, StorageMode::Plaintext) {
         warn!(

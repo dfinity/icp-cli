@@ -1,6 +1,6 @@
 use anyhow::{Context as _, anyhow, bail};
 use candid::types::{Type, TypeInner};
-use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
+use candid::{IDLArgs, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use candid_parser::utils::CandidSource;
@@ -12,12 +12,14 @@ use icp::fs;
 use icp::manifest::InitArgsFormat;
 use icp::parsers::CyclesAmount;
 use icp::prelude::*;
-use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use serde::Serialize;
 use std::io::{self, Write};
 use tracing::{error, warn};
 
-use crate::{commands::args, operations::misc::fetch_canister_metadata};
+use crate::{
+    commands::args, operations::call::update_or_proxy_call,
+    operations::misc::fetch_canister_metadata,
+};
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
@@ -206,30 +208,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             .context("failed to serialize candid arguments with specific types")?,
     };
 
-    let res = if let Some(proxy_cid) = args.proxy {
-        // Route the call through the proxy canister
-        let proxy_args = ProxyArgs {
-            canister_id: cid,
-            method: method.clone(),
-            args: arg_bytes,
-            cycles: Nat::from(args.cycles.get()),
-        };
-        let proxy_arg_bytes =
-            Encode!(&proxy_args).context("failed to encode proxy call arguments")?;
-
-        let proxy_res = agent
-            .update(&proxy_cid, "proxy")
-            .with_arg(proxy_arg_bytes)
-            .await?;
-
-        let proxy_result: (ProxyResult,) =
-            candid::decode_args(&proxy_res).context("failed to decode proxy canister response")?;
-
-        match proxy_result.0 {
-            ProxyResult::Ok(ok) => ok.result,
-            ProxyResult::Err(err) => bail!(err.format_error()),
-        }
-    } else if args.query {
+    let res = if args.query {
         // Preemptive check: error if Candid shows this is an update method
         if let Some((_, func)) = &declared_method
             && !func.is_query()
@@ -245,8 +224,15 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             .call()
             .await?
     } else {
-        // Direct update call to the target canister
-        agent.update(&cid, &method).with_arg(arg_bytes).await?
+        update_or_proxy_call(
+            &agent,
+            cid,
+            &method,
+            arg_bytes,
+            args.proxy,
+            args.cycles.get(),
+        )
+        .await?
     };
 
     let mut term = Term::buffered_stdout();

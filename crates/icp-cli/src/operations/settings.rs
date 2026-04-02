@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
-use ic_management_canister_types::{EnvironmentVariable, LogVisibility as IcLogVisibility};
+use ic_management_canister_types::{EnvironmentVariable, LogVisibility};
 use ic_utils::interfaces::ManagementCanister;
 use icp::{Canister, canister::Settings};
 use itertools::Itertools;
@@ -45,11 +45,11 @@ struct SettingsFailure {
 
 /// Compare two LogVisibility values in an order-insensitive manner.
 /// For AllowedViewers, the principal lists are compared as sets.
-fn log_visibility_eq(a: &IcLogVisibility, b: &IcLogVisibility) -> bool {
+fn log_visibility_eq(a: &LogVisibility, b: &LogVisibility) -> bool {
     match (a, b) {
-        (IcLogVisibility::Controllers, IcLogVisibility::Controllers) => true,
-        (IcLogVisibility::Public, IcLogVisibility::Public) => true,
-        (IcLogVisibility::AllowedViewers(va), IcLogVisibility::AllowedViewers(vb)) => {
+        (LogVisibility::Controllers, LogVisibility::Controllers) => true,
+        (LogVisibility::Public, LogVisibility::Public) => true,
+        (LogVisibility::AllowedViewers(va), LogVisibility::AllowedViewers(vb)) => {
             let set_a: HashSet<_> = va.iter().collect();
             let set_b: HashSet<_> = vb.iter().collect();
             set_a == set_b
@@ -89,8 +89,8 @@ pub(crate) async fn sync_settings(
     let current_settings = status.settings;
 
     // Convert our log_visibility to IC type for comparison and update
-    let log_visibility_setting: Option<IcLogVisibility> =
-        log_visibility.clone().map(IcLogVisibility::from);
+    let log_visibility_setting: Option<LogVisibility> =
+        log_visibility.clone().map(LogVisibility::from);
 
     let environment_variable_setting =
         if let Some(configured_environment_variables) = &environment_variables {
@@ -262,28 +262,28 @@ mod tests {
     #[test]
     fn log_visibility_eq_controllers() {
         assert!(log_visibility_eq(
-            &IcLogVisibility::Controllers,
-            &IcLogVisibility::Controllers
+            &LogVisibility::Controllers,
+            &LogVisibility::Controllers
         ));
     }
 
     #[test]
     fn log_visibility_eq_public() {
         assert!(log_visibility_eq(
-            &IcLogVisibility::Public,
-            &IcLogVisibility::Public
+            &LogVisibility::Public,
+            &LogVisibility::Public
         ));
     }
 
     #[test]
     fn log_visibility_eq_different_variants() {
         assert!(!log_visibility_eq(
-            &IcLogVisibility::Controllers,
-            &IcLogVisibility::Public
+            &LogVisibility::Controllers,
+            &LogVisibility::Public
         ));
         assert!(!log_visibility_eq(
-            &IcLogVisibility::Public,
-            &IcLogVisibility::Controllers
+            &LogVisibility::Public,
+            &LogVisibility::Controllers
         ));
     }
 
@@ -293,8 +293,8 @@ mod tests {
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
         assert!(log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
-            &IcLogVisibility::AllowedViewers(vec![p1, p2])
+            &LogVisibility::AllowedViewers(vec![p1, p2]),
+            &LogVisibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
@@ -305,8 +305,8 @@ mod tests {
 
         // Order should not matter
         assert!(log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
-            &IcLogVisibility::AllowedViewers(vec![p2, p1])
+            &LogVisibility::AllowedViewers(vec![p1, p2]),
+            &LogVisibility::AllowedViewers(vec![p2, p1])
         ));
     }
 
@@ -317,8 +317,8 @@ mod tests {
         let p3 = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
-            &IcLogVisibility::AllowedViewers(vec![p1, p3])
+            &LogVisibility::AllowedViewers(vec![p1, p2]),
+            &LogVisibility::AllowedViewers(vec![p1, p3])
         ));
     }
 
@@ -328,8 +328,8 @@ mod tests {
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1]),
-            &IcLogVisibility::AllowedViewers(vec![p1, p2])
+            &LogVisibility::AllowedViewers(vec![p1]),
+            &LogVisibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
@@ -338,12 +338,12 @@ mod tests {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
 
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1]),
-            &IcLogVisibility::Controllers
+            &LogVisibility::AllowedViewers(vec![p1]),
+            &LogVisibility::Controllers
         ));
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1]),
-            &IcLogVisibility::Public
+            &LogVisibility::AllowedViewers(vec![p1]),
+            &LogVisibility::Public
         ));
     }
 

@@ -829,6 +829,7 @@ Deploy a project to an environment
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
+* `--proxy <PROXY>` — Principal of a proxy canister to route management canister calls through
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 

@@ -75,10 +75,11 @@ pub(crate) async fn poll_for_delegation(
     login_url.set_path("/cli-login");
 
     eprintln!();
-    eprintln!("  Open {login_url} and enter this code:");
+    eprintln!("  Your one-time code is:");
     eprintln!();
     eprintln!("    {code}");
     eprintln!();
+    eprintln!("  Press Enter to open {login_url}");
 
     let spinner = ProgressBar::new_spinner();
     spinner.set_style(
@@ -86,16 +87,36 @@ pub(crate) async fn poll_for_delegation(
             .template("{spinner:.green} {msg}")
             .expect("valid template"),
     );
-    spinner.set_message("Waiting for Internet Identity authentication...");
-    spinner.enable_steady_tick(Duration::from_millis(100));
 
     let poll_args = Encode!(&uuid).expect("infallible candid encode");
 
+    // Spawn a detached thread for stdin.
+    // If this is done with tokio instead, because the read never completes, the runtime hangs.
+    let (enter_tx, mut enter_rx) = tokio::sync::mpsc::channel::<()>(1);
+    std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_line(&mut buf);
+        let _ = enter_tx.blocking_send(());
+    });
+
+    let mut browser_opened = false;
+    let mut fuse = false;
+
     loop {
+        if browser_opened && !fuse {
+            spinner.set_message("Waiting for Internet Identity authentication...");
+            spinner.enable_steady_tick(Duration::from_millis(100));
+            fuse = true;
+        }
+
         tokio::select! {
             _ = signal::stop_signal() => {
                 spinner.finish_and_clear();
                 return InterruptedSnafu.fail();
+            }
+            _ = enter_rx.recv(), if !browser_opened => {
+                browser_opened = true;
+                let _ = open::that(login_url.as_str());
             }
             _ = tokio::time::sleep(Duration::from_secs(2)) => {
                 let response = agent

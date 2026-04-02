@@ -1,6 +1,6 @@
 # Unreleased
 
-* feat: `icp canister create --proxy` to create canisters via a proxy canister
+* feat: Add `--proxy` to `icp canister` subcommands that call the management canister
 
 # v0.2.2
 

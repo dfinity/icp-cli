@@ -51,7 +51,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
         .context(CreateAgentSnafu)?;
 
     // Look up the cli-backend canister ID
-    let clii_backend_id = ctx
+    let delegator_backend_id = ctx
         .get_canister_id_for_env(
             &CanisterSelection::Named("backend".to_string()),
             &environment,
@@ -59,7 +59,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
         .await
         .context(LookupCanisterSnafu)?;
 
-    let clii_frontend_id = ctx
+    let delegator_frontend_id = ctx
         .get_canister_id_for_env(
             &CanisterSelection::Named("frontend".to_string()),
             &environment,
@@ -67,7 +67,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
         .await
         .context(LookupCanisterSnafu)?;
 
-    let friendly = if network_access.use_friendly_domains {
+    let delegator_frontend_friendly = if network_access.use_friendly_domains {
         Some(("frontend", env.name.as_str()))
     } else {
         None
@@ -76,11 +76,11 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
     // Open browser and poll for delegation
     let chain = ii_poll::poll_for_delegation(
         &agent,
-        clii_backend_id,
-        clii_frontend_id,
+        delegator_backend_id,
+        delegator_frontend_id,
         &der_public_key,
         http_gateway_url,
-        friendly,
+        delegator_frontend_friendly,
     )
     .await
     .context(PollSnafu)?;
@@ -98,7 +98,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
         .await?
         .context(LinkSnafu)?;
 
-    info!("Identity \"{}\" linked to Internet Identity", args.name);
+    info!("Identity `{}` linked to Internet Identity", args.name);
 
     Ok(())
 }

@@ -60,7 +60,7 @@ pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> 
         .await?
         .context(LinkHsmSnafu)?;
 
-    info!("Identity \"{}\" linked to HSM", args.name);
+    info!("Identity `{}` linked to HSM", args.name);
 
     Ok(())
 }

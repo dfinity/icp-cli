@@ -578,6 +578,7 @@ Download a snapshot to local disk
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
 * `--resume` — Resume a previously interrupted download
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -645,6 +646,7 @@ Upload a snapshot from local disk
 * `--resume` — Resume a previously interrupted upload
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 

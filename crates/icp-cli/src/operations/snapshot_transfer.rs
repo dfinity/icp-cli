@@ -440,6 +440,7 @@ pub fn create_transfer_progress_bar(total_bytes: u64, label: &str) -> ProgressBa
 /// Read snapshot metadata from a canister.
 pub async fn read_snapshot_metadata(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: Principal,
     snapshot_id: &[u8],
 ) -> Result<ReadCanisterSnapshotMetadataResult, SnapshotTransferError> {
@@ -450,7 +451,7 @@ pub async fn read_snapshot_metadata(
 
     let metadata = with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::read_canister_snapshot_metadata(agent, None, args).await }
+        async move { proxy_management::read_canister_snapshot_metadata(agent, proxy, args).await }
     })
     .await
     .context(ReadMetadataSnafu { canister_id })?;
@@ -461,6 +462,7 @@ pub async fn read_snapshot_metadata(
 /// Upload snapshot metadata to create a new snapshot.
 pub async fn upload_snapshot_metadata(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: Principal,
     metadata: &ReadCanisterSnapshotMetadataResult,
     replace_snapshot: Option<&[u8]>,
@@ -489,7 +491,7 @@ pub async fn upload_snapshot_metadata(
 
     let result = with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::upload_canister_snapshot_metadata(agent, None, args).await }
+        async move { proxy_management::upload_canister_snapshot_metadata(agent, proxy, args).await }
     })
     .await
     .context(UploadMetadataSnafu { canister_id })?;
@@ -504,6 +506,7 @@ pub async fn upload_snapshot_metadata(
 /// The agent handles rate limiting and semaphoring internally.
 pub async fn download_blob_to_file(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: Principal,
     snapshot_id: &[u8],
     blob_type: BlobType,
@@ -563,17 +566,16 @@ pub async fn download_blob_to_file(
             };
 
             in_progress.push(async move {
-                let result =
-                    with_retry(|| {
-                        let args = args.clone();
-                        async move {
-                            proxy_management::read_canister_snapshot_data(agent, None, args).await
-                        }
-                    })
-                    .await
-                    .context(ReadDataChunkSnafu {
-                        offset: chunk_offset,
-                    })?;
+                let result = with_retry(|| {
+                    let args = args.clone();
+                    async move {
+                        proxy_management::read_canister_snapshot_data(agent, proxy, args).await
+                    }
+                })
+                .await
+                .context(ReadDataChunkSnafu {
+                    offset: chunk_offset,
+                })?;
                 Ok::<_, SnapshotTransferError>((chunk_offset, result.chunk))
             });
         }
@@ -619,6 +621,7 @@ pub async fn download_blob_to_file(
 /// Download a single WASM chunk by hash.
 pub async fn download_wasm_chunk(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: Principal,
     snapshot_id: &[u8],
     chunk_hash: &ChunkHash,
@@ -637,7 +640,7 @@ pub async fn download_wasm_chunk(
 
     let result = with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::read_canister_snapshot_data(agent, None, args).await }
+        async move { proxy_management::read_canister_snapshot_data(agent, proxy, args).await }
     })
     .await
     .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
@@ -654,6 +657,7 @@ pub async fn download_wasm_chunk(
 /// Returns the final byte offset after all uploads complete.
 pub async fn upload_blob_from_file(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: Principal,
     snapshot_id: &[u8],
     blob_type: BlobType,
@@ -715,7 +719,7 @@ pub async fn upload_blob_from_file(
             with_retry(|| {
                 let args = args.clone();
                 async move {
-                    proxy_management::upload_canister_snapshot_data(agent, None, args).await
+                    proxy_management::upload_canister_snapshot_data(agent, proxy, args).await
                 }
             })
             .await
@@ -771,6 +775,7 @@ pub async fn upload_blob_from_file(
 /// Upload a single WASM chunk.
 pub async fn upload_wasm_chunk(
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: Principal,
     snapshot_id: &[u8],
     chunk_hash: &[u8],
@@ -790,7 +795,7 @@ pub async fn upload_wasm_chunk(
 
     with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::upload_canister_snapshot_data(agent, None, args).await }
+        async move { proxy_management::upload_canister_snapshot_data(agent, proxy, args).await }
     })
     .await
     .context(UploadWasmChunkSnafu { hash: hash_hex })?;

@@ -12,6 +12,8 @@ use ic_management_canister_types::{
     UploadCanisterSnapshotMetadataResult, UploadChunkArgs, UploadChunkResult,
 };
 
+use snafu::{ResultExt, Snafu};
+
 use super::proxy::{UpdateOrProxyError, update_or_proxy};
 
 pub async fn create_canister(
@@ -197,23 +199,57 @@ pub async fn clear_chunk_store(
     .await
 }
 
+#[derive(Debug, Snafu)]
+pub enum FetchCanisterLogsError {
+    #[snafu(display("failed to encode call arguments: {source}"))]
+    CandidEncode { source: candid::Error },
+
+    #[snafu(display("failed to decode call response: {source}"))]
+    CandidDecode { source: candid::Error },
+
+    #[snafu(display("direct query call failed: {source}"))]
+    DirectQueryCall { source: ic_agent::AgentError },
+
+    #[snafu(display("proxied call failed: {source}"))]
+    ProxiedCall { source: UpdateOrProxyError },
+}
+
+/// Fetches canister logs from the management canister.
+///
+/// Unlike other management canister methods, `fetch_canister_logs` is a
+/// **query** call when made directly. When a proxy is provided, the call is
+/// routed through the proxy canister as an update call instead.
 pub async fn fetch_canister_logs(
     agent: &Agent,
     proxy: Option<Principal>,
     args: FetchCanisterLogsArgs,
-) -> Result<FetchCanisterLogsResult, UpdateOrProxyError> {
+) -> Result<FetchCanisterLogsResult, FetchCanisterLogsError> {
     let effective = args.canister_id;
-    let (result,): (FetchCanisterLogsResult,) = update_or_proxy(
-        agent,
-        Principal::management_canister(),
-        "fetch_canister_logs",
-        (args,),
-        proxy,
-        Some(effective),
-        0,
-    )
-    .await?;
-    Ok(result)
+    if proxy.is_some() {
+        let (result,): (FetchCanisterLogsResult,) = update_or_proxy(
+            agent,
+            Principal::management_canister(),
+            "fetch_canister_logs",
+            (args,),
+            proxy,
+            Some(effective),
+            0,
+        )
+        .await
+        .context(ProxiedCallSnafu)?;
+        Ok(result)
+    } else {
+        let arg = candid::encode_args((args,)).context(CandidEncodeSnafu)?;
+        let res = agent
+            .query(&Principal::management_canister(), "fetch_canister_logs")
+            .with_arg(arg)
+            .with_effective_canister_id(effective)
+            .await
+            .context(DirectQueryCallSnafu)?;
+        let (result,): (FetchCanisterLogsResult,) =
+            candid::decode_args(&res).context(CandidDecodeSnafu)?;
+        Ok(result)
+    }
 }
 
 pub async fn take_canister_snapshot(

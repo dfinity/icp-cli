@@ -3,10 +3,10 @@ use std::io::stdout;
 use anyhow::anyhow;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
+use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::context::Context;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use icp::{Canister, context::CanisterSelection, prelude::*};
-use icp_canister_interfaces::management_canister::CanisterSettingsArg;
 use serde::Serialize;
 use tracing::info;
 
@@ -112,8 +112,11 @@ pub(crate) struct CreateArgs {
 }
 
 impl CreateArgs {
-    pub(crate) fn canister_settings_with_default(&self, default: &Canister) -> CanisterSettingsArg {
-        CanisterSettingsArg {
+    pub(crate) fn canister_settings_with_default(
+        &self,
+        default: &Canister,
+    ) -> MgmtCanisterSettings {
+        MgmtCanisterSettings {
             freezing_threshold: self
                 .settings
                 .freezing_threshold
@@ -144,6 +147,7 @@ impl CreateArgs {
                 .compute_allocation
                 .or(default.settings.compute_allocation)
                 .map(Nat::from),
+            ..Default::default()
         }
     }
 
@@ -155,8 +159,8 @@ impl CreateArgs {
         }
     }
 
-    pub(crate) fn canister_settings(&self) -> CanisterSettingsArg {
-        CanisterSettingsArg {
+    pub(crate) fn canister_settings(&self) -> MgmtCanisterSettings {
+        MgmtCanisterSettings {
             freezing_threshold: self
                 .settings
                 .freezing_threshold
@@ -180,6 +184,7 @@ impl CreateArgs {
                 .clone()
                 .map(|m| Nat::from(m.get())),
             compute_allocation: self.settings.compute_allocation.map(Nat::from),
+            ..Default::default()
         }
     }
 }

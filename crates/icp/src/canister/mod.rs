@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use candid::{Nat, Principal};
-use icp_canister_interfaces::management_canister::CanisterSettingsArg;
+use ic_management_canister_types::CanisterSettings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -187,19 +187,6 @@ impl From<LogVisibility> for ic_management_canister_types::LogVisibility {
     }
 }
 
-impl From<LogVisibility> for icp_canister_interfaces::management_canister::LogVisibility {
-    fn from(value: LogVisibility) -> Self {
-        use icp_canister_interfaces::management_canister::LogVisibility as CyclesLedgerLogVisibility;
-        match value {
-            LogVisibility::Controllers => CyclesLedgerLogVisibility::Controllers,
-            LogVisibility::Public => CyclesLedgerLogVisibility::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                CyclesLedgerLogVisibility::AllowedViewers(viewers)
-            }
-        }
-    }
-}
-
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
@@ -241,15 +228,16 @@ pub struct Settings {
     pub environment_variables: Option<HashMap<String, String>>,
 }
 
-impl From<Settings> for CanisterSettingsArg {
+impl From<Settings> for CanisterSettings {
     fn from(settings: Settings) -> Self {
-        CanisterSettingsArg {
+        CanisterSettings {
             freezing_threshold: settings.freezing_threshold.map(|d| Nat::from(d.get())),
             controllers: None,
             reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),
             memory_allocation: settings.memory_allocation.map(|m| Nat::from(m.get())),
             compute_allocation: settings.compute_allocation.map(Nat::from),
+            ..Default::default()
         }
     }
 }

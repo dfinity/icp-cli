@@ -3375,6 +3375,7 @@ version = "0.2.2"
 dependencies = [
  "bigdecimal",
  "candid",
+ "ic-management-canister-types 0.7.1",
  "serde",
 ]
 

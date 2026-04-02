@@ -1,7 +1,12 @@
+use std::sync::Arc;
+
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{
     Agent, AgentError,
     agent::{Subnet, SubnetType},
+};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
 use icp_canister_interfaces::{
     cycles_ledger::{
@@ -9,19 +14,12 @@ use icp_canister_interfaces::{
         SubnetSelectionArg,
     },
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
-    management_canister::{
-        CanisterSettingsArg, LogVisibility, MgmtCreateCanisterArgs, MgmtCreateCanisterResponse,
-    },
 };
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
+use tokio::sync::OnceCell;
 
 use super::proxy::{UpdateOrProxyError, update_or_proxy};
-use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgsTyped,
-};
-use std::sync::Arc;
-use tokio::sync::OnceCell;
 
 #[derive(Debug, Snafu)]
 pub enum CreateOperationError {
@@ -116,7 +114,7 @@ impl CreateOperation {
     /// - `Err(CreateOperationError)` if an error occurred.
     pub async fn create(
         &self,
-        settings: &CanisterSettingsArg,
+        settings: &CanisterSettings,
     ) -> Result<Principal, CreateOperationError> {
         if let CreateTarget::Proxy(proxy) = self.inner.target {
             return self.create_proxy(settings, proxy).await;
@@ -142,7 +140,7 @@ impl CreateOperation {
 
     async fn create_ledger(
         &self,
-        settings: &CanisterSettingsArg,
+        settings: &CanisterSettings,
         selected_subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
         let creation_args = CreationArgs {
@@ -183,7 +181,7 @@ impl CreateOperation {
 
     async fn create_mgmt(
         &self,
-        settings: &CanisterSettingsArg,
+        settings: &CanisterSettings,
         selected_subnet: &Subnet,
     ) -> Result<Principal, CreateOperationError> {
         let arg = MgmtCreateCanisterArgs {
@@ -208,33 +206,17 @@ impl CreateOperation {
             )
             .await
             .context(AgentSnafu)?;
-        let resp = Decode!(&resp, MgmtCreateCanisterResponse).context(CandidDecodeSnafu)?;
+        let resp: CanisterIdRecord = Decode!(&resp, CanisterIdRecord).context(CandidDecodeSnafu)?;
         Ok(resp.canister_id)
     }
 
     async fn create_proxy(
         &self,
-        settings: &CanisterSettingsArg,
+        settings: &CanisterSettings,
         proxy: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let args = MgmtCreateCanisterArgsTyped {
-            settings: Some(CanisterSettings {
-                controllers: settings.controllers.clone(),
-                compute_allocation: settings.compute_allocation.clone(),
-                memory_allocation: settings.memory_allocation.clone(),
-                freezing_threshold: settings.freezing_threshold.clone(),
-                reserved_cycles_limit: settings.reserved_cycles_limit.clone(),
-                log_visibility: settings.log_visibility.as_ref().map(|lv| match lv {
-                    LogVisibility::Controllers => {
-                        ic_management_canister_types::LogVisibility::Controllers
-                    }
-                    LogVisibility::Public => ic_management_canister_types::LogVisibility::Public,
-                    LogVisibility::AllowedViewers(viewers) => {
-                        ic_management_canister_types::LogVisibility::AllowedViewers(viewers.clone())
-                    }
-                }),
-                ..Default::default()
-            }),
+        let args = MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
             sender_canister_version: None,
         };
 

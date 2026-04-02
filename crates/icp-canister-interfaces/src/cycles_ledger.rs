@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat, Principal};
 use serde::Deserialize;
 
-use crate::management_canister::CanisterSettingsArg;
+use ic_management_canister_types::CanisterSettings;
 
 /// 100m cycles
 pub const CYCLES_LEDGER_BLOCK_FEE: u128 = 100_000_000;
@@ -20,7 +20,7 @@ pub enum SubnetSelectionArg {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct CreationArgs {
     pub subnet_selection: Option<SubnetSelectionArg>,
-    pub settings: Option<CanisterSettingsArg>,
+    pub settings: Option<CanisterSettings>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

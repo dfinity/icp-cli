@@ -8,6 +8,7 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
+use ic_management_canister_types::CanisterSettings;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
     cycles_ledger::{
@@ -19,7 +20,6 @@ use icp_canister_interfaces::{
         NotifyMintArgs, NotifyMintResponse,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
-    management_canister::CanisterSettingsArg,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -842,13 +842,9 @@ async fn install_proxy(
     let creation_args = if !controllers.is_empty() {
         Some(CreationArgs {
             subnet_selection: None,
-            settings: Some(CanisterSettingsArg {
+            settings: Some(CanisterSettings {
                 controllers: Some(controllers.clone()),
-                freezing_threshold: None,
-                reserved_cycles_limit: None,
-                log_visibility: None,
-                memory_allocation: None,
-                compute_allocation: None,
+                ..Default::default()
             }),
         })
     } else {

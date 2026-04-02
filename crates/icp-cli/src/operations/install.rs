@@ -1,3 +1,4 @@
+use candid::Encode;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{
@@ -157,11 +158,13 @@ async fn do_install_operation(
     // Generous overhead for encoding, target canister ID, install mode, etc.
     const ENCODING_OVERHEAD: usize = 500;
 
-    // Calculate total install message size
-    let init_args_len = init_args.map_or(0, |args| args.len());
-    let total_install_size = wasm.len() + init_args_len + ENCODING_OVERHEAD;
-
     let cid = CanisterId::from(*canister_id);
+    let arg = init_args
+        .map(|a| a.to_vec())
+        .unwrap_or_else(|| Encode!().unwrap());
+
+    // Calculate total install message size
+    let total_install_size = wasm.len() + arg.len() + ENCODING_OVERHEAD;
 
     if total_install_size <= CHUNK_THRESHOLD {
         // Small wasm: use regular install_code
@@ -171,7 +174,7 @@ async fn do_install_operation(
             mode,
             canister_id: cid,
             wasm_module: wasm.to_vec(),
-            arg: init_args.map(|a| a.to_vec()).unwrap_or_default(),
+            arg,
             sender_canister_version: None,
         };
 
@@ -231,7 +234,7 @@ async fn do_install_operation(
             store_canister: None,
             chunk_hashes_list: chunk_hashes,
             wasm_module_hash,
-            arg: init_args.map(|a| a.to_vec()).unwrap_or_default(),
+            arg,
             sender_canister_version: None,
         };
 

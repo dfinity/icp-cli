@@ -230,6 +230,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             &method,
             arg_bytes,
             args.proxy,
+            None,
             args.cycles.get(),
         )
         .await?

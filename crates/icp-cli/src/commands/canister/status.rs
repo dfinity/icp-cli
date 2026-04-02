@@ -62,6 +62,10 @@ pub(crate) struct StatusArgsOptions {
     /// looks up public information from the state tree.
     #[arg(short, long)]
     pub public: bool,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub proxy: Option<Principal>,
 }
 
 /// Fetch the list of canister ids from the id_store
@@ -227,7 +231,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                 // Retrieve canister status from management canister
                 match proxy_management::canister_status(
                     &agent,
-                    None,
+                    args.options.proxy,
                     CanisterIdRecord { canister_id: *cid },
                 )
                 .await

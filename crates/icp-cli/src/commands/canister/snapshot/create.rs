@@ -2,6 +2,7 @@ use std::io::stdout;
 
 use anyhow::bail;
 use byte_unit::{Byte, UnitType};
+use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, TakeCanisterSnapshotArgs,
@@ -30,6 +31,10 @@ pub(crate) struct CreateArgs {
     /// Suppress human-readable output; print only snapshot ID
     #[arg(long, short)]
     quiet: bool,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow::Error> {
@@ -52,9 +57,12 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     // Check canister status - must be stopped to create a snapshot
     let name = &args.cmd_args.canister;
-    let status =
-        proxy_management::canister_status(&agent, None, CanisterIdRecord { canister_id: cid })
-            .await?;
+    let status = proxy_management::canister_status(
+        &agent,
+        args.proxy,
+        CanisterIdRecord { canister_id: cid },
+    )
+    .await?;
     match status.status {
         CanisterStatusType::Running => {
             bail!(
@@ -74,7 +82,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         sender_canister_version: None,
     };
 
-    let snapshot = proxy_management::take_canister_snapshot(&agent, None, take_args).await?;
+    let snapshot = proxy_management::take_canister_snapshot(&agent, args.proxy, take_args).await?;
     if args.json {
         serde_json::to_writer(
             stdout(),

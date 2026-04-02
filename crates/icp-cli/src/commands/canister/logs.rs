@@ -1,6 +1,7 @@
 use std::io::stdout;
 
 use anyhow::{Context as _, anyhow};
+use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
 use ic_management_canister_types::{CanisterLogFilter, CanisterLogRecord, FetchCanisterLogsArgs};
@@ -48,6 +49,10 @@ pub(crate) struct LogsArgs {
     /// Output command results as JSON
     #[arg(long)]
     pub(crate) json: bool,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 fn parse_timestamp(s: &str) -> Result<u64, String> {
@@ -103,10 +108,10 @@ pub(crate) async fn exec(ctx: &Context, args: &LogsArgs) -> Result<(), anyhow::E
 
     if args.follow {
         // Follow mode: continuously fetch and display new logs
-        follow_logs(args, &agent, &canister_id, args.interval).await
+        follow_logs(args, &agent, args.proxy, &canister_id, args.interval).await
     } else {
         // Single fetch mode: fetch all logs once
-        fetch_and_display_logs(args, &agent, &canister_id, build_filter(args)?).await
+        fetch_and_display_logs(args, &agent, args.proxy, &canister_id, build_filter(args)?).await
     }
 }
 
@@ -158,6 +163,7 @@ fn build_filter(args: &LogsArgs) -> Result<Option<CanisterLogFilter>, anyhow::Er
 async fn fetch_and_display_logs(
     args: &LogsArgs,
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: &candid::Principal,
     filter: Option<CanisterLogFilter>,
 ) -> Result<(), anyhow::Error> {
@@ -165,7 +171,7 @@ async fn fetch_and_display_logs(
         canister_id: *canister_id,
         filter,
     };
-    let result = proxy_management::fetch_canister_logs(agent, None, fetch_args)
+    let result = proxy_management::fetch_canister_logs(agent, proxy, fetch_args)
         .await
         .context("Failed to fetch canister logs")?;
 
@@ -203,6 +209,7 @@ const FOLLOW_LOOKBACK_NANOS: u64 = 60 * 60 * 1_000_000_000; // 1 hour
 async fn follow_logs(
     args: &LogsArgs,
     agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: &candid::Principal,
     interval_seconds: u64,
 ) -> Result<(), anyhow::Error> {
@@ -232,7 +239,7 @@ async fn follow_logs(
             canister_id: *canister_id,
             filter,
         };
-        let result = proxy_management::fetch_canister_logs(agent, None, fetch_args)
+        let result = proxy_management::fetch_canister_logs(agent, proxy, fetch_args)
             .await
             .context("Failed to fetch canister logs")?;
 
@@ -434,6 +441,7 @@ mod tests {
             since_index,
             until_index,
             json: false,
+            proxy: None,
         }
     }
 

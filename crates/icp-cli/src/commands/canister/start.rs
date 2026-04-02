@@ -1,3 +1,4 @@
+use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
 use icp::context::Context;
@@ -9,6 +10,10 @@ use crate::{commands::args, operations::proxy_management};
 pub(crate) struct StartArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::Error> {
@@ -28,7 +33,8 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         )
         .await?;
 
-    proxy_management::start_canister(&agent, None, CanisterIdRecord { canister_id: cid }).await?;
+    proxy_management::start_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
+        .await?;
 
     Ok(())
 }

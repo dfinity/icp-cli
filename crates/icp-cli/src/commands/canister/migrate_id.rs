@@ -47,6 +47,10 @@ pub(crate) struct MigrateIdArgs {
     /// Exit as soon as the migrated canister is deleted (don't wait for full completion)
     #[arg(long)]
     skip_watch: bool,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<candid::Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyhow::Error> {
@@ -110,7 +114,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         // Fetch status of both canisters
         let source_status = proxy_management::canister_status(
             &agent,
-            None,
+            args.proxy,
             CanisterIdRecord {
                 canister_id: source_cid,
             },
@@ -118,7 +122,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         .await?;
         let target_status = proxy_management::canister_status(
             &agent,
-            None,
+            args.proxy,
             CanisterIdRecord {
                 canister_id: target_cid,
             },
@@ -172,7 +176,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         // Check target canister has no snapshots
         let snapshots = proxy_management::list_canister_snapshots(
             &agent,
-            None,
+            args.proxy,
             CanisterIdRecord {
                 canister_id: target_cid,
             },
@@ -211,7 +215,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             proxy_management::update_settings(
                 &agent,
-                None,
+                args.proxy,
                 UpdateSettingsArgs {
                     canister_id: source_cid,
                     settings: CanisterSettings {
@@ -231,7 +235,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             proxy_management::update_settings(
                 &agent,
-                None,
+                args.proxy,
                 UpdateSettingsArgs {
                     canister_id: target_cid,
                     settings: CanisterSettings {

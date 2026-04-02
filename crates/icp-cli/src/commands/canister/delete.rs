@@ -1,3 +1,4 @@
+use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
 use icp::context::{CanisterSelection, Context};
@@ -9,6 +10,10 @@ use crate::{commands::args, operations::proxy_management};
 pub(crate) struct DeleteArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow::Error> {
@@ -29,7 +34,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
         )
         .await?;
 
-    proxy_management::delete_canister(&agent, None, CanisterIdRecord { canister_id: cid }).await?;
+    proxy_management::delete_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
+        .await?;
 
     // Remove canister ID from the id store if it was referenced by name
     if let CanisterSelection::Named(canister_name) = &selections.canister {

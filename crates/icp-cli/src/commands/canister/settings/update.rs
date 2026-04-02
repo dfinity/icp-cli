@@ -134,6 +134,10 @@ pub(crate) struct UpdateArgs {
 
     #[command(flatten)]
     environment_variables: Option<EnvironmentVariableOpt>,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
@@ -171,8 +175,12 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     let mut current_status: Option<CanisterStatusResult> = None;
     if require_current_settings(args) {
         current_status = Some(
-            proxy_management::canister_status(&agent, None, CanisterIdRecord { canister_id: cid })
-                .await?,
+            proxy_management::canister_status(
+                &agent,
+                args.proxy,
+                CanisterIdRecord { canister_id: cid },
+            )
+            .await?,
         );
     }
 
@@ -279,7 +287,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
 
     proxy_management::update_settings(
         &agent,
-        None,
+        args.proxy,
         UpdateSettingsArgs {
             canister_id: cid,
             settings,

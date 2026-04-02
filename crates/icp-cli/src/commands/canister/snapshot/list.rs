@@ -1,6 +1,7 @@
 use std::io::stdout;
 
 use byte_unit::{Byte, UnitType};
+use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
 use icp::context::Context;
@@ -22,6 +23,10 @@ pub(crate) struct ListArgs {
     /// Suppress human-readable output; print only snapshot IDs
     #[arg(long, short)]
     pub(crate) quiet: bool,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::Error> {
@@ -44,7 +49,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
 
     let snapshots = proxy_management::list_canister_snapshots(
         &agent,
-        None,
+        args.proxy,
         CanisterIdRecord { canister_id: cid },
     )
     .await?;

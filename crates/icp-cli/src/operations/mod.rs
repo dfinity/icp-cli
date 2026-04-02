@@ -1,10 +1,10 @@
 pub(crate) mod binding_env_vars;
 pub(crate) mod build;
-pub(crate) mod call;
 pub(crate) mod candid_compat;
 pub(crate) mod canister_migration;
 pub(crate) mod create;
 pub(crate) mod install;
+pub(crate) mod proxy;
 pub(crate) mod settings;
 pub(crate) mod snapshot_transfer;
 pub(crate) mod sync;

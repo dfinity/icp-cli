@@ -17,8 +17,8 @@ use std::io::{self, Write};
 use tracing::{error, warn};
 
 use crate::{
-    commands::args, operations::call::update_or_proxy_call,
-    operations::misc::fetch_canister_metadata,
+    commands::args, operations::misc::fetch_canister_metadata,
+    operations::proxy::update_or_proxy_raw,
 };
 
 /// How to interpret and display the call response blob.
@@ -224,7 +224,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             .call()
             .await?
     } else {
-        update_or_proxy_call(
+        update_or_proxy_raw(
             &agent,
             cid,
             &method,

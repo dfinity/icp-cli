@@ -10,13 +10,16 @@ use icp_canister_interfaces::{
     },
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
     management_canister::{
-        CanisterSettingsArg, MgmtCreateCanisterArgs, MgmtCreateCanisterResponse,
+        CanisterSettingsArg, LogVisibility, MgmtCreateCanisterArgs, MgmtCreateCanisterResponse,
     },
 };
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use super::call::{UpdateOrProxyCallError, update_or_proxy_call};
+use super::proxy::{UpdateOrProxyError, update_or_proxy};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgsTyped,
+};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
@@ -53,7 +56,7 @@ pub enum CreateOperationError {
     SubnetResolution { message: String },
 
     #[snafu(transparent)]
-    UpdateOrProxyCall { source: UpdateOrProxyCallError },
+    UpdateOrProxyCall { source: UpdateOrProxyError },
 }
 
 /// Determines how a new canister is created.
@@ -214,24 +217,38 @@ impl CreateOperation {
         settings: &CanisterSettingsArg,
         proxy: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let mgmt_arg = MgmtCreateCanisterArgs {
-            settings: Some(settings.clone()),
+        let args = MgmtCreateCanisterArgsTyped {
+            settings: Some(CanisterSettings {
+                controllers: settings.controllers.clone(),
+                compute_allocation: settings.compute_allocation.clone(),
+                memory_allocation: settings.memory_allocation.clone(),
+                freezing_threshold: settings.freezing_threshold.clone(),
+                reserved_cycles_limit: settings.reserved_cycles_limit.clone(),
+                log_visibility: settings.log_visibility.as_ref().map(|lv| match lv {
+                    LogVisibility::Controllers => {
+                        ic_management_canister_types::LogVisibility::Controllers
+                    }
+                    LogVisibility::Public => ic_management_canister_types::LogVisibility::Public,
+                    LogVisibility::AllowedViewers(viewers) => {
+                        ic_management_canister_types::LogVisibility::AllowedViewers(viewers.clone())
+                    }
+                }),
+                ..Default::default()
+            }),
             sender_canister_version: None,
         };
-        let mgmt_arg_bytes = Encode!(&mgmt_arg).context(CandidEncodeSnafu)?;
 
-        let res = update_or_proxy_call(
+        let (result,): (CanisterIdRecord,) = update_or_proxy(
             &self.inner.agent,
             Principal::management_canister(),
             "create_canister",
-            mgmt_arg_bytes,
+            (args,),
             Some(proxy),
             self.inner.cycles,
         )
         .await?;
 
-        let resp = Decode!(&res, MgmtCreateCanisterResponse).context(CandidDecodeSnafu)?;
-        Ok(resp.canister_id)
+        Ok(result.canister_id)
     }
 
     /// 1. If a subnet is explicitly provided, use it

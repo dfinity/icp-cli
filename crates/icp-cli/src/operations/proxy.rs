@@ -1,10 +1,11 @@
+use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::{Encode, Nat, Principal};
 use ic_agent::Agent;
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
-pub enum UpdateOrProxyCallError {
+pub enum UpdateOrProxyError {
     #[snafu(display("failed to encode proxy call arguments: {source}"))]
     ProxyEncode { source: candid::Error },
 
@@ -19,6 +20,12 @@ pub enum UpdateOrProxyCallError {
 
     #[snafu(display("proxy call failed: {message}"))]
     ProxyCall { message: String },
+
+    #[snafu(display("failed to encode call arguments: {source}"))]
+    CandidEncode { source: candid::Error },
+
+    #[snafu(display("failed to decode call response: {source}"))]
+    CandidDecode { source: candid::Error },
 }
 
 /// Dispatches a canister update call, optionally routing through a proxy canister.
@@ -27,14 +34,14 @@ pub enum UpdateOrProxyCallError {
 /// If `proxy` is `Some`, wraps the call in [`ProxyArgs`] and sends it to the
 /// proxy canister's `proxy` method, which forwards it to the target.
 /// The `cycles` parameter is only used for proxied calls.
-pub async fn update_or_proxy_call(
+pub async fn update_or_proxy_raw(
     agent: &Agent,
     canister_id: Principal,
     method: &str,
     arg: Vec<u8>,
     proxy: Option<Principal>,
     cycles: u128,
-) -> Result<Vec<u8>, UpdateOrProxyCallError> {
+) -> Result<Vec<u8>, UpdateOrProxyError> {
     if let Some(proxy_cid) = proxy {
         let proxy_args = ProxyArgs {
             canister_id,
@@ -68,4 +75,23 @@ pub async fn update_or_proxy_call(
             .context(DirectUpdateCallSnafu)?;
         Ok(res)
     }
+}
+
+/// Like [`update_or_proxy_raw`], but accepts typed Candid arguments and decodes the response.
+pub async fn update_or_proxy<A, R>(
+    agent: &Agent,
+    canister_id: Principal,
+    method: &str,
+    args: A,
+    proxy: Option<Principal>,
+    cycles: u128,
+) -> Result<R, UpdateOrProxyError>
+where
+    A: ArgumentEncoder,
+    R: for<'a> ArgumentDecoder<'a>,
+{
+    let arg = candid::encode_args(args).context(CandidEncodeSnafu)?;
+    let res = update_or_proxy_raw(agent, canister_id, method, arg, proxy, cycles).await?;
+    let decoded: R = candid::decode_args(&res).context(CandidDecodeSnafu)?;
+    Ok(decoded)
 }

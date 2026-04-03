@@ -19,7 +19,7 @@ use crate::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
         candid_compat::check_candid_compatibility_many,
-        create::CreateOperation,
+        create::{CreateOperation, CreateTarget},
         install::{install_many, resolve_install_mode_and_status},
         settings::sync_settings_many,
         sync::sync_many,
@@ -127,9 +127,13 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     if canisters_to_create.is_empty() {
         info!("All canisters already exist");
     } else {
+        let target = match args.subnet {
+            Some(subnet) => CreateTarget::Subnet(subnet),
+            None => CreateTarget::None,
+        };
         let create_operation = CreateOperation::new(
             agent.clone(),
-            args.subnet,
+            target,
             args.cycles.get(),
             existing_canisters.into_values().collect(),
         );

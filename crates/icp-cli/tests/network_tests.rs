@@ -4,6 +4,7 @@ use candid::Principal;
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
+    internet_identity::INTERNET_IDENTITY_FRONTEND_PRINCIPAL,
     internet_identity::INTERNET_IDENTITY_PRINCIPAL, registry::REGISTRY_PRINCIPAL,
 };
 use indoc::{formatdoc, indoc};
@@ -498,6 +499,10 @@ async fn network_starts_with_canisters_preset() {
         .read_state_canister_module_hash(INTERNET_IDENTITY_PRINCIPAL)
         .await
         .unwrap();
+    agent
+        .read_state_canister_module_hash(INTERNET_IDENTITY_FRONTEND_PRINCIPAL)
+        .await
+        .unwrap();
 }
 
 #[tag(docker)]
@@ -872,5 +877,76 @@ async fn network_gateway_binds_to_configured_interface() {
         resp.status().is_success(),
         "gateway should respond successfully on custom interface, got {}",
         resp.status()
+    );
+}
+
+#[tokio::test]
+async fn network_recovers_from_stale_descriptor() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("stale-descriptor");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // Ensure the network descriptor directory exists
+    let network_dir = project_dir.join(".icp/cache/networks/random-network");
+    std::fs::create_dir_all(&network_dir).expect("failed to create network directory");
+
+    // Create a stale descriptor with a PID that cannot exist
+    let stale_descriptor = serde_json::json!({
+        "v": "1",
+        "id": "11111111-1111-1111-1111-111111111111",
+        "project-dir": project_dir.to_string(),
+        "network": "random-network",
+        "network-dir": network_dir.to_string(),
+        "gateway": {
+            "fixed": false,
+            "port": 9999,
+            "host": "localhost",
+            "ip": "127.0.0.1"
+        },
+        "child-locator": {
+            "type": "pid",
+            "pid": u32::MAX,  // Non-existent PID
+            "start-time": 0
+        },
+        "root-key": "308182301c300d06092a864886f70d0101010500030b008081007f",
+        "pocketic-config-port": null,
+        "pocketic-instance-id": null,
+        "candid-ui-canister-id": null,
+        "proxy-canister-id": null,
+        "status-dir": null,
+        "use-friendly-domains": false
+    });
+
+    // Write the stale descriptor
+    let descriptor_bytes =
+        serde_json::to_vec(&stale_descriptor).expect("failed to serialize descriptor");
+    ctx.write_network_descriptor(&project_dir, "random-network", &descriptor_bytes);
+
+    // Start network - should succeed and clean up the stale descriptor
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "random-network", "--background"])
+        .assert()
+        .success()
+        .stderr(contains("Found stale network descriptor"));
+
+    // Verify the network actually started (descriptor should be updated with real process)
+    let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
+
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Verify we can query the network
+    let agent = ic_agent::Agent::builder()
+        .with_url(format!("http://127.0.0.1:{}", network.gateway_port))
+        .build()
+        .expect("Failed to build agent");
+
+    let status = agent.status().await.expect("Failed to get network status");
+    assert!(
+        matches!(&status.replica_health_status, Some(health) if health == "healthy"),
+        "Network should be healthy"
     );
 }

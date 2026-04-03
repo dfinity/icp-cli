@@ -26,7 +26,7 @@ If you're coming from dfx (the previous Internet Computer SDK), see the **[Migra
 
 ## Documentation
 
-📚 **[Full Documentation Site](https://dfinity.github.io/icp-cli/)** — Complete guides, tutorials, and reference
+📚 **[Full Documentation Site](https://cli.internetcomputer.org)** — Complete guides, tutorials, and reference
 
 Or browse the markdown docs directly:
 

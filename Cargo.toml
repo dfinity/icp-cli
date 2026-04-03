@@ -8,7 +8,7 @@ resolver = "3"
 [workspace.package]
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2024"
-version = "0.2.1"
+version = "0.2.2"
 repository = "https://github.com/dfinity/icp-cli"
 rust-version = "1.88.0"
 license = "Apache-2.0"
@@ -24,7 +24,7 @@ axoupdater = "0.10.0"
 backoff = { version = "0.4", features = ["tokio"] }
 bigdecimal = "0.4.10"
 bip32 = "0.5.0"
-bollard = "0.20.1"
+bollard = "0.20.2"
 byte-unit = "5.1.6"
 camino = { version = "1.1.9", features = ["serde1"] }
 cargo-generate = "0.23.7"
@@ -46,15 +46,15 @@ glob = "0.3.2"
 handlebars = "6.3.2"
 hex = { version = "0.4.3", features = ["serde"] }
 httptest = "0.16.3"
-ic-agent = { version = "0.46.0" }
-ic-asset = "0.28.0"
+ic-agent = { version = "0.47.0" }
+ic-asset = "0.29.0"
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.7.1" }
-ic-utils = { version = "0.46.0" }
+ic-utils = { version = "0.47.0" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
-ic-identity-hsm = "0.46.0"
+ic-identity-hsm = "0.47.0"
 icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"
 indoc = "2.0.6"
@@ -104,7 +104,7 @@ tracing-subscriber = "0.3.20"
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 wasmparser = "0.245.1"
-winreg = "0.55"
+winreg = "0.56.0"
 wslpath2 = "0.1"
 zeroize = "1.8.1"
 

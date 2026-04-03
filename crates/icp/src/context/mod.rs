@@ -548,9 +548,15 @@ impl Context {
                 env_mappings.insert(env_name.clone(), mapping);
             }
         }
-        if let Err(e) =
-            crate::network::custom_domains::write_custom_domains(status_dir, domain, &env_mappings)
-        {
+        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(desc.ii, domain)
+            .into_iter()
+            .collect();
+        if let Err(e) = crate::network::custom_domains::write_custom_domains(
+            status_dir,
+            domain,
+            &env_mappings,
+            &extra,
+        ) {
             tracing::warn!("Failed to update custom domains: {e}");
         }
     }

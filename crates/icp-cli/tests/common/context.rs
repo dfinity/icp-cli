@@ -395,6 +395,10 @@ impl TestContext {
             .expect("Failed to write network descriptor file");
     }
 
+    pub(crate) fn gateway_url(&self) -> &Url {
+        self.http_gateway_url.get().unwrap()
+    }
+
     pub(crate) fn agent(&self) -> Agent {
         let agent = Agent::builder()
             .with_url(self.http_gateway_url.get().unwrap().as_str())
@@ -441,18 +445,21 @@ impl TestContext {
     }
 
     pub(crate) fn docker_pull_network(&self) {
+        self.docker_pull_image("ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0");
+    }
+
+    pub(crate) fn docker_pull_engine_network(&self) {
+        self.docker_pull_image("ghcr.io/dfinity/icp-cli-network-launcher:engine-beta");
+    }
+
+    fn docker_pull_image(&self, image: &str) {
         let platform = if cfg!(target_arch = "aarch64") {
             "linux/arm64"
         } else {
             "linux/amd64"
         };
         Command::new("docker")
-            .args([
-                "pull",
-                "--platform",
-                platform,
-                "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
-            ])
+            .args(["pull", "--platform", platform, image])
             .assert()
             .success();
     }

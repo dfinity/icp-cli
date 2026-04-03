@@ -87,11 +87,11 @@ pub fn initialize(
     let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());
 
     // Identity loader
-    let idload = Arc::new(identity::Loader {
-        dir: dirs.identity().context(IdentityDirectorySnafu)?,
+    let idload = Arc::new(identity::Loader::new(
+        dirs.identity().context(IdentityDirectorySnafu)?,
         password_func,
-        telemetry_data: telemetry_data.clone(),
-    });
+        telemetry_data.clone(),
+    ));
     if let Ok(mockdir) = std::env::var("ICP_CLI_KEYRING_MOCK_DIR") {
         keyring::set_default_credential_builder(Box::new(
             crate::identity::keyring_mock::MockKeyring {

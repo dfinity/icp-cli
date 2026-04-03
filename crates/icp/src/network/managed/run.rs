@@ -8,6 +8,7 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
+use ic_management_canister_types::CanisterSettings;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
     cycles_ledger::{
@@ -19,7 +20,6 @@ use icp_canister_interfaces::{
         NotifyMintArgs, NotifyMintResponse,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
-    management_canister::CanisterSettingsArg,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -241,10 +241,12 @@ async fn run_network_launcher(
         info!("Network started on port {}", instance.gateway_port);
     }
 
+    let gateway_url: Url = format!("http://{}:{}", gateway.host, gateway.port)
+        .parse()
+        .unwrap();
+
     let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
-        &format!("http://{}:{}", gateway.host, gateway.port)
-            .parse()
-            .unwrap(),
+        &gateway_url,
         &instance.root_key,
         all_identities,
         default_identity,
@@ -252,6 +254,8 @@ async fn run_network_launcher(
         proxy_wasm,
     )
     .await?;
+
+    let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.ii);
 
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
@@ -274,6 +278,7 @@ async fn run_network_launcher(
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
                 proxy_canister_id,
+                ii,
                 status_dir: Some(status_dir_path.clone()),
                 use_friendly_domains: instance.use_friendly_domains,
             };
@@ -284,6 +289,23 @@ async fn run_network_launcher(
             Ok(())
         })
         .await??;
+
+    // Write initial custom-domains.txt with system canister entries (e.g. II)
+    if instance.use_friendly_domains
+        && let Some(domain) = crate::network::custom_domains::gateway_domain(&gateway_url)
+    {
+        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(ii, domain)
+            .into_iter()
+            .collect();
+        if !extra.is_empty() {
+            let _ = crate::network::custom_domains::write_custom_domains(
+                &status_dir_path,
+                domain,
+                &std::collections::BTreeMap::new(),
+                &extra,
+            );
+        }
+    }
     if background {
         info!("To stop the network, run `icp network stop`");
         guard.defuse();
@@ -302,7 +324,7 @@ async fn run_network_launcher(
 }
 
 fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
-    use bollard::secret::PortBinding;
+    use bollard::models::PortBinding;
     use std::collections::HashMap;
 
     use super::docker::{docker_extra_hosts_for_addrs, translate_launcher_args_for_docker};
@@ -820,13 +842,9 @@ async fn install_proxy(
     let creation_args = if !controllers.is_empty() {
         Some(CreationArgs {
             subnet_selection: None,
-            settings: Some(CanisterSettingsArg {
+            settings: Some(CanisterSettings {
                 controllers: Some(controllers.clone()),
-                freezing_threshold: None,
-                reserved_cycles_limit: None,
-                log_visibility: None,
-                memory_allocation: None,
-                compute_allocation: None,
+                ..Default::default()
             }),
         })
     } else {

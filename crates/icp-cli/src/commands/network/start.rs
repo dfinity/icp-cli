@@ -15,7 +15,7 @@ use icp::{
     },
     settings::Settings,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
@@ -78,8 +78,23 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     nd.ensure_exists()
         .context("failed to create network directory")?;
 
-    if nd.load_network_descriptor().await?.is_some() {
-        bail!("network '{}' is already running", network.name);
+    if let Some(descriptor) = nd.load_network_descriptor().await? {
+        debug!(
+            "Found network descriptor for {} in: {}",
+            nd.network_name, nd.network_root
+        );
+        if descriptor.child_locator.is_alive().await {
+            bail!("network '{}' is already running", network.name);
+        } else {
+            warn!(
+                "Found stale network descriptor for '{}' (process is no longer running). \
+                 Cleaning up and starting fresh.",
+                network.name
+            );
+            nd.cleanup_port_descriptor(descriptor.gateway_port())
+                .await?;
+            nd.cleanup_project_network_descriptor().await?;
+        }
     }
 
     // Clean up any existing canister ID mappings of which environment is on this network

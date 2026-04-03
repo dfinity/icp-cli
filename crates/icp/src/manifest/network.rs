@@ -64,7 +64,8 @@ pub enum ManagedMode {
         gateway: Option<Gateway>,
         /// Artificial delay to add to every update call
         artificial_delay_ms: Option<u64>,
-        /// Set up the Internet Identity canister
+        /// Set up the Internet Identity canister. Makes internet identity available at
+        /// id.ai.localhost:<port>
         ii: Option<bool>,
         /// Set up the NNS
         nns: Option<bool>,

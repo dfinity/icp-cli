@@ -3,12 +3,8 @@
 // Overrides Starlight's default Banner component so we don't need
 // banner frontmatter in each file.
 const content = 'Feedback welcome! Report issues on <a href="https://github.com/dfinity/icp-cli/issues" target="_blank" rel="noopener noreferrer">GitHub</a>, ask questions on the <a href="https://forum.dfinity.org/t/icp-cli-announcements-and-feedback-discussion/60410/1" target="_blank" rel="noopener noreferrer">Forum</a>, or chat with us on <a href="https://discord.internetcomputer.org" target="_blank" rel="noopener noreferrer">Discord</a>.';
-const llmsTxtPath = `${import.meta.env.BASE_URL}llms.txt`;
 ---
 
-<blockquote class="agent-signaling" data-pagefind-ignore>
-	<p>For AI agents: Documentation index at <a href={llmsTxtPath}>{llmsTxtPath}</a></p>
-</blockquote>
 <div class="sl-banner" data-pagefind-ignore set:html={content} />
 
 <style>

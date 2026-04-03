@@ -5,11 +5,11 @@ use async_trait::async_trait;
 use bollard::{
     Docker,
     errors::Error as BollardError,
+    models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
         RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
-    secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;

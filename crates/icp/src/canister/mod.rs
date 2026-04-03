@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use candid::{Nat, Principal};
-use icp_canister_interfaces::management_canister::CanisterSettingsArg;
+use ic_management_canister_types::{CanisterSettings, LogVisibility};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -14,73 +14,24 @@ pub mod sync;
 mod script;
 
 /// Controls who can read canister logs.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum LogVisibility {
-    /// Only controllers can view logs.
-    #[default]
-    Controllers,
-    /// Anyone can view logs.
-    Public,
-    /// Specific principals can view logs.
-    AllowedViewers(Vec<Principal>),
-}
-
-/// Serialization/deserialization representation for LogVisibility.
 /// Supports both string format ("controllers", "public") and object format ({ allowed_viewers: [...] }).
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged, rename_all = "snake_case")]
-enum LogVisibilityDef {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum LogVisibilityDef {
     /// Simple string variants for controllers or public
     Simple(LogVisibilitySimple),
     /// Object format with allowed_viewers list
     AllowedViewers { allowed_viewers: Vec<Principal> },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum LogVisibilitySimple {
+pub enum LogVisibilitySimple {
     Controllers,
     Public,
 }
 
-impl From<LogVisibility> for LogVisibilityDef {
-    fn from(value: LogVisibility) -> Self {
-        match value {
-            LogVisibility::Controllers => {
-                LogVisibilityDef::Simple(LogVisibilitySimple::Controllers)
-            }
-            LogVisibility::Public => LogVisibilityDef::Simple(LogVisibilitySimple::Public),
-            LogVisibility::AllowedViewers(viewers) => LogVisibilityDef::AllowedViewers {
-                allowed_viewers: viewers,
-            },
-        }
-    }
-}
-
-impl From<LogVisibilityDef> for LogVisibility {
-    fn from(value: LogVisibilityDef) -> Self {
-        match value {
-            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers) => {
-                LogVisibility::Controllers
-            }
-            LogVisibilityDef::Simple(LogVisibilitySimple::Public) => LogVisibility::Public,
-            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
-                LogVisibility::AllowedViewers(allowed_viewers)
-            }
-        }
-    }
-}
-
-impl Serialize for LogVisibility {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        LogVisibilityDef::from(self.clone()).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LogVisibility {
+impl<'de> Deserialize<'de> for LogVisibilityDef {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -91,17 +42,17 @@ impl<'de> Deserialize<'de> for LogVisibility {
         struct LogVisibilityVisitor;
 
         impl<'de> Visitor<'de> for LogVisibilityVisitor {
-            type Value = LogVisibility;
+            type Value = LogVisibilityDef;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("'controllers', 'public', or object with 'allowed_viewers'")
             }
 
             fn visit_str<E: Error>(self, value: &str) -> Result<Self::Value, E> {
-                LogVisibilityDef::deserialize(
+                LogVisibilitySimple::deserialize(
                     serde::de::value::StrDeserializer::<E>::new(value),
                 )
-                .map(Into::into)
+                .map(LogVisibilityDef::Simple)
                 .map_err(|_| {
                     E::custom(format!(
                         "unknown log_visibility value: '{}', expected 'controllers' or 'public'",
@@ -131,7 +82,7 @@ impl<'de> Deserialize<'de> for LogVisibility {
                 }
 
                 allowed_viewers
-                    .map(LogVisibility::AllowedViewers)
+                    .map(|v| LogVisibilityDef::AllowedViewers { allowed_viewers: v })
                     .ok_or_else(|| Error::missing_field("allowed_viewers"))
             }
         }
@@ -140,7 +91,7 @@ impl<'de> Deserialize<'de> for LogVisibility {
     }
 }
 
-impl JsonSchema for LogVisibility {
+impl JsonSchema for LogVisibilityDef {
     fn schema_name() -> std::borrow::Cow<'static, str> {
         std::borrow::Cow::Borrowed("LogVisibility")
     }
@@ -175,26 +126,15 @@ impl JsonSchema for LogVisibility {
     }
 }
 
-impl From<LogVisibility> for ic_management_canister_types::LogVisibility {
-    fn from(value: LogVisibility) -> Self {
+impl From<LogVisibilityDef> for LogVisibility {
+    fn from(value: LogVisibilityDef) -> Self {
         match value {
-            LogVisibility::Controllers => ic_management_canister_types::LogVisibility::Controllers,
-            LogVisibility::Public => ic_management_canister_types::LogVisibility::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                ic_management_canister_types::LogVisibility::AllowedViewers(viewers)
+            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers) => {
+                LogVisibility::Controllers
             }
-        }
-    }
-}
-
-impl From<LogVisibility> for icp_canister_interfaces::management_canister::LogVisibility {
-    fn from(value: LogVisibility) -> Self {
-        use icp_canister_interfaces::management_canister::LogVisibility as CyclesLedgerLogVisibility;
-        match value {
-            LogVisibility::Controllers => CyclesLedgerLogVisibility::Controllers,
-            LogVisibility::Public => CyclesLedgerLogVisibility::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                CyclesLedgerLogVisibility::AllowedViewers(viewers)
+            LogVisibilityDef::Simple(LogVisibilitySimple::Public) => LogVisibility::Public,
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                LogVisibility::AllowedViewers(allowed_viewers)
             }
         }
     }
@@ -204,7 +144,7 @@ impl From<LogVisibility> for icp_canister_interfaces::management_canister::LogVi
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
     /// Controls who can read canister logs.
-    pub log_visibility: Option<LogVisibility>,
+    pub log_visibility: Option<LogVisibilityDef>,
 
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
     pub compute_allocation: Option<u64>,
@@ -241,15 +181,16 @@ pub struct Settings {
     pub environment_variables: Option<HashMap<String, String>>,
 }
 
-impl From<Settings> for CanisterSettingsArg {
+impl From<Settings> for CanisterSettings {
     fn from(settings: Settings) -> Self {
-        CanisterSettingsArg {
+        CanisterSettings {
             freezing_threshold: settings.freezing_threshold.map(|d| Nat::from(d.get())),
             controllers: None,
             reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),
             memory_allocation: settings.memory_allocation.map(|m| Nat::from(m.get())),
             compute_allocation: settings.compute_allocation.map(Nat::from),
+            ..Default::default()
         }
     }
 }
@@ -261,15 +202,21 @@ mod tests {
     #[test]
     fn log_visibility_deserialize_controllers() {
         let yaml = "controllers";
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(result, LogVisibility::Controllers);
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers)
+        );
     }
 
     #[test]
     fn log_visibility_deserialize_public() {
         let yaml = "public";
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(result, LogVisibility::Public);
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            LogVisibilityDef::Simple(LogVisibilitySimple::Public)
+        );
     }
 
     #[test]
@@ -279,12 +226,18 @@ allowed_viewers:
   - "aaaaa-aa"
   - "2vxsx-fae"
 "#;
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
         match result {
-            LogVisibility::AllowedViewers(viewers) => {
-                assert_eq!(viewers.len(), 2);
-                assert_eq!(viewers[0], Principal::from_text("aaaaa-aa").unwrap());
-                assert_eq!(viewers[1], Principal::from_text("2vxsx-fae").unwrap());
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                assert_eq!(allowed_viewers.len(), 2);
+                assert_eq!(
+                    allowed_viewers[0],
+                    Principal::from_text("aaaaa-aa").unwrap()
+                );
+                assert_eq!(
+                    allowed_viewers[1],
+                    Principal::from_text("2vxsx-fae").unwrap()
+                );
             }
             _ => panic!("Expected AllowedViewers variant"),
         }
@@ -293,10 +246,10 @@ allowed_viewers:
     #[test]
     fn log_visibility_deserialize_allowed_viewers_empty() {
         let yaml = "allowed_viewers: []";
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
         match result {
-            LogVisibility::AllowedViewers(viewers) => {
-                assert!(viewers.is_empty());
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                assert!(allowed_viewers.is_empty());
             }
             _ => panic!("Expected AllowedViewers variant"),
         }
@@ -305,7 +258,7 @@ allowed_viewers:
     #[test]
     fn log_visibility_deserialize_invalid_string() {
         let yaml = "invalid";
-        let result: Result<LogVisibility, _> = serde_yaml::from_str(yaml);
+        let result: Result<LogVisibilityDef, _> = serde_yaml::from_str(yaml);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("unknown log_visibility value"));
@@ -314,7 +267,7 @@ allowed_viewers:
     #[test]
     fn log_visibility_deserialize_invalid_field() {
         let yaml = "unknown_field: []";
-        let result: Result<LogVisibility, _> = serde_yaml::from_str(yaml);
+        let result: Result<LogVisibilityDef, _> = serde_yaml::from_str(yaml);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("unknown field"));
@@ -322,24 +275,26 @@ allowed_viewers:
 
     #[test]
     fn log_visibility_serialize_controllers() {
-        let log_vis = LogVisibility::Controllers;
+        let log_vis = LogVisibilityDef::Simple(LogVisibilitySimple::Controllers);
         let yaml = serde_yaml::to_string(&log_vis).unwrap();
         assert_eq!(yaml.trim(), "controllers");
     }
 
     #[test]
     fn log_visibility_serialize_public() {
-        let log_vis = LogVisibility::Public;
+        let log_vis = LogVisibilityDef::Simple(LogVisibilitySimple::Public);
         let yaml = serde_yaml::to_string(&log_vis).unwrap();
         assert_eq!(yaml.trim(), "public");
     }
 
     #[test]
     fn log_visibility_serialize_allowed_viewers() {
-        let log_vis = LogVisibility::AllowedViewers(vec![
-            Principal::from_text("aaaaa-aa").unwrap(),
-            Principal::from_text("2vxsx-fae").unwrap(),
-        ]);
+        let log_vis = LogVisibilityDef::AllowedViewers {
+            allowed_viewers: vec![
+                Principal::from_text("aaaaa-aa").unwrap(),
+                Principal::from_text("2vxsx-fae").unwrap(),
+            ],
+        };
         let yaml = serde_yaml::to_string(&log_vis).unwrap();
         assert!(yaml.contains("allowed_viewers"));
         assert!(yaml.contains("aaaaa-aa"));
@@ -418,25 +373,20 @@ allowed_viewers:
 
     #[test]
     fn log_visibility_conversion_to_ic_type() {
-        let controllers = LogVisibility::Controllers;
-        let ic_controllers: ic_management_canister_types::LogVisibility = controllers.into();
-        assert!(matches!(
-            ic_controllers,
-            ic_management_canister_types::LogVisibility::Controllers
-        ));
+        let controllers = LogVisibilityDef::Simple(LogVisibilitySimple::Controllers);
+        let ic_controllers: LogVisibility = controllers.into();
+        assert!(matches!(ic_controllers, LogVisibility::Controllers));
 
-        let public = LogVisibility::Public;
-        let ic_public: ic_management_canister_types::LogVisibility = public.into();
-        assert!(matches!(
-            ic_public,
-            ic_management_canister_types::LogVisibility::Public
-        ));
+        let public = LogVisibilityDef::Simple(LogVisibilitySimple::Public);
+        let ic_public: LogVisibility = public.into();
+        assert!(matches!(ic_public, LogVisibility::Public));
 
-        let viewers =
-            LogVisibility::AllowedViewers(vec![Principal::from_text("aaaaa-aa").unwrap()]);
-        let ic_viewers: ic_management_canister_types::LogVisibility = viewers.into();
+        let viewers = LogVisibilityDef::AllowedViewers {
+            allowed_viewers: vec![Principal::from_text("aaaaa-aa").unwrap()],
+        };
+        let ic_viewers: LogVisibility = viewers.into();
         match ic_viewers {
-            ic_management_canister_types::LogVisibility::AllowedViewers(v) => {
+            LogVisibility::AllowedViewers(v) => {
                 assert_eq!(v.len(), 1);
             }
             _ => panic!("Expected AllowedViewers"),

@@ -1,6 +1,15 @@
 # Unreleased
 
+* feat: `icp canister create --proxy` to create canisters via a proxy canister
+
+# v0.2.2
+
+Important: A network launcher more recent than v12.0.0-83c3f95e8c4ce28e02493df83df5f84a166451c0 is
+required to use internet identity.
+
 * feat: Many more commands support `--json` and `--quiet`.
+* feat: When a local network is started internet identity is available at id.ai.localhost
+* fix: Network would fail to start if a stale descriptor was present
 
 # v0.2.1
 

@@ -895,6 +895,7 @@ pub fn link_ii_identity(
     key: IdentityKey,
     chain: &delegation::DelegationChain,
     principal: ic_agent::export::Principal,
+    login_host: &str,
 ) -> Result<(), LinkIiIdentityError> {
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
@@ -932,6 +933,7 @@ pub fn link_ii_identity(
     let spec = IdentitySpec::InternetIdentity {
         algorithm,
         principal,
+        login_host: Some(login_host.to_string()),
     };
     identity_list.identities.insert(name.to_string(), spec);
     identity_list.write_to(dirs)?;

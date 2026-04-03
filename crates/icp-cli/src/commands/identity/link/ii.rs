@@ -87,7 +87,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
-            key::link_ii_identity(dirs, &args.name, identity_key, &chain, ii_principal)
+            key::link_ii_identity(dirs, &args.name, identity_key, &chain, ii_principal, &args.login_host)
         })
         .await?
         .context(LinkSnafu)?;

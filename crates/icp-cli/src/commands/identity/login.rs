@@ -24,15 +24,11 @@ use crate::commands::identity::link::ii::{CallbackServer, DEFAULT_LOGIN_HOST};
 pub(crate) struct LoginArgs {
     /// Name of the identity to re-authenticate
     name: String,
-
-    /// Login frontend host (domain:port)
-    #[arg(long, default_value = DEFAULT_LOGIN_HOST)]
-    login_host: String,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
     // Load the identity list and verify this is an II identity
-    let der_public_key =
+    let (der_public_key, login_host) =
         ctx.dirs
             .identity()?
             .with_read(async |dirs| {
@@ -42,8 +38,17 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                     .get(&args.name)
                     .context(IdentityNotFoundSnafu { name: &args.name })?;
 
-                let algorithm = match spec {
-                    IdentitySpec::InternetIdentity { algorithm, .. } => algorithm.clone(),
+                let (algorithm, login_host) = match spec {
+                    IdentitySpec::InternetIdentity {
+                        algorithm,
+                        login_host,
+                        ..
+                    } => (
+                        algorithm.clone(),
+                        login_host
+                            .clone()
+                            .unwrap_or_else(|| DEFAULT_LOGIN_HOST.to_string()),
+                    ),
                     _ => return NotIiSnafu { name: &args.name }.fail(),
                 };
 
@@ -97,20 +102,19 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                     }
                 };
 
-                Ok(der_public_key)
+                Ok((der_public_key, login_host))
             })
             .await??;
 
     let public_key_b64 = URL_SAFE_NO_PAD.encode(&der_public_key);
 
     // Start the local callback server on a random port
-    let server = CallbackServer::bind(&args.login_host).await.context(CallbackSnafu)?;
+    let server = CallbackServer::bind(&login_host).await.context(CallbackSnafu)?;
     let callback_url = format!("http://127.0.0.1:{}/callback", server.port);
 
     // Build the login URL
     let login_url = format!(
-        "http://{}/cli-login?public_key={public_key_b64}&callback={callback_url}",
-        args.login_host
+        "http://{login_host}/cli-login?public_key={public_key_b64}&callback={callback_url}"
     );
 
     eprintln!();

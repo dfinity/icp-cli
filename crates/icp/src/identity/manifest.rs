@@ -133,6 +133,9 @@ pub enum IdentitySpec {
         /// The principal at the root of the delegation chain
         /// (`Principal::self_authenticating(from_key)`), not the session key.
         principal: Principal,
+        /// The login frontend host (domain:port) used during linking.
+        #[serde(default)]
+        login_host: Option<String>,
     },
 }
 

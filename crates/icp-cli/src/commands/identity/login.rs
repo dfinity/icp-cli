@@ -1,19 +1,23 @@
+use base64::engine::{Engine as _, general_purpose::URL_SAFE_NO_PAD};
 use clap::Args;
 use ic_agent::Identity as _;
 use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection},
+    context::Context,
     identity::{
-        IdentitySelection, key,
+        key,
         manifest::{IdentityKeyAlgorithm, IdentityList, IdentitySpec},
     },
+    signal,
 };
 use pem::Pem;
 use pkcs8::DecodePrivateKey as _;
 use sec1::pem::PemLabel as _;
+use indicatif::{ProgressBar, ProgressStyle};
 use snafu::{OptionExt, ResultExt, Snafu};
+use std::time::Duration;
 use tracing::info;
 
-use crate::{operations::ii_poll, options::EnvironmentOpt};
+use crate::commands::identity::link::ii::{CallbackServer, DEFAULT_LOGIN_HOST};
 
 /// Re-authenticate an Internet Identity delegation
 #[derive(Debug, Args)]
@@ -21,15 +25,14 @@ pub(crate) struct LoginArgs {
     /// Name of the identity to re-authenticate
     name: String,
 
-    #[command(flatten)]
-    environment: EnvironmentOpt,
+    /// Login frontend host (domain:port)
+    #[arg(long, default_value = DEFAULT_LOGIN_HOST)]
+    login_host: String,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
-    let environment: EnvironmentSelection = args.environment.clone().into();
-
     // Load the identity list and verify this is an II identity
-    let (_algorithm, der_public_key) =
+    let der_public_key =
         ctx.dirs
             .identity()?
             .with_read(async |dirs| {
@@ -94,65 +97,56 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                     }
                 };
 
-                Ok((algorithm, der_public_key))
+                Ok(der_public_key)
             })
             .await??;
 
-    // Resolve the environment to get network access
-    let env = ctx
-        .get_environment(&environment)
-        .await
-        .context(GetEnvSnafu)?;
-    let network_access = ctx
-        .network
-        .access(&env.network)
-        .await
-        .context(NetworkAccessSnafu)?;
+    let public_key_b64 = URL_SAFE_NO_PAD.encode(&der_public_key);
 
-    let http_gateway_url = network_access
-        .http_gateway_url
-        .as_ref()
-        .context(NoHttpGatewaySnafu)?;
+    // Start the local callback server on a random port
+    let server = CallbackServer::bind(&args.login_host).await.context(CallbackSnafu)?;
+    let callback_url = format!("http://127.0.0.1:{}/callback", server.port);
 
-    // Create an anonymous agent for polling
-    let agent = ctx
-        .get_agent_for_env(&IdentitySelection::Anonymous, &environment)
-        .await
-        .context(CreateAgentSnafu)?;
+    // Build the login URL
+    let login_url = format!(
+        "http://{}/cli-login?public_key={public_key_b64}&callback={callback_url}",
+        args.login_host
+    );
 
-    // Look up the cli-backend canister ID
-    let delegator_backend_id = ctx
-        .get_canister_id_for_env(
-            &CanisterSelection::Named("backend".to_string()),
-            &environment,
-        )
-        .await
-        .context(LookupCanisterSnafu)?;
-    let delegator_frontend_id = ctx
-        .get_canister_id_for_env(
-            &CanisterSelection::Named("frontend".to_string()),
-            &environment,
-        )
-        .await
-        .context(LookupCanisterSnafu)?;
+    eprintln!();
+    eprintln!("  Press Enter to open {login_url}");
 
-    let delegator_frontend_friendly = if network_access.use_friendly_domains {
-        Some(("frontend", env.name.as_str()))
-    } else {
-        None
+    // Spawn a detached thread for stdin — using tokio would hang the runtime
+    // because the blocking read never completes.
+    let (enter_tx, mut enter_rx) = tokio::sync::mpsc::channel::<()>(1);
+    std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_line(&mut buf);
+        let _ = enter_tx.blocking_send(());
+    });
+
+    // Wait for Enter or Ctrl-C, then open the browser and wait for the callback.
+    let chain = loop {
+        tokio::select! {
+            _ = signal::stop_signal() => {
+                return InterruptedSnafu.fail();
+            }
+            _ = enter_rx.recv() => {
+                let _ = open::that(&login_url);
+                let spinner = ProgressBar::new_spinner();
+                spinner.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{spinner:.green} {msg}")
+                        .expect("valid template"),
+                );
+                spinner.set_message("Waiting for Internet Identity authentication...");
+                spinner.enable_steady_tick(Duration::from_millis(100));
+                let result = server.wait_for_delegation().await.context(CallbackSnafu);
+                spinner.finish_and_clear();
+                break result?;
+            }
+        }
     };
-
-    // Open browser and poll for delegation
-    let chain = ii_poll::poll_for_delegation(
-        &agent,
-        delegator_backend_id,
-        delegator_frontend_id,
-        &der_public_key,
-        http_gateway_url,
-        delegator_frontend_friendly,
-    )
-    .await
-    .context(PollSnafu)?;
 
     // Update the delegation chain
     ctx.dirs
@@ -200,29 +194,13 @@ pub(crate) enum LoginError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    #[snafu(display("failed to resolve environment"))]
-    GetEnv {
-        source: icp::context::GetEnvironmentError,
+    #[snafu(display("callback server error"))]
+    Callback {
+        source: crate::commands::identity::link::ii::CallbackError,
     },
 
-    #[snafu(display("failed to access network"))]
-    NetworkAccess { source: icp::network::AccessError },
-
-    #[snafu(display("network has no HTTP gateway URL configured"))]
-    NoHttpGateway,
-
-    #[snafu(display("failed to create agent"))]
-    CreateAgent {
-        source: icp::context::GetAgentForEnvError,
-    },
-
-    #[snafu(display("failed to look up cli-backend canister ID"))]
-    LookupCanister {
-        source: icp::context::GetCanisterIdForEnvError,
-    },
-
-    #[snafu(display("failed during II authentication polling"))]
-    Poll { source: ii_poll::IiPollError },
+    #[snafu(display("interrupted"))]
+    Interrupted,
 
     #[snafu(display("failed to update delegation"))]
     UpdateDelegation {

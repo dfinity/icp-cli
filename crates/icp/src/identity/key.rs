@@ -244,6 +244,15 @@ fn load_plaintext_identity(
 
 const SERVICE_NAME: &str = "icp-cli";
 
+/// Returns the keyring username for an II session key.
+///
+/// The `ii:` prefix discriminates II session keys from regular identities —
+/// no code path that operates on regular identity names can accidentally
+/// access or export these keys.
+fn ii_keyring_key(name: &str) -> String {
+    format!("ii:{name}")
+}
+
 fn load_keyring_identity(
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
@@ -311,12 +320,15 @@ fn load_ii_identity(
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
-    // Load the session keypair PEM (same path as regular PEM identities)
-    let pem_path = dirs.key_pem_path(name);
-    let origin = PemOrigin::File {
-        path: pem_path.clone(),
+    // Load the session keypair from the keyring
+    let username = ii_keyring_key(name);
+    let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
+    let password = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
+    let origin = PemOrigin::Keyring {
+        service: SERVICE_NAME.to_string(),
+        username,
     };
-    let doc = fs::read_to_string(&pem_path)?
+    let doc = password
         .parse::<Pem>()
         .context(ParsePemSnafu { origin: &origin })?;
 
@@ -336,7 +348,7 @@ fn load_ii_identity(
     let (from_key, signed_delegations) =
         delegation::to_agent_types(&stored_chain).context(DelegationConversionSnafu)?;
 
-    // Load the inner identity from the plaintext PEM
+    // Load the inner identity from the keyring-stored PEM
     let inner: Box<dyn Identity> = match algorithm {
         IdentityKeyAlgorithm::Ed25519 => {
             let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
@@ -361,6 +373,49 @@ fn load_ii_identity(
     let delegated = DelegatedIdentity::new_unchecked(from_key, inner, signed_delegations);
 
     Ok(Arc::new(delegated))
+}
+
+/// Returns the DER-encoded public key for a stored II session key.
+///
+/// Used during re-authentication to obtain the session public key to present
+/// to the II delegator backend, without re-loading the full delegated identity.
+pub fn load_ii_session_public_key(
+    name: &str,
+    algorithm: &IdentityKeyAlgorithm,
+) -> Result<Vec<u8>, LoadIdentityError> {
+    let username = ii_keyring_key(name);
+    let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
+    let password = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
+    let origin = PemOrigin::Keyring {
+        service: SERVICE_NAME.to_string(),
+        username,
+    };
+    let doc = password
+        .parse::<Pem>()
+        .context(ParsePemSnafu { origin: &origin })?;
+    match algorithm {
+        IdentityKeyAlgorithm::Ed25519 => {
+            let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
+                .context(ParseEd25519KeySnafu { origin: &origin })?;
+            Ok(BasicIdentity::from_raw_key(&key.serialize_raw())
+                .public_key()
+                .expect("ed25519 always has a public key"))
+        }
+        IdentityKeyAlgorithm::Secp256k1 => {
+            let key = k256::SecretKey::from_pkcs8_der(doc.contents())
+                .context(ParsePkcs8Snafu { origin: &origin })?;
+            Ok(Secp256k1Identity::from_private_key(key)
+                .public_key()
+                .expect("secp256k1 always has a public key"))
+        }
+        IdentityKeyAlgorithm::Prime256v1 => {
+            let key = p256::SecretKey::from_pkcs8_der(doc.contents())
+                .context(ParsePkcs8Snafu { origin: &origin })?;
+            Ok(Prime256v1Identity::from_private_key(key)
+                .public_key()
+                .expect("p256 always has a public key"))
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -628,8 +683,8 @@ pub fn rename_identity(
     // Copy key material to new location before updating the list
     enum OldKeyMaterial {
         Pem(PathBuf),
-        PemAndDelegation(PathBuf, PathBuf),
         Keyring(Entry),
+        IiKeyringAndDelegation(Entry, PathBuf),
         None,
     }
 
@@ -659,11 +714,18 @@ pub fn rename_identity(
             OldKeyMaterial::Keyring(old_entry)
         }
         IdentitySpec::InternetIdentity { .. } => {
-            // Copy both PEM and delegation chain
-            let old_pem = dirs.key_pem_path(old_name);
-            let new_pem = dirs.key_pem_path(new_name);
-            let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
-            fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+            // Copy the keyring entry (ii:-prefixed) and the delegation chain
+            let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                .context(LoadKeyringEntrySnafu { name: old_name })?;
+            let password = old_entry
+                .get_password()
+                .context(ReadKeyringEntrySnafu { name: old_name })?;
+
+            let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                .context(CreateKeyringEntrySnafu { new_name })?;
+            new_entry
+                .set_password(&password)
+                .context(SetKeyringEntryPasswordSnafu { new_name })?;
 
             let old_delegation = dirs.delegation_chain_path(old_name);
             let new_delegation = dirs
@@ -672,7 +734,7 @@ pub fn rename_identity(
             let delegation_contents = fs::read(&old_delegation).context(CopyKeyFileSnafu)?;
             fs::write(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
 
-            OldKeyMaterial::PemAndDelegation(old_pem, old_delegation)
+            OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
         }
         IdentitySpec::Hsm { .. } => {
             // No migration required - HSM key stays on device
@@ -704,8 +766,10 @@ pub fn rename_identity(
                 .delete_credential()
                 .context(DeleteKeyringEntrySnafu { old_name })?;
         }
-        OldKeyMaterial::PemAndDelegation(old_pem, old_delegation) => {
-            fs::remove_file(&old_pem).context(DeleteOldKeyFileSnafu)?;
+        OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation) => {
+            old_entry
+                .delete_credential()
+                .context(DeleteKeyringEntrySnafu { old_name })?;
             fs::remove_file(&old_delegation).context(DeleteOldKeyFileSnafu)?;
         }
         OldKeyMaterial::None => {
@@ -793,8 +857,11 @@ pub fn delete_identity(
                 .context(DeleteKeyringEntryForDeleteSnafu { name })?;
         }
         IdentitySpec::InternetIdentity { .. } => {
-            let pem_path = dirs.key_pem_path(name);
-            fs::remove_file(&pem_path)?;
+            let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                .context(LoadKeyringEntryForDeleteSnafu { name })?;
+            entry
+                .delete_credential()
+                .context(DeleteKeyringEntryForDeleteSnafu { name })?;
             let delegation_path = dirs.delegation_chain_path(name);
             fs::remove_file(&delegation_path)?;
         }
@@ -872,8 +939,17 @@ pub enum LinkIiIdentityError {
     #[snafu(display("identity `{name}` already exists"))]
     IiNameTaken { name: String },
 
-    #[snafu(transparent)]
-    WriteIiKey { source: WriteIdentityError },
+    #[snafu(display("failed to create II session key keyring entry"))]
+    CreateIiKeyringEntry { source: keyring::Error },
+
+    #[snafu(display("failed to store II session key in keyring"))]
+    SetIiKeyringEntryPassword { source: keyring::Error },
+
+    #[cfg(target_os = "linux")]
+    #[snafu(display(
+        "no keyring available - have you set it up? gnome-keyring must be installed and configured with a default keyring."
+    ))]
+    NoIiKeyring,
 
     #[snafu(display("failed to create delegation directory"))]
     CreateIiDelegationDir { source: crate::fs::IoError },
@@ -887,8 +963,8 @@ pub enum LinkIiIdentityError {
 
 /// Links an Internet Identity delegation to a new named identity.
 ///
-/// Stores the session keypair as a plaintext PEM and the delegation chain as
-/// a separate JSON file.
+/// Stores the session keypair in the system keyring (under the `ii:{name}` key)
+/// and the delegation chain as a separate JSON file.
 pub fn link_ii_identity(
     dirs: LWrite<&IdentityPaths>,
     name: &str,
@@ -920,7 +996,17 @@ pub fn link_ii_identity(
     let pem = doc
         .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
         .expect("infallible PKI encoding");
-    write_identity(dirs, name, &pem)?;
+
+    let entry =
+        Entry::new(SERVICE_NAME, &ii_keyring_key(name)).context(CreateIiKeyringEntrySnafu)?;
+    let res = entry.set_password(&pem);
+    #[cfg(target_os = "linux")]
+    if let Err(keyring::Error::NoStorageAccess(err)) = &res
+        && err.to_string().contains("no result found")
+    {
+        return NoIiKeyringSnafu.fail()?;
+    }
+    res.context(SetIiKeyringEntryPasswordSnafu)?;
 
     let delegation_path = dirs
         .ensure_delegation_chain_path(name)

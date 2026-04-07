@@ -1,15 +1,11 @@
 use clap::Args;
-use ic_agent::Identity as _;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::{
         IdentitySelection, key,
-        manifest::{IdentityKeyAlgorithm, IdentityList, IdentitySpec},
+        manifest::{IdentityList, IdentitySpec},
     },
 };
-use pem::Pem;
-use pkcs8::DecodePrivateKey as _;
-use sec1::pem::PemLabel as _;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
@@ -29,74 +25,24 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
     let environment: EnvironmentSelection = args.environment.clone().into();
 
     // Load the identity list and verify this is an II identity
-    let (_algorithm, der_public_key) =
-        ctx.dirs
-            .identity()?
-            .with_read(async |dirs| {
-                let list = IdentityList::load_from(dirs)?;
-                let spec = list
-                    .identities
-                    .get(&args.name)
-                    .context(IdentityNotFoundSnafu { name: &args.name })?;
+    let algorithm = ctx
+        .dirs
+        .identity()?
+        .with_read(async |dirs| {
+            let list = IdentityList::load_from(dirs)?;
+            let spec = list
+                .identities
+                .get(&args.name)
+                .context(IdentityNotFoundSnafu { name: &args.name })?;
+            match spec {
+                IdentitySpec::InternetIdentity { algorithm, .. } => Ok(algorithm.clone()),
+                _ => NotIiSnafu { name: &args.name }.fail(),
+            }
+        })
+        .await??;
 
-                let algorithm = match spec {
-                    IdentitySpec::InternetIdentity { algorithm, .. } => algorithm.clone(),
-                    _ => return NotIiSnafu { name: &args.name }.fail(),
-                };
-
-                // Load the existing PEM to get the public key
-                let pem_path = dirs.key_pem_path(&args.name);
-                let origin = key::PemOrigin::File {
-                    path: pem_path.clone(),
-                };
-                let doc = icp::fs::read_to_string(&pem_path)?
-                    .parse::<Pem>()
-                    .map_err(|e| LoginError::ParsePem {
-                        origin: origin.clone(),
-                        source: Box::new(e),
-                    })?;
-
-                assert!(
-                    doc.tag() == pkcs8::PrivateKeyInfo::PEM_LABEL,
-                    "II identity PEM should be plaintext"
-                );
-
-                let der_public_key = match algorithm {
-                    IdentityKeyAlgorithm::Ed25519 => {
-                        let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
-                            .map_err(|e| LoginError::ParseKey {
-                                origin: origin.clone(),
-                                source: Box::new(e),
-                            })?;
-                        let basic =
-                            ic_agent::identity::BasicIdentity::from_raw_key(&key.serialize_raw());
-                        basic.public_key().expect("ed25519 always has a public key")
-                    }
-                    IdentityKeyAlgorithm::Secp256k1 => {
-                        let key = k256::SecretKey::from_pkcs8_der(doc.contents()).map_err(|e| {
-                            LoginError::ParseKey {
-                                origin: origin.clone(),
-                                source: Box::new(e),
-                            }
-                        })?;
-                        let id = ic_agent::identity::Secp256k1Identity::from_private_key(key);
-                        id.public_key().expect("secp256k1 always has a public key")
-                    }
-                    IdentityKeyAlgorithm::Prime256v1 => {
-                        let key = p256::SecretKey::from_pkcs8_der(doc.contents()).map_err(|e| {
-                            LoginError::ParseKey {
-                                origin: origin.clone(),
-                                source: Box::new(e),
-                            }
-                        })?;
-                        let id = ic_agent::identity::Prime256v1Identity::from_private_key(key);
-                        id.public_key().expect("p256 always has a public key")
-                    }
-                };
-
-                Ok((algorithm, der_public_key))
-            })
-            .await??;
+    let der_public_key =
+        key::load_ii_session_public_key(&args.name, &algorithm).context(LoadSessionKeySnafu)?;
 
     // Resolve the environment to get network access
     let env = ctx
@@ -184,21 +130,8 @@ pub(crate) enum LoginError {
     ))]
     NotIi { name: String },
 
-    #[snafu(transparent)]
-    ReadFile { source: icp::fs::IoError },
-
-    #[snafu(display("failed to parse PEM from `{origin}`"))]
-    ParsePem {
-        origin: key::PemOrigin,
-        #[snafu(source(from(pem::PemError, Box::new)))]
-        source: Box<pem::PemError>,
-    },
-
-    #[snafu(display("failed to parse key from `{origin}`"))]
-    ParseKey {
-        origin: key::PemOrigin,
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
+    #[snafu(display("failed to load II session key from keyring"))]
+    LoadSessionKey { source: key::LoadIdentityError },
 
     #[snafu(display("failed to resolve environment"))]
     GetEnv {

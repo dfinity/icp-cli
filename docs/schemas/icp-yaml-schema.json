@@ -89,6 +89,26 @@
       ],
       "type": "object"
     },
+    "ArgsFormat": {
+      "description": "Format specifier for canister call/install args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "candid",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
+    },
     "BuildStep": {
       "description": "Identifies the type of adapter used to build the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: do_something.sh\n```",
       "oneOf": [
@@ -373,26 +393,6 @@
         }
       },
       "type": "object"
-    },
-    "InitArgsFormat": {
-      "description": "Format specifier for init args content.",
-      "oneOf": [
-        {
-          "const": "hex",
-          "description": "Hex-encoded bytes",
-          "type": "string"
-        },
-        {
-          "const": "candid",
-          "description": "Candid text format",
-          "type": "string"
-        },
-        {
-          "const": "bin",
-          "description": "Raw binary (only valid for file references)",
-          "type": "string"
-        }
-      ]
     },
     "Item": {
       "anyOf": [
@@ -680,7 +680,7 @@
           "description": "File reference with explicit format.",
           "properties": {
             "format": {
-              "$ref": "#/$defs/InitArgsFormat",
+              "$ref": "#/$defs/ArgsFormat",
               "default": "candid"
             },
             "path": {
@@ -696,7 +696,7 @@
           "description": "Inline value with explicit format.",
           "properties": {
             "format": {
-              "$ref": "#/$defs/InitArgsFormat",
+              "$ref": "#/$defs/ArgsFormat",
               "default": "candid"
             },
             "value": {

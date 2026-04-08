@@ -839,6 +839,20 @@ Deploy a project to an environment
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--json` — Output command results as JSON
+* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
+* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
+
+  Default value: `candid`
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 
 
 

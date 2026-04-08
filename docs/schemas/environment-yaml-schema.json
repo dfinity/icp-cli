@@ -1,5 +1,25 @@
 {
   "$defs": {
+    "ArgsFormat": {
+      "description": "Format specifier for canister call/install args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "candid",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
+    },
     "CyclesAmount": {
       "anyOf": [
         {
@@ -25,26 +45,6 @@
         }
       ],
       "description": "A duration in seconds.\n\nDeserializes from a number (seconds) or a string with duration suffix (s, m, h, d, w)\nand optional underscore separators.\n\nSuffixes (case-insensitive):\n- `s` — seconds\n- `m` — minutes (×60)\n- `h` — hours (×3600)\n- `d` — days (×86400)\n- `w` — weeks (×604800)\n\nA bare number without suffix is treated as seconds."
-    },
-    "InitArgsFormat": {
-      "description": "Format specifier for init args content.",
-      "oneOf": [
-        {
-          "const": "hex",
-          "description": "Hex-encoded bytes",
-          "type": "string"
-        },
-        {
-          "const": "candid",
-          "description": "Candid text format",
-          "type": "string"
-        },
-        {
-          "const": "bin",
-          "description": "Raw binary (only valid for file references)",
-          "type": "string"
-        }
-      ]
     },
     "LogVisibility": {
       "description": "Controls who can read canister logs.",
@@ -87,7 +87,7 @@
           "description": "File reference with explicit format.",
           "properties": {
             "format": {
-              "$ref": "#/$defs/InitArgsFormat",
+              "$ref": "#/$defs/ArgsFormat",
               "default": "candid"
             },
             "path": {
@@ -103,7 +103,7 @@
           "description": "Inline value with explicit format.",
           "properties": {
             "format": {
-              "$ref": "#/$defs/InitArgsFormat",
+              "$ref": "#/$defs/ArgsFormat",
               "default": "candid"
             },
             "value": {

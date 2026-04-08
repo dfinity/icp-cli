@@ -1,6 +1,7 @@
 use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
+    prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
 };
 use test_tag::tag;
@@ -682,4 +683,79 @@ async fn deploy_cloud_engine() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
+}
+
+#[tokio::test]
+async fn deploy_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify canister works by calling it through proxy (proxy is the controller)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"proxy\")",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, proxy!\")").trim());
+
+    // Verify canister status through proxy shows the proxy as controller
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Running").and(contains(&proxy_cid)));
 }

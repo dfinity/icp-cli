@@ -266,6 +266,7 @@ Delete a canister from a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -307,6 +308,7 @@ Install a built WASM to a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -392,6 +394,7 @@ Migrate a canister ID from one subnet to another
 * `-y`, `--yes` — Skip confirmation prompts
 * `--resume-watch` — Resume watching an already-initiated migration (skips validation and initiation)
 * `--skip-watch` — Exit as soon as the migrated canister is deleted (don't wait for full completion)
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -430,6 +433,7 @@ By default this queries the status endpoint of the management canister. If the c
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
 * `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -470,6 +474,7 @@ Change a canister's settings to specified values
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -489,6 +494,7 @@ Synchronize a canister's settings with those defined in the project
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -528,6 +534,7 @@ Create a snapshot of a canister's state
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -548,6 +555,7 @@ Delete a canister snapshot
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -570,6 +578,7 @@ Download a snapshot to local disk
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
 * `--resume` — Resume a previously interrupted download
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -591,6 +600,7 @@ List all snapshots for a canister
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only snapshot IDs
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -611,6 +621,7 @@ Restore a canister from a snapshot
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -635,6 +646,7 @@ Upload a snapshot from local disk
 * `--resume` — Resume a previously interrupted upload
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -654,6 +666,7 @@ Start a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -678,6 +691,7 @@ By default this queries the status endpoint of the management canister. If the c
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
 * `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -697,6 +711,7 @@ Stop a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -815,6 +830,7 @@ Deploy a project to an environment
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
+* `--proxy <PROXY>` — Principal of a proxy canister to route management canister calls through
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 

@@ -5,6 +5,7 @@ pub(crate) mod canister_migration;
 pub(crate) mod create;
 pub(crate) mod install;
 pub(crate) mod proxy;
+pub(crate) mod proxy_management;
 pub(crate) mod settings;
 pub(crate) mod snapshot_transfer;
 pub(crate) mod sync;

@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use candid::Principal;
+use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, AgentError};
-use ic_management_canister_types::{EnvironmentVariable, LogVisibility};
-use ic_utils::interfaces::ManagementCanister;
+use ic_agent::Agent;
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
+};
 use icp::{Canister, canister::Settings};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
@@ -13,19 +14,20 @@ use tracing::error;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
+
 #[derive(Debug, Snafu)]
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum SyncSettingsOperationError {
     #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
     FetchCurrentSettings {
-        source: AgentError,
+        source: UpdateOrProxyError,
         canister: Principal,
     },
-    #[snafu(display("invalid canister settings in manifest for canister {name}"))]
-    ValidateSettings { source: AgentError, name: String },
     #[snafu(display("failed to update canister settings for canister {canister}"))]
     UpdateSettings {
-        source: AgentError,
+        source: UpdateOrProxyError,
         canister: Principal,
     },
 }
@@ -67,14 +69,15 @@ fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]
 }
 
 pub(crate) async fn sync_settings(
-    mgmt: &ManagementCanister<'_>,
+    agent: &Agent,
+    proxy: Option<Principal>,
     cid: &Principal,
     canister: &Canister,
 ) -> Result<(), SyncSettingsOperationError> {
-    let (status,) = mgmt
-        .canister_status(cid)
-        .await
-        .context(FetchCurrentSettingsSnafu { canister: *cid })?;
+    let status =
+        proxy_management::canister_status(agent, proxy, CanisterIdRecord { canister_id: *cid })
+            .await
+            .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
         ref log_visibility,
         compute_allocation,
@@ -144,52 +147,41 @@ pub(crate) async fn sync_settings(
         // No changes needed
         return Ok(());
     }
-    let mut builder = mgmt.update_settings(cid);
-    if let Some(v) = log_visibility_setting {
-        builder = builder.with_log_visibility(v);
-    }
-    if let Some(v) = compute_allocation {
-        builder = builder.with_compute_allocation(v);
-    }
-    if let Some(v) = memory_allocation.as_ref().map(|m| m.get()) {
-        builder = builder.with_memory_allocation(v);
-    }
-    if let Some(v) = freezing_threshold.as_ref().map(|d| d.get()) {
-        builder = builder.with_freezing_threshold(v);
-    }
-    if let Some(v) = reserved_cycles_limit.as_ref().map(|r| r.get()) {
-        builder = builder.with_reserved_cycles_limit(v);
-    }
-    if let Some(v) = wasm_memory_limit.as_ref().map(|m| m.get()) {
-        builder = builder.with_wasm_memory_limit(v);
-    }
-    if let Some(v) = wasm_memory_threshold.as_ref().map(|m| m.get()) {
-        builder = builder.with_wasm_memory_threshold(v);
-    }
-    if let Some(v) = log_memory_limit.as_ref().map(|m| m.get()) {
-        builder = builder.with_log_memory_limit(v);
-    }
-    if let Some(v) = environment_variable_setting {
-        builder = builder.with_environment_variables(v);
-    }
-    builder
-        .build()
-        .context(ValidateSettingsSnafu {
-            name: &canister.name,
-        })?
-        .await
-        .context(UpdateSettingsSnafu { canister: *cid })?;
+
+    let settings = CanisterSettings {
+        log_visibility: log_visibility_setting,
+        compute_allocation: compute_allocation.map(Nat::from),
+        memory_allocation: memory_allocation.as_ref().map(|m| Nat::from(m.get())),
+        freezing_threshold: freezing_threshold.as_ref().map(|d| Nat::from(d.get())),
+        reserved_cycles_limit: reserved_cycles_limit.as_ref().map(|r| Nat::from(r.get())),
+        wasm_memory_limit: wasm_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        wasm_memory_threshold: wasm_memory_threshold.as_ref().map(|m| Nat::from(m.get())),
+        log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        environment_variables: environment_variable_setting,
+        ..Default::default()
+    };
+
+    proxy_management::update_settings(
+        agent,
+        proxy,
+        UpdateSettingsArgs {
+            canister_id: *cid,
+            settings,
+            sender_canister_version: None,
+        },
+    )
+    .await
+    .context(UpdateSettingsSnafu { canister: *cid })?;
 
     Ok(())
 }
 
 pub(crate) async fn sync_settings_many(
     agent: Agent,
+    proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
     debug: bool,
 ) -> Result<(), SyncSettingsManyError> {
-    let mgmt = ManagementCanister::create(&agent);
-
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -198,12 +190,12 @@ pub(crate) async fn sync_settings_many(
         let canister_name = info.name.clone();
 
         let settings_fn = {
-            let mgmt = mgmt.clone();
+            let agent = agent.clone();
             let pb = pb.clone();
 
             async move {
                 pb.set_message("Updating canister settings...");
-                sync_settings(&mgmt, &cid, &info).await
+                sync_settings(&agent, proxy, &cid, &info).await
             }
         };
 

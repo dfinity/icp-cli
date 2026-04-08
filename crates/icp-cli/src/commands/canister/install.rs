@@ -1,9 +1,10 @@
 use std::io::IsTerminal;
 
 use anyhow::{Context as _, anyhow, bail};
+use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
-use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use icp::context::{CanisterSelection, Context};
 use icp::manifest::InitArgsFormat;
 use icp::prelude::*;
@@ -47,6 +48,10 @@ pub(crate) struct InstallArgs {
 
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow::Error> {
@@ -121,9 +126,14 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .transpose()?;
 
     let canister_display = args.cmd_args.canister.to_string();
-    let (install_mode, status) =
-        resolve_install_mode_and_status(&agent, &canister_display, &canister_id, &args.mode)
-            .await?;
+    let (install_mode, status) = resolve_install_mode_and_status(
+        &agent,
+        args.proxy,
+        &canister_display,
+        &canister_id,
+        &args.mode,
+    )
+    .await?;
 
     // Candid interface compatibility check for upgrades
     if !args.yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
@@ -156,6 +166,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     install_canister(
         &agent,
+        args.proxy,
         &canister_id,
         &canister_display,
         &wasm,

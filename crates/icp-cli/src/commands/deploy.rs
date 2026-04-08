@@ -39,8 +39,12 @@ pub(crate) struct DeployArgs {
     pub(crate) mode: String,
 
     /// The subnet to use for the canisters being deployed.
-    #[clap(long)]
+    #[clap(long, conflicts_with = "proxy")]
     pub(crate) subnet: Option<Principal>,
+
+    /// Principal of a proxy canister to route management canister calls through.
+    #[arg(long, conflicts_with = "subnet")]
+    pub(crate) proxy: Option<Principal>,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -127,9 +131,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     if canisters_to_create.is_empty() {
         info!("All canisters already exist");
     } else {
-        let target = match args.subnet {
-            Some(subnet) => CreateTarget::Subnet(subnet),
-            None => CreateTarget::None,
+        let target = match (args.subnet, args.proxy) {
+            (Some(subnet), _) => CreateTarget::Subnet(subnet),
+            (_, Some(proxy)) => CreateTarget::Proxy(proxy),
+            _ => CreateTarget::None,
         };
         let create_operation = CreateOperation::new(
             agent.clone(),
@@ -217,6 +222,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     set_binding_env_vars_many(
         agent.clone(),
+        args.proxy,
         &env.name,
         target_canisters.clone(),
         canister_list,
@@ -225,7 +231,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
+    sync_settings_many(agent.clone(), args.proxy, target_canisters, ctx.debug)
         .await
         .map_err(|e| anyhow!(e))?;
 
@@ -244,7 +250,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map_err(|e| anyhow!(e))?;
 
             let (mode, status) =
-                resolve_install_mode_and_status(&agent, name, &cid, &args.mode).await?;
+                resolve_install_mode_and_status(&agent, args.proxy, name, &cid, &args.mode).await?;
 
             let env = ctx.get_environment(&environment_selection).await?;
             let (_canister_path, canister_info) =
@@ -277,7 +283,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     info!("Installing canisters:");
 
-    install_many(agent.clone(), canisters, ctx.artifacts.clone(), ctx.debug).await?;
+    install_many(
+        agent.clone(),
+        args.proxy,
+        canisters,
+        ctx.artifacts.clone(),
+        ctx.debug,
+    )
+    .await?;
 
     // Sync the selected canisters
 
@@ -315,6 +328,11 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     if sync_canisters.is_empty() {
         info!("No canisters have sync steps configured");
     } else {
+        // TODO: When `--proxy` is used and the canister was newly created, the proxy
+        // canister is its only controller. Sync steps (e.g. asset uploads to a frontend
+        // canister) will fail because the user's identity lacks the required permissions.
+        // The fix is to make a proxy call to the frontend canister's `grant_permission`
+        // method to permit the user identity to upload assets directly before syncing.
         info!("Syncing canisters:");
 
         sync_many(ctx.syncer.clone(), agent.clone(), sync_canisters, ctx.debug).await?;

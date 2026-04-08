@@ -1116,3 +1116,86 @@ async fn canister_install_upgrade_rejects_incompatible_candid() {
         .success()
         .stdout(eq("(\"Hello, 42!\")").trim());
 }
+
+#[tokio::test]
+async fn canister_install_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Build canister
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .success();
+
+    // Create canister through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Install canister through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Verify canister works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
+}

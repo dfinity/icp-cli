@@ -33,6 +33,12 @@ pub enum UpdateOrProxyError {
 /// If `proxy` is `None`, makes a direct update call to the target canister.
 /// If `proxy` is `Some`, wraps the call in [`ProxyArgs`] and sends it to the
 /// proxy canister's `proxy` method, which forwards it to the target.
+///
+/// `effective_canister_id` overrides the effective canister ID used for HTTP
+/// routing in direct calls. This is required when calling the management
+/// canister, where the effective canister ID must be the target canister
+/// rather than `aaaaa-aa`. When `None`, defaults to `canister_id`.
+///
 /// The `cycles` parameter is only used for proxied calls.
 pub async fn update_or_proxy_raw(
     agent: &Agent,
@@ -40,6 +46,7 @@ pub async fn update_or_proxy_raw(
     method: &str,
     arg: Vec<u8>,
     proxy: Option<Principal>,
+    effective_canister_id: Option<Principal>,
     cycles: u128,
 ) -> Result<Vec<u8>, UpdateOrProxyError> {
     if let Some(proxy_cid) = proxy {
@@ -68,11 +75,11 @@ pub async fn update_or_proxy_raw(
             .fail(),
         }
     } else {
-        let res = agent
-            .update(&canister_id, method)
-            .with_arg(arg)
-            .await
-            .context(DirectUpdateCallSnafu)?;
+        let mut builder = agent.update(&canister_id, method).with_arg(arg);
+        if let Some(eid) = effective_canister_id {
+            builder = builder.with_effective_canister_id(eid);
+        }
+        let res = builder.await.context(DirectUpdateCallSnafu)?;
         Ok(res)
     }
 }
@@ -84,6 +91,7 @@ pub async fn update_or_proxy<A, R>(
     method: &str,
     args: A,
     proxy: Option<Principal>,
+    effective_canister_id: Option<Principal>,
     cycles: u128,
 ) -> Result<R, UpdateOrProxyError>
 where
@@ -91,7 +99,16 @@ where
     R: for<'a> ArgumentDecoder<'a>,
 {
     let arg = candid::encode_args(args).context(CandidEncodeSnafu)?;
-    let res = update_or_proxy_raw(agent, canister_id, method, arg, proxy, cycles).await?;
+    let res = update_or_proxy_raw(
+        agent,
+        canister_id,
+        method,
+        arg,
+        proxy,
+        effective_canister_id,
+        cycles,
+    )
+    .await?;
     let decoded: R = candid::decode_args(&res).context(CandidDecodeSnafu)?;
     Ok(decoded)
 }

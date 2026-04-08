@@ -4,8 +4,9 @@ use std::time::{Duration, Instant};
 use anyhow::bail;
 use clap::Args;
 use dialoguer::Confirm;
-use ic_management_canister_types::CanisterStatusType;
-use ic_utils::interfaces::ManagementCanister;
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CanisterStatusType, UpdateSettingsArgs,
+};
 use icp::context::Context;
 use icp_canister_interfaces::nns_migration::{MigrationStatus, NNS_MIGRATION_PRINCIPAL};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -17,6 +18,7 @@ use crate::operations::canister_migration::{
     get_subnet_for_canister, migrate_canister, migration_status,
 };
 use crate::operations::misc::format_timestamp;
+use crate::operations::proxy_management;
 use icp::context::CanisterSelection;
 
 /// Minimum cycles required for migration (10T).
@@ -45,6 +47,10 @@ pub(crate) struct MigrateIdArgs {
     /// Exit as soon as the migrated canister is deleted (don't wait for full completion)
     #[arg(long)]
     skip_watch: bool,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<candid::Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyhow::Error> {
@@ -105,11 +111,23 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             }
         }
 
-        let mgmt = ManagementCanister::create(&agent);
-
         // Fetch status of both canisters
-        let (source_status,) = mgmt.canister_status(&source_cid).await?;
-        let (target_status,) = mgmt.canister_status(&target_cid).await?;
+        let source_status = proxy_management::canister_status(
+            &agent,
+            args.proxy,
+            CanisterIdRecord {
+                canister_id: source_cid,
+            },
+        )
+        .await?;
+        let target_status = proxy_management::canister_status(
+            &agent,
+            args.proxy,
+            CanisterIdRecord {
+                canister_id: target_cid,
+            },
+        )
+        .await?;
 
         // Check both are stopped
         ensure_canister_stopped(source_status.status, &source_name)?;
@@ -156,7 +174,14 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         }
 
         // Check target canister has no snapshots
-        let (snapshots,) = mgmt.list_canister_snapshots(&target_cid).await?;
+        let snapshots = proxy_management::list_canister_snapshots(
+            &agent,
+            args.proxy,
+            CanisterIdRecord {
+                canister_id: target_cid,
+            },
+        )
+        .await?;
         if !snapshots.is_empty() {
             bail!(
                 "The target canister '{target_name}' ({target_cid}) has {} snapshot(s). \
@@ -188,11 +213,19 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             info!("Adding NNS migration canister as controller of '{source_name}'...");
             let mut new_controllers = source_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
-            let mut builder = mgmt.update_settings(&source_cid);
-            for controller in new_controllers {
-                builder = builder.with_controller(controller);
-            }
-            builder.await?;
+            proxy_management::update_settings(
+                &agent,
+                args.proxy,
+                UpdateSettingsArgs {
+                    canister_id: source_cid,
+                    settings: CanisterSettings {
+                        controllers: Some(new_controllers),
+                        ..Default::default()
+                    },
+                    sender_canister_version: None,
+                },
+            )
+            .await?;
         }
 
         let target_controllers = target_status.settings.controllers;
@@ -200,11 +233,19 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             info!("Adding NNS migration canister as controller of '{target_name}'...");
             let mut new_controllers = target_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
-            let mut builder = mgmt.update_settings(&target_cid);
-            for controller in new_controllers {
-                builder = builder.with_controller(controller);
-            }
-            builder.await?;
+            proxy_management::update_settings(
+                &agent,
+                args.proxy,
+                UpdateSettingsArgs {
+                    canister_id: target_cid,
+                    settings: CanisterSettings {
+                        controllers: Some(new_controllers),
+                        ..Default::default()
+                    },
+                    sender_canister_version: None,
+                },
+            )
+            .await?;
         }
 
         // Initiate migration

@@ -19,7 +19,8 @@ use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::sync::OnceCell;
 
-use super::proxy::{UpdateOrProxyError, update_or_proxy};
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 pub enum CreateOperationError {
@@ -220,13 +221,11 @@ impl CreateOperation {
             sender_canister_version: None,
         };
 
-        let (result,): (CanisterIdRecord,) = update_or_proxy(
+        let result = proxy_management::create_canister(
             &self.inner.agent,
-            Principal::management_canister(),
-            "create_canister",
-            (args,),
             Some(proxy),
             self.inner.cycles,
+            args,
         )
         .await?;
 

@@ -6,13 +6,12 @@ use clap::Args;
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
 use icp::context::{CanisterSelection, Context};
-use icp::manifest::InitArgsFormat;
+use icp::fs;
 use icp::prelude::*;
-use icp::{InitArgs, fs};
 use tracing::{info, warn};
 
 use crate::{
-    commands::args,
+    commands::args::{self, ArgsOpt},
     operations::{
         candid_compat::{CandidCompatibility, check_candid_compatibility},
         install::{install_canister, resolve_install_mode_and_status},
@@ -30,17 +29,8 @@ pub(crate) struct InstallArgs {
     #[arg(long)]
     pub(crate) wasm: Option<PathBuf>,
 
-    /// Inline initialization arguments, interpreted per `--args-format` (Candid by default).
-    #[arg(long, conflicts_with = "args_file")]
-    pub(crate) args: Option<String>,
-
-    /// Path to a file containing initialization arguments.
-    #[arg(long, conflicts_with = "args")]
-    pub(crate) args_file: Option<PathBuf>,
-
-    /// Format of the initialization arguments.
-    #[arg(long, default_value = "candid")]
-    pub(crate) args_format: InitArgsFormat,
+    #[command(flatten)]
+    pub(crate) args_opt: ArgsOpt,
 
     /// Skip confirmation prompts, including the Candid interface compatibility check.
     #[arg(long, short)]
@@ -92,38 +82,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         .await?;
 
     // If you add .did support to this code, consider extracting/unifying with the logic from call.rs
-    let init_args = match (&args.args, &args.args_file) {
-        (Some(value), None) => {
-            if args.args_format == InitArgsFormat::Bin {
-                bail!("--args-format bin requires --args-file, not --args");
-            }
-            Some(InitArgs::Text {
-                content: value.clone(),
-                format: args.args_format.clone(),
-            })
-        }
-        (None, Some(file_path)) => Some(match args.args_format {
-            InitArgsFormat::Bin => {
-                let bytes = fs::read(file_path).context("failed to read init args file")?;
-                InitArgs::Binary(bytes)
-            }
-            ref fmt => {
-                let content =
-                    fs::read_to_string(file_path).context("failed to read init args file")?;
-                InitArgs::Text {
-                    content: content.trim().to_owned(),
-                    format: fmt.clone(),
-                }
-            }
-        }),
-        (None, None) => None,
-        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
-    };
-
-    let init_args_bytes = init_args
-        .as_ref()
-        .map(|ia| ia.to_bytes().context("failed to encode init args"))
-        .transpose()?;
+    let init_args_bytes = args.args_opt.resolve_bytes()?;
 
     let canister_display = args.cmd_args.canister.to_string();
     let (install_mode, status) = resolve_install_mode_and_status(

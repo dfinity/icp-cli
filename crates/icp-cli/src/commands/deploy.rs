@@ -14,7 +14,7 @@ use serde::Serialize;
 use tracing::info;
 
 use crate::{
-    commands::canister::create,
+    commands::{args::ArgsOpt, canister::create},
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
@@ -68,6 +68,11 @@ pub(crate) struct DeployArgs {
     /// Output command results as JSON
     #[arg(long)]
     pub(crate) json: bool,
+
+    /// Initialization arguments to pass to the canister on install.
+    /// Only valid when deploying a single canister. Takes priority over `init_args` in the manifest.
+    #[command(flatten)]
+    pub(crate) args_opt: ArgsOpt,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
@@ -87,6 +92,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
         return Ok(());
+    }
+
+    if args.args_opt.is_some() && cnames.len() != 1 {
+        anyhow::bail!("--args and --args-file can only be used when deploying a single canister");
     }
 
     let canisters_to_build = try_join_all(
@@ -256,11 +265,16 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             let (_canister_path, canister_info) =
                 env.get_canister_info(name).map_err(|e| anyhow!(e))?;
 
-            let init_args_bytes = canister_info
-                .init_args
-                .as_ref()
-                .map(|ia| ia.to_bytes())
-                .transpose()?;
+            // CLI --args/--args-file take priority over manifest init_args
+            let init_args_bytes = if args.args_opt.is_some() {
+                args.args_opt.resolve_bytes()?
+            } else {
+                canister_info
+                    .init_args
+                    .as_ref()
+                    .map(|ia| ia.to_bytes())
+                    .transpose()?
+            };
 
             Ok::<_, anyhow::Error>((name.clone(), cid, mode, status, init_args_bytes))
         }

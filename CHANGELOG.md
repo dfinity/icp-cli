@@ -1,6 +1,7 @@
 # Unreleased
 
 * feat: Add `--proxy` to `icp canister` subcommands and `icp deploy` to route management canister calls through a proxy canister
+* feat: Add `--args`, `--args-file`, and `--args-format` flags to `icp deploy` to pass install arguments at the command line, overriding `init_args` in the manifest
 
 # v0.2.2
 

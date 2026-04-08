@@ -8,7 +8,7 @@ use crate::{
     context::IC_ROOT_KEY,
     fs,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, InitArgsFormat, Item,
+        ArgsFormat, CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item,
         LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
         ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
@@ -108,12 +108,12 @@ fn resolve_manifest_init_args(
     match manifest_init_args {
         ManifestInitArgs::String(content) => Ok(InitArgs::Text {
             content: content.trim().to_owned(),
-            format: InitArgsFormat::Candid,
+            format: ArgsFormat::Candid,
         }),
         ManifestInitArgs::Path { path, format } => {
             let file_path = base_path.join(path);
             match format {
-                InitArgsFormat::Bin => {
+                ArgsFormat::Bin => {
                     let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Binary(bytes))
                 }
@@ -128,7 +128,7 @@ fn resolve_manifest_init_args(
             }
         }
         ManifestInitArgs::Value { value, format } => match format {
-            InitArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
+            ArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
             fmt => Ok(InitArgs::Text {
                 content: value.trim().to_owned(),
                 format: fmt.clone(),

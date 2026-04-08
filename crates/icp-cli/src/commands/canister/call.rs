@@ -8,8 +8,7 @@ use clap::{Args, ValueEnum};
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
-use icp::fs;
-use icp::manifest::InitArgsFormat;
+use icp::manifest::ArgsFormat;
 use icp::parsers::CyclesAmount;
 use icp::prelude::*;
 use serde::Serialize;
@@ -17,7 +16,8 @@ use std::io::{self, Write};
 use tracing::{error, warn};
 
 use crate::{
-    commands::args, operations::misc::fetch_canister_metadata,
+    commands::args::{self, load_args},
+    operations::misc::fetch_canister_metadata,
     operations::proxy::update_or_proxy_raw,
 };
 
@@ -56,7 +56,7 @@ pub(crate) struct CallArgs {
 
     /// Format of the call arguments.
     #[arg(long, default_value = "candid")]
-    pub(crate) args_format: InitArgsFormat,
+    pub(crate) args_format: ArgsFormat,
 
     /// Principal of a proxy canister to route the call through.
     ///
@@ -134,45 +134,36 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         Bytes(Vec<u8>),
     }
 
-    let resolved_args = match (&args.args, &args.args_file) {
-        (Some(value), None) => {
-            if args.args_format == InitArgsFormat::Bin {
-                bail!("--args-format bin requires --args-file, not a positional argument");
-            }
-            Some(match args.args_format {
-                InitArgsFormat::Candid => ResolvedArgs::Candid(
-                    parse_idl_args(value).context("failed to parse Candid arguments")?,
-                ),
-                InitArgsFormat::Hex => ResolvedArgs::Bytes(
-                    hex::decode(value).context("failed to decode hex arguments")?,
-                ),
-                InitArgsFormat::Bin => unreachable!(),
-            })
+    let resolved_args = match load_args(
+        args.args.as_deref(),
+        args.args_file.as_ref(),
+        &args.args_format,
+        "a positional argument",
+    )? {
+        None => None,
+        Some(icp::InitArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
+        Some(icp::InitArgs::Text {
+            content,
+            format: ArgsFormat::Candid,
+        }) => Some(ResolvedArgs::Candid(
+            parse_idl_args(&content).context("failed to parse Candid arguments")?,
+        )),
+        Some(icp::InitArgs::Text {
+            content,
+            format: ArgsFormat::Hex,
+        }) => Some(ResolvedArgs::Bytes(
+            hex::decode(&content).context("failed to decode hex arguments")?,
+        )),
+        Some(icp::InitArgs::Text {
+            format: ArgsFormat::Bin,
+            ..
+        }) => {
+            unreachable!("load_args rejects bin format for inline values")
         }
-        (None, Some(file_path)) => Some(match args.args_format {
-            InitArgsFormat::Bin => {
-                let bytes = fs::read(file_path).context("failed to read args file")?;
-                ResolvedArgs::Bytes(bytes)
-            }
-            InitArgsFormat::Hex => {
-                let content = fs::read_to_string(file_path).context("failed to read args file")?;
-                ResolvedArgs::Bytes(
-                    hex::decode(content.trim()).context("failed to decode hex from file")?,
-                )
-            }
-            InitArgsFormat::Candid => {
-                let content = fs::read_to_string(file_path).context("failed to read args file")?;
-                ResolvedArgs::Candid(
-                    parse_idl_args(content.trim()).context("failed to parse Candid from file")?,
-                )
-            }
-        }),
-        (None, None) => None,
-        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
     };
 
     let arg_bytes = match (&declared_method, resolved_args) {
-        (_, None) if args.args_format != InitArgsFormat::Candid => {
+        (_, None) if args.args_format != ArgsFormat::Candid => {
             bail!("arguments must be provided when --args-format is not candid");
         }
         (None, None) => bail!(

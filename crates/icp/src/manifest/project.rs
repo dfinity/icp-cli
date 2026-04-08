@@ -30,7 +30,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
-            InitArgsFormat, ManifestInitArgs,
+            ArgsFormat, ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -459,7 +459,7 @@ mod tests {
                             "canister-2".to_string(),
                             ManifestInitArgs::Value {
                                 value: "4449444c0000".to_string(),
-                                format: InitArgsFormat::Hex,
+                                format: ArgsFormat::Hex,
                             },
                         ),
                     ])),

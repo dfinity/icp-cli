@@ -40,8 +40,8 @@ using --args or --args-file:
     # Pass arguments from a file
     icp deploy my_canister --args-file ./args.did
 
-    # Pass raw bytes (hex-encoded)
-    icp deploy my_canister --args-file ./args.bin --args-format raw
+    # Pass raw bytes
+    icp deploy my_canister --args-file ./args.bin --args-format bin
 ")]
 pub(crate) struct DeployArgs {
     /// Canister names

@@ -745,6 +745,67 @@ async fn deploy_with_inline_args_candid() {
 
 #[cfg(unix)] // moc
 #[tokio::test]
+async fn deploy_with_args_overrides_manifest_init_args() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    // Manifest sets init_args to 7; CLI --args should override it with 42
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            init_args: "(opt (7 : nat8))"
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--args",
+            "(opt (42 : nat8))",
+        ])
+        .assert()
+        .success();
+
+    // CLI --args (42) should take priority over manifest init_args (7)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"42\")").trim());
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
 async fn deploy_with_args_file() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");

@@ -7,7 +7,7 @@ use clap::Args;
 use ic_ledger_types::AccountIdentifier;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
-use icp::manifest::InitArgsFormat;
+use icp::manifest::ArgsFormat;
 use icp::prelude::PathBuf;
 use icp::{InitArgs, fs};
 use icrc_ledger_types::icrc1::account::Account;
@@ -221,7 +221,7 @@ pub(crate) struct ArgsOpt {
 
     /// Format of the initialization arguments.
     #[arg(long, default_value = "candid")]
-    pub(crate) args_format: InitArgsFormat,
+    pub(crate) args_format: ArgsFormat,
 }
 
 impl ArgsOpt {
@@ -253,12 +253,12 @@ impl ArgsOpt {
 pub(crate) fn load_args(
     inline_value: Option<&str>,
     args_file: Option<&PathBuf>,
-    args_format: &InitArgsFormat,
+    args_format: &ArgsFormat,
     inline_arg_name: &str,
 ) -> Result<Option<InitArgs>, anyhow::Error> {
     match (inline_value, args_file) {
         (Some(value), None) => {
-            if *args_format == InitArgsFormat::Bin {
+            if *args_format == ArgsFormat::Bin {
                 bail!("--args-format bin requires --args-file, not {inline_arg_name}");
             }
             Ok(Some(InitArgs::Text {
@@ -267,7 +267,7 @@ pub(crate) fn load_args(
             }))
         }
         (None, Some(file_path)) => Ok(Some(match args_format {
-            InitArgsFormat::Bin => {
+            ArgsFormat::Bin => {
                 let bytes = fs::read(file_path).context("failed to read args file")?;
                 InitArgs::Binary(bytes)
             }

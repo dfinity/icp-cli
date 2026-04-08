@@ -7,11 +7,11 @@ use crate::canister::Settings;
 
 use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
-/// Format specifier for init args content.
+/// Format specifier for canister call/install args content.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "lowercase")]
-pub enum InitArgsFormat {
+pub enum ArgsFormat {
     /// Hex-encoded bytes
     Hex,
     /// Candid text format
@@ -48,13 +48,13 @@ pub enum ManifestInitArgs {
     Path {
         path: String,
         #[serde(default)]
-        format: InitArgsFormat,
+        format: ArgsFormat,
     },
     /// Inline value with explicit format.
     Value {
         value: String,
         #[serde(default)]
-        format: InitArgsFormat,
+        format: ArgsFormat,
     },
 }
 
@@ -767,7 +767,7 @@ mod tests {
             ia,
             ManifestInitArgs::Path {
                 path: "./args.bin".to_string(),
-                format: InitArgsFormat::Bin,
+                format: ArgsFormat::Bin,
             }
         );
     }
@@ -783,7 +783,7 @@ mod tests {
             ia,
             ManifestInitArgs::Value {
                 value: "(42)".to_string(),
-                format: InitArgsFormat::Candid,
+                format: ArgsFormat::Candid,
             }
         );
     }
@@ -798,7 +798,7 @@ mod tests {
             ia,
             ManifestInitArgs::Value {
                 value: "(42)".to_string(),
-                format: InitArgsFormat::Candid,
+                format: ArgsFormat::Candid,
             }
         );
     }

@@ -11,7 +11,7 @@ use candid_parser::parse_idl_args;
 use crate::{
     canister::{Settings, recipe::Resolve},
     manifest::{
-        InitArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
+        ArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
         ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
         load_manifest_from_path,
@@ -46,10 +46,7 @@ const DATA_DIR: &str = "data";
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum InitArgs {
     /// Text content (inline or loaded from file). Format is always known.
-    Text {
-        content: String,
-        format: InitArgsFormat,
-    },
+    Text { content: String, format: ArgsFormat },
     /// Raw binary bytes (from a file with `format: bin`). Used directly.
     Binary(Vec<u8>),
 }
@@ -72,12 +69,12 @@ impl InitArgs {
         match self {
             InitArgs::Binary(bytes) => Ok(bytes.clone()),
             InitArgs::Text { content, format } => match format {
-                InitArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
-                InitArgsFormat::Candid => {
+                ArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
+                ArgsFormat::Candid => {
                     let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
                     args.to_bytes().context(CandidEncodeSnafu)
                 }
-                InitArgsFormat::Bin => {
+                ArgsFormat::Bin => {
                     unreachable!("binary format cannot appear in InitArgs::Text")
                 }
             },

@@ -8,7 +8,7 @@ use clap::{Args, ValueEnum};
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
-use icp::manifest::InitArgsFormat;
+use icp::manifest::ArgsFormat;
 use icp::parsers::CyclesAmount;
 use icp::prelude::*;
 use serde::Serialize;
@@ -56,7 +56,7 @@ pub(crate) struct CallArgs {
 
     /// Format of the call arguments.
     #[arg(long, default_value = "candid")]
-    pub(crate) args_format: InitArgsFormat,
+    pub(crate) args_format: ArgsFormat,
 
     /// Principal of a proxy canister to route the call through.
     ///
@@ -144,18 +144,18 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         Some(icp::InitArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
         Some(icp::InitArgs::Text {
             content,
-            format: InitArgsFormat::Candid,
+            format: ArgsFormat::Candid,
         }) => Some(ResolvedArgs::Candid(
             parse_idl_args(&content).context("failed to parse Candid arguments")?,
         )),
         Some(icp::InitArgs::Text {
             content,
-            format: InitArgsFormat::Hex,
+            format: ArgsFormat::Hex,
         }) => Some(ResolvedArgs::Bytes(
             hex::decode(&content).context("failed to decode hex arguments")?,
         )),
         Some(icp::InitArgs::Text {
-            format: InitArgsFormat::Bin,
+            format: ArgsFormat::Bin,
             ..
         }) => {
             unreachable!("load_args rejects bin format for inline values")
@@ -163,7 +163,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
     };
 
     let arg_bytes = match (&declared_method, resolved_args) {
-        (_, None) if args.args_format != InitArgsFormat::Candid => {
+        (_, None) if args.args_format != ArgsFormat::Candid => {
             bail!("arguments must be provided when --args-format is not candid");
         }
         (None, None) => bail!(

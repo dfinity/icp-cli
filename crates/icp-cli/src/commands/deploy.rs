@@ -30,6 +30,19 @@ use crate::{
 
 /// Deploy a project to an environment
 #[derive(Args, Debug)]
+#[command(after_long_help = "\
+When deploying a single canister, you can pass arguments to the install call
+using --args or --args-file:
+
+    # Pass inline Candid arguments
+    icp deploy my_canister --args '(42 : nat)'
+
+    # Pass arguments from a file
+    icp deploy my_canister --args-file ./args.did
+
+    # Pass raw bytes (hex-encoded)
+    icp deploy my_canister --args-file ./args.bin --args-format raw
+")]
 pub(crate) struct DeployArgs {
     /// Canister names
     pub(crate) names: Vec<String>,
@@ -69,7 +82,7 @@ pub(crate) struct DeployArgs {
     #[arg(long)]
     pub(crate) json: bool,
 
-    /// Initialization arguments to pass to the canister on install.
+    /// Arguments to pass to the canister on install.
     /// Only valid when deploying a single canister. Takes priority over `init_args` in the manifest.
     #[command(flatten)]
     pub(crate) args_opt: ArgsOpt,

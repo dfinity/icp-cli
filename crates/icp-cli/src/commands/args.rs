@@ -211,15 +211,15 @@ impl Display for FlexibleAccountId {
 /// Grouped flags for specifying canister install arguments, shared by `canister install`, and `deploy`.
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct ArgsOpt {
-    /// Inline initialization arguments, interpreted per `--args-format` (Candid by default).
+    /// Inline arguments, interpreted per `--args-format` (Candid by default).
     #[arg(long, conflicts_with = "args_file")]
     pub(crate) args: Option<String>,
 
-    /// Path to a file containing initialization arguments.
+    /// Path to a file containing arguments.
     #[arg(long, conflicts_with = "args")]
     pub(crate) args_file: Option<PathBuf>,
 
-    /// Format of the initialization arguments.
+    /// Format of the arguments.
     #[arg(long, default_value = "candid")]
     pub(crate) args_format: ArgsFormat,
 }

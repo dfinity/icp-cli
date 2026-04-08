@@ -289,9 +289,9 @@ Install a built WASM to a canister on a network
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
-* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
-* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
-* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
 
   Default value: `candid`
 
@@ -817,6 +817,19 @@ Deploy a project to an environment
 
 **Usage:** `icp deploy [OPTIONS] [NAMES]...`
 
+When deploying a single canister, you can pass arguments to the install call
+using --args or --args-file:
+
+    # Pass inline Candid arguments
+    icp deploy my_canister --args '(42 : nat)'
+
+    # Pass arguments from a file
+    icp deploy my_canister --args-file ./args.did
+
+    # Pass raw bytes (hex-encoded)
+    icp deploy my_canister --args-file ./args.bin --args-format raw
+
+
 ###### **Arguments:**
 
 * `<NAMES>` — Canister names
@@ -839,9 +852,9 @@ Deploy a project to an environment
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--json` — Output command results as JSON
-* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
-* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
-* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
 
   Default value: `candid`
 

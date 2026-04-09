@@ -314,7 +314,9 @@ Install a built WASM to a canister on a network
 
 ## `icp canister list`
 
-List the canisters in an environment
+List the canisters in an environment.
+
+Prints canister names, one per line. Use --json for machine-readable output (returns {"canisters": ["name1", "name2", ...]})
 
 **Usage:** `icp canister list [OPTIONS]`
 
@@ -430,7 +432,7 @@ Queries the canister_status endpoint of the management canister and displays onl
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--json` — Format output in json
+* `--json` — Format output as JSON
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
@@ -459,19 +461,19 @@ Change a canister's settings to specified values
 * `--set-controller <SET_CONTROLLER>` — Replace the canister's controller list with the specified principals.
 
    Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
-* `--compute-allocation <COMPUTE_ALLOCATION>`
+* `--compute-allocation <COMPUTE_ALLOCATION>` — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--wasm-memory-limit <WASM_MEMORY_LIMIT>` — Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>` — Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--log-memory-limit <LOG_MEMORY_LIMIT>` — Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value. Supports suffixes: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes
-* `--log-visibility <LOG_VISIBILITY>`
-* `--add-log-viewer <ADD_LOG_VIEWER>`
-* `--remove-log-viewer <REMOVE_LOG_VIEWER>`
-* `--set-log-viewer <SET_LOG_VIEWER>`
-* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
-* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+* `--log-visibility <LOG_VISIBILITY>` — Set log visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-log-viewer, --remove-log-viewer, and --set-log-viewer. Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead
+* `--add-log-viewer <ADD_LOG_VIEWER>` — Add a principal to the allowed log viewers list
+* `--remove-log-viewer <REMOVE_LOG_VIEWER>` — Remove a principal from the allowed log viewers list
+* `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
+* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>` — Add a canister environment variable in KEY=VALUE format
+* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>` — Remove a canister environment variable by key name
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
@@ -676,9 +678,24 @@ By default this queries the status endpoint of the management canister. If the c
 
 **Usage:** `icp canister status [OPTIONS] [CANISTER]`
 
+Examples:
+
+    # Status of all canisters in the local environment
+    icp canister status
+
+    # Status of one canister by name
+    icp canister status backend -e local
+
+    # Print only canister IDs (useful for scripting)
+    icp canister status -i
+
+    # JSON output for all canisters
+    icp canister status --json
+
+
 ###### **Arguments:**
 
-* `<CANISTER>` — An optional canister name or principal to target. When using a name, an enviroment must be specified
+* `<CANISTER>` — An optional canister name or principal to target. When using a name, an environment must be specified. If omitted, shows status for all canisters in the environment
 
 ###### **Options:**
 
@@ -742,7 +759,7 @@ Mint and manage cycles
 ###### **Subcommands:**
 
 * `balance` — Display the cycles balance
-* `mint` — Convert icp to cycles
+* `mint` — Convert ICP to cycles
 * `transfer` — Transfer cycles to another principal
 
 
@@ -767,7 +784,9 @@ Display the cycles balance
 
 ## `icp cycles mint`
 
-Convert icp to cycles
+Convert ICP to cycles.
+
+Exactly one of --icp or --cycles must be provided.
 
 **Usage:** `icp cycles mint [OPTIONS]`
 
@@ -799,7 +818,7 @@ Transfer cycles to another principal
 ###### **Options:**
 
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
-* `--from-subaccount <FROM_SUBACCOUNT>`
+* `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer cycles from
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
@@ -875,13 +894,15 @@ Show information about the current project environments
 
 ###### **Subcommands:**
 
-* `list` — Display a list of enviroments
+* `list` — List the environments defined in this project, one per line
 
 
 
 ## `icp environment list`
 
-Display a list of enviroments
+List the environments defined in this project, one per line.
+
+Use `icp project show` to see the fully expanded configuration including implicit environments (local, ic) and their network and canister assignments.
 
 **Usage:** `icp environment list`
 
@@ -1170,7 +1191,11 @@ Examples:
 
 ## `icp network start`
 
-Run a given network
+Run a given network.
+
+The gateway binds to port 8000 by default. To use a different port, set `gateway.port` in `icp.yaml`. If port 8000 is already in use by another icp-cli project, stop that network first:
+
+icp network stop --project-root-override <path>
 
 **Usage:** `icp network start [OPTIONS] [NAME]`
 
@@ -1326,11 +1351,11 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 * `-f`, `--force` — Don't convert the project name to kebab-case before creating the directory. Note that `icp-cli` won't overwrite an existing directory, even if `--force` is given
 * `-q`, `--quiet` — Opposite of verbose, suppresses errors & warning in output Conflicts with --debug, and requires the use of --continue-on-error
 * `--continue-on-error` — Continue if errors in templates are encountered
-* `-s`, `--silent` — If silent mode is set all variables will be extracted from the template_values_file. If a value is missing the project generation will fail
+* `-s`, `--silent` — Non-interactive mode: suppresses all prompts. Unset variables fall back to their template-defined defaults; generation fails if a required variable has no default. Combine with --define to supply values for variables that have no default in the template. Use for CI or automated/agent contexts
 * `--vcs <VCS>` — Specify the VCS used to initialize the generated template
 * `-i`, `--identity <IDENTITY>` — Use a different ssh identity
 * `--gitconfig <GITCONFIG_FILE>` — Use a different gitconfig file, if omitted the usual $HOME/.gitconfig will be used
-* `-d`, `--define <DEFINE>` — Define a value for use during template expansion. E.g `--define foo=bar`
+* `-d`, `--define <DEFINE>` — Set a template variable in KEY=VALUE format (e.g. --define project_name=my-app). Variable names are template-specific. Suppresses the interactive prompt for that variable. Required in --silent mode for any template variable that has no default value
 * `--init` — Generate the template directly into the current dir. No subfolder will be created and no vcs is initialized
 * `--destination <PATH>` — Generate the template directly at the given path
 * `--force-git-init` — Will enforce a fresh git init on the generated project

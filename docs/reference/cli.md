@@ -1047,15 +1047,11 @@ Link an HSM key to a new identity
 
 Link an Internet Identity to a new identity
 
-**Usage:** `icp identity link ii [OPTIONS] <NAME>`
+**Usage:** `icp identity link ii <NAME>`
 
 ###### **Arguments:**
 
 * `<NAME>` — Name for the linked identity
-
-###### **Options:**
-
-* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 
 
 
@@ -1076,15 +1072,11 @@ List the identities
 
 Re-authenticate an Internet Identity delegation
 
-**Usage:** `icp identity login [OPTIONS] <NAME>`
+**Usage:** `icp identity login <NAME>`
 
 ###### **Arguments:**
 
 * `<NAME>` — Name of the identity to re-authenticate
-
-###### **Options:**
-
-* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 
 
 

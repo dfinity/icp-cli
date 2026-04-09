@@ -15,6 +15,7 @@ anstyle.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 axoupdater.workspace = true
+axum.workspace = true
 backoff.workspace = true
 base64.workspace = true
 bigdecimal.workspace = true

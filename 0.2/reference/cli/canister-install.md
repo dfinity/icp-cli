@@ -17,9 +17,9 @@ Install a built WASM to a canister on a network
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
-* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
-* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
-* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
 
   Default value: `candid`
 
@@ -36,6 +36,7 @@ Install a built WASM to a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 

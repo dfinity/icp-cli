@@ -18,6 +18,7 @@ Migrate a canister ID from one subnet to another
 * `-y`, `--yes` — Skip confirmation prompts
 * `--resume-watch` — Resume watching an already-initiated migration (skips validation and initiation)
 * `--skip-watch` — Exit as soon as the migrated canister is deleted (don't wait for full completion)
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 

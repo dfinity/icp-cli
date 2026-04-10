@@ -194,6 +194,7 @@ Make a canister call
   - `hex`:
     Print raw response as hex
 
+* `--json` — Output command results as JSON
 
 
 
@@ -238,7 +239,11 @@ Examples:
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `--proxy <PROXY>` — Principal of a proxy canister to route the create_canister call through.
+
+   When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy's `proxy` method.
 * `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
+* `--json` — Output command results as JSON
 
 
 
@@ -258,6 +263,7 @@ Delete a canister from a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -280,9 +286,9 @@ Install a built WASM to a canister on a network
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
-* `--args <ARGS>` — Inline initialization arguments, interpreted per `--args-format` (Candid by default)
-* `--args-file <ARGS_FILE>` — Path to a file containing initialization arguments
-* `--args-format <ARGS_FORMAT>` — Format of the initialization arguments
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
 
   Default value: `candid`
 
@@ -299,6 +305,7 @@ Install a built WASM to a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -311,6 +318,7 @@ List the canisters in an environment
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--json` — Output command results as JSON
 
 
 
@@ -338,6 +346,7 @@ Fetch and display canister logs
 * `--until <TIMESTAMP>` — Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
 * `--since-index <INDEX>` — Show logs at or after this log index (inclusive). Cannot be used with --follow
 * `--until-index <INDEX>` — Show logs before this log index (exclusive). Cannot be used with --follow
+* `--json` — Output command results as JSON
 
 
 
@@ -358,6 +367,7 @@ Read a metadata section from a canister
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
 
 
 
@@ -381,6 +391,7 @@ Migrate a canister ID from one subnet to another
 * `-y`, `--yes` — Skip confirmation prompts
 * `--resume-watch` — Resume watching an already-initiated migration (skips validation and initiation)
 * `--skip-watch` — Exit as soon as the migrated canister is deleted (don't wait for full completion)
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -419,6 +430,7 @@ By default this queries the status endpoint of the management canister. If the c
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
 * `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -459,6 +471,7 @@ Change a canister's settings to specified values
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -478,6 +491,7 @@ Synchronize a canister's settings with those defined in the project
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -515,6 +529,9 @@ Create a snapshot of a canister's state
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -535,6 +552,7 @@ Delete a canister snapshot
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -557,6 +575,7 @@ Download a snapshot to local disk
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
 * `--resume` — Resume a previously interrupted download
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -576,6 +595,9 @@ List all snapshots for a canister
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot IDs
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -596,6 +618,7 @@ Restore a canister from a snapshot
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -618,6 +641,9 @@ Upload a snapshot from local disk
 * `-i`, `--input <INPUT>` — Input directory containing the snapshot files
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one
 * `--resume` — Resume a previously interrupted upload
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -637,6 +663,7 @@ Start a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -661,6 +688,7 @@ By default this queries the status endpoint of the management canister. If the c
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
 * `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -680,6 +708,7 @@ Stop a canister on a network
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -730,6 +759,8 @@ Display the cycles balance
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
 
 
@@ -749,6 +780,7 @@ Convert icp to cycles
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
 
 
 
@@ -771,6 +803,8 @@ Transfer cycles to another principal
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
 
 
@@ -779,6 +813,19 @@ Transfer cycles to another principal
 Deploy a project to an environment
 
 **Usage:** `icp deploy [OPTIONS] [NAMES]...`
+
+When deploying a single canister, you can pass arguments to the install call
+using --args or --args-file:
+
+    # Pass inline Candid arguments
+    icp deploy my_canister --args '(42 : nat)'
+
+    # Pass arguments from a file
+    icp deploy my_canister --args-file ./args.did
+
+    # Pass raw bytes
+    icp deploy my_canister --args-file ./args.bin --args-format bin
+
 
 ###### **Arguments:**
 
@@ -793,6 +840,7 @@ Deploy a project to an environment
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
+* `--proxy <PROXY>` — Principal of a proxy canister to route management canister calls through
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
@@ -800,6 +848,21 @@ Deploy a project to an environment
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--json` — Output command results as JSON
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
+
+  Default value: `candid`
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 
 
 
@@ -977,7 +1040,12 @@ Link an HSM key to a new identity
 
 List the identities
 
-**Usage:** `icp identity list`
+**Usage:** `icp identity list [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only identity names
 
 
 
@@ -1001,6 +1069,8 @@ Create a new identity
 
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the seed phrase
 
 
 
@@ -1404,6 +1474,8 @@ Display the token balance on the ledger (default token: icp)
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
 
 
@@ -1426,6 +1498,8 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
 
 

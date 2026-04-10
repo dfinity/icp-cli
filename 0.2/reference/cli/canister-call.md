@@ -54,6 +54,7 @@ Make a canister call
   - `hex`:
     Print raw response as hex
 
+* `--json` — Output command results as JSON
 
 
 

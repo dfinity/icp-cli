@@ -39,7 +39,11 @@ Examples:
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `--proxy <PROXY>` — Principal of a proxy canister to route the create_canister call through.
+
+   When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy's `proxy` method.
 * `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
+* `--json` — Output command results as JSON
 
 
 

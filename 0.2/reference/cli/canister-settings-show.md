@@ -19,6 +19,7 @@ By default this queries the status endpoint of the management canister. If the c
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
 * `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 

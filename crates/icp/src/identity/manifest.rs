@@ -133,6 +133,7 @@ pub enum IdentitySpec {
         /// The principal at the root of the delegation chain
         /// (`Principal::self_authenticating(from_key)`), not the session key.
         principal: Principal,
+        storage: IiKeyStorage,
     },
 }
 
@@ -153,6 +154,13 @@ impl IdentitySpec {
 pub enum PemFormat {
     Plaintext,
     Pbes2,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum IiKeyStorage {
+    Keyring,
+    Pem { format: PemFormat },
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, EnumString, Display)]

@@ -1047,11 +1047,21 @@ Link an HSM key to a new identity
 
 Link an Internet Identity to a new identity
 
-**Usage:** `icp identity link ii <NAME>`
+**Usage:** `icp identity link ii [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 
 * `<NAME>` — Name for the linked identity
+
+###### **Options:**
+
+* `--storage <STORAGE>` — Where to store the session private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`, `password`
+
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 
 
 

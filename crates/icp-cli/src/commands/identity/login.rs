@@ -1,4 +1,5 @@
 use clap::Args;
+use dialoguer::Password;
 use icp::{
     context::Context,
     identity::{
@@ -19,7 +20,7 @@ pub(crate) struct LoginArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
-    let algorithm = ctx
+    let (algorithm, storage) = ctx
         .dirs
         .identity()?
         .with_read(async |dirs| {
@@ -29,14 +30,27 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                 .get(&args.name)
                 .context(IdentityNotFoundSnafu { name: &args.name })?;
             match spec {
-                IdentitySpec::InternetIdentity { algorithm, .. } => Ok(algorithm.clone()),
+                IdentitySpec::InternetIdentity {
+                    algorithm, storage, ..
+                } => Ok((algorithm.clone(), storage.clone())),
                 _ => NotIiSnafu { name: &args.name }.fail(),
             }
         })
         .await??;
 
-    let der_public_key =
-        key::load_ii_session_public_key(&args.name, &algorithm).context(LoadSessionKeySnafu)?;
+    let der_public_key = ctx
+        .dirs
+        .identity()?
+        .with_read(async |dirs| {
+            key::load_ii_session_public_key(dirs, &args.name, &algorithm, &storage, || {
+                Password::new()
+                    .with_prompt("Enter identity password")
+                    .interact()
+                    .map_err(|e| e.to_string())
+            })
+        })
+        .await?
+        .context(LoadSessionKeySnafu)?;
 
     let chain = ii_poll::poll_for_delegation(&der_public_key)
         .await
@@ -71,7 +85,7 @@ pub(crate) enum LoginError {
     ))]
     NotIi { name: String },
 
-    #[snafu(display("failed to load II session key from keyring"))]
+    #[snafu(display("failed to load II session key"))]
     LoadSessionKey { source: key::LoadIdentityError },
 
     #[snafu(display("failed during II authentication"))]

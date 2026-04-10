@@ -31,7 +31,7 @@ use crate::{
     identity::{
         IdentityPaths, delegation,
         manifest::{
-            IdentityDefaults, IdentityKeyAlgorithm, IdentityList, IdentitySpec,
+            IdentityDefaults, IdentityKeyAlgorithm, IdentityList, IdentitySpec, IiKeyStorage,
             LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
         },
     },
@@ -146,7 +146,9 @@ pub fn load_identity(
             ..
         } => load_hsm_identity(module, *slot, key_id, password_func),
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
-        IdentitySpec::InternetIdentity { algorithm, .. } => load_ii_identity(dirs, name, algorithm),
+        IdentitySpec::InternetIdentity {
+            algorithm, storage, ..
+        } => load_ii_identity(dirs, name, algorithm, storage, password_func),
     }
 }
 
@@ -319,18 +321,10 @@ fn load_ii_identity(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
+    storage: &IiKeyStorage,
+    password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
-    // Load the session keypair from the keyring
-    let username = ii_keyring_key(name);
-    let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
-    let password = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
-    let origin = PemOrigin::Keyring {
-        service: SERVICE_NAME.to_string(),
-        username,
-    };
-    let doc = password
-        .parse::<Pem>()
-        .context(ParsePemSnafu { origin: &origin })?;
+    let (doc, origin) = load_ii_session_pem(dirs, name, storage)?;
 
     // Load the delegation chain
     let chain_path = dirs.delegation_chain_path(name);
@@ -348,22 +342,59 @@ fn load_ii_identity(
     let (from_key, signed_delegations) =
         delegation::to_agent_types(&stored_chain).context(DelegationConversionSnafu)?;
 
-    // Load the inner identity from the keyring-stored PEM
-    let inner: Box<dyn Identity> = match algorithm {
-        IdentityKeyAlgorithm::Ed25519 => {
-            let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
-                .context(ParseEd25519KeySnafu { origin: &origin })?;
-            Box::new(BasicIdentity::from_raw_key(&key.serialize_raw()))
-        }
-        IdentityKeyAlgorithm::Secp256k1 => {
-            let key = k256::SecretKey::from_pkcs8_der(doc.contents())
-                .context(ParsePkcs8Snafu { origin: &origin })?;
-            Box::new(Secp256k1Identity::from_private_key(key))
-        }
-        IdentityKeyAlgorithm::Prime256v1 => {
-            let key = p256::SecretKey::from_pkcs8_der(doc.contents())
-                .context(ParsePkcs8Snafu { origin: &origin })?;
-            Box::new(Prime256v1Identity::from_private_key(key))
+    let pem_format = match storage {
+        IiKeyStorage::Keyring
+        | IiKeyStorage::Pem {
+            format: PemFormat::Plaintext,
+        } => PemFormat::Plaintext,
+        IiKeyStorage::Pem {
+            format: PemFormat::Pbes2,
+        } => PemFormat::Pbes2,
+    };
+
+    let inner: Box<dyn Identity> = match pem_format {
+        PemFormat::Plaintext => match algorithm {
+            IdentityKeyAlgorithm::Ed25519 => {
+                let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
+                    .context(ParseEd25519KeySnafu { origin: &origin })?;
+                Box::new(BasicIdentity::from_raw_key(&key.serialize_raw()))
+            }
+            IdentityKeyAlgorithm::Secp256k1 => {
+                let key = k256::SecretKey::from_pkcs8_der(doc.contents())
+                    .context(ParsePkcs8Snafu { origin: &origin })?;
+                Box::new(Secp256k1Identity::from_private_key(key))
+            }
+            IdentityKeyAlgorithm::Prime256v1 => {
+                let key = p256::SecretKey::from_pkcs8_der(doc.contents())
+                    .context(ParsePkcs8Snafu { origin: &origin })?;
+                Box::new(Prime256v1Identity::from_private_key(key))
+            }
+        },
+        PemFormat::Pbes2 => {
+            let pw = password_func()
+                .map_err(|message| LoadIdentityError::GetPasswordError { message })?;
+            match algorithm {
+                IdentityKeyAlgorithm::Ed25519 => {
+                    let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
+                        .context(ParseDerSnafu { origin: &origin })?;
+                    let decrypted: SecretDocument = encrypted
+                        .decrypt(&pw)
+                        .context(ParsePkcs8Snafu { origin: &origin })?;
+                    let key = ic_ed25519::PrivateKey::deserialize_pkcs8(decrypted.as_bytes())
+                        .context(ParseEd25519KeySnafu { origin: &origin })?;
+                    Box::new(BasicIdentity::from_raw_key(&key.serialize_raw()))
+                }
+                IdentityKeyAlgorithm::Secp256k1 => {
+                    let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
+                        .context(ParsePkcs8Snafu { origin: &origin })?;
+                    Box::new(Secp256k1Identity::from_private_key(key))
+                }
+                IdentityKeyAlgorithm::Prime256v1 => {
+                    let key = p256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
+                        .context(ParsePkcs8Snafu { origin: &origin })?;
+                    Box::new(Prime256v1Identity::from_private_key(key))
+                }
+            }
         }
     };
 
@@ -377,40 +408,122 @@ fn load_ii_identity(
 
 /// Returns the DER-encoded public key for a stored II session key.
 ///
-/// Used during re-authentication to obtain the session public key to present
-/// to the II delegator backend, without re-loading the full delegated identity.
+/// Used during re-authentication to obtain the session public key without
+/// re-loading the full delegated identity.
 pub fn load_ii_session_public_key(
+    dirs: LRead<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
+    storage: &IiKeyStorage,
+    password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Vec<u8>, LoadIdentityError> {
-    let username = ii_keyring_key(name);
-    let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
-    let password = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
-    let origin = PemOrigin::Keyring {
-        service: SERVICE_NAME.to_string(),
-        username,
-    };
-    let doc = password
-        .parse::<Pem>()
-        .context(ParsePemSnafu { origin: &origin })?;
+    let (doc, origin) = load_ii_session_pem(dirs, name, storage)?;
+
+    match storage {
+        IiKeyStorage::Keyring
+        | IiKeyStorage::Pem {
+            format: PemFormat::Plaintext,
+        } => load_ii_public_key_plaintext(&doc, algorithm, &origin),
+        IiKeyStorage::Pem {
+            format: PemFormat::Pbes2,
+        } => {
+            let pw = password_func()
+                .map_err(|message| LoadIdentityError::GetPasswordError { message })?;
+            load_ii_public_key_pbes2(&doc, algorithm, &origin, &pw)
+        }
+    }
+}
+
+fn load_ii_session_pem(
+    dirs: LRead<&IdentityPaths>,
+    name: &str,
+    storage: &IiKeyStorage,
+) -> Result<(Pem, PemOrigin), LoadIdentityError> {
+    match storage {
+        IiKeyStorage::Keyring => {
+            let username = ii_keyring_key(name);
+            let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
+            let pem_str = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
+            let origin = PemOrigin::Keyring {
+                service: SERVICE_NAME.to_string(),
+                username,
+            };
+            let doc = pem_str
+                .parse::<Pem>()
+                .context(ParsePemSnafu { origin: &origin })?;
+            Ok((doc, origin))
+        }
+        IiKeyStorage::Pem { .. } => {
+            let pem_path = dirs.key_pem_path(name);
+            let origin = PemOrigin::File {
+                path: pem_path.clone(),
+            };
+            let doc = fs::read_to_string(&pem_path)?
+                .parse::<Pem>()
+                .context(ParsePemSnafu { origin: &origin })?;
+            Ok((doc, origin))
+        }
+    }
+}
+
+fn load_ii_public_key_plaintext(
+    doc: &Pem,
+    algorithm: &IdentityKeyAlgorithm,
+    origin: &PemOrigin,
+) -> Result<Vec<u8>, LoadIdentityError> {
     match algorithm {
         IdentityKeyAlgorithm::Ed25519 => {
             let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
-                .context(ParseEd25519KeySnafu { origin: &origin })?;
+                .context(ParseEd25519KeySnafu { origin })?;
             Ok(BasicIdentity::from_raw_key(&key.serialize_raw())
                 .public_key()
                 .expect("ed25519 always has a public key"))
         }
         IdentityKeyAlgorithm::Secp256k1 => {
             let key = k256::SecretKey::from_pkcs8_der(doc.contents())
-                .context(ParsePkcs8Snafu { origin: &origin })?;
+                .context(ParsePkcs8Snafu { origin })?;
             Ok(Secp256k1Identity::from_private_key(key)
                 .public_key()
                 .expect("secp256k1 always has a public key"))
         }
         IdentityKeyAlgorithm::Prime256v1 => {
             let key = p256::SecretKey::from_pkcs8_der(doc.contents())
-                .context(ParsePkcs8Snafu { origin: &origin })?;
+                .context(ParsePkcs8Snafu { origin })?;
+            Ok(Prime256v1Identity::from_private_key(key)
+                .public_key()
+                .expect("p256 always has a public key"))
+        }
+    }
+}
+
+fn load_ii_public_key_pbes2(
+    doc: &Pem,
+    algorithm: &IdentityKeyAlgorithm,
+    origin: &PemOrigin,
+    pw: &str,
+) -> Result<Vec<u8>, LoadIdentityError> {
+    match algorithm {
+        IdentityKeyAlgorithm::Ed25519 => {
+            let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
+                .context(ParseDerSnafu { origin })?;
+            let decrypted: SecretDocument =
+                encrypted.decrypt(pw).context(ParsePkcs8Snafu { origin })?;
+            let key = ic_ed25519::PrivateKey::deserialize_pkcs8(decrypted.as_bytes())
+                .context(ParseEd25519KeySnafu { origin })?;
+            Ok(BasicIdentity::from_raw_key(&key.serialize_raw())
+                .public_key()
+                .expect("ed25519 always has a public key"))
+        }
+        IdentityKeyAlgorithm::Secp256k1 => {
+            let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), pw)
+                .context(ParsePkcs8Snafu { origin })?;
+            Ok(Secp256k1Identity::from_private_key(key)
+                .public_key()
+                .expect("secp256k1 always has a public key"))
+        }
+        IdentityKeyAlgorithm::Prime256v1 => {
+            let key = p256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), pw)
+                .context(ParsePkcs8Snafu { origin })?;
             Ok(Prime256v1Identity::from_private_key(key)
                 .public_key()
                 .expect("p256 always has a public key"))
@@ -685,6 +798,7 @@ pub fn rename_identity(
         Pem(PathBuf),
         Keyring(Entry),
         IiKeyringAndDelegation(Entry, PathBuf),
+        IiPemAndDelegation(PathBuf, PathBuf),
         None,
     }
 
@@ -713,20 +827,7 @@ pub fn rename_identity(
 
             OldKeyMaterial::Keyring(old_entry)
         }
-        IdentitySpec::InternetIdentity { .. } => {
-            // Copy the keyring entry (ii:-prefixed) and the delegation chain
-            let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
-                .context(LoadKeyringEntrySnafu { name: old_name })?;
-            let password = old_entry
-                .get_password()
-                .context(ReadKeyringEntrySnafu { name: old_name })?;
-
-            let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
-                .context(CreateKeyringEntrySnafu { new_name })?;
-            new_entry
-                .set_password(&password)
-                .context(SetKeyringEntryPasswordSnafu { new_name })?;
-
+        IdentitySpec::InternetIdentity { storage, .. } => {
             let old_delegation = dirs.delegation_chain_path(old_name);
             let new_delegation = dirs
                 .ensure_delegation_chain_path(new_name)
@@ -734,7 +835,28 @@ pub fn rename_identity(
             let delegation_contents = fs::read(&old_delegation).context(CopyKeyFileSnafu)?;
             fs::write(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
 
-            OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
+            match storage {
+                IiKeyStorage::Keyring => {
+                    let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                        .context(LoadKeyringEntrySnafu { name: old_name })?;
+                    let password = old_entry
+                        .get_password()
+                        .context(ReadKeyringEntrySnafu { name: old_name })?;
+                    let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                        .context(CreateKeyringEntrySnafu { new_name })?;
+                    new_entry
+                        .set_password(&password)
+                        .context(SetKeyringEntryPasswordSnafu { new_name })?;
+                    OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
+                }
+                IiKeyStorage::Pem { .. } => {
+                    let old_pem = dirs.key_pem_path(old_name);
+                    let new_pem = dirs.key_pem_path(new_name);
+                    let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
+                    fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+                    OldKeyMaterial::IiPemAndDelegation(old_pem, old_delegation)
+                }
+            }
         }
         IdentitySpec::Hsm { .. } => {
             // No migration required - HSM key stays on device
@@ -770,6 +892,10 @@ pub fn rename_identity(
             old_entry
                 .delete_credential()
                 .context(DeleteKeyringEntrySnafu { old_name })?;
+            fs::remove_file(&old_delegation).context(DeleteOldKeyFileSnafu)?;
+        }
+        OldKeyMaterial::IiPemAndDelegation(old_pem, old_delegation) => {
+            fs::remove_file(&old_pem).context(DeleteOldKeyFileSnafu)?;
             fs::remove_file(&old_delegation).context(DeleteOldKeyFileSnafu)?;
         }
         OldKeyMaterial::None => {
@@ -856,12 +982,20 @@ pub fn delete_identity(
                 .delete_credential()
                 .context(DeleteKeyringEntryForDeleteSnafu { name })?;
         }
-        IdentitySpec::InternetIdentity { .. } => {
-            let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
-                .context(LoadKeyringEntryForDeleteSnafu { name })?;
-            entry
-                .delete_credential()
-                .context(DeleteKeyringEntryForDeleteSnafu { name })?;
+        IdentitySpec::InternetIdentity { storage, .. } => {
+            match storage {
+                IiKeyStorage::Keyring => {
+                    let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                        .context(LoadKeyringEntryForDeleteSnafu { name })?;
+                    entry
+                        .delete_credential()
+                        .context(DeleteKeyringEntryForDeleteSnafu { name })?;
+                }
+                IiKeyStorage::Pem { .. } => {
+                    let pem_path = dirs.key_pem_path(name);
+                    fs::remove_file(&pem_path)?;
+                }
+            }
             let delegation_path = dirs.delegation_chain_path(name);
             fs::remove_file(&delegation_path)?;
         }
@@ -951,6 +1085,12 @@ pub enum LinkIiIdentityError {
     ))]
     NoIiKeyring,
 
+    #[snafu(display("failed to write II session key PEM file for `{name}`"))]
+    WriteIiPemFile {
+        name: String,
+        source: crate::fs::IoError,
+    },
+
     #[snafu(display("failed to create delegation directory"))]
     CreateIiDelegationDir { source: crate::fs::IoError },
 
@@ -963,14 +1103,15 @@ pub enum LinkIiIdentityError {
 
 /// Links an Internet Identity delegation to a new named identity.
 ///
-/// Stores the session keypair in the system keyring (under the `ii:{name}` key)
-/// and the delegation chain as a separate JSON file.
+/// Stores the session keypair according to `storage` and the delegation chain
+/// as a separate JSON file.
 pub fn link_ii_identity(
     dirs: LWrite<&IdentityPaths>,
     name: &str,
     key: IdentityKey,
     chain: &delegation::DelegationChain,
     principal: ic_agent::export::Principal,
+    create_format: CreateFormat,
 ) -> Result<(), LinkIiIdentityError> {
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
@@ -993,20 +1134,46 @@ pub fn link_ii_identity(
             .expect("infallible PKI encoding"),
     };
 
-    let pem = doc
-        .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
-        .expect("infallible PKI encoding");
-
-    let entry =
-        Entry::new(SERVICE_NAME, &ii_keyring_key(name)).context(CreateIiKeyringEntrySnafu)?;
-    let res = entry.set_password(&pem);
-    #[cfg(target_os = "linux")]
-    if let Err(keyring::Error::NoStorageAccess(err)) = &res
-        && err.to_string().contains("no result found")
-    {
-        return NoIiKeyringSnafu.fail()?;
-    }
-    res.context(SetIiKeyringEntryPasswordSnafu)?;
+    let ii_storage = match &create_format {
+        CreateFormat::Keyring => {
+            let pem = doc
+                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .expect("infallible PKI encoding");
+            let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                .context(CreateIiKeyringEntrySnafu)?;
+            let res = entry.set_password(&pem);
+            #[cfg(target_os = "linux")]
+            if let Err(keyring::Error::NoStorageAccess(err)) = &res
+                && err.to_string().contains("no result found")
+            {
+                return NoIiKeyringSnafu.fail()?;
+            }
+            res.context(SetIiKeyringEntryPasswordSnafu)?;
+            IiKeyStorage::Keyring
+        }
+        CreateFormat::Plaintext => {
+            let pem = doc
+                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .expect("infallible PKI encoding");
+            let pem_path = dirs
+                .ensure_key_pem_path(name)
+                .context(WriteIiPemFileSnafu { name })?;
+            fs::write_string(&pem_path, &pem).context(WriteIiPemFileSnafu { name })?;
+            IiKeyStorage::Pem {
+                format: PemFormat::Plaintext,
+            }
+        }
+        CreateFormat::Pbes2 { password } => {
+            let pem = make_pkcs5_encrypted_pem(&doc, password.as_str());
+            let pem_path = dirs
+                .ensure_key_pem_path(name)
+                .context(WriteIiPemFileSnafu { name })?;
+            fs::write_string(&pem_path, &pem).context(WriteIiPemFileSnafu { name })?;
+            IiKeyStorage::Pem {
+                format: PemFormat::Pbes2,
+            }
+        }
+    };
 
     let delegation_path = dirs
         .ensure_delegation_chain_path(name)
@@ -1018,6 +1185,7 @@ pub fn link_ii_identity(
     let spec = IdentitySpec::InternetIdentity {
         algorithm,
         principal,
+        storage: ii_storage,
     };
     identity_list.identities.insert(name.to_string(), spec);
     identity_list.write_to(dirs)?;

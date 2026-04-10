@@ -15,7 +15,6 @@ use tokio::{net::TcpListener, sync::oneshot};
 use url::Url;
 
 /// The hosted II login frontend for the dev account canister.
-/// `ut7yr-7iaaa-aaaag-ak7ca-cai` (text) = canister on the IC mainnet.
 const CLI_LOGIN_BASE: &str = "https://ut7yr-7iaaa-aaaag-ak7ca-cai.icp0.io/cli-login";
 
 #[derive(Debug, Snafu)]

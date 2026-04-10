@@ -1,19 +1,51 @@
 use clap::Args;
+use dialoguer::Password;
+use elliptic_curve::zeroize::Zeroizing;
 use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
-use icp::{context::Context, identity::key};
+use icp::{context::Context, fs::read_to_string, identity::key, prelude::*};
 use snafu::{ResultExt, Snafu};
-use tracing::info;
+use tracing::{info, warn};
 
-use crate::operations::ii_poll;
+use crate::{commands::identity::StorageMode, operations::ii_poll};
 
 /// Link an Internet Identity to a new identity
 #[derive(Debug, Args)]
 pub(crate) struct IiArgs {
     /// Name for the linked identity
     name: String,
+
+    /// Where to store the session private key
+    #[arg(long, value_enum, default_value_t)]
+    storage: StorageMode,
+
+    /// Read the storage password from a file instead of prompting (for --storage password)
+    #[arg(long, value_name = "FILE")]
+    storage_password_file: Option<PathBuf>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
+    let create_format = match args.storage {
+        StorageMode::Plaintext => key::CreateFormat::Plaintext,
+        StorageMode::Keyring => key::CreateFormat::Keyring,
+        StorageMode::Password => {
+            let password = if let Some(path) = &args.storage_password_file {
+                read_to_string(path)
+                    .context(ReadStoragePasswordFileSnafu)?
+                    .trim()
+                    .to_string()
+            } else {
+                Password::new()
+                    .with_prompt("Enter password to encrypt identity")
+                    .with_confirmation("Confirm password", "Passwords do not match")
+                    .interact()
+                    .context(StoragePasswordTermReadSnafu)?
+            };
+            key::CreateFormat::Pbes2 {
+                password: Zeroizing::new(password),
+            }
+        }
+    };
+
     let secret_key = ic_ed25519::PrivateKey::generate();
     let identity_key = key::IdentityKey::Ed25519(secret_key.clone());
     let basic = BasicIdentity::from_raw_key(&secret_key.serialize_raw());
@@ -29,18 +61,37 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
-            key::link_ii_identity(dirs, &args.name, identity_key, &chain, ii_principal)
+            key::link_ii_identity(
+                dirs,
+                &args.name,
+                identity_key,
+                &chain,
+                ii_principal,
+                create_format,
+            )
         })
         .await?
         .context(LinkSnafu)?;
 
     info!("Identity `{}` linked to Internet Identity", args.name);
 
+    if matches!(args.storage, StorageMode::Plaintext) {
+        warn!(
+            "This identity is stored in plaintext and is not secure. Do not use it for anything of significant value."
+        );
+    }
+
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
 pub(crate) enum IiError {
+    #[snafu(display("failed to read storage password file"))]
+    ReadStoragePasswordFile { source: icp::fs::IoError },
+
+    #[snafu(display("failed to read storage password from terminal"))]
+    StoragePasswordTermRead { source: dialoguer::Error },
+
     #[snafu(display("failed during II authentication"))]
     Poll { source: ii_poll::IiPollError },
 

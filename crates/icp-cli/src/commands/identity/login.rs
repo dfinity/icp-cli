@@ -35,7 +35,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                     storage,
                     host,
                     ..
-                } => Ok((algorithm.clone(), storage.clone(), host.clone())),
+                } => Ok((algorithm.clone(), *storage, host.clone())),
                 _ => NotIiSnafu { name: &args.name }.fail(),
             }
         })

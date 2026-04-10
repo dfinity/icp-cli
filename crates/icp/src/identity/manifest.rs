@@ -4,6 +4,7 @@ use ic_agent::export::Principal;
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use strum::{Display, EnumString};
+use url::Url;
 
 use crate::{
     fs::{
@@ -134,6 +135,9 @@ pub enum IdentitySpec {
         /// (`Principal::self_authenticating(from_key)`), not the session key.
         principal: Principal,
         storage: IiKeyStorage,
+        /// The host used for II login, stored so `icp identity login` can
+        /// re-authenticate without requiring `--host` again.
+        host: Url,
     },
 }
 

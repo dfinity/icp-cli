@@ -14,8 +14,8 @@ use snafu::{ResultExt, Snafu};
 use tokio::{net::TcpListener, sync::oneshot};
 use url::Url;
 
-/// The hosted II login frontend for the dev account canister.
-const CLI_LOGIN_BASE: &str = "https://ut7yr-7iaaa-aaaag-ak7ca-cai.icp0.io/cli-login";
+/// Fallback host. Dummy value until we get a real domain. A staging instance can be found at ut7yr-7iaaa-aaaag-ak7ca-caia.ic0.app
+pub(crate) const DEFAULT_HOST: &str = "https://not.a.domain";
 
 #[derive(Debug, Snafu)]
 pub(crate) enum IiPollError {
@@ -25,17 +25,52 @@ pub(crate) enum IiPollError {
     #[snafu(display("failed to run local callback server"))]
     ServeServer { source: std::io::Error },
 
+    #[snafu(display("failed to fetch `{url}`"))]
+    FetchDiscovery { url: String, source: reqwest::Error },
+
+    #[snafu(display("failed to read discovery response from `{url}`"))]
+    ReadDiscovery { url: String, source: reqwest::Error },
+
+    #[snafu(display(
+        "`{url}` returned an empty login path — the response must be a single non-empty line"
+    ))]
+    EmptyLoginPath { url: String },
+
     #[snafu(display("interrupted"))]
     Interrupted,
 }
 
-/// Starts a local HTTP server to receive the delegation callback from the II
-/// frontend, prints the login URL for the user to open, and returns the
-/// delegation chain once the frontend POSTs it back.
+/// Discovers the login path from `{host}/.well-known/ic-cli-login`, then opens
+/// a local HTTP server, builds the login URL, and returns the delegation chain
+/// once the frontend POSTs it back.
 pub(crate) async fn poll_for_delegation(
+    host: &Url,
     der_public_key: &[u8],
 ) -> Result<DelegationChain, IiPollError> {
     let key_b64 = URL_SAFE_NO_PAD.encode(der_public_key);
+
+    // Discover the login path.
+    let discovery_url = host
+        .join("/.well-known/ic-cli-login")
+        .expect("joining an absolute path is infallible");
+    let discovery_url_str = discovery_url.to_string();
+    let login_path = reqwest::get(discovery_url)
+        .await
+        .context(FetchDiscoverySnafu {
+            url: &discovery_url_str,
+        })?
+        .text()
+        .await
+        .context(ReadDiscoverySnafu {
+            url: &discovery_url_str,
+        })?;
+    let login_path = login_path.trim();
+    if login_path.is_empty() {
+        return EmptyLoginPathSnafu {
+            url: discovery_url_str,
+        }
+        .fail();
+    }
 
     // Bind on a random port before opening the browser so the callback URL is known.
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -54,11 +89,11 @@ pub(crate) async fn poll_for_delegation(
             .append_pair("callback", &callback_url);
         scratch.query().expect("just set").to_owned()
     };
-    let mut login_url = Url::parse(CLI_LOGIN_BASE).expect("valid constant");
+    let mut login_url = host.join(login_path).expect("login_path is a valid path");
     login_url.set_fragment(Some(&fragment));
 
     eprintln!();
-    eprintln!("  Press Enter to open {}", {
+    eprintln!("  Press Enter to log in at {}", {
         let mut display = login_url.clone();
         display.set_fragment(None);
         display

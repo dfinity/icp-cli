@@ -1055,6 +1055,9 @@ Link an Internet Identity to a new identity
 
 ###### **Options:**
 
+* `--host <HOST>` — Host of the II login frontend (e.g. https://example.icp0.io)
+
+  Default value: `https://not.a.domain`
 * `--storage <STORAGE>` — Where to store the session private key
 
   Default value: `keyring`

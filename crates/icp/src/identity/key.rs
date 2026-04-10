@@ -6,7 +6,8 @@ use std::{
 use ic_agent::{
     Identity,
     identity::{
-        AnonymousIdentity, BasicIdentity, DelegatedIdentity, Prime256v1Identity, Secp256k1Identity,
+        AnonymousIdentity, BasicIdentity, DelegatedIdentity, DelegationError, Prime256v1Identity,
+        Secp256k1Identity,
     },
 };
 use ic_ed25519::PrivateKeyFormat;
@@ -21,6 +22,7 @@ use rand::Rng;
 use scrypt::Params;
 use sec1::{der::Decode, pem::PemLabel};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
+use url::Url;
 use zeroize::Zeroizing;
 
 use crate::{
@@ -111,6 +113,12 @@ pub enum LoadIdentityError {
     LoadDelegationChain {
         path: PathBuf,
         source: delegation::LoadError,
+    },
+
+    #[snafu(display("failed to validate delegation chain loaded from `{path}`"))]
+    ValidateDelegationChain {
+        path: PathBuf,
+        source: DelegationError,
     },
 
     #[snafu(display(
@@ -398,10 +406,8 @@ fn load_ii_identity(
         }
     };
 
-    // Use new_unchecked because the root of the II delegation chain uses
-    // canister signatures (OID 1.3.6.1.4.1.56387.1.2) which DelegatedIdentity::new
-    // cannot verify client-side. The replica validates the chain on each request.
-    let delegated = DelegatedIdentity::new_unchecked(from_key, inner, signed_delegations);
+    let delegated = DelegatedIdentity::new(from_key, inner, signed_delegations)
+        .context(ValidateDelegationChainSnafu { path: &chain_path })?;
 
     Ok(Arc::new(delegated))
 }
@@ -1112,6 +1118,7 @@ pub fn link_ii_identity(
     chain: &delegation::DelegationChain,
     principal: ic_agent::export::Principal,
     create_format: CreateFormat,
+    host: Url,
 ) -> Result<(), LinkIiIdentityError> {
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
@@ -1186,6 +1193,7 @@ pub fn link_ii_identity(
         algorithm,
         principal,
         storage: ii_storage,
+        host,
     };
     identity_list.identities.insert(name.to_string(), spec);
     identity_list.write_to(dirs)?;

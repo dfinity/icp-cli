@@ -20,7 +20,7 @@ pub(crate) struct LoginArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
-    let (algorithm, storage) = ctx
+    let (algorithm, storage, host) = ctx
         .dirs
         .identity()?
         .with_read(async |dirs| {
@@ -31,8 +31,11 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                 .context(IdentityNotFoundSnafu { name: &args.name })?;
             match spec {
                 IdentitySpec::InternetIdentity {
-                    algorithm, storage, ..
-                } => Ok((algorithm.clone(), storage.clone())),
+                    algorithm,
+                    storage,
+                    host,
+                    ..
+                } => Ok((algorithm.clone(), storage.clone(), host.clone())),
                 _ => NotIiSnafu { name: &args.name }.fail(),
             }
         })
@@ -52,7 +55,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
         .await?
         .context(LoadSessionKeySnafu)?;
 
-    let chain = ii_poll::poll_for_delegation(&der_public_key)
+    let chain = ii_poll::poll_for_delegation(&host, &der_public_key)
         .await
         .context(PollSnafu)?;
 

@@ -10,7 +10,7 @@ use icp::{
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
-use crate::operations::ii_poll;
+use crate::commands::identity::link::ii;
 
 /// Re-authenticate an Internet Identity delegation
 #[derive(Debug, Args)]
@@ -55,7 +55,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
         .await?
         .context(LoadSessionKeySnafu)?;
 
-    let chain = ii_poll::poll_for_delegation(&host, &der_public_key)
+    let chain = ii::recv_delegation(&host, &der_public_key)
         .await
         .context(PollSnafu)?;
 
@@ -92,7 +92,7 @@ pub(crate) enum LoginError {
     LoadSessionKey { source: key::LoadIdentityError },
 
     #[snafu(display("failed during II authentication"))]
-    Poll { source: ii_poll::IiPollError },
+    Poll { source: ii::IiRecvError },
 
     #[snafu(display("failed to update delegation"))]
     UpdateDelegation {

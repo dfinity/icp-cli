@@ -1,5 +1,7 @@
 # Unreleased
 
+* fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
+
 # v0.2.3
 
 * feat: Add `--proxy` to `icp canister` subcommands and `icp deploy` to route management canister calls through a proxy canister

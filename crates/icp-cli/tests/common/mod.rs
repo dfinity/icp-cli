@@ -49,11 +49,14 @@ environments:
     network: docker-network
 "#;
 
+// The floating tag `engine-beta` always points to the latest version of the engine image.
+// A new version of the image may be broken, so we use a fixed digest to ensure stability of the tests.
+// The digest may be updated periodically to keep up with new versions of the engine image.
 pub(crate) const NETWORK_DOCKER_ENGINE: &str = r#"
 networks:
   - name: docker-engine-network
     mode: managed
-    image: ghcr.io/dfinity/icp-cli-network-launcher:engine-beta
+    image: ghcr.io/dfinity/icp-cli-network-launcher:12.0.0-83c3f95e8c4ce28e02493df83df5f84a166451c0-engine
     port-mapping:
       - 0:4943
       - 0:4942

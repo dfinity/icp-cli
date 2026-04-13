@@ -35,6 +35,7 @@ Change a canister's settings to specified values
 * `--set-log-viewer <SET_LOG_VIEWER>`
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 

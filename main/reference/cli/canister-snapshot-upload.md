@@ -19,6 +19,7 @@ Upload a snapshot from local disk
 * `--resume` — Resume a previously interrupted upload
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 

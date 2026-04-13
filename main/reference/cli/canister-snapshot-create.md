@@ -17,6 +17,7 @@ Create a snapshot of a canister's state
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 

@@ -363,6 +363,7 @@ or a “detached” canister on a network.</p>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-install"><code>icp canister install</code></h2>
 <p>Install a built WASM to a canister on a network</p>
@@ -382,13 +383,13 @@ or a “detached” canister on a network.</p>
 <p><code>--wasm &#x3C;WASM></code> — Path to the WASM file to install. Uses the build output if not explicitly provided</p>
 </li>
 <li>
-<p><code>--args &#x3C;ARGS></code> — Inline initialization arguments, interpreted per <code>--args-format</code> (Candid by default)</p>
+<p><code>--args &#x3C;ARGS></code> — Inline arguments, interpreted per <code>--args-format</code> (Candid by default)</p>
 </li>
 <li>
-<p><code>--args-file &#x3C;ARGS_FILE></code> — Path to a file containing initialization arguments</p>
+<p><code>--args-file &#x3C;ARGS_FILE></code> — Path to a file containing arguments</p>
 </li>
 <li>
-<p><code>--args-format &#x3C;ARGS_FORMAT></code> — Format of the initialization arguments</p>
+<p><code>--args-format &#x3C;ARGS_FORMAT></code> — Format of the arguments</p>
 <p>Default value: <code>candid</code></p>
 <p>Possible values:</p>
 <ul>
@@ -414,6 +415,9 @@ Raw binary (only valid for file references)</li>
 </li>
 <li>
 <p><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</p>
+</li>
+<li>
+<p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</p>
 </li>
 </ul>
 <h2 id="icp-canister-list"><code>icp canister list</code></h2>
@@ -501,23 +505,24 @@ Raw binary (only valid for file references)</li>
 <li><code>-y</code>, <code>--yes</code> — Skip confirmation prompts</li>
 <li><code>--resume-watch</code> — Resume watching an already-initiated migration (skips validation and initiation)</li>
 <li><code>--skip-watch</code> — Exit as soon as the migrated canister is deleted (don’t wait for full completion)</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</li>
 </ul>
 <h2 id="icp-canister-settings"><code>icp canister settings</code></h2>
 <p>Commands to manage canister settings</p>
 <p><strong>Usage:</strong> <code>icp canister settings &#x3C;COMMAND></code></p>
 <h6 id="subcommands-2"><strong>Subcommands:</strong></h6>
 <ul>
-<li><code>show</code> — Show the status of a canister</li>
+<li><code>show</code> — Show the settings of a canister</li>
 <li><code>update</code> — Change a canister’s settings to specified values</li>
 <li><code>sync</code> — Synchronize a canister’s settings with those defined in the project</li>
 </ul>
 <h2 id="icp-canister-settings-show"><code>icp canister settings show</code></h2>
-<p>Show the status of a canister.</p>
-<p>By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.</p>
+<p>Show the settings of a canister.</p>
+<p>Queries the canister_status endpoint of the management canister and displays only the settings fields. Requires the caller to be a controller.</p>
 <p><strong>Usage:</strong> <code>icp canister settings show [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-8"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — canister name or principal to target. When using a name, an enviroment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — Name or principal of canister to target. When using a name an environment must be specified</li>
 </ul>
 <h6 id="options-10"><strong>Options:</strong></h6>
 <ul>
@@ -525,9 +530,8 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>-i</code>, <code>--id-only</code> — Only print the canister ids</li>
 <li><code>--json</code> — Format output in json</li>
-<li><code>-p</code>, <code>--public</code> — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-settings-update"><code>icp canister settings update</code></h2>
 <p>Change a canister’s settings to specified values</p>
@@ -603,6 +607,9 @@ Raw binary (only valid for file references)</li>
 <li>
 <p><code>--remove-environment-variable &#x3C;REMOVE_ENVIRONMENT_VARIABLE></code></p>
 </li>
+<li>
+<p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</p>
+</li>
 </ul>
 <h2 id="icp-canister-settings-sync"><code>icp canister settings sync</code></h2>
 <p>Synchronize a canister’s settings with those defined in the project</p>
@@ -617,6 +624,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</li>
 </ul>
 <h2 id="icp-canister-snapshot"><code>icp canister snapshot</code></h2>
 <p>Commands to manage canister snapshots</p>
@@ -646,6 +654,7 @@ Raw binary (only valid for file references)</li>
 <li><code>--replace &#x3C;REPLACE></code> — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created</li>
 <li><code>--json</code> — Output command results as JSON</li>
 <li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only snapshot ID</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</li>
 </ul>
 <h2 id="icp-canister-snapshot-delete"><code>icp canister snapshot delete</code></h2>
 <p>Delete a canister snapshot</p>
@@ -661,6 +670,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-snapshot-download"><code>icp canister snapshot download</code></h2>
 <p>Download a snapshot to local disk</p>
@@ -678,6 +688,7 @@ Raw binary (only valid for file references)</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>-o</code>, <code>--output &#x3C;OUTPUT></code> — Output directory for the snapshot files</li>
 <li><code>--resume</code> — Resume a previously interrupted download</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</li>
 </ul>
 <h2 id="icp-canister-snapshot-list"><code>icp canister snapshot list</code></h2>
 <p>List all snapshots for a canister</p>
@@ -694,6 +705,7 @@ Raw binary (only valid for file references)</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--json</code> — Output command results as JSON</li>
 <li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only snapshot IDs</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-snapshot-restore"><code>icp canister snapshot restore</code></h2>
 <p>Restore a canister from a snapshot</p>
@@ -709,6 +721,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</li>
 </ul>
 <h2 id="icp-canister-snapshot-upload"><code>icp canister snapshot upload</code></h2>
 <p>Upload a snapshot from local disk</p>
@@ -728,6 +741,7 @@ Raw binary (only valid for file references)</li>
 <li><code>--resume</code> — Resume a previously interrupted upload</li>
 <li><code>--json</code> — Output command results as JSON</li>
 <li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only snapshot ID</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</li>
 </ul>
 <h2 id="icp-canister-start"><code>icp canister start</code></h2>
 <p>Start a canister on a network</p>
@@ -742,6 +756,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-status"><code>icp canister status</code></h2>
 <p>Show the status of canister(s).</p>
@@ -760,6 +775,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-i</code>, <code>--id-only</code> — Only print the canister ids</li>
 <li><code>--json</code> — Format output in json</li>
 <li><code>-p</code>, <code>--public</code> — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-stop"><code>icp canister stop</code></h2>
 <p>Stop a canister on a network</p>
@@ -774,6 +790,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-top-up"><code>icp canister top-up</code></h2>
 <p>Top up a canister with cycles</p>
@@ -849,6 +866,11 @@ Raw binary (only valid for file references)</li>
 <h2 id="icp-deploy"><code>icp deploy</code></h2>
 <p>Deploy a project to an environment</p>
 <p><strong>Usage:</strong> <code>icp deploy [OPTIONS] [NAMES]...</code></p>
+<p>When deploying a single canister, you can pass arguments to the install call
+using —args or —args-file:</p>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Pass inline Candid arguments</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp deploy my_canister --args '(42 : nat)'</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Pass arguments from a file</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp deploy my_canister --args-file ./args.did</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Pass raw bytes</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp deploy my_canister --args-file ./args.bin --args-format bin</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Pass inline Candid argumentsicp deploy my_canister --args &#x27;(42 : nat)&#x27;# Pass arguments from a fileicp deploy my_canister --args-file ./args.did# Pass raw bytesicp deploy my_canister --args-file ./args.bin --args-format bin"><div></div></button></div></figure></div>
 <h6 id="arguments-22"><strong>Arguments:</strong></h6>
 <ul>
 <li><code>&#x3C;NAMES></code> — Canister names</li>
@@ -862,6 +884,9 @@ Raw binary (only valid for file references)</li>
 </li>
 <li>
 <p><code>--subnet &#x3C;SUBNET></code> — The subnet to use for the canisters being deployed</p>
+</li>
+<li>
+<p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route management canister calls through</p>
 </li>
 <li>
 <p><code>--controller &#x3C;CONTROLLER></code> — One or more controllers for the canisters being deployed. Repeat <code>--controller</code> to specify multiple</p>
@@ -881,6 +906,25 @@ Raw binary (only valid for file references)</li>
 </li>
 <li>
 <p><code>--json</code> — Output command results as JSON</p>
+</li>
+<li>
+<p><code>--args &#x3C;ARGS></code> — Inline arguments, interpreted per <code>--args-format</code> (Candid by default)</p>
+</li>
+<li>
+<p><code>--args-file &#x3C;ARGS_FILE></code> — Path to a file containing arguments</p>
+</li>
+<li>
+<p><code>--args-format &#x3C;ARGS_FORMAT></code> — Format of the arguments</p>
+<p>Default value: <code>candid</code></p>
+<p>Possible values:</p>
+<ul>
+<li><code>hex</code>:
+Hex-encoded bytes</li>
+<li><code>candid</code>:
+Candid text format</li>
+<li><code>bin</code>:
+Raw binary (only valid for file references)</li>
+</ul>
 </li>
 </ul>
 <h2 id="icp-environment"><code>icp environment</code></h2>

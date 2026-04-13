@@ -422,7 +422,7 @@ Queries the canister_status endpoint of the management canister and displays onl
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Canister name or principal to target. When using a name, an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 

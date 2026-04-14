@@ -6,7 +6,10 @@ use serde::Serialize;
 
 use crate::options::EnvironmentOpt;
 
-/// List the canisters in an environment
+/// List the canisters in an environment.
+///
+/// Prints canister names, one per line. Use --json for machine-readable output
+/// (returns {"canisters": ["name1", "name2", ...]})
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
     #[command(flatten)]

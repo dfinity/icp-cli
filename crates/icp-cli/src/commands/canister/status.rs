@@ -29,9 +29,25 @@ const E_NOT_A_CONTROLLER: &str = "IC0512";
 /// If the caller is not a controller, falls back on fetching public
 /// information from the state tree.
 #[derive(Debug, Args)]
+#[command(after_long_help = "\
+Examples:
+
+    # Status of all canisters in the local environment
+    icp canister status
+
+    # Status of one canister by name
+    icp canister status backend -e local
+
+    # Print only canister IDs (useful for scripting)
+    icp canister status -i
+
+    # JSON output for all canisters
+    icp canister status --json
+")]
 pub(crate) struct StatusArgs {
     /// An optional canister name or principal to target.
-    /// When using a name, an enviroment must be specified.
+    /// When using a name, an environment must be specified.
+    /// If omitted, shows status for all canisters in the environment.
     pub(crate) canister: Option<args::Canister>,
 
     #[command(flatten)]

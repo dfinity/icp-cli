@@ -58,8 +58,10 @@ pub struct IcpGenerateArgs {
     #[arg(long, action)]
     pub continue_on_error: bool,
 
-    /// If silent mode is set all variables will be extracted from the template_values_file. If a
-    /// value is missing the project generation will fail
+    /// Non-interactive mode: suppresses all prompts. Unset variables fall back to their
+    /// template-defined defaults; generation fails if a required variable has no default.
+    /// Combine with --define to supply values for variables that have no default in the template.
+    /// Use for CI or automated/agent contexts.
     #[arg(long, short, requires("name"), action)]
     pub silent: bool,
 
@@ -77,7 +79,9 @@ pub struct IcpGenerateArgs {
     #[arg(long = "gitconfig", value_parser, value_name="GITCONFIG_FILE", help_heading = heading::GIT_PARAMETERS)]
     pub gitconfig: Option<PathBuf>,
 
-    /// Define a value for use during template expansion. E.g `--define foo=bar`
+    /// Set a template variable in KEY=VALUE format (e.g. --define project_name=my-app).
+    /// Variable names are template-specific. Suppresses the interactive prompt for that variable.
+    /// Required in --silent mode for any template variable that has no default value.
     #[arg(long, short, number_of_values = 1, value_parser, help_heading = heading::OUTPUT_PARAMETERS)]
     pub define: Vec<String>,
 

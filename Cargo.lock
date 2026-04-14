@@ -3016,7 +3016,7 @@ dependencies = [
  "p256",
  "pem",
  "pkcs8",
- "rand 0.10.0",
+ "rand 0.10.1",
  "rangemap",
  "reqwest",
  "sec1",
@@ -3342,7 +3342,7 @@ dependencies = [
  "p256",
  "pem",
  "pkcs8",
- "rand 0.10.0",
+ "rand 0.10.1",
  "reqwest",
  "schemars",
  "scrypt",
@@ -3428,7 +3428,7 @@ dependencies = [
  "phf",
  "pkcs8",
  "predicates",
- "rand 0.10.0",
+ "rand 0.10.1",
  "regex",
  "reqwest",
  "sec1",
@@ -5359,9 +5359,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
+checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
 dependencies = [
  "chacha20",
  "getrandom 0.4.2",

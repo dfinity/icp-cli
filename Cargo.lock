@@ -3321,6 +3321,7 @@ dependencies = [
  "glob",
  "handlebars",
  "hex",
+ "hmac",
  "ic-agent",
  "ic-asset",
  "ic-ed25519",

@@ -1,6 +1,8 @@
 ﻿# icp canister list
 
-List the canisters in an environment
+List the canisters in an environment.
+
+Prints canister names, one per line. Use --json for machine-readable output (returns {"canisters": ["name1", "name2", ...]})
 
 **Usage:** `icp canister list [OPTIONS]`
 

@@ -12,7 +12,7 @@ Transfer cycles to another principal
 ###### **Options:**
 
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
-* `--from-subaccount <FROM_SUBACCOUNT>`
+* `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer cycles from
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used

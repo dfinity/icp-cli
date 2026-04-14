@@ -6,9 +6,24 @@ By default this queries the status endpoint of the management canister. If the c
 
 **Usage:** `icp canister status [OPTIONS] [CANISTER]`
 
+Examples:
+
+    # Status of all canisters in the local environment
+    icp canister status
+
+    # Status of one canister by name
+    icp canister status backend -e local
+
+    # Print only canister IDs (useful for scripting)
+    icp canister status -i
+
+    # JSON output for all canisters
+    icp canister status --json
+
+
 ###### **Arguments:**
 
-* `<CANISTER>` — An optional canister name or principal to target. When using a name, an enviroment must be specified
+* `<CANISTER>` — An optional canister name or principal to target. When using a name, an environment must be specified. If omitted, shows status for all canisters in the environment
 
 ###### **Options:**
 

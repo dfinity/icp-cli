@@ -1,6 +1,10 @@
 ﻿# icp network start
 
-Run a given network
+Run a given network.
+
+The gateway binds to port 8000 by default. To use a different port, set `gateway.port` in `icp.yaml`. If port 8000 is already in use by another icp-cli project, stop that network first:
+
+icp network stop --project-root-override <path>
 
 **Usage:** `icp network start [OPTIONS] [NAME]`
 

@@ -421,7 +421,8 @@ Raw binary (only valid for file references)</li>
 </li>
 </ul>
 <h2 id="icp-canister-list"><code>icp canister list</code></h2>
-<p>List the canisters in an environment</p>
+<p>List the canisters in an environment.</p>
+<p>Prints canister names, one per line. Use —json for machine-readable output (returns {“canisters”: [“name1”, “name2”, …]})</p>
 <p><strong>Usage:</strong> <code>icp canister list [OPTIONS]</code></p>
 <h6 id="options-6"><strong>Options:</strong></h6>
 <ul>
@@ -530,7 +531,7 @@ Raw binary (only valid for file references)</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
-<li><code>--json</code> — Format output in json</li>
+<li><code>--json</code> — Format output as JSON</li>
 <li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
 </ul>
 <h2 id="icp-canister-settings-update"><code>icp canister settings update</code></h2>
@@ -569,7 +570,7 @@ Raw binary (only valid for file references)</li>
 <p>Warning: This removes all existing controllers not in the new list. If you don’t include yourself, you will lose control of the canister.</p>
 </li>
 <li>
-<p><code>--compute-allocation &#x3C;COMPUTE_ALLOCATION></code></p>
+<p><code>--compute-allocation &#x3C;COMPUTE_ALLOCATION></code> — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet’s compute capacity</p>
 </li>
 <li>
 <p><code>--memory-allocation &#x3C;MEMORY_ALLOCATION></code> — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. “4gib” or “2.5kb”)</p>
@@ -590,22 +591,22 @@ Raw binary (only valid for file references)</li>
 <p><code>--log-memory-limit &#x3C;LOG_MEMORY_LIMIT></code> — Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value. Supports suffixes: kb, kib, mb, mib (e.g. “2mib” or “256kib”). Canister default is 4096 bytes</p>
 </li>
 <li>
-<p><code>--log-visibility &#x3C;LOG_VISIBILITY></code></p>
+<p><code>--log-visibility &#x3C;LOG_VISIBILITY></code> — Set log visibility to a fixed policy [possible values: controllers, public]. Conflicts with —add-log-viewer, —remove-log-viewer, and —set-log-viewer. Use —add-log-viewer / —set-log-viewer to grant access to specific principals instead</p>
 </li>
 <li>
-<p><code>--add-log-viewer &#x3C;ADD_LOG_VIEWER></code></p>
+<p><code>--add-log-viewer &#x3C;ADD_LOG_VIEWER></code> — Add a principal to the allowed log viewers list</p>
 </li>
 <li>
-<p><code>--remove-log-viewer &#x3C;REMOVE_LOG_VIEWER></code></p>
+<p><code>--remove-log-viewer &#x3C;REMOVE_LOG_VIEWER></code> — Remove a principal from the allowed log viewers list</p>
 </li>
 <li>
-<p><code>--set-log-viewer &#x3C;SET_LOG_VIEWER></code></p>
+<p><code>--set-log-viewer &#x3C;SET_LOG_VIEWER></code> — Replace the allowed log viewers list with the specified principals</p>
 </li>
 <li>
-<p><code>--add-environment-variable &#x3C;ADD_ENVIRONMENT_VARIABLE></code></p>
+<p><code>--add-environment-variable &#x3C;ADD_ENVIRONMENT_VARIABLE></code> — Add a canister environment variable in KEY=VALUE format</p>
 </li>
 <li>
-<p><code>--remove-environment-variable &#x3C;REMOVE_ENVIRONMENT_VARIABLE></code></p>
+<p><code>--remove-environment-variable &#x3C;REMOVE_ENVIRONMENT_VARIABLE></code> — Remove a canister environment variable by key name</p>
 </li>
 <li>
 <p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister calls through</p>
@@ -762,9 +763,14 @@ Raw binary (only valid for file references)</li>
 <p>Show the status of canister(s).</p>
 <p>By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.</p>
 <p><strong>Usage:</strong> <code>icp canister status [OPTIONS] [CANISTER]</code></p>
+<p>Examples:</p>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Status of all canisters in the local environment</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister status</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Status of one canister by name</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister status backend -e local</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Print only canister IDs (useful for scripting)</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister status -i</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># JSON output for all canisters</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister status --json</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="# Status of all canisters in the local environmenticp canister status# Status of one canister by nameicp canister status backend -e local# Print only canister IDs (useful for scripting)icp canister status -i# JSON output for all canistersicp canister status --json"><div></div></button></div></figure></div>
 <h6 id="arguments-18"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;CANISTER></code> — An optional canister name or principal to target. When using a name, an enviroment must be specified</li>
+<li><code>&#x3C;CANISTER></code> — An optional canister name or principal to target. When using a name, an environment must be specified. If omitted, shows status for all canisters in the environment</li>
 </ul>
 <h6 id="options-20"><strong>Options:</strong></h6>
 <ul>
@@ -813,7 +819,7 @@ Raw binary (only valid for file references)</li>
 <h6 id="subcommands-4"><strong>Subcommands:</strong></h6>
 <ul>
 <li><code>balance</code> — Display the cycles balance</li>
-<li><code>mint</code> — Convert icp to cycles</li>
+<li><code>mint</code> — Convert ICP to cycles</li>
 <li><code>transfer</code> — Transfer cycles to another principal</li>
 </ul>
 <h2 id="icp-cycles-balance"><code>icp cycles balance</code></h2>
@@ -830,7 +836,8 @@ Raw binary (only valid for file references)</li>
 <li><code>-q</code>, <code>--quiet</code> — Suppress human-readable output; print only the balance</li>
 </ul>
 <h2 id="icp-cycles-mint"><code>icp cycles mint</code></h2>
-<p>Convert icp to cycles</p>
+<p>Convert ICP to cycles.</p>
+<p>Exactly one of —icp or —cycles must be provided.</p>
 <p><strong>Usage:</strong> <code>icp cycles mint [OPTIONS]</code></p>
 <h6 id="options-24"><strong>Options:</strong></h6>
 <ul>
@@ -855,7 +862,7 @@ Raw binary (only valid for file references)</li>
 <h6 id="options-25"><strong>Options:</strong></h6>
 <ul>
 <li><code>--to-subaccount &#x3C;TO_SUBACCOUNT></code> — The subaccount to transfer to (only if the receiver is a principal)</li>
-<li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code></li>
+<li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — The subaccount to transfer cycles from</li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
 <li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
@@ -932,10 +939,11 @@ Raw binary (only valid for file references)</li>
 <p><strong>Usage:</strong> <code>icp environment &#x3C;COMMAND></code></p>
 <h6 id="subcommands-5"><strong>Subcommands:</strong></h6>
 <ul>
-<li><code>list</code> — Display a list of enviroments</li>
+<li><code>list</code> — List the environments defined in this project, one per line</li>
 </ul>
 <h2 id="icp-environment-list"><code>icp environment list</code></h2>
-<p>Display a list of enviroments</p>
+<p>List the environments defined in this project, one per line.</p>
+<p>Use <code>icp project show</code> to see the fully expanded configuration including implicit environments (local, ic) and their network and canister assignments.</p>
 <p><strong>Usage:</strong> <code>icp environment list</code></p>
 <h2 id="icp-identity"><code>icp identity</code></h2>
 <p>Manage your identities</p>
@@ -1164,7 +1172,9 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 </li>
 </ul>
 <h2 id="icp-network-start"><code>icp network start</code></h2>
-<p>Run a given network</p>
+<p>Run a given network.</p>
+<p>The gateway binds to port 8000 by default. To use a different port, set <code>gateway.port</code> in <code>icp.yaml</code>. If port 8000 is already in use by another icp-cli project, stop that network first:</p>
+<p>icp network stop —project-root-override <path></path></p>
 <p><strong>Usage:</strong> <code>icp network start [OPTIONS] [NAME]</code></p>
 <p>Examples:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Use default 'local' network</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp network start</span></div></div><div class="ec-line"><div class="code">
@@ -1285,7 +1295,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p><code>--continue-on-error</code> — Continue if errors in templates are encountered</p>
 </li>
 <li>
-<p><code>-s</code>, <code>--silent</code> — If silent mode is set all variables will be extracted from the template_values_file. If a value is missing the project generation will fail</p>
+<p><code>-s</code>, <code>--silent</code> — Non-interactive mode: suppresses all prompts. Unset variables fall back to their template-defined defaults; generation fails if a required variable has no default. Combine with —define to supply values for variables that have no default in the template. Use for CI or automated/agent contexts</p>
 </li>
 <li>
 <p><code>--vcs &#x3C;VCS></code> — Specify the VCS used to initialize the generated template</p>
@@ -1297,7 +1307,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <p><code>--gitconfig &#x3C;GITCONFIG_FILE></code> — Use a different gitconfig file, if omitted the usual $HOME/.gitconfig will be used</p>
 </li>
 <li>
-<p><code>-d</code>, <code>--define &#x3C;DEFINE></code> — Define a value for use during template expansion. E.g <code>--define foo=bar</code></p>
+<p><code>-d</code>, <code>--define &#x3C;DEFINE></code> — Set a template variable in KEY=VALUE format (e.g. —define project_name=my-app). Variable names are template-specific. Suppresses the interactive prompt for that variable. Required in —silent mode for any template variable that has no default value</p>
 </li>
 <li>
 <p><code>--init</code> — Generate the template directly into the current dir. No subfolder will be created and no vcs is initialized</p>

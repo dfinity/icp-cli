@@ -75,7 +75,7 @@ predicates = "3"
 pem = "3.0.5"
 phf = { version = "0.13.1", features = ["macros"] }
 pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
-rand = "0.10.0"
+rand = "0.10.1"
 regex = "1.12.2"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json", "stream"] }
 schemars = { version = "1.0.4", features = ["derive", "url2"] }

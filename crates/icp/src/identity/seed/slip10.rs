@@ -3,11 +3,11 @@
 //! Implements <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
 
 use bip32::DerivationPath;
-use elliptic_curve::{Curve, bigint::Encoding, sec1::ToEncodedPoint};
-use hmac::{Hmac, Mac};
-use num_bigint::BigUint;
-use num_traits::Zero;
+use crypto_bigint::{Encoding, U256, Zero};
+use elliptic_curve::{Curve, sec1::ToEncodedPoint};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha512;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -20,10 +20,10 @@ pub fn derive_secp256k1(seed: &[u8], path: &DerivationPath) -> k256::SecretKey {
         seed,
         path,
         SECP256K1_SEED_KEY,
-        Some(k256::Secp256k1::ORDER.to_be_bytes()),
+        Some(k256::Secp256k1::ORDER),
         k256_compressed_public_key,
     );
-    k256::SecretKey::from_slice(&key_bytes)
+    k256::SecretKey::from_slice(&*key_bytes)
         .expect("SLIP-0010 secp256k1 derivation produced a valid key")
 }
 
@@ -32,24 +32,29 @@ pub fn derive_p256(seed: &[u8], path: &DerivationPath) -> p256::SecretKey {
         seed,
         path,
         P256_SEED_KEY,
-        Some(p256::NistP256::ORDER.to_be_bytes()),
+        Some(p256::NistP256::ORDER),
         p256_compressed_public_key,
     );
-    p256::SecretKey::from_slice(&key_bytes).expect("SLIP-0010 p256 derivation produced a valid key")
+    p256::SecretKey::from_slice(&*key_bytes)
+        .expect("SLIP-0010 p256 derivation produced a valid key")
 }
 
 /// Panics if any path component is non-hardened; SLIP-0010 forbids it for Ed25519.
 pub fn derive_ed25519(seed: &[u8], path: &DerivationPath) -> ic_ed25519::PrivateKey {
     let key_bytes = slip10_derive(seed, path, ED25519_SEED_KEY, None, |_| unreachable!());
-    ic_ed25519::PrivateKey::deserialize_raw(&key_bytes)
+    ic_ed25519::PrivateKey::deserialize_raw(&*key_bytes)
         .expect("SLIP-0010 ed25519 derivation produced a valid key")
 }
 
-fn hmac_sha512_split(key: &[u8], data: &[u8]) -> ([u8; 32], [u8; 32]) {
+fn hmac_sha512_split(key: &[u8], data: &[u8]) -> (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>) {
+    assert_zeroize_enabled::<Sha512>(); // HmacSha512 doesn't implement ZeroizeOnDrop for some reason but it contains Sha512 which does.
     let mut mac = HmacSha512::new_from_slice(key).expect("HMAC accepts any key length");
     mac.update(data);
-    let out = mac.finalize().into_bytes();
-    (out[..32].try_into().unwrap(), out[32..].try_into().unwrap())
+    let out = Zeroizing::new(mac.finalize().into_bytes());
+    (
+        Zeroizing::new(out[..32].try_into().unwrap()),
+        Zeroizing::new(out[32..].try_into().unwrap()),
+    )
 }
 
 /// Generic SLIP-0010 derivation.
@@ -64,10 +69,19 @@ fn slip10_derive(
     seed: &[u8],
     path: &DerivationPath,
     curve_key: &[u8],
-    order: Option<[u8; 32]>,
+    order: Option<U256>,
     pub_key: impl Fn(&[u8; 32]) -> [u8; 33],
-) -> [u8; 32] {
+) -> Zeroizing<[u8; 32]> {
     let (mut key, mut chain_code) = hmac_sha512_split(curve_key, seed);
+
+    // For EC curves, the spec requires the master key to be a valid scalar.
+    if let Some(order) = order {
+        let master = Zeroizing::new(U256::from_be_bytes(*key));
+        assert!(
+            !bool::from(master.is_zero()) && *master < order,
+            "SLIP-0010: master key derived from seed is invalid; use a different seed",
+        );
+    }
 
     for child in path.iter() {
         assert!(
@@ -80,33 +94,34 @@ fn slip10_derive(
         // The hardened flag lives in bit 31, so incrementing preserves it.
         let mut index = u32::from(child);
         loop {
-            let mut data = Vec::with_capacity(37);
+            let mut data = Zeroizing::new(Vec::with_capacity(37));
             if index >= 0x8000_0000 {
                 data.push(0x00);
-                data.extend_from_slice(&key);
+                data.extend_from_slice(&*key);
             } else {
                 data.extend_from_slice(&pub_key(&key));
             }
             data.extend_from_slice(&index.to_be_bytes());
 
-            let (il, ir) = hmac_sha512_split(&chain_code, &data);
+            let (il, ir) = hmac_sha512_split(&*chain_code, &data);
 
-            if let Some(order_bytes) = order {
+            if let Some(order) = order {
                 // EC: child key = (IL + parent_key) mod n
-                let order = BigUint::from_bytes_be(&order_bytes);
-                let il_big = BigUint::from_bytes_be(&il);
-                if il_big >= order {
+                let il_scalar = Zeroizing::new(U256::from_be_bytes(*il));
+                if *il_scalar >= order {
                     index += 1;
                     continue;
                 }
-                let child_big = (il_big + BigUint::from_bytes_be(&key)) % &order;
-                if child_big.is_zero() {
+                let key_scalar = Zeroizing::new(U256::from_be_bytes(*key));
+                // add_mod requires both operands < order; key_scalar is guaranteed < order
+                // because it was validated on entry (master key check above) and every
+                // subsequent value is the output of a prior add_mod call.
+                let child_scalar = Zeroizing::new(il_scalar.add_mod(&key_scalar, &order));
+                if bool::from(child_scalar.is_zero()) {
                     index += 1;
                     continue;
                 }
-                let child_bytes = child_big.to_bytes_be();
-                key = [0u8; 32];
-                key[32 - child_bytes.len()..].copy_from_slice(&child_bytes);
+                *key = child_scalar.to_be_bytes();
                 chain_code = ir;
             } else {
                 // Ed25519: child key is the left 32 bytes directly; no modular arithmetic.
@@ -121,6 +136,7 @@ fn slip10_derive(
 
 /// Returns the compressed SEC1 public key (33 bytes) for a secp256k1 private key scalar.
 fn k256_compressed_public_key(key_bytes: &[u8; 32]) -> [u8; 33] {
+    assert_zeroize_enabled::<k256::SecretKey>();
     let secret = k256::SecretKey::from_slice(key_bytes).expect("valid k256 secret key");
     secret
         .public_key()
@@ -132,6 +148,7 @@ fn k256_compressed_public_key(key_bytes: &[u8; 32]) -> [u8; 33] {
 
 /// Returns the compressed SEC1 public key (33 bytes) for a p256 private key scalar.
 fn p256_compressed_public_key(key_bytes: &[u8; 32]) -> [u8; 33] {
+    assert_zeroize_enabled::<p256::SecretKey>();
     let secret = p256::SecretKey::from_slice(key_bytes).expect("valid p256 secret key");
     secret
         .public_key()
@@ -140,3 +157,5 @@ fn p256_compressed_public_key(key_bytes: &[u8; 32]) -> [u8; 33] {
         .try_into()
         .expect("compressed p256 point is 33 bytes")
 }
+
+fn assert_zeroize_enabled<T: ZeroizeOnDrop>() {}

@@ -7,7 +7,5 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
-# Dependencies added during implementation.
-# This plugin targets wasm32-wasip2 and is built with `cargo component build`.
-# See sync-plugin/sync-plugin.wit for the interface.
 [dependencies]
+wit-bindgen = { version = "0.36", features = ["realloc"] }

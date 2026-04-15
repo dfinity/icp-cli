@@ -7,6 +7,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 camino.workspace = true
 candid.workspace = true
 candid_parser.workspace = true
@@ -14,8 +15,7 @@ hex.workspace = true
 ic-agent.workspace = true
 snafu.workspace = true
 tokio.workspace = true
-# wasmtime with component-model feature — added during implementation
-# wasmtime = { version = "...", features = ["component-model"] }
+wasmtime.workspace = true
 
 [lints]
 workspace = true

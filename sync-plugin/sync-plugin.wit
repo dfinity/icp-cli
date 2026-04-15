@@ -1,0 +1,69 @@
+package icp:sync-plugin@0.1.0;
+
+/// Types shared between the host runtime and sync plugins.
+interface types {
+    /// Whether a canister call is an update or a query.
+    enum call-type { update, query }
+
+    /// Input passed by the runtime to the plugin's exec() export.
+    record sync-exec-input {
+        /// Textual principal of the canister being synced.
+        canister-id: string,
+        /// Name of the environment being synced (e.g. "production", "local").
+        environment: string,
+    }
+
+    /// A request to call a method on the target canister.
+    record canister-call-request {
+        /// The canister method to call.
+        method: string,
+        /// Candid IDL text notation, e.g. `("hello")`.
+        arg: string,
+        /// Defaults to update if omitted.
+        call-type: option<call-type>,
+    }
+
+    /// A single entry returned by list-dir.
+    record dir-entry {
+        /// File or directory name (not a full path).
+        name: string,
+        /// True if the entry is a directory; false if it is a file.
+        is-dir: bool,
+    }
+}
+
+/// The complete interface of a sync plugin.
+world sync-plugin {
+    use types.{sync-exec-input, canister-call-request, dir-entry};
+
+    // -------------------------------------------------------------------------
+    // Host functions (imports) — provided by icp-cli, called by the plugin
+    // -------------------------------------------------------------------------
+
+    /// Make an update or query call to the canister being synced.
+    /// The host always calls the canister from sync-exec-input.canister-id;
+    /// the plugin does not choose the target.
+    /// Returns Candid IDL text on success or an error message on failure.
+    import canister-call: func(req: canister-call-request) -> result<string, string>;
+
+    /// Read a UTF-8 file from the host filesystem.
+    /// The host enforces that the path falls within a declared `dirs` entry.
+    /// Returns the file contents or an error message.
+    import read-file: func(path: string) -> result<string, string>;
+
+    /// List one level of entries in a host filesystem directory.
+    /// The host enforces the same `dirs` allowlist as read-file.
+    /// Returns directory entries or an error message.
+    import list-dir: func(path: string) -> result<list<dir-entry>, string>;
+
+    /// Print a message to the CLI's progress output.
+    import log: func(message: string);
+
+    // -------------------------------------------------------------------------
+    // Plugin exports — implemented by the plugin, called by the host
+    // -------------------------------------------------------------------------
+
+    /// Execute the sync plugin for the canister being synced.
+    /// Returns optional output text on success or an error message on failure.
+    export exec: func(input: sync-exec-input) -> result<option<string>, string>;
+}

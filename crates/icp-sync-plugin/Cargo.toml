@@ -1,0 +1,21 @@
+[package]
+name = "icp-sync-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+camino.workspace = true
+candid.workspace = true
+candid_parser.workspace = true
+hex.workspace = true
+ic-agent.workspace = true
+snafu.workspace = true
+tokio.workspace = true
+# wasmtime with component-model feature — added during implementation
+# wasmtime = { version = "...", features = ["component-model"] }
+
+[lints]
+workspace = true

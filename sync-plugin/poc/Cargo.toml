@@ -1,0 +1,13 @@
+[package]
+name = "icp-sync-plugin-poc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+# Dependencies added during implementation.
+# This plugin targets wasm32-wasip2 and is built with `cargo component build`.
+# See sync-plugin/sync-plugin.wit for the interface.
+[dependencies]

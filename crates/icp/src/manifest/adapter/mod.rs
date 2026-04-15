@@ -1,3 +1,4 @@
 pub mod assets;
-pub mod prebuilt;
+pub mod plugin;
 pub mod script;
+pub mod prebuilt;

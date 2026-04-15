@@ -77,7 +77,14 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
 
     info!("Syncing canisters:");
 
-    sync_many(ctx.syncer.clone(), agent, sync_canisters, ctx.debug).await?;
+    sync_many(
+        ctx.syncer.clone(),
+        agent,
+        sync_canisters,
+        environment_selection.name().to_owned(),
+        ctx.debug,
+    )
+    .await?;
 
     Ok(())
 }

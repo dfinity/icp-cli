@@ -2,7 +2,7 @@
 members = ["crates/*"]
 
 default-members = ["crates/icp-cli"]
-exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
+exclude = ["examples/icp-rust", "examples/icp-rust-recipe", "sync-plugin/poc"]
 resolver = "3"
 
 [workspace.package]
@@ -54,6 +54,7 @@ ic-management-canister-types = { version = "0.7.1" }
 ic-utils = { version = "0.47.0" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
+icp-sync-plugin = { path = "crates/icp-sync-plugin" }
 ic-identity-hsm = "0.47.0"
 icrc-ledger-types = "0.1.10"
 indicatif = "0.18.0"

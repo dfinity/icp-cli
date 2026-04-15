@@ -362,7 +362,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         // method to permit the user identity to upload assets directly before syncing.
         info!("Syncing canisters:");
 
-        sync_many(ctx.syncer.clone(), agent.clone(), sync_canisters, ctx.debug).await?;
+        sync_many(
+            ctx.syncer.clone(),
+            agent.clone(),
+            sync_canisters,
+            environment_selection.name().to_owned(),
+            ctx.debug,
+        )
+        .await?;
     }
 
     // Print URLs for deployed canisters

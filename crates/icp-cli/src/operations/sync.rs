@@ -32,6 +32,7 @@ async fn sync_canister(
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
+    environment: &str,
     pb: &mut MultiStepProgressBar,
 ) -> Result<(), SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
@@ -50,6 +51,7 @@ async fn sync_canister(
                 &Params {
                     path: canister_path.clone(),
                     cid: canister_id,
+                    environment: environment.to_owned(),
                 },
                 agent,
                 Some(tx),
@@ -70,6 +72,7 @@ pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
+    environment: String,
     debug: bool,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
@@ -81,12 +84,20 @@ pub(crate) async fn sync_many(
         let fut = {
             let agent = agent.clone();
             let syncer = syncer.clone();
+            let environment = environment.clone();
 
             async move {
                 // Define the sync logic
-                let sync_result =
-                    sync_canister(&syncer, &agent, canister_path, cid, &canister_info, &mut pb)
-                        .await;
+                let sync_result = sync_canister(
+                    &syncer,
+                    &agent,
+                    canister_path,
+                    cid,
+                    &canister_info,
+                    &environment,
+                    &mut pb,
+                )
+                .await;
 
                 // Execute with progress tracking for final state
                 let result = ProgressManager::execute_with_progress(

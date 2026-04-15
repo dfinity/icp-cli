@@ -44,7 +44,7 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a Pre-built canister build adapter.",
+      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
       "properties": {
         "sha256": {
           "description": "Optional sha256 checksum of the WASM",
@@ -87,6 +87,39 @@
           "type": "object"
         }
       ],
+      "type": "object"
+    },
+    "Adapter4": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LocalSource",
+          "description": "Local path on-disk to read a WASM file from"
+        },
+        {
+          "$ref": "#/$defs/RemoteSource",
+          "description": "Remote url to fetch a WASM file from"
+        }
+      ],
+      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister.  It runs inside the Extism sandbox with restricted\npermissions — it can only call canister methods on the canister being\nsynced and read files from the declared `dirs` allowlist.\n\nExample:\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional but recommended\n  dirs:                               # optional read-access directories\n    - assets/seed-data/\n```",
+      "properties": {
+        "dirs": {
+          "description": "Directories (relative to canister directory) the plugin may read from.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sha256": {
+          "description": "Optional sha256 checksum of the wasm file.\nRequired when `url` is used; optional (but recommended) for `path`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ArgsFormat": {
@@ -941,6 +974,20 @@
           "properties": {
             "type": {
               "const": "assets",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Adapter4",
+          "description": "Represents a sync step executed by a WebAssembly plugin running inside\nthe Extism sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
+          "properties": {
+            "type": {
+              "const": "plugin",
               "type": "string"
             }
           },

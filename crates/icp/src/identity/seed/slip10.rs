@@ -76,38 +76,43 @@ fn slip10_derive(
             std::str::from_utf8(curve_key).unwrap_or("?"),
         );
 
-        let raw_index = u32::from(child);
-        let mut data = Vec::with_capacity(37);
-        if child.is_hardened() {
-            data.push(0x00);
-            data.extend_from_slice(&key);
-        } else {
-            data.extend_from_slice(&pub_key(&key));
-        }
-        data.extend_from_slice(&raw_index.to_be_bytes());
+        // Per spec, on an invalid derived key (IL >= n or child == 0), retry with index + 1.
+        // The hardened flag lives in bit 31, so incrementing preserves it.
+        let mut index = u32::from(child);
+        loop {
+            let mut data = Vec::with_capacity(37);
+            if index >= 0x8000_0000 {
+                data.push(0x00);
+                data.extend_from_slice(&key);
+            } else {
+                data.extend_from_slice(&pub_key(&key));
+            }
+            data.extend_from_slice(&index.to_be_bytes());
 
-        let (il, ir) = hmac_sha512_split(&chain_code, &data);
+            let (il, ir) = hmac_sha512_split(&chain_code, &data);
 
-        if let Some(order_bytes) = order {
-            // EC: child key = (IL + parent_key) mod n
-            let order = BigUint::from_bytes_be(&order_bytes);
-            let il_big = BigUint::from_bytes_be(&il);
-            assert!(
-                il_big < order,
-                "SLIP-0010: IL >= order at index {child} (astronomically unlikely)"
-            );
-            let child_big = (il_big + BigUint::from_bytes_be(&key)) % &order;
-            assert!(
-                !child_big.is_zero(),
-                "SLIP-0010: child key is zero at index {child} (astronomically unlikely)"
-            );
-            let child_bytes = child_big.to_bytes_be();
-            key = [0u8; 32];
-            key[32 - child_bytes.len()..].copy_from_slice(&child_bytes);
-            chain_code = ir;
-        } else {
-            // Ed25519: child key is the left 32 bytes directly; no modular arithmetic.
-            (key, chain_code) = (il, ir);
+            if let Some(order_bytes) = order {
+                // EC: child key = (IL + parent_key) mod n
+                let order = BigUint::from_bytes_be(&order_bytes);
+                let il_big = BigUint::from_bytes_be(&il);
+                if il_big >= order {
+                    index += 1;
+                    continue;
+                }
+                let child_big = (il_big + BigUint::from_bytes_be(&key)) % &order;
+                if child_big.is_zero() {
+                    index += 1;
+                    continue;
+                }
+                let child_bytes = child_big.to_bytes_be();
+                key = [0u8; 32];
+                key[32 - child_bytes.len()..].copy_from_slice(&child_bytes);
+                chain_code = ir;
+            } else {
+                // Ed25519: child key is the left 32 bytes directly; no modular arithmetic.
+                (key, chain_code) = (il, ir);
+            }
+            break;
         }
     }
 

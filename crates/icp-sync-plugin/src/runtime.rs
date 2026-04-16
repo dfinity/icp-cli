@@ -15,7 +15,7 @@ wasmtime::component::bindgen!({
     path: "../../sync-plugin/sync-plugin.wit",
 });
 
-use icp::sync_plugin::types::{CallType, FileInput};
+use icp::sync_plugin::types::CallType;
 
 // HostState holds everything the plugin's import functions need.
 struct HostState {
@@ -28,15 +28,12 @@ struct HostState {
     wasi_table: wasmtime_wasi::ResourceTable,
 }
 
-impl wasmtime_wasi::IoView for HostState {
-    fn table(&mut self) -> &mut wasmtime_wasi::ResourceTable {
-        &mut self.wasi_table
-    }
-}
-
 impl wasmtime_wasi::WasiView for HostState {
-    fn ctx(&mut self) -> &mut wasmtime_wasi::WasiCtx {
-        &mut self.wasi_ctx
+    fn ctx(&mut self) -> wasmtime_wasi::WasiCtxView<'_> {
+        wasmtime_wasi::WasiCtxView {
+            ctx: &mut self.wasi_ctx,
+            table: &mut self.wasi_table,
+        }
     }
 }
 
@@ -155,12 +152,14 @@ pub fn run_plugin(
     };
 
     let mut linker: Linker<HostState> = Linker::new(&engine);
-    wasmtime_wasi::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
+    wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
         path: wasm_path.clone(),
     })?;
-    SyncPlugin::add_to_linker(&mut linker, |s| s).context(InstantiateSnafu {
-        path: wasm_path.clone(),
-    })?;
+    SyncPlugin::add_to_linker::<_, wasmtime::component::HasSelf<_>>(&mut linker, |s| s).context(
+        InstantiateSnafu {
+            path: wasm_path.clone(),
+        },
+    )?;
 
     let mut store = Store::new(&engine, host_state);
 

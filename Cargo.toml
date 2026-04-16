@@ -105,8 +105,8 @@ tracing-subscriber = "0.3.20"
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 wasmparser = "0.245.1"
-wasmtime = { version = "30", features = ["component-model"] }
-wasmtime-wasi = { version = "30" }
+wasmtime = { version = "41", features = ["component-model"] }
+wasmtime-wasi = { version = "41" }
 winreg = "0.56.0"
 wslpath2 = "0.1"
 zeroize = "1.8.1"

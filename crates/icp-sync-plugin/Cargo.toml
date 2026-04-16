@@ -16,6 +16,7 @@ ic-agent.workspace = true
 snafu.workspace = true
 tokio.workspace = true
 wasmtime.workspace = true
+wasmtime-wasi.workspace = true
 
 [lints]
 workspace = true

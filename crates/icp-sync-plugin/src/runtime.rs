@@ -25,6 +25,24 @@ struct HostState {
     allowed_dirs: Arc<Vec<Utf8PathBuf>>,
     base_dir: Arc<Utf8PathBuf>,
     stdio: Option<Sender<String>>,
+    // WASI context required by wasm32-wasip2 components. We provide a minimal
+    // context with no ambient authority (no env vars, no stdio, no filesystem).
+    // Plugins must use the host-provided `log`, `read_file`, and `list_dir`
+    // imports from the sync-plugin WIT world instead.
+    wasi_ctx: wasmtime_wasi::WasiCtx,
+    wasi_table: wasmtime_wasi::ResourceTable,
+}
+
+impl wasmtime_wasi::IoView for HostState {
+    fn table(&mut self) -> &mut wasmtime_wasi::ResourceTable {
+        &mut self.wasi_table
+    }
+}
+
+impl wasmtime_wasi::WasiView for HostState {
+    fn ctx(&mut self) -> &mut wasmtime_wasi::WasiCtx {
+        &mut self.wasi_ctx
+    }
 }
 
 // `types::Host` is an empty marker trait generated for the `types` interface.
@@ -161,9 +179,13 @@ pub fn run_plugin(
         allowed_dirs: Arc::new(allowed_dirs),
         base_dir: Arc::new(base_dir),
         stdio,
+        wasi_ctx: wasmtime_wasi::WasiCtxBuilder::new().build(),
+        wasi_table: wasmtime_wasi::ResourceTable::new(),
     };
 
     let mut linker: Linker<HostState> = Linker::new(&engine);
+    wasmtime_wasi::add_to_linker_sync(&mut linker)
+        .context(InstantiateSnafu { path: wasm_path.clone() })?;
     SyncPlugin::add_to_linker(&mut linker, |s| s)
         .context(InstantiateSnafu { path: wasm_path.clone() })?;
 

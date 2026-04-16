@@ -137,6 +137,14 @@ pub(crate) async fn sync_many(
                 failure.canister_name, failure.canister_id,
             );
             error!("'{}'", failure.error);
+            {
+                use std::error::Error;
+                let mut cause = failure.error.source();
+                while let Some(err) = cause {
+                    error!("  caused by: {err}");
+                    cause = err.source();
+                }
+            }
             for line in &failure.progress_output {
                 error!("{line}");
             }

@@ -16,8 +16,8 @@ use super::Params;
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {
-    #[snafu(display("failed to read plugin wasm file"))]
-    ReadWasm { source: crate::fs::IoError },
+    #[snafu(display("failed to read plugin wasm at '{path}'"))]
+    ReadWasm { source: crate::fs::IoError, path: Utf8PathBuf },
 
     #[snafu(display("failed to parse plugin url"))]
     ParseUrl { source: url::ParseError },
@@ -65,7 +65,7 @@ pub(super) async fn sync(
                     .await
                     .context(LogSnafu)?;
             }
-            let bytes = read(full_path.as_ref()).context(ReadWasmSnafu)?;
+            let bytes = read(full_path.as_ref()).context(ReadWasmSnafu { path: full_path.clone() })?;
             (bytes, full_path)
         }
 

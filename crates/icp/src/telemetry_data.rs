@@ -72,6 +72,8 @@ pub enum IdentityStorageType {
     Hsm,
     Anonymous,
     InternetIdentity,
+    PendingDelegation,
+    Delegation,
 }
 
 /// Whether the network accessed by the command is managed locally or a remote
@@ -91,6 +93,8 @@ impl From<&IdentitySpec> for IdentityStorageType {
             IdentitySpec::Hsm { .. } => Self::Hsm,
             IdentitySpec::Anonymous => Self::Anonymous,
             IdentitySpec::InternetIdentity { .. } => Self::InternetIdentity,
+            IdentitySpec::PendingDelegation { .. } => Self::PendingDelegation,
+            IdentitySpec::Delegation { .. } => Self::Delegation,
         }
     }
 }

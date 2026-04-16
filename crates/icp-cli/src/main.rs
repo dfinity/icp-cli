@@ -317,6 +317,18 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::default::exec(ctx, &args).await?
             }
 
+            commands::identity::Command::Delegation(cmd) => match cmd {
+                commands::identity::delegation::Command::Request(args) => {
+                    commands::identity::delegation::request::exec(ctx, &args).await?
+                }
+                commands::identity::delegation::Command::Sign(args) => {
+                    commands::identity::delegation::sign::exec(ctx, &args).await?
+                }
+                commands::identity::delegation::Command::Use(args) => {
+                    commands::identity::delegation::r#use::exec(ctx, &args).await?
+                }
+            },
+
             commands::identity::Command::Delete(args) => {
                 commands::identity::delete::exec(ctx, &args).await?
             }

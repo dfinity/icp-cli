@@ -173,7 +173,7 @@ pub(crate) enum IiError {
 
     #[snafu(display("failed to link II identity"))]
     Link {
-        source: key::LinkIiIdentityError,
+        source: key::CreatePendingDelegationError,
     },
 
     BadPassword {},

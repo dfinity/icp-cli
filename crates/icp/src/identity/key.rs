@@ -33,8 +33,8 @@ use crate::{
     identity::{
         IdentityPaths, delegation,
         manifest::{
-            IdentityDefaults, IdentityKeyAlgorithm, IdentityList, IdentitySpec, IiKeyStorage,
-            LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
+            DelegationKeyStorage, IdentityDefaults, IdentityKeyAlgorithm, IdentityList,
+            IdentitySpec, LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
         },
     },
     prelude::*,
@@ -129,6 +129,12 @@ pub enum LoadIdentityError {
 
     #[snafu(display("failed to convert delegation chain"))]
     DelegationConversion { source: delegation::ConversionError },
+
+    #[snafu(display(
+        "identity `{name}` has no delegation yet; \
+         run `icp identity delegation use {name}` to complete it"
+    ))]
+    DelegationNotYetProvided { name: String },
 }
 
 pub fn load_identity(
@@ -155,6 +161,10 @@ pub fn load_identity(
         } => load_hsm_identity(module, *slot, key_id, password_func),
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
         IdentitySpec::InternetIdentity {
+            algorithm, storage, ..
+        } => load_ii_identity(dirs, name, algorithm, storage, password_func),
+        IdentitySpec::PendingDelegation { .. } => DelegationNotYetProvidedSnafu { name }.fail(),
+        IdentitySpec::Delegation {
             algorithm, storage, ..
         } => load_ii_identity(dirs, name, algorithm, storage, password_func),
     }
@@ -329,7 +339,7 @@ fn load_ii_identity(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
-    storage: &IiKeyStorage,
+    storage: &DelegationKeyStorage,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     let (doc, origin) = load_ii_session_pem(dirs, name, storage)?;
@@ -351,11 +361,11 @@ fn load_ii_identity(
         delegation::to_agent_types(&stored_chain).context(DelegationConversionSnafu)?;
 
     let inner: Arc<dyn Identity> = match storage {
-        IiKeyStorage::Keyring
-        | IiKeyStorage::Pem {
+        DelegationKeyStorage::Keyring
+        | DelegationKeyStorage::Pem {
             format: PemFormat::Plaintext,
         } => load_plaintext_identity(&doc, algorithm, &origin)?,
-        IiKeyStorage::Pem {
+        DelegationKeyStorage::Pem {
             format: PemFormat::Pbes2,
         } => load_pbes2_identity(&doc, algorithm, password_func, &origin)?,
     };
@@ -374,17 +384,17 @@ pub fn load_ii_session_public_key(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
-    storage: &IiKeyStorage,
+    storage: &DelegationKeyStorage,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Vec<u8>, LoadIdentityError> {
     let (doc, origin) = load_ii_session_pem(dirs, name, storage)?;
 
     match storage {
-        IiKeyStorage::Keyring
-        | IiKeyStorage::Pem {
+        DelegationKeyStorage::Keyring
+        | DelegationKeyStorage::Pem {
             format: PemFormat::Plaintext,
         } => load_ii_public_key_plaintext(&doc, algorithm, &origin),
-        IiKeyStorage::Pem {
+        DelegationKeyStorage::Pem {
             format: PemFormat::Pbes2,
         } => {
             let pw = password_func()
@@ -397,10 +407,10 @@ pub fn load_ii_session_public_key(
 fn load_ii_session_pem(
     dirs: LRead<&IdentityPaths>,
     name: &str,
-    storage: &IiKeyStorage,
+    storage: &DelegationKeyStorage,
 ) -> Result<(Pem, PemOrigin), LoadIdentityError> {
     match storage {
-        IiKeyStorage::Keyring => {
+        DelegationKeyStorage::Keyring => {
             let username = ii_keyring_key(name);
             let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
             let pem_str = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
@@ -413,7 +423,7 @@ fn load_ii_session_pem(
                 .context(ParsePemSnafu { origin: &origin })?;
             Ok((doc, origin))
         }
-        IiKeyStorage::Pem { .. } => {
+        DelegationKeyStorage::Pem { .. } => {
             let pem_path = dirs.key_pem_path(name);
             let origin = PemOrigin::File {
                 path: pem_path.clone(),
@@ -757,6 +767,8 @@ pub fn rename_identity(
     enum OldKeyMaterial {
         Pem(PathBuf),
         Keyring(Entry),
+        DelegationKeyring(Entry),
+        DelegationPem(PathBuf),
         IiKeyringAndDelegation(Entry, PathBuf),
         IiPemAndDelegation(PathBuf, PathBuf),
         None,
@@ -796,7 +808,7 @@ pub fn rename_identity(
             fs::write(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
 
             match storage {
-                IiKeyStorage::Keyring => {
+                DelegationKeyStorage::Keyring => {
                     let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
                         .context(LoadKeyringEntrySnafu { name: old_name })?;
                     let password = old_entry
@@ -809,7 +821,7 @@ pub fn rename_identity(
                         .context(SetKeyringEntryPasswordSnafu { new_name })?;
                     OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
                 }
-                IiKeyStorage::Pem { .. } => {
+                DelegationKeyStorage::Pem { .. } => {
                     let old_pem = dirs.key_pem_path(old_name);
                     let new_pem = dirs.key_pem_path(new_name);
                     let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
@@ -824,6 +836,59 @@ pub fn rename_identity(
         }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
+        }
+        IdentitySpec::PendingDelegation { storage, .. } => match storage {
+            DelegationKeyStorage::Keyring => {
+                let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                    .context(LoadKeyringEntrySnafu { name: old_name })?;
+                let password = old_entry
+                    .get_password()
+                    .context(ReadKeyringEntrySnafu { name: old_name })?;
+                let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                    .context(CreateKeyringEntrySnafu { new_name })?;
+                new_entry
+                    .set_password(&password)
+                    .context(SetKeyringEntryPasswordSnafu { new_name })?;
+                OldKeyMaterial::DelegationKeyring(old_entry)
+            }
+            DelegationKeyStorage::Pem { .. } => {
+                let old_pem = dirs.key_pem_path(old_name);
+                let new_pem = dirs.key_pem_path(new_name);
+                let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
+                fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+                OldKeyMaterial::DelegationPem(old_pem)
+            }
+        },
+        IdentitySpec::Delegation { storage, .. } => {
+            let old_delegation = dirs.delegation_chain_path(old_name);
+            let new_delegation = dirs
+                .ensure_delegation_chain_path(new_name)
+                .context(CopyKeyFileSnafu)?;
+            let delegation_contents = fs::read(&old_delegation).context(CopyKeyFileSnafu)?;
+            fs::write(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
+
+            match storage {
+                DelegationKeyStorage::Keyring => {
+                    let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                        .context(LoadKeyringEntrySnafu { name: old_name })?;
+                    let password = old_entry
+                        .get_password()
+                        .context(ReadKeyringEntrySnafu { name: old_name })?;
+                    let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                        .context(CreateKeyringEntrySnafu { new_name })?;
+                    new_entry
+                        .set_password(&password)
+                        .context(SetKeyringEntryPasswordSnafu { new_name })?;
+                    OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
+                }
+                DelegationKeyStorage::Pem { .. } => {
+                    let old_pem = dirs.key_pem_path(old_name);
+                    let new_pem = dirs.key_pem_path(new_name);
+                    let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
+                    fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+                    OldKeyMaterial::IiPemAndDelegation(old_pem, old_delegation)
+                }
+            }
         }
     };
 
@@ -847,6 +912,14 @@ pub fn rename_identity(
             entry
                 .delete_credential()
                 .context(DeleteKeyringEntrySnafu { old_name })?;
+        }
+        OldKeyMaterial::DelegationKeyring(old_entry) => {
+            old_entry
+                .delete_credential()
+                .context(DeleteKeyringEntrySnafu { old_name })?;
+        }
+        OldKeyMaterial::DelegationPem(old_pem) => {
+            fs::remove_file(&old_pem).context(DeleteOldKeyFileSnafu)?;
         }
         OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation) => {
             old_entry
@@ -944,14 +1017,14 @@ pub fn delete_identity(
         }
         IdentitySpec::InternetIdentity { storage, .. } => {
             match storage {
-                IiKeyStorage::Keyring => {
+                DelegationKeyStorage::Keyring => {
                     let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
                         .context(LoadKeyringEntryForDeleteSnafu { name })?;
                     entry
                         .delete_credential()
                         .context(DeleteKeyringEntryForDeleteSnafu { name })?;
                 }
-                IiKeyStorage::Pem { .. } => {
+                DelegationKeyStorage::Pem { .. } => {
                     let pem_path = dirs.key_pem_path(name);
                     fs::remove_file(&pem_path)?;
                 }
@@ -964,6 +1037,36 @@ pub fn delete_identity(
         }
         IdentitySpec::Anonymous => {
             unreachable!("anonymous identity should have been rejected above")
+        }
+        IdentitySpec::PendingDelegation { storage, .. } => match storage {
+            DelegationKeyStorage::Keyring => {
+                let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                    .context(LoadKeyringEntryForDeleteSnafu { name })?;
+                entry
+                    .delete_credential()
+                    .context(DeleteKeyringEntryForDeleteSnafu { name })?;
+            }
+            DelegationKeyStorage::Pem { .. } => {
+                let pem_path = dirs.key_pem_path(name);
+                fs::remove_file(&pem_path)?;
+            }
+        },
+        IdentitySpec::Delegation { storage, .. } => {
+            match storage {
+                DelegationKeyStorage::Keyring => {
+                    let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                        .context(LoadKeyringEntryForDeleteSnafu { name })?;
+                    entry
+                        .delete_credential()
+                        .context(DeleteKeyringEntryForDeleteSnafu { name })?;
+                }
+                DelegationKeyStorage::Pem { .. } => {
+                    let pem_path = dirs.key_pem_path(name);
+                    fs::remove_file(&pem_path)?;
+                }
+            }
+            let delegation_path = dirs.delegation_chain_path(name);
+            fs::remove_file(&delegation_path)?;
         }
     }
 
@@ -1023,7 +1126,7 @@ pub fn link_hsm_identity(
 }
 
 #[derive(Debug, Snafu)]
-pub enum LinkIiIdentityError {
+pub enum CreatePendingDelegationError {
     #[snafu(transparent)]
     LoadIdentityManifest { source: LoadIdentityManifestError },
 
@@ -1031,31 +1134,31 @@ pub enum LinkIiIdentityError {
     WriteIdentityManifest { source: WriteIdentityManifestError },
 
     #[snafu(display("identity `{name}` already exists"))]
-    IiNameTaken { name: String },
+    DlgNameTaken { name: String },
 
-    #[snafu(display("failed to create II session key keyring entry"))]
-    CreateIiKeyringEntry { source: keyring::Error },
+    #[snafu(display("failed to create session key keyring entry"))]
+    DlgCreateKeyringEntry { source: keyring::Error },
 
-    #[snafu(display("failed to store II session key in keyring"))]
-    SetIiKeyringEntryPassword { source: keyring::Error },
+    #[snafu(display("failed to store session key in keyring"))]
+    DlgSetKeyringEntryPassword { source: keyring::Error },
 
     #[cfg(target_os = "linux")]
     #[snafu(display(
         "no keyring available - have you set it up? gnome-keyring must be installed and configured with a default keyring."
     ))]
-    NoIiKeyring,
+    DlgNoKeyring,
 
-    #[snafu(display("failed to write II session key PEM file for `{name}`"))]
-    WriteIiPemFile {
+    #[snafu(display("failed to write session key PEM file for `{name}`"))]
+    DlgWritePemFile {
         name: String,
         source: crate::fs::IoError,
     },
 
     #[snafu(display("failed to create delegation directory"))]
-    CreateIiDelegationDir { source: crate::fs::IoError },
+    DlgCreateDelegationDir { source: crate::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
-    SaveIiDelegation {
+    DlgSaveDelegation {
         path: PathBuf,
         source: delegation::SaveError,
     },
@@ -1073,11 +1176,11 @@ pub fn link_ii_identity(
     principal: ic_agent::export::Principal,
     create_format: CreateFormat,
     host: Url,
-) -> Result<(), LinkIiIdentityError> {
+) -> Result<(), CreatePendingDelegationError> {
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
         !identity_list.identities.contains_key(name),
-        IiNameTakenSnafu { name }
+        DlgNameTakenSnafu { name }
     );
 
     let algorithm = match &key {
@@ -1101,16 +1204,16 @@ pub fn link_ii_identity(
                 .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
-                .context(CreateIiKeyringEntrySnafu)?;
+                .context(DlgCreateKeyringEntrySnafu)?;
             let res = entry.set_password(&pem);
             #[cfg(target_os = "linux")]
             if let Err(keyring::Error::NoStorageAccess(err)) = &res
                 && err.to_string().contains("no result found")
             {
-                return NoIiKeyringSnafu.fail()?;
+                return DlgNoKeyringSnafu.fail()?;
             }
-            res.context(SetIiKeyringEntryPasswordSnafu)?;
-            IiKeyStorage::Keyring
+            res.context(DlgSetKeyringEntryPasswordSnafu)?;
+            DelegationKeyStorage::Keyring
         }
         CreateFormat::Plaintext => {
             let pem = doc
@@ -1118,9 +1221,9 @@ pub fn link_ii_identity(
                 .expect("infallible PKI encoding");
             let pem_path = dirs
                 .ensure_key_pem_path(name)
-                .context(WriteIiPemFileSnafu { name })?;
-            fs::write_string(&pem_path, &pem).context(WriteIiPemFileSnafu { name })?;
-            IiKeyStorage::Pem {
+                .context(DlgWritePemFileSnafu { name })?;
+            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            DelegationKeyStorage::Pem {
                 format: PemFormat::Plaintext,
             }
         }
@@ -1128,9 +1231,9 @@ pub fn link_ii_identity(
             let pem = make_pkcs5_encrypted_pem(&doc, password.as_str());
             let pem_path = dirs
                 .ensure_key_pem_path(name)
-                .context(WriteIiPemFileSnafu { name })?;
-            fs::write_string(&pem_path, &pem).context(WriteIiPemFileSnafu { name })?;
-            IiKeyStorage::Pem {
+                .context(DlgWritePemFileSnafu { name })?;
+            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            DelegationKeyStorage::Pem {
                 format: PemFormat::Pbes2,
             }
         }
@@ -1138,8 +1241,8 @@ pub fn link_ii_identity(
 
     let delegation_path = dirs
         .ensure_delegation_chain_path(name)
-        .context(CreateIiDelegationDirSnafu)?;
-    delegation::save(&delegation_path, chain).context(SaveIiDelegationSnafu {
+        .context(DlgCreateDelegationDirSnafu)?;
+    delegation::save(&delegation_path, chain).context(DlgSaveDelegationSnafu {
         path: &delegation_path,
     })?;
 
@@ -1203,6 +1306,151 @@ pub fn update_ii_delegation(
     Ok(())
 }
 
+/// Creates a new pending delegation identity with a fresh P256 session key.
+///
+/// Stores the session key according to `create_format` and registers the identity
+/// as `PendingDelegation`. Returns the DER-encoded SPKI public key to hand to a
+/// signer via `icp identity delegation sign --key-pem`.
+pub fn create_pending_delegation(
+    dirs: LWrite<&IdentityPaths>,
+    name: &str,
+    create_format: CreateFormat,
+) -> Result<Vec<u8>, CreatePendingDelegationError> {
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
+    ensure!(
+        !identity_list.identities.contains_key(name),
+        DlgNameTakenSnafu { name }
+    );
+
+    let mut key_bytes = Zeroizing::new([0u8; 32]);
+    rand::rng().fill_bytes(key_bytes.as_mut());
+    let key = p256::SecretKey::from_slice(&key_bytes[..])
+        .expect("random 32 bytes are a valid p256 scalar");
+    let identity = Prime256v1Identity::from_private_key(key.clone());
+    let der_public_key = identity.public_key().expect("p256 always has a public key");
+
+    let doc = key.to_pkcs8_der().expect("infallible PKI encoding");
+
+    let storage = match &create_format {
+        CreateFormat::Keyring => {
+            let pem = doc
+                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .expect("infallible PKI encoding");
+            let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                .context(DlgCreateKeyringEntrySnafu)?;
+            let res = entry.set_password(&pem);
+            #[cfg(target_os = "linux")]
+            if let Err(keyring::Error::NoStorageAccess(err)) = &res
+                && err.to_string().contains("no result found")
+            {
+                return DlgNoKeyringSnafu.fail()?;
+            }
+            res.context(DlgSetKeyringEntryPasswordSnafu)?;
+            DelegationKeyStorage::Keyring
+        }
+        CreateFormat::Plaintext => {
+            let pem = doc
+                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .expect("infallible PKI encoding");
+            let pem_path = dirs
+                .ensure_key_pem_path(name)
+                .context(DlgWritePemFileSnafu { name })?;
+            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            DelegationKeyStorage::Pem {
+                format: PemFormat::Plaintext,
+            }
+        }
+        CreateFormat::Pbes2 { password } => {
+            let pem = make_pkcs5_encrypted_pem(&doc, password.as_str());
+            let pem_path = dirs
+                .ensure_key_pem_path(name)
+                .context(DlgWritePemFileSnafu { name })?;
+            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            DelegationKeyStorage::Pem {
+                format: PemFormat::Pbes2,
+            }
+        }
+    };
+
+    let spec = IdentitySpec::PendingDelegation {
+        algorithm: IdentityKeyAlgorithm::Prime256v1,
+        storage,
+    };
+    identity_list.identities.insert(name.to_string(), spec);
+    identity_list.write_to(dirs)?;
+
+    Ok(der_public_key)
+}
+
+#[derive(Debug, Snafu)]
+pub enum CompleteDelegationError {
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    WriteIdentityManifest { source: WriteIdentityManifestError },
+
+    #[snafu(display("no identity found with name `{name}`"))]
+    DelegationIdentityNotFound { name: String },
+
+    #[snafu(display("identity `{name}` is not a pending delegation"))]
+    IdentityNotPending { name: String },
+
+    #[snafu(display("invalid public key in delegation chain"))]
+    DecodeDelegationChainKey { source: hex::FromHexError },
+
+    #[snafu(display("failed to create delegation directory"))]
+    CreateDelegationChainDir { source: crate::fs::IoError },
+
+    #[snafu(display("failed to save delegation chain to `{path}`"))]
+    SaveDelegationChain {
+        path: PathBuf,
+        source: delegation::SaveError,
+    },
+}
+
+/// Completes a `PendingDelegation` identity by attaching a signed delegation chain.
+///
+/// Updates the identity spec to `Delegation` with the root principal derived from
+/// `chain.public_key`. After this call the identity is usable for signing.
+/// Returns the storage mode so callers can warn about plaintext storage.
+pub fn complete_delegation(
+    dirs: LWrite<&IdentityPaths>,
+    name: &str,
+    chain: &delegation::DelegationChain,
+) -> Result<DelegationKeyStorage, CompleteDelegationError> {
+    let mut identity_list = IdentityList::load_from(dirs.read())?;
+    let spec = identity_list
+        .identities
+        .get(name)
+        .context(DelegationIdentityNotFoundSnafu { name })?;
+
+    let (algorithm, storage) = match spec {
+        IdentitySpec::PendingDelegation { algorithm, storage } => (algorithm.clone(), *storage),
+        _ => return IdentityNotPendingSnafu { name }.fail(),
+    };
+
+    let from_key = hex::decode(&chain.public_key).context(DecodeDelegationChainKeySnafu)?;
+    let principal = ic_agent::export::Principal::self_authenticating(&from_key);
+
+    let delegation_path = dirs
+        .ensure_delegation_chain_path(name)
+        .context(CreateDelegationChainDirSnafu)?;
+    delegation::save(&delegation_path, chain).context(SaveDelegationChainSnafu {
+        path: &delegation_path,
+    })?;
+
+    let new_spec = IdentitySpec::Delegation {
+        algorithm,
+        principal,
+        storage,
+    };
+    identity_list.identities.insert(name.to_string(), new_spec);
+    identity_list.write_to(dirs)?;
+
+    Ok(storage)
+}
+
 fn encrypt_pki(pki: &PrivateKeyInfo<'_>, password: &str) -> Zeroizing<String> {
     let mut salt = [0; 16];
     let mut iv = [0; 16];
@@ -1249,6 +1497,9 @@ pub enum ExportIdentityError {
 
     #[snafu(display("cannot export an Internet Identity-backed identity"))]
     CannotExportInternetIdentity,
+
+    #[snafu(display("cannot export a delegation identity"))]
+    CannotExportDelegation,
 
     #[snafu(display("failed to read PEM file"))]
     ReadPemFileForExport { source: fs::IoError },
@@ -1355,6 +1606,9 @@ pub fn export_identity(
         IdentitySpec::Anonymous => return CannotExportAnonymousSnafu.fail(),
         IdentitySpec::Hsm { .. } => return CannotExportHsmSnafu.fail(),
         IdentitySpec::InternetIdentity { .. } => return CannotExportInternetIdentitySnafu.fail(),
+        IdentitySpec::PendingDelegation { .. } | IdentitySpec::Delegation { .. } => {
+            return CannotExportDelegationSnafu.fail();
+        }
     };
 
     match export_format {

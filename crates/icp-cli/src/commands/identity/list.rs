@@ -65,7 +65,10 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
         .unwrap_or(0);
 
     for (name, id) in sorted_identities.iter() {
-        let principal = id.principal();
+        let principal = id
+            .principal()
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "(pending delegation)".to_string());
         let padded_name = format!("{name: <longest_identity_name_length$}");
         if **name == defaults.default {
             println!("* {padded_name} {principal}");
@@ -86,5 +89,5 @@ struct JsonIdentityList {
 #[derive(Serialize)]
 struct JsonIdentity {
     name: String,
-    principal: Principal,
+    principal: Option<Principal>,
 }

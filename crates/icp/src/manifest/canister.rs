@@ -768,6 +768,7 @@ mod tests {
                                 }),
                                 sha256: None,
                                 dirs: Some(vec!["assets/seed-data/".to_string()]),
+                                files: None,
                             }
                         )]
                     }),
@@ -811,6 +812,7 @@ mod tests {
                                     .to_string()
                             ),
                             dirs: None,
+                            files: None,
                         })]
                     }),
                 },

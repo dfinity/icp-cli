@@ -5,12 +5,28 @@ interface types {
     /// Whether a canister call is an update or a query.
     enum call-type { update, query }
 
+    /// A file the host read on behalf of the plugin.
+    record file-input {
+        /// Path of the file as declared in the manifest (relative to
+        /// the canister directory).
+        name: string,
+        /// UTF-8 contents of the file.
+        content: string,
+    }
+
     /// Input passed by the runtime to the plugin's exec() export.
     record sync-exec-input {
         /// Textual principal of the canister being synced.
         canister-id: string,
         /// Name of the environment being synced (e.g. "production", "local").
         environment: string,
+        /// Directories declared in the manifest step's `dirs` setting.
+        /// The host preopens each entry via WASI; the plugin can traverse
+        /// them with standard `wasi:filesystem` (e.g. Rust's `std::fs`).
+        dirs: list<string>,
+        /// Files declared in the manifest step's `files` setting, read by
+        /// the host and passed inline. The plugin decides how to use them.
+        files: list<file-input>,
     }
 
     /// A request to call a method on the target canister.
@@ -22,19 +38,11 @@ interface types {
         /// Defaults to update if omitted.
         call-type: option<call-type>,
     }
-
-    /// A single entry returned by list-dir.
-    record dir-entry {
-        /// File or directory name (not a full path).
-        name: string,
-        /// True if the entry is a directory; false if it is a file.
-        is-dir: bool,
-    }
 }
 
 /// The complete interface of a sync plugin.
 world sync-plugin {
-    use types.{sync-exec-input, canister-call-request, dir-entry};
+    use types.{sync-exec-input, canister-call-request, file-input};
 
     // -------------------------------------------------------------------------
     // Host functions (imports) — provided by icp-cli, called by the plugin
@@ -45,16 +53,6 @@ world sync-plugin {
     /// the plugin does not choose the target.
     /// Returns Candid IDL text on success or an error message on failure.
     import canister-call: func(req: canister-call-request) -> result<string, string>;
-
-    /// Read a UTF-8 file from the host filesystem.
-    /// The host enforces that the path falls within a declared `dirs` entry.
-    /// Returns the file contents or an error message.
-    import read-file: func(path: string) -> result<string, string>;
-
-    /// List one level of entries in a host filesystem directory.
-    /// The host enforces the same `dirs` allowlist as read-file.
-    /// Returns directory entries or an error message.
-    import list-dir: func(path: string) -> result<list<dir-entry>, string>;
 
     /// Print a message to the CLI's progress output.
     import log: func(message: string);

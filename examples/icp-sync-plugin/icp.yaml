@@ -19,4 +19,6 @@ canisters:
           # Build it first: cd ../../sync-plugin/poc && cargo build --target wasm32-wasip2 --release
           path: ../../sync-plugin/poc/target/wasm32-wasip2/release/icp_sync_plugin_poc.wasm
           dirs:
-            - seed-data/
+            - seed-data
+          files:
+            - config.txt

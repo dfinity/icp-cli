@@ -1,23 +1,27 @@
 use std::cell::RefCell;
 
 thread_local! {
-    static ITEMS: RefCell<Vec<(String, String)>> = RefCell::default();
+    static CONFIG: RefCell<String> = RefCell::default();
+    static FRUITS: RefCell<Vec<(String, String)>> = RefCell::default();
 }
 
-// Add a (name, content) pair to the store (called by the sync plugin for each seed file).
+// Upload the config value (called once by the sync plugin).
 #[ic_cdk::update]
-fn seed(name: String, content: String) {
-    ITEMS.with_borrow_mut(|items| items.push((name, content)));
+fn set_config(value: String) {
+    CONFIG.with_borrow_mut(|c| *c = value);
 }
 
-// Return all stored (name, content) pairs.
-#[ic_cdk::query]
-fn list() -> Vec<(String, String)> {
-    ITEMS.with_borrow(|items| items.clone())
+// Register a (name, content) fruit pair (called by the sync plugin for each file).
+#[ic_cdk::update]
+fn register(name: String, content: String) {
+    FRUITS.with_borrow_mut(|f| f.push((name, content)));
 }
 
-// Return the number of stored items.
+// Return the stored config and every registered fruit.
 #[ic_cdk::query]
-fn count_items() -> u64 {
-    ITEMS.with_borrow(|items| items.len() as u64)
+fn show() -> (String, Vec<(String, String)>) {
+    (
+        CONFIG.with_borrow(|c| c.clone()),
+        FRUITS.with_borrow(|f| f.clone()),
+    )
 }

@@ -8,27 +8,22 @@ use candid::Principal;
 use ic_agent::Agent;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
-
-use crate::sandbox::is_path_allowed;
+use wasmtime_wasi::{DirPerms, FilePerms};
 
 wasmtime::component::bindgen!({
     world: "sync-plugin",
     path: "../../sync-plugin/sync-plugin.wit",
 });
 
-use icp::sync_plugin::types::CallType;
+use icp::sync_plugin::types::{CallType, FileInput};
 
 // HostState holds everything the plugin's import functions need.
 struct HostState {
     target_canister_id: Principal,
     agent: Arc<Agent>,
-    allowed_dirs: Arc<Vec<Utf8PathBuf>>,
-    base_dir: Arc<Utf8PathBuf>,
     stdio: Option<Sender<String>>,
-    // WASI context required by wasm32-wasip2 components. We provide a minimal
-    // context with no ambient authority (no env vars, no stdio, no filesystem).
-    // Plugins must use the host-provided `log`, `read_file`, and `list_dir`
-    // imports from the sync-plugin WIT world instead.
+    // WASI context. Preopened directories in this context are the only
+    // filesystem locations the plugin can access.
     wasi_ctx: wasmtime_wasi::WasiCtx,
     wasi_table: wasmtime_wasi::ResourceTable,
 }
@@ -66,13 +61,7 @@ impl SyncPluginImports for HostState {
             .block_on(async move {
                 match call_type {
                     CallType::Update => agent.update(&cid, &method).with_arg(arg_bytes).await,
-                    CallType::Query => {
-                        agent
-                            .query(&cid, &method)
-                            .with_arg(arg_bytes)
-                            .call()
-                            .await
-                    }
+                    CallType::Query => agent.query(&cid, &method).with_arg(arg_bytes).call().await,
                 }
             })
             .map_err(|e| format!("canister call failed: {e}"))?;
@@ -80,50 +69,6 @@ impl SyncPluginImports for HostState {
         candid::IDLArgs::from_bytes(&result)
             .map(|args| args.to_string())
             .map_err(|e| format!("failed to decode canister response: {e}"))
-    }
-
-    fn read_file(&mut self, path: String) -> Result<String, String> {
-        let full_path = self.base_dir.join(&path);
-        let canon_std = std::fs::canonicalize(full_path.as_std_path())
-            .map_err(|e| format!("failed to resolve path '{path}': {e}"))?;
-        let canon = Utf8PathBuf::from_path_buf(canon_std)
-            .map_err(|p| format!("path is not valid UTF-8: {}", p.display()))?;
-
-        if !is_path_allowed(&canon, &self.allowed_dirs) {
-            return Err(format!(
-                "access denied: '{path}' is outside the declared dirs allowlist"
-            ));
-        }
-
-        std::fs::read_to_string(canon.as_std_path())
-            .map_err(|e| format!("failed to read file '{path}': {e}"))
-    }
-
-    fn list_dir(&mut self, path: String) -> Result<Vec<DirEntry>, String> {
-        let full_path = self.base_dir.join(&path);
-        let canon_std = std::fs::canonicalize(full_path.as_std_path())
-            .map_err(|e| format!("failed to resolve path '{path}': {e}"))?;
-        let canon = Utf8PathBuf::from_path_buf(canon_std)
-            .map_err(|p| format!("path is not valid UTF-8: {}", p.display()))?;
-
-        if !is_path_allowed(&canon, &self.allowed_dirs) {
-            return Err(format!(
-                "access denied: '{path}' is outside the declared dirs allowlist"
-            ));
-        }
-
-        std::fs::read_dir(canon.as_std_path())
-            .map_err(|e| format!("failed to read directory '{path}': {e}"))?
-            .map(|entry| {
-                let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                let is_dir = entry
-                    .file_type()
-                    .map_err(|e| format!("failed to get file type for '{name}': {e}"))?
-                    .is_dir();
-                Ok(DirEntry { name, is_dir })
-            })
-            .collect()
     }
 
     fn log(&mut self, message: String) {
@@ -136,16 +81,34 @@ impl SyncPluginImports for HostState {
 #[derive(Debug, Snafu)]
 pub enum RunPluginError {
     #[snafu(display("failed to create wasmtime engine for plugin at {path}"))]
-    CreateEngine { source: anyhow::Error, path: Utf8PathBuf },
+    CreateEngine {
+        source: anyhow::Error,
+        path: Utf8PathBuf,
+    },
 
     #[snafu(display("failed to load wasm component from {path}"))]
-    LoadComponent { source: anyhow::Error, path: Utf8PathBuf },
+    LoadComponent {
+        source: anyhow::Error,
+        path: Utf8PathBuf,
+    },
+
+    #[snafu(display("failed to preopen directory '{dir}' for the plugin"))]
+    PreopenDir {
+        source: anyhow::Error,
+        dir: Utf8PathBuf,
+    },
 
     #[snafu(display("failed to instantiate wasm component at {path}"))]
-    Instantiate { source: anyhow::Error, path: Utf8PathBuf },
+    Instantiate {
+        source: anyhow::Error,
+        path: Utf8PathBuf,
+    },
 
     #[snafu(display("failed to call exec() on plugin at {path}"))]
-    CallExec { source: anyhow::Error, path: Utf8PathBuf },
+    CallExec {
+        source: anyhow::Error,
+        path: Utf8PathBuf,
+    },
 
     #[snafu(display("plugin returned error: {message}"))]
     PluginFailed { message: String },
@@ -154,7 +117,8 @@ pub enum RunPluginError {
 pub fn run_plugin(
     wasm_path: Utf8PathBuf,
     base_dir: Utf8PathBuf,
-    allowed_dirs: Vec<Utf8PathBuf>,
+    dirs: Vec<String>,
+    files: Vec<(String, String)>,
     target_canister_id: Principal,
     agent: Agent,
     environment: String,
@@ -165,38 +129,61 @@ pub fn run_plugin(
 
     let mut config = Config::new();
     config.wasm_component_model(true);
-    let engine =
-        Engine::new(&config).context(CreateEngineSnafu { path: wasm_path.clone() })?;
+    let engine = Engine::new(&config).context(CreateEngineSnafu {
+        path: wasm_path.clone(),
+    })?;
 
-    let component = Component::from_file(&engine, wasm_path.as_std_path())
-        .context(LoadComponentSnafu { path: wasm_path.clone() })?;
+    let component =
+        Component::from_file(&engine, wasm_path.as_std_path()).context(LoadComponentSnafu {
+            path: wasm_path.clone(),
+        })?;
 
-    let canister_id_text = target_canister_id.to_text();
+    // Preopen each declared directory read-only. The guest sees it at the
+    // same relative path it used in the manifest.
+    let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
+    for dir in &dirs {
+        let host_path = base_dir.join(dir);
+        wasi_builder
+            .preopened_dir(
+                host_path.as_std_path(),
+                dir,
+                DirPerms::READ,
+                FilePerms::READ,
+            )
+            .context(PreopenDirSnafu { dir: host_path })?;
+    }
 
     let host_state = HostState {
         target_canister_id,
         agent: Arc::new(agent),
-        allowed_dirs: Arc::new(allowed_dirs),
-        base_dir: Arc::new(base_dir),
         stdio,
-        wasi_ctx: wasmtime_wasi::WasiCtxBuilder::new().build(),
+        wasi_ctx: wasi_builder.build(),
         wasi_table: wasmtime_wasi::ResourceTable::new(),
     };
 
     let mut linker: Linker<HostState> = Linker::new(&engine);
-    wasmtime_wasi::add_to_linker_sync(&mut linker)
-        .context(InstantiateSnafu { path: wasm_path.clone() })?;
-    SyncPlugin::add_to_linker(&mut linker, |s| s)
-        .context(InstantiateSnafu { path: wasm_path.clone() })?;
+    wasmtime_wasi::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
+        path: wasm_path.clone(),
+    })?;
+    SyncPlugin::add_to_linker(&mut linker, |s| s).context(InstantiateSnafu {
+        path: wasm_path.clone(),
+    })?;
 
     let mut store = Store::new(&engine, host_state);
 
-    let plugin = SyncPlugin::instantiate(&mut store, &component, &linker)
-        .context(InstantiateSnafu { path: wasm_path.clone() })?;
+    let plugin =
+        SyncPlugin::instantiate(&mut store, &component, &linker).context(InstantiateSnafu {
+            path: wasm_path.clone(),
+        })?;
 
     let input = SyncExecInput {
-        canister_id: canister_id_text,
+        canister_id: target_canister_id.to_text(),
         environment,
+        dirs,
+        files: files
+            .into_iter()
+            .map(|(name, content)| FileInput { name, content })
+            .collect(),
     };
 
     let result = plugin

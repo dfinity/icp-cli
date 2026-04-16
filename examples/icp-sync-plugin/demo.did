@@ -1,5 +1,5 @@
 service : {
-  seed : (text, text) -> ();
-  list : () -> (vec record { text; text }) query;
-  count_items : () -> (nat64) query;
+  set_config : (text) -> ();
+  register : (text, text) -> ();
+  show : () -> (text, vec record { text; text }) query;
 }

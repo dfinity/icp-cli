@@ -8,7 +8,7 @@ use tokio::sync::mpsc::Sender;
 use url::Url;
 
 use crate::{
-    fs::{read, write},
+    fs::{read, read_to_string, write},
     manifest::adapter::{plugin::Adapter, prebuilt::SourceField},
 };
 
@@ -17,7 +17,16 @@ use super::Params;
 #[derive(Debug, Snafu)]
 pub enum PluginError {
     #[snafu(display("failed to read plugin wasm at '{path}'"))]
-    ReadWasm { source: crate::fs::IoError, path: Utf8PathBuf },
+    ReadWasm {
+        source: crate::fs::IoError,
+        path: Utf8PathBuf,
+    },
+
+    #[snafu(display("failed to read plugin input file at '{path}'"))]
+    ReadFile {
+        source: crate::fs::IoError,
+        path: Utf8PathBuf,
+    },
 
     #[snafu(display("failed to parse plugin url"))]
     ParseUrl { source: url::ParseError },
@@ -36,9 +45,6 @@ pub enum PluginError {
 
     #[snafu(display("plugin wasm checksum mismatch, expected: {expected}, actual: {actual}"))]
     ChecksumMismatch { expected: String, actual: String },
-
-    #[snafu(display("failed to canonicalize allowed dir '{dir}'"))]
-    CanonicalizeDirs { source: std::io::Error, dir: String },
 
     #[snafu(display("failed to run plugin"))]
     Run { source: RunPluginError },
@@ -65,7 +71,9 @@ pub(super) async fn sync(
                     .await
                     .context(LogSnafu)?;
             }
-            let bytes = read(full_path.as_ref()).context(ReadWasmSnafu { path: full_path.clone() })?;
+            let bytes = read(full_path.as_ref()).context(ReadWasmSnafu {
+                path: full_path.clone(),
+            })?;
             (bytes, full_path)
         }
 
@@ -117,23 +125,17 @@ pub(super) async fn sync(
         }
     }
 
-    // 3. Canonicalize declared dirs relative to the canister directory.
+    // 3. Collect inputs: `dirs` stays as manifest strings (runtime preopens them),
+    //    `files` are read on the host and passed inline.
     let base_dir = Utf8PathBuf::from(params.path.as_str());
-    let allowed_dirs: Vec<Utf8PathBuf> = adapter
-        .dirs
-        .as_deref()
-        .unwrap_or(&[])
-        .iter()
-        .map(|d| {
-            let abs = params.path.join(d);
-            std::fs::canonicalize(abs.as_std_path())
-                .context(CanonicalizeDirsSnafu { dir: d.clone() })
-                .map(|p| {
-                    Utf8PathBuf::from_path_buf(p)
-                        .unwrap_or_else(|p| Utf8PathBuf::from(p.to_string_lossy().as_ref()))
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
+
+    let mut files: Vec<(String, String)> = Vec::new();
+    for name in adapter.files.as_deref().unwrap_or(&[]) {
+        let abs = params.path.join(name);
+        let content = read_to_string(abs.as_ref()).context(ReadFileSnafu { path: abs })?;
+        files.push((name.clone(), content));
+    }
 
     // 4. Run the plugin (blocking call — signal Tokio that this thread will block).
     let wasm_path_buf = Utf8PathBuf::from(wasm_path.as_str());
@@ -145,7 +147,8 @@ pub(super) async fn sync(
         run_plugin(
             wasm_path_buf,
             base_dir,
-            allowed_dirs,
+            dirs,
+            files,
             params.cid,
             agent_clone,
             environment_owned,

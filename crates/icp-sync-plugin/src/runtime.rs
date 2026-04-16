@@ -44,11 +44,8 @@ impl wasmtime_wasi::WasiView for HostState {
 impl icp::sync_plugin::types::Host for HostState {}
 
 impl SyncPluginImports for HostState {
-    fn canister_call(&mut self, req: CanisterCallRequest) -> Result<String, String> {
-        let arg_bytes = candid_parser::parse_idl_args(&req.arg)
-            .map_err(|e| format!("failed to parse Candid arg: {e}"))?
-            .to_bytes()
-            .map_err(|e| format!("failed to encode Candid arg: {e}"))?;
+    fn canister_call(&mut self, req: CanisterCallRequest) -> Result<Vec<u8>, String> {
+        let arg_bytes = req.arg;
 
         let cid = self.target_canister_id;
         let method = req.method.clone();
@@ -57,18 +54,14 @@ impl SyncPluginImports for HostState {
 
         // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
         // so blocking the thread here is safe.
-        let result = tokio::runtime::Handle::current()
+        tokio::runtime::Handle::current()
             .block_on(async move {
                 match call_type {
                     CallType::Update => agent.update(&cid, &method).with_arg(arg_bytes).await,
                     CallType::Query => agent.query(&cid, &method).with_arg(arg_bytes).call().await,
                 }
             })
-            .map_err(|e| format!("canister call failed: {e}"))?;
-
-        candid::IDLArgs::from_bytes(&result)
-            .map(|args| args.to_string())
-            .map_err(|e| format!("failed to decode canister response: {e}"))
+            .map_err(|e| format!("canister call failed: {e}"))
     }
 
     fn log(&mut self, message: String) {

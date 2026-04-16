@@ -10,7 +10,6 @@ publish.workspace = true
 anyhow.workspace = true
 camino.workspace = true
 candid.workspace = true
-candid_parser.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
 snafu.workspace = true

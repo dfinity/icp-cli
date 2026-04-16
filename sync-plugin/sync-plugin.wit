@@ -33,8 +33,9 @@ interface types {
     record canister-call-request {
         /// The canister method to call.
         method: string,
-        /// Candid IDL text notation, e.g. `("hello")`.
-        arg: string,
+        /// Candid-encoded argument bytes. The plugin is responsible for
+        /// encoding; the host forwards these bytes unchanged.
+        arg: list<u8>,
         /// Defaults to update if omitted.
         call-type: option<call-type>,
     }
@@ -51,8 +52,9 @@ world sync-plugin {
     /// Make an update or query call to the canister being synced.
     /// The host always calls the canister from sync-exec-input.canister-id;
     /// the plugin does not choose the target.
-    /// Returns Candid IDL text on success or an error message on failure.
-    import canister-call: func(req: canister-call-request) -> result<string, string>;
+    /// Returns the raw Candid-encoded response bytes on success or an error
+    /// message on failure. The plugin is responsible for decoding.
+    import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
 
     /// Print a message to the CLI's progress output.
     import log: func(message: string);

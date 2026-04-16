@@ -3843,7 +3843,6 @@ dependencies = [
  "anyhow",
  "camino",
  "candid",
- "candid_parser",
  "hex",
  "ic-agent",
  "snafu",

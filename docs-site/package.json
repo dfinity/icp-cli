@@ -17,6 +17,8 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
+    "@fontsource/inter": "^5.1.1",
+    "@resvg/resvg-js": "^2.6.2",
     "rehype-external-links": "^3.0.0",
     "typescript": "^5.7.3",
     "unist-util-visit": "^5.1.0"

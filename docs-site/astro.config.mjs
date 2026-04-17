@@ -4,6 +4,8 @@ import rehypeExternalLinks from 'rehype-external-links';
 import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
 import agentDocs from './plugins/astro-agent-docs.mjs';
 
+const SITE = process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org';
+
 // https://astro.build/config
 export default defineConfig({
   site: process.env.PUBLIC_SITE,
@@ -26,6 +28,7 @@ export default defineConfig({
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
         Banner: './src/components/Banner.astro',
+        Footer: './src/components/Footer.astro',
       },
       head: [
         {
@@ -38,6 +41,58 @@ export default defineConfig({
             type: 'text/plain',
             title: 'LLM-friendly documentation index',
           },
+        },
+        {
+          tag: 'link',
+          attrs: {
+            rel: 'alternate',
+            type: 'application/rss+xml',
+            title: 'ICP CLI Documentation',
+            href: `${process.env.PUBLIC_BASE_PATH || '/'}feed.xml`,
+          },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'robots', content: 'index, follow, max-image-preview:large' },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'author', content: 'DFINITY Foundation' },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: `${SITE}/og-image.png` },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:alt', content: 'ICP CLI Documentation — Build on Internet Computer' },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'twitter:image', content: `${SITE}/og-image.png` },
+        },
+        {
+          tag: 'script',
+          attrs: { type: 'application/ld+json' },
+          content: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@graph': [
+              {
+                '@type': 'WebSite',
+                '@id': `${SITE}/#website`,
+                'name': 'ICP CLI',
+                'description': 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
+                'url': SITE,
+                'publisher': { '@id': `${SITE}/#organization` },
+              },
+              {
+                '@type': 'Organization',
+                '@id': `${SITE}/#organization`,
+                'name': 'DFINITY Foundation',
+                'url': 'https://dfinity.org',
+              },
+            ],
+          }),
         },
         {
           tag: 'script',

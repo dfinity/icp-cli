@@ -12,6 +12,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
+import { Resvg } from "@resvg/resvg-js";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 
@@ -283,6 +285,42 @@ function generateLlmsTxt(pages, siteUrl, basePath, cliSubPages) {
   return lines.join("\n");
 }
 
+/** Get last git commit date (ISO 8601) for a file, or null if unavailable. */
+function getGitDate(filePath) {
+  try {
+    const date = execSync(`git log -1 --format=%cI -- "${filePath}"`, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    return date || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Try .md then .mdx source; return git date for whichever exists. */
+function getPageGitDate(pageFile, docsDir) {
+  for (const f of [
+    path.join(docsDir, pageFile),
+    path.join(docsDir, pageFile.replace(/\.md$/, ".mdx")),
+  ]) {
+    if (fs.existsSync(f)) {
+      const d = getGitDate(f);
+      if (d) return d;
+    }
+  }
+  return null;
+}
+
+/** Escape special XML characters. */
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export default function agentDocs() {
   let siteUrl = "";
   let basePath = "/";
@@ -342,7 +380,104 @@ export default function agentDocs() {
           `Generated llms.txt (${llmsTxt.length} chars, ${pages.length} pages)`
         );
 
-        // 3. Inject agent signaling directive into HTML pages
+        // 3. Generate llms-full.txt (full content dump for bulk ingestion / RAG pipelines)
+        const fullParts = [llmsTxt];
+        for (const page of [...pages].sort((a, b) => a.file.localeCompare(b.file))) {
+          const mdContent = fs.readFileSync(path.join(outDir, page.file), "utf-8");
+          fullParts.push("\n---\n", mdContent);
+        }
+        fs.writeFileSync(path.join(outDir, "llms-full.txt"), fullParts.join("\n"));
+        logger.info(`Generated llms-full.txt (${pages.length} pages)`);
+
+        // 4. Generate RSS feed
+        const base = (siteUrl + basePath).replace(/\/$/, "");
+        const feedItems = pages
+          .map((p) => {
+            const slug = p.file.replace(/\.md$/, "").replace(/(?:^|\/)index$/, "");
+            const url = slug ? `${base}/${slug}/` : `${base}/`;
+            const date = getPageGitDate(p.file, docsDir);
+            return { ...p, url, date };
+          })
+          .sort((a, b) => {
+            if (a.date && b.date) return b.date.localeCompare(a.date);
+            return a.date ? -1 : b.date ? 1 : 0;
+          });
+
+        const channelPubDate = feedItems.find((i) => i.date);
+        const feedXml = [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">',
+          "  <channel>",
+          "    <title>ICP CLI Documentation</title>",
+          `    <link>${base}/</link>`,
+          "    <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>",
+          "    <language>en-us</language>",
+          "    <copyright>DFINITY Foundation</copyright>",
+          `    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>`,
+          channelPubDate
+            ? `    <pubDate>${new Date(channelPubDate.date).toUTCString()}</pubDate>`
+            : "",
+          `    <atom:link href="${base}/feed.xml" rel="self" type="application/rss+xml"/>`,
+          ...feedItems.map((item) =>
+            [
+              "    <item>",
+              `      <title>${escapeXml(item.title)}</title>`,
+              `      <link>${item.url}</link>`,
+              item.description
+                ? `      <description><![CDATA[${item.description}]]></description>`
+                : "",
+              item.date
+                ? `      <pubDate>${new Date(item.date).toUTCString()}</pubDate>`
+                : "",
+              `      <guid isPermaLink="true">${item.url}</guid>`,
+              "      <dc:creator>DFINITY Foundation</dc:creator>",
+              "    </item>",
+            ]
+              .filter(Boolean)
+              .join("\n")
+          ),
+          "  </channel>",
+          "</rss>",
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        fs.writeFileSync(path.join(outDir, "feed.xml"), feedXml);
+        logger.info(`Generated feed.xml (${feedItems.length} items)`);
+
+        // 5. Inject accurate git-based lastmod into sitemap
+        const sitemapFiles = (await fs.promises.readdir(outDir))
+          .filter((f) => /^sitemap-\d+\.xml$/.test(f));
+        let lastmodCount = 0;
+        for (const sitemapFile of sitemapFiles) {
+          const sitemapPath = path.join(outDir, sitemapFile);
+          const content = fs.readFileSync(sitemapPath, "utf-8");
+          const modified = content.replace(
+            /<url>\s*<loc>([^<]+)<\/loc>\s*<\/url>/g,
+            (match, rawUrl) => {
+              const url = rawUrl.trim();
+              const pathname = url
+                .replace(siteUrl, "")
+                .replace(basePath, "")
+                .replace(/^\//, "")
+                .replace(/\/$/, "");
+              const pageFile = (pathname || "index") + ".md";
+              let date = getPageGitDate(pageFile, docsDir);
+              if (!date && pathname) {
+                date = getPageGitDate(pathname + "/index.md", docsDir);
+              }
+              if (!date) return match;
+              lastmodCount++;
+              return `<url><loc>${url}</loc><lastmod>${new Date(date).toISOString().split("T")[0]}</lastmod></url>`;
+            }
+          );
+          fs.writeFileSync(sitemapPath, modified);
+        }
+        if (sitemapFiles.length > 0) {
+          logger.info(`Injected lastmod into ${lastmodCount} sitemap URLs`);
+        }
+
+        // 7. Inject agent signaling directive into HTML pages
         // Places a visually-hidden blockquote right after <body> so it appears
         // early in the document (within the first ~15%), before nav/sidebar.
         // Uses CSS clip-rect (not display:none) so it survives HTML-to-markdown
@@ -370,7 +505,7 @@ export default function agentDocs() {
         }
         logger.info(`Injected agent signaling into ${injected} HTML pages`);
 
-        // 4. Alias sitemap-index.xml → sitemap.xml
+        // 8. Alias sitemap-index.xml → sitemap.xml
         // Astro's sitemap integration outputs sitemap-index.xml, but crawlers
         // and the agentdocsspec checker expect /sitemap.xml by convention.
         const sitemapIndex = path.join(outDir, "sitemap-index.xml");
@@ -378,6 +513,31 @@ export default function agentDocs() {
         if (fs.existsSync(sitemapIndex) && !fs.existsSync(sitemapAlias)) {
           fs.copyFileSync(sitemapIndex, sitemapAlias);
           logger.info("Copied sitemap-index.xml → sitemap.xml");
+        }
+
+        // 9. Convert og-image.svg → og-image.png
+        // SVG is the source of truth; PNG is what og:image / twitter:image reference
+        // because Twitter/X rejects SVG for social sharing previews.
+        const ogSvgPath = path.join(outDir, "og-image.svg");
+        if (fs.existsSync(ogSvgPath)) {
+          const fontDir = path.resolve("node_modules/@fontsource/inter/files");
+          const fontBuffers = ["400", "500", "600", "700"]
+            .map((w) => {
+              const p = path.join(fontDir, `inter-latin-${w}-normal.woff`);
+              return fs.existsSync(p) ? fs.readFileSync(p) : null;
+            })
+            .filter(Boolean);
+
+          const svg = fs.readFileSync(ogSvgPath, "utf-8");
+          const resvg = new Resvg(svg, {
+            font: fontBuffers.length > 0
+              ? { fontBuffers, loadSystemFonts: false, defaultFontFamily: "Inter", sansSerifFamily: "Inter" }
+              : { loadSystemFonts: true },
+            fitTo: { mode: "original" },
+          });
+          const pngBuffer = resvg.render().asPng();
+          fs.writeFileSync(path.join(outDir, "og-image.png"), pngBuffer);
+          logger.info("Generated og-image.png from og-image.svg");
         }
       },
     },

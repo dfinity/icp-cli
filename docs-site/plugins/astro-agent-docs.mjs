@@ -285,17 +285,23 @@ function generateLlmsTxt(pages, siteUrl, basePath, cliSubPages) {
   return lines.join("\n");
 }
 
+const gitDateCache = new Map();
+
 /** Get last git commit date (ISO 8601) for a file, or null if unavailable. */
 function getGitDate(filePath) {
+  if (gitDateCache.has(filePath)) return gitDateCache.get(filePath);
+  let result = null;
   try {
     const date = execSync(`git log -1 --format=%cI -- "${filePath}"`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-    return date || null;
+    result = date || null;
   } catch {
-    return null;
+    result = null;
   }
+  gitDateCache.set(filePath, result);
+  return result;
 }
 
 /** Try .md then .mdx source; return git date for whichever exists. */
@@ -383,7 +389,7 @@ export default function agentDocs() {
         // 3. Generate llms-full.txt (full content dump for bulk ingestion / RAG pipelines)
         const fullParts = [llmsTxt];
         for (const page of [...pages].sort((a, b) => a.file.localeCompare(b.file))) {
-          const mdContent = fs.readFileSync(path.join(outDir, page.file), "utf-8");
+          const mdContent = fs.readFileSync(path.join(outDir, page.file), "utf-8").replace(/^\uFEFF/, "");
           fullParts.push("\n---\n", mdContent);
         }
         fs.writeFileSync(path.join(outDir, "llms-full.txt"), fullParts.join("\n"));
@@ -482,7 +488,7 @@ export default function agentDocs() {
         // early in the document (within the first ~15%), before nav/sidebar.
         // Uses CSS clip-rect (not display:none) so it survives HTML-to-markdown
         // conversion. See: https://agentdocsspec.com
-        const llmsTxtUrl = `${basePath}llms.txt`;
+        const llmsTxtUrl = siteUrl ? `${siteUrl}/llms.txt` : `${basePath}llms.txt`;
         const directive =
           `<blockquote class="agent-signaling" data-pagefind-ignore>` +
           `<p>For AI agents: Documentation index at ` +

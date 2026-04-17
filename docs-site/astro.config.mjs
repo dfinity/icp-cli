@@ -8,7 +8,7 @@ const SITE = process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org';
 
 // https://astro.build/config
 export default defineConfig({
-  site: process.env.PUBLIC_SITE,
+  site: SITE,
   // For versioned deployments: /0.1/, /0.2/, etc.
   // PUBLIC_BASE_PATH is set per-version in CI (e.g., /0.2/, /main/)
   base: process.env.PUBLIC_BASE_PATH || '/',
@@ -37,7 +37,7 @@ export default defineConfig({
           tag: 'link',
           attrs: {
             rel: 'help',
-            href: `${process.env.PUBLIC_BASE_PATH || '/'}llms.txt`,
+            href: `${SITE}/llms.txt`,
             type: 'text/plain',
             title: 'LLM-friendly documentation index',
           },
@@ -48,7 +48,7 @@ export default defineConfig({
             rel: 'alternate',
             type: 'application/rss+xml',
             title: 'ICP CLI Documentation',
-            href: `${process.env.PUBLIC_BASE_PATH || '/'}feed.xml`,
+            href: `${SITE}/feed.xml`,
           },
         },
         {

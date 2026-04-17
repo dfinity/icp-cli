@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
@@ -115,17 +117,73 @@ jobs:
 
           echo "LATEST_VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
 
-      - name: Copy llms.txt from latest version on docs-deployment branch
+          # Generate robots.txt — allow only the latest version, block old versions.
+          # /main/ is disallowed unless it IS the latest version (no releases yet fallback).
+          {
+            echo "User-agent: *"
+            echo "Allow: /${LATEST_VERSION}/"
+            for version in $(jq -r '.versions[].version' docs-site/versions.json); do
+              if [[ "$version" != "$LATEST_VERSION" ]]; then
+                echo "Disallow: /${version}/"
+              fi
+            done
+            if [[ "$LATEST_VERSION" != "main" ]]; then echo "Disallow: /main/"; fi
+            echo ""
+            echo "Sitemap: ${PUBLIC_SITE}/sitemap.xml"
+            echo ""
+            echo "# LLM and AI agent discovery (llmstxt.org)"
+            echo "# ${PUBLIC_SITE}/llms.txt"
+            echo "# ${PUBLIC_SITE}/llms-full.txt"
+          } > root/robots.txt
+          echo "✅ Generated robots.txt (latest: ${LATEST_VERSION})"
+
+          # Generate root sitemap.xml pointing directly to the latest version's sitemap.
+          # Points to sitemap-0.xml (not sitemap-index.xml) to stay spec-compliant:
+          # a sitemapindex must reference sitemaps, not other sitemapindex files.
+          {
+            echo '<?xml version="1.0" encoding="UTF-8"?>'
+            echo '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            echo '  <sitemap>'
+            echo "    <loc>${PUBLIC_SITE}/${LATEST_VERSION}/sitemap-0.xml</loc>"
+            echo '  </sitemap>'
+            echo '</sitemapindex>'
+          } > root/sitemap.xml
+          echo "✅ Generated sitemap.xml → /${LATEST_VERSION}/sitemap-0.xml"
+
+      - name: Copy files from latest version on docs-deployment branch
         run: |
-          # Fetch the llms.txt from the latest version's folder on docs-deployment.
-          # This file was deployed by publish-versioned-docs and is always in sync
-          # with the versioned .md endpoints it links to.
           git fetch origin docs-deployment --depth=1
+
+          # llms.txt — agent discovery index (versioned copy is always in sync with .md endpoints)
           if git show "origin/docs-deployment:${LATEST_VERSION}/llms.txt" > root/llms.txt 2>/dev/null; then
             echo "✅ Copied llms.txt from /${LATEST_VERSION}/llms.txt to root"
           else
             echo "⚠️  No llms.txt found at /${LATEST_VERSION}/llms.txt on docs-deployment — skipping"
             rm -f root/llms.txt
+          fi
+
+          # llms-full.txt — full content dump for bulk ingestion / RAG pipelines
+          if git show "origin/docs-deployment:${LATEST_VERSION}/llms-full.txt" > root/llms-full.txt 2>/dev/null; then
+            echo "✅ Copied llms-full.txt from /${LATEST_VERSION}/llms-full.txt to root"
+          else
+            echo "⚠️  No llms-full.txt found at /${LATEST_VERSION}/llms-full.txt on docs-deployment — skipping"
+            rm -f root/llms-full.txt
+          fi
+
+          # og-image.png — social sharing preview image
+          if git show "origin/docs-deployment:${LATEST_VERSION}/og-image.png" > root/og-image.png 2>/dev/null; then
+            echo "✅ Copied og-image.png from /${LATEST_VERSION}/og-image.png to root"
+          else
+            echo "⚠️  No og-image.png found at /${LATEST_VERSION}/og-image.png on docs-deployment — skipping"
+            rm -f root/og-image.png
+          fi
+
+          # feed.xml — RSS feed
+          if git show "origin/docs-deployment:${LATEST_VERSION}/feed.xml" > root/feed.xml 2>/dev/null; then
+            echo "✅ Copied feed.xml from /${LATEST_VERSION}/feed.xml to root"
+          else
+            echo "⚠️  No feed.xml found at /${LATEST_VERSION}/feed.xml on docs-deployment — skipping"
+            rm -f root/feed.xml
           fi
 
       - name: Prepend version navigation to root llms.txt
@@ -164,6 +222,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
@@ -203,6 +263,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0

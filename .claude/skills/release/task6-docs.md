@@ -2,7 +2,9 @@
 
 *Skip if `$ARGUMENTS` is a beta release. Requires Task 2. Runs concurrently with Task 3.*
 
-The tag push triggers a docs deployment workflow that builds and publishes the versioned docs to `/icp-cli/X.Y/`. The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
+The tag push triggers a docs deployment workflow that builds and publishes the versioned docs to `/X.Y/` on the `docs-deployment` branch (served at `https://cli.internetcomputer.org/X.Y/`). The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
+
+Once the `versions.json` PR merges to `main`, the `publish-root-files` CI job runs automatically and copies `og-image.png`, `llms.txt`, `llms-full.txt`, and `feed.xml` from the new version's folder to the deployment root — no manual step needed.
 
 **1. Wait for the docs deployment triggered by the tag**
 ```bash

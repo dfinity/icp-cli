@@ -25,6 +25,12 @@ Import a new identity
 
   Possible values: `secp256k1`, `prime256v1`, `ed25519`
 
+* `--seed-curve <SEED_CURVE>` — Curve for SLIP-0010 key derivation from a seed phrase
+
+  Default value: `secp256k1`
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
 
 
 

@@ -7,7 +7,8 @@
     "dev": "npm run clean && astro dev",
     "build": "astro build",
     "preview": "npm run build && astro preview",
-    "clean": "rm -rf dist .astro"
+    "clean": "rm -rf dist .astro",
+    "test:versions": "./test-version-switcher.sh"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",

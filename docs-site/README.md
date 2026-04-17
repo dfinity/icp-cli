@@ -103,7 +103,7 @@ Removes `dist/` and `.astro/` directories
 - `build` - Builds for production
 - `preview` - Previews production build locally
 - `clean` - Removes build artifacts (`dist/`, `.astro/`)
-- `test-version-switcher.sh` - Simulates the full multi-version production layout locally for testing the version switcher UI
+- `test:versions` - Simulates the full multi-version production layout locally for testing the version switcher UI
 
 ## Deployment
 

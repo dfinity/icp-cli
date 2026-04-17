@@ -15,7 +15,7 @@ pub(crate) struct ShowArgs {
     #[command(flatten)]
     pub(crate) cmd_args: CanisterCommandArgs,
 
-    /// Format output in json
+    /// Format output as JSON
     #[arg(long = "json")]
     pub json_format: bool,
 

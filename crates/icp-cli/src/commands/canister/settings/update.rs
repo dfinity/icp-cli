@@ -44,6 +44,9 @@ impl ControllerOpt {
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct LogVisibilityOpt {
+    /// Set log visibility to a fixed policy [possible values: controllers, public].
+    /// Conflicts with --add-log-viewer, --remove-log-viewer, and --set-log-viewer.
+    /// Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead.
     #[arg(
         long,
         value_parser = log_visibility_parser,
@@ -53,12 +56,15 @@ pub(crate) struct LogVisibilityOpt {
     )]
     log_visibility: Option<LogVisibility>,
 
+    /// Add a principal to the allowed log viewers list
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
     add_log_viewer: Option<Vec<Principal>>,
 
+    /// Remove a principal from the allowed log viewers list
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
     remove_log_viewer: Option<Vec<Principal>>,
 
+    /// Replace the allowed log viewers list with the specified principals
     #[arg(long, action = ArgAction::Append)]
     set_log_viewer: Option<Vec<Principal>>,
 }
@@ -71,9 +77,11 @@ impl LogVisibilityOpt {
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct EnvironmentVariableOpt {
+    /// Add a canister environment variable in KEY=VALUE format
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
 
+    /// Remove a canister environment variable by key name
     #[arg(long, action = ArgAction::Append)]
     remove_environment_variable: Option<Vec<String>>,
 }
@@ -97,6 +105,7 @@ pub(crate) struct UpdateArgs {
     #[command(flatten)]
     controllers: Option<ControllerOpt>,
 
+    /// Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity.
     #[arg(long, value_parser = compute_allocation_parser)]
     compute_allocation: Option<u8>,
 

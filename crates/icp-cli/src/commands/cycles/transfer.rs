@@ -26,7 +26,7 @@ pub(crate) struct TransferArgs {
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) to_subaccount: Option<[u8; 32]>,
 
-    //// The subaccount to transfer from
+    /// The subaccount to transfer cycles from
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) from_subaccount: Option<[u8; 32]>,
 

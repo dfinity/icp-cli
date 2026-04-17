@@ -1,0 +1,78 @@
+name: Sync docs branch after release
+
+# When a release tag is pushed, open a PR to reset the corresponding docs/vX.Y
+# branch to that tag commit. This prevents the branch from drifting behind the
+# latest patch release and avoids accidentally deploying stale docs.
+#
+# - If docs/vX.Y does not exist: creates it directly from the tag (no PR needed).
+# - If docs/vX.Y exists: opens a PR from a temporary sync branch so CI validates
+#   the build before the branch is updated. Merge with "Squash and merge".
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '!v*-*'    # exclude pre-release tags (e.g. v0.2.0-beta.0)
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-docs-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version info
+        run: |
+          TAG=${GITHUB_REF_NAME}          # e.g. v0.2.3
+          PATCH=${TAG#v}                  # e.g. 0.2.3
+          MINOR=${PATCH%.*}               # e.g. 0.2
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "MINOR=${MINOR}" >> $GITHUB_ENV
+          echo "DOCS_BRANCH=docs/v${MINOR}" >> $GITHUB_ENV
+          echo "SYNC_BRANCH=sync/docs-v${MINOR}-from-${TAG}" >> $GITHUB_ENV
+
+      - name: Create or sync docs branch
+        run: |
+          if git ls-remote --exit-code --heads origin "${DOCS_BRANCH}" > /dev/null 2>&1; then
+            # Branch exists — open a PR so CI validates before merging.
+            git checkout -b "${SYNC_BRANCH}" "${TAG}"
+            git push origin "${SYNC_BRANCH}"
+
+            gh pr create \
+              --base "${DOCS_BRANCH}" \
+              --head "${SYNC_BRANCH}" \
+              --title "chore(docs): sync ${DOCS_BRANCH} to ${TAG}" \
+              --body "$(cat <<EOF
+Automated sync of \`${DOCS_BRANCH}\` to the \`${TAG}\` release tag.
+
+**Why:** Both \`v*\` tags and \`docs/v*\` branches trigger the same \`publish-versioned-docs\` CI job and deploy to the same \`/${MINOR}/\` folder. If the branch drifts behind the tag, any future push to it would silently overwrite the live docs with older content.
+
+**What to do:**
+1. Wait for CI to pass.
+2. Merge with **Squash and merge** to keep the branch history clean.
+3. If there are docs-only improvements on \`main\` (not in \`${TAG}\`) that should be backported, cherry-pick them onto \`${DOCS_BRANCH}\` after this PR merges.
+
+*Opened automatically by the sync-docs-branch workflow.*
+EOF
+)"
+
+            echo "Opened sync PR: ${DOCS_BRANCH} ← ${SYNC_BRANCH}"
+          else
+            # Branch doesn't exist — create it directly from the tag.
+            git checkout -b "${DOCS_BRANCH}" "${TAG}"
+            git push origin "${DOCS_BRANCH}"
+            echo "Created ${DOCS_BRANCH} from ${TAG}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,7 +2,11 @@
 
 *Skip if `$ARGUMENTS` is a beta release. Requires Task 2. Runs concurrently with Task 3.*
 
-The tag push triggers a docs deployment workflow that builds and publishes the versioned docs to `/X.Y/` on the `docs-deployment` branch (served at `https://cli.internetcomputer.org/X.Y/`). The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
+The tag push triggers two automated workflows:
+
+1. **`docs.yml` (`publish-versioned-docs` job):** Builds and publishes the versioned docs to `/X.Y/` on the `docs-deployment` branch (served at `https://cli.internetcomputer.org/X.Y/`). The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
+
+2. **`sync-docs-branch.yml`:** Opens a PR to reset `docs/vX.Y` to the new tag, preventing the branch from drifting behind the latest patch release. **Merge this PR (squash) after CI passes.** If there are docs-only improvements on `main` that should be backported to this version's docs, cherry-pick them onto `docs/vX.Y` after merging.
 
 Once the `versions.json` PR merges to `main`, the `publish-root-files` CI job runs automatically and copies `og-image.png`, `llms.txt`, `llms-full.txt`, and `feed.xml` from the new version's folder to the deployment root — no manual step needed.
 

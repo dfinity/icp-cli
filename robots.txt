@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /0.2/
+Disallow: /0.1/
+Disallow: /main/
+
+Sitemap: https://cli.internetcomputer.org/sitemap.xml
+
+# LLM and AI agent discovery (llmstxt.org)
+# https://cli.internetcomputer.org/llms.txt
+# https://cli.internetcomputer.org/llms-full.txt

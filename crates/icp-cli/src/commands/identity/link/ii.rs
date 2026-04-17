@@ -33,8 +33,8 @@ pub(crate) struct IiArgs {
     /// Name for the linked identity
     name: String,
 
-    /// Host of the II login frontend (e.g. https://example.icp0.io)
-    #[arg(long, default_value = DEFAULT_HOST)]
+    /// Host of the II login frontend (e.g. example.icp0.io or https://example.icp0.io)
+    #[arg(long, default_value = DEFAULT_HOST, value_parser = parse_host)]
     host: Url,
 
     /// Where to store the session private key
@@ -44,6 +44,15 @@ pub(crate) struct IiArgs {
     /// Read the storage password from a file instead of prompting (for --storage password)
     #[arg(long, value_name = "FILE")]
     storage_password_file: Option<PathBuf>,
+}
+
+fn parse_host(s: &str) -> Result<Url, String> {
+    let with_scheme = if s.contains("://") {
+        s.to_owned()
+    } else {
+        format!("https://{s}")
+    };
+    Url::parse(&with_scheme).map_err(|e| e.to_string())
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {

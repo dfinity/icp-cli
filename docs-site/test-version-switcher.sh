@@ -154,6 +154,17 @@ done
 } > "$TEST_DIR/robots.txt"
 echo "✓ robots.txt generated"
 
+# Generate root sitemap.xml (mirrors publish-root-files CI logic)
+{
+  echo '<?xml version="1.0" encoding="UTF-8"?>'
+  echo '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+  echo '  <sitemap>'
+  echo "    <loc>http://localhost:${TEST_PORT}/${LATEST_VERSION}/sitemap-index.xml</loc>"
+  echo '  </sitemap>'
+  echo '</sitemapindex>'
+} > "$TEST_DIR/sitemap.xml"
+echo "✓ sitemap.xml generated"
+
 echo ""
 echo "=================================================="
 echo "✓ All versions built successfully!"
@@ -230,6 +241,7 @@ else
     echo "  - http://localhost:${TEST_PORT}/feed.xml (RSS feed, latest version)"
     echo "  - http://localhost:${TEST_PORT}/llms.txt (agent index, latest version)"
     echo "  - http://localhost:${TEST_PORT}/robots.txt (robots, latest version)"
+    echo "  - http://localhost:${TEST_PORT}/sitemap.xml (root sitemap index)"
     echo ""
     echo "Expected behavior:"
     echo "  ✓ Version 0.2: Button shows 'v0.2', dropdown shows both versions"

@@ -2,7 +2,12 @@
 
 *Skip if `$ARGUMENTS` is a beta release. Requires Task 2. Runs concurrently with Task 3.*
 
-The tag push triggers a docs deployment workflow that builds and publishes the versioned docs to `/X.Y/` on the `docs-deployment` branch (served at `https://cli.internetcomputer.org/X.Y/`). The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
+The tag push triggers two automated workflows:
+
+1. **`docs.yml` (`publish-versioned-docs` job):** Builds and publishes the versioned docs to `/X.Y/` on the `docs-deployment` branch (served at `https://cli.internetcomputer.org/X.Y/`). The `versions.json` PR must not be merged until that deployment succeeds, otherwise the root redirect will point to a path that does not exist yet.
+
+2. **`sync-docs-tag.yml`:** Creates or moves the `docs/vX.Y` tag to the new release commit — no manual action required. This keeps the docs-override tag in sync with the latest patch. Because the tag is moved via `GITHUB_TOKEN`, the push does not re-trigger `docs.yml` (GitHub prevents recursive workflow runs from `GITHUB_TOKEN` pushes).
+   - The reset overwrites any docs-only commits that were on `docs/vX.Y` but not in the release. This is safe as long as the "merge to main first" rule was followed — those commits will be in the release itself. See `.claude/docs-guidelines.md` → "Docs-Only Fixes for Released Versions".
 
 Once the `versions.json` PR merges to `main`, the `publish-root-files` CI job runs automatically and copies `og-image.png`, `llms.txt`, `llms-full.txt`, and `feed.xml` from the new version's folder to the deployment root — no manual step needed.
 

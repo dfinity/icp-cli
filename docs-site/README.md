@@ -119,8 +119,13 @@ The site is hosted on an IC asset canister and served at `https://cli.internetco
 ### Triggers
 
 - **Push to `main`**: Rebuilds `/main/` docs and root files (`index.html`, `versions.json`, `robots.txt`, `sitemap.xml`, IC config). Also copies `og-image.png`, `llms.txt`, `llms-full.txt`, and `feed.xml` from the latest versioned deployment to the root.
-- **Tags (`v*`)**: Builds versioned docs (e.g., `v0.2.0` → `/0.2/`)
-- **Branches (`docs/v*`)**: Updates versioned docs (e.g., `docs/v0.1` → `/0.1/`)
+- **Release tags (`v*`)**: Builds and deploys versioned docs (e.g., `v0.2.0` → `/0.2/`). Also triggers `sync-docs-tag.yml` which automatically creates or moves the `docs/v0.2` tag to that same commit — no manual step needed.
+- **Docs-override tags (`docs/v*`)**: Redeploys versioned docs for a specific minor version without cutting a new code release (e.g., `docs/v0.1` → `/0.1/`). To trigger a re-deploy, force-move the tag to the desired commit:
+  ```bash
+  git tag -f docs/v0.2 <commit-sha>
+  git push origin refs/tags/docs/v0.2 --force
+  ```
+  Note: `sync-docs-tag.yml` uses `GITHUB_TOKEN` to move the tag after each release, which does **not** re-trigger `docs.yml` (GitHub prevents recursive workflow runs from `GITHUB_TOKEN` pushes). Only a human explicitly pushing the tag triggers a re-deploy.
 
 ### Root-level files
 

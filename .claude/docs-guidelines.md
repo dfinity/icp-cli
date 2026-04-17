@@ -30,6 +30,32 @@ Documentation follows the Diátaxis framework:
 - When referencing alternatives in other docs, maintain this order: "Homebrew, shell script, ..." (e.g., "See the Installation Guide for Homebrew, shell script, or other options")
 - Both `icp-cli` and `ic-wasm` are available as official Homebrew formulas: `brew install icp-cli` and `brew install ic-wasm`
 
+## Docs-Only Fixes for Released Versions
+
+Versioned docs deployments (e.g. `/0.2/`) are controlled by `docs/vX.Y` tags. To fix or improve docs for an already-released version without cutting a new code release:
+
+**Rule: always merge the change to `main` first.** The `docs/vX.Y` tag is only for immediate deployment — when the next patch release is tagged, `sync-docs-tag.yml` resets `docs/vX.Y` to the new release commit. Any commit that exists only on the tag (not in `main`) will be silently lost at that point.
+
+**Workflow:**
+
+```bash
+# 1. Merge the fix to main via a normal PR (always required)
+
+# 2. To immediately deploy the fix to /X.Y/ without waiting for a release:
+git fetch --tags
+git checkout -b temp/docs-fix-vX.Y docs/vX.Y  # start from current tag state
+git cherry-pick <commit-sha-from-main>          # pick the merged commit(s)
+
+git tag -f docs/vX.Y HEAD
+git push origin refs/tags/docs/vX.Y --force    # triggers re-deploy of /X.Y/
+
+git branch -D temp/docs-fix-vX.Y               # local branch no longer needed
+```
+
+The commits remain reachable via the tag — no remote branch is needed.
+
+**On the next release:** `sync-docs-tag.yml` resets `docs/vX.Y` to the release commit. Because the fix was already merged to `main`, the release will contain it, and the reset preserves it automatically.
+
 ## Writing Guidelines
 
 - Use "canister environment variables" (not just "environment variables") when referring to runtime variables stored in canister settings — this distinguishes them from shell/build environment variables

@@ -1,0 +1,59 @@
+name: Sync docs tag after release
+
+# When a release tag is pushed, create or force-move the docs/vX.Y tag to that
+# same commit. This keeps the docs-override tag in sync with the latest patch
+# and prevents stale content from being served if someone later moves the tag
+# for a docs-only fix on top of an outdated base.
+#
+# docs/vX.Y tags are the stable mechanism for docs-only updates to an older
+# minor version without cutting a new code release. Moving them is intentional
+# and requires explicit force-push — unlike branches, they cannot drift by
+# accident.
+#
+# Note: pushes via GITHUB_TOKEN do not trigger other workflow runs, so moving
+# the docs/vX.Y tag here will NOT re-trigger publish-versioned-docs in
+# docs.yml. Only a human explicitly pushing the tag triggers a re-deploy.
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '!v*-*'    # exclude pre-release tags (e.g. v0.2.0-beta.0)
+
+permissions:
+  contents: write
+
+jobs:
+  sync-docs-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version info
+        run: |
+          TAG=${GITHUB_REF_NAME}          # e.g. v0.2.3
+          PATCH=${TAG#v}                  # e.g. 0.2.3
+          MINOR=${PATCH%.*}              # e.g. 0.2
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "MINOR=${MINOR}" >> $GITHUB_ENV
+          echo "DOCS_TAG=docs/v${MINOR}" >> $GITHUB_ENV
+
+      - name: Create or move docs tag to release commit
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${DOCS_TAG}" > /dev/null 2>&1; then
+            git tag -f "${DOCS_TAG}" "${TAG}"
+            git push origin "refs/tags/${DOCS_TAG}" --force
+            echo "Moved ${DOCS_TAG} to ${TAG}"
+          else
+            git tag "${DOCS_TAG}" "${TAG}"
+            git push origin "refs/tags/${DOCS_TAG}"
+            echo "Created ${DOCS_TAG} at ${TAG}"
+          fi

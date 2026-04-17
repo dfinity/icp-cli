@@ -423,7 +423,7 @@ export default function agentDocs() {
           channelPubDate
             ? `    <pubDate>${new Date(channelPubDate.date).toUTCString()}</pubDate>`
             : "",
-          `    <atom:link href="${base}/feed.xml" rel="self" type="application/rss+xml"/>`,
+          `    <atom:link href="${siteUrl}/feed.xml" rel="self" type="application/rss+xml"/>`,
           ...feedItems.map((item) =>
             [
               "    <item>",

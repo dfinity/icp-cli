@@ -102,6 +102,13 @@ cat > "$TEST_DIR/versions.json" << 'EOF'
 EOF
 echo "✓ versions.json created"
 
+# Determine latest version (mirrors publish-root-files CI logic)
+LATEST_VERSION=$(jq -r ".versions[] | select(.latest == true) | .version" "$TEST_DIR/versions.json")
+if [[ -z "$LATEST_VERSION" ]]; then
+  LATEST_VERSION="main"
+fi
+echo "Latest version: $LATEST_VERSION"
+
 # Generate redirect index.html
 echo ""
 echo "Generating root redirect..."
@@ -109,16 +116,43 @@ cat > "$TEST_DIR/index.html" << EOF
 <!doctype html>
 <html>
   <head>
-    <meta http-equiv="refresh" content="0; url=./0.2/" />
+    <meta http-equiv="refresh" content="0; url=./${LATEST_VERSION}/" />
     <meta name="robots" content="noindex" />
     <title>Redirecting to latest version...</title>
   </head>
   <body>
-    <p>Redirecting to <a href="./0.2/">latest version</a>...</p>
+    <p>Redirecting to <a href="./${LATEST_VERSION}/">latest version</a>...</p>
   </body>
 </html>
 EOF
 echo "✓ index.html created"
+
+# Copy root-level files from latest version (mirrors publish-root-files CI logic)
+echo ""
+echo "Copying root-level files from $LATEST_VERSION/..."
+for f in llms.txt llms-full.txt feed.xml og-image.png; do
+  if [ -f "$TEST_DIR/$LATEST_VERSION/$f" ]; then
+    cp "$TEST_DIR/$LATEST_VERSION/$f" "$TEST_DIR/$f"
+    echo "✓ Copied $f from $LATEST_VERSION/"
+  else
+    echo "⚠️  $f not found in $LATEST_VERSION/ — skipping"
+  fi
+done
+
+# Generate robots.txt (mirrors publish-root-files CI logic)
+{
+  echo "User-agent: *"
+  echo "Allow: /${LATEST_VERSION}/"
+  for version in $(jq -r '.versions[].version' "$TEST_DIR/versions.json"); do
+    if [[ "$version" != "$LATEST_VERSION" ]]; then
+      echo "Disallow: /${version}/"
+    fi
+  done
+  if [[ "$LATEST_VERSION" != "main" ]]; then echo "Disallow: /main/"; fi
+  echo ""
+  echo "Sitemap: http://localhost:${TEST_PORT}/sitemap.xml"
+} > "$TEST_DIR/robots.txt"
+echo "✓ robots.txt generated"
 
 echo ""
 echo "=================================================="
@@ -189,10 +223,13 @@ else
     echo "Press Ctrl+C to stop the server when done testing"
     echo ""
     echo "Test URLs:"
-    echo "  - http://localhost:${TEST_PORT}/ (should redirect to 0.2)"
+    echo "  - http://localhost:${TEST_PORT}/ (should redirect to $LATEST_VERSION)"
     echo "  - http://localhost:${TEST_PORT}/0.2/ (version 0.2)"
     echo "  - http://localhost:${TEST_PORT}/0.1/ (version 0.1)"
     echo "  - http://localhost:${TEST_PORT}/main/ (main branch)"
+    echo "  - http://localhost:${TEST_PORT}/feed.xml (RSS feed, latest version)"
+    echo "  - http://localhost:${TEST_PORT}/llms.txt (agent index, latest version)"
+    echo "  - http://localhost:${TEST_PORT}/robots.txt (robots, latest version)"
     echo ""
     echo "Expected behavior:"
     echo "  ✓ Version 0.2: Button shows 'v0.2', dropdown shows both versions"

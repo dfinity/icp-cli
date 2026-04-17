@@ -480,7 +480,7 @@ export default function agentDocs() {
           logger.info(`Injected lastmod into ${lastmodCount} sitemap URLs`);
         }
 
-        // 7. Inject agent signaling directive into HTML pages
+        // 6. Inject agent signaling directive into HTML pages
         // Places a visually-hidden blockquote right after <body> so it appears
         // early in the document (within the first ~15%), before nav/sidebar.
         // Uses CSS clip-rect (not display:none) so it survives HTML-to-markdown
@@ -508,7 +508,7 @@ export default function agentDocs() {
         }
         logger.info(`Injected agent signaling into ${injected} HTML pages`);
 
-        // 8. Alias sitemap-index.xml → sitemap.xml
+        // 7. Alias sitemap-index.xml → sitemap.xml
         // Astro's sitemap integration outputs sitemap-index.xml, but crawlers
         // and the agentdocsspec checker expect /sitemap.xml by convention.
         const sitemapIndex = path.join(outDir, "sitemap-index.xml");
@@ -518,7 +518,7 @@ export default function agentDocs() {
           logger.info("Copied sitemap-index.xml → sitemap.xml");
         }
 
-        // 9. Convert og-image.svg → og-image.png
+        // 8. Convert og-image.svg → og-image.png
         // SVG is the source of truth; PNG is what og:image / twitter:image reference
         // because Twitter/X rejects SVG for social sharing previews.
         const ogSvgPath = path.join(outDir, "og-image.svg");

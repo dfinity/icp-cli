@@ -37,7 +37,7 @@ export default defineConfig({
           tag: 'link',
           attrs: {
             rel: 'help',
-            href: `${SITE}/llms.txt`,
+            href: '/llms.txt',
             type: 'text/plain',
             title: 'LLM-friendly documentation index',
           },
@@ -48,7 +48,7 @@ export default defineConfig({
             rel: 'alternate',
             type: 'application/rss+xml',
             title: 'ICP CLI Documentation',
-            href: `${SITE}/feed.xml`,
+            href: '/feed.xml',
           },
         },
         {

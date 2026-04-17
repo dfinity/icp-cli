@@ -427,7 +427,7 @@ export default function agentDocs() {
               `      <title>${escapeXml(item.title)}</title>`,
               `      <link>${item.url}</link>`,
               item.description
-                ? `      <description><![CDATA[${item.description}]]></description>`
+                ? `      <description>${escapeXml(item.description)}</description>`
                 : "",
               item.date
                 ? `      <pubDate>${new Date(item.date).toUTCString()}</pubDate>`

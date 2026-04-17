@@ -23,6 +23,7 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Link(link::Command),
     List(list::ListArgs),
+    #[command(hide = true)]
     Login(login::LoginArgs),
     New(new::NewArgs),
     Principal(principal::PrincipalArgs),

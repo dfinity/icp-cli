@@ -130,8 +130,7 @@ pub(crate) enum IiError {
     Link { source: key::LinkIiIdentityError },
 }
 
-/// Fallback host. Dummy value until we get a real domain. A staging instance can be found at ut7yr-7iaaa-aaaag-ak7ca-caia.ic0.app
-pub(crate) const DEFAULT_HOST: &str = "https://not.a.domain";
+pub(crate) const DEFAULT_HOST: &str = "https://cli.id.ai";
 
 #[derive(Debug, Snafu)]
 pub(crate) enum IiRecvError {

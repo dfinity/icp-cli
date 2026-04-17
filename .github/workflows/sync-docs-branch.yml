@@ -48,11 +48,12 @@ jobs:
 
       - name: Force-reset docs branch to tag
         run: |
-          git checkout -b "${DOCS_BRANCH}" "${TAG}"
           if git ls-remote --exit-code --heads origin "${DOCS_BRANCH}" > /dev/null 2>&1; then
+            git checkout -b "${DOCS_BRANCH}" "${TAG}"
             git push origin "${DOCS_BRANCH}" --force
             echo "Reset ${DOCS_BRANCH} to ${TAG}"
           else
+            git checkout -b "${DOCS_BRANCH}" "${TAG}"
             git push origin "${DOCS_BRANCH}"
             echo "Created ${DOCS_BRANCH} from ${TAG}"
           fi

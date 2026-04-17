@@ -4,7 +4,7 @@ import rehypeExternalLinks from 'rehype-external-links';
 import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
 import agentDocs from './plugins/astro-agent-docs.mjs';
 
-const SITE = process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org';
+const SITE = (process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org').replace(/\/$/, '');
 
 // https://astro.build/config
 export default defineConfig({

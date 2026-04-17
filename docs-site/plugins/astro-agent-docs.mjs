@@ -12,7 +12,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { Resvg } from "@resvg/resvg-js";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
@@ -291,15 +291,12 @@ const gitDateCache = new Map();
 function getGitDate(filePath) {
   if (gitDateCache.has(filePath)) return gitDateCache.get(filePath);
   let result = null;
-  try {
-    const date = execSync(`git log -1 --format=%cI -- "${filePath}"`, {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-    result = date || null;
-  } catch {
-    result = null;
-  }
+  const { stdout, status } = spawnSync(
+    "git",
+    ["log", "-1", "--format=%cI", "--", filePath],
+    { encoding: "utf-8" }
+  );
+  if (status === 0) result = stdout.trim() || null;
   gitDateCache.set(filePath, result);
   return result;
 }
@@ -474,7 +471,7 @@ export default function agentDocs() {
               }
               if (!date) return match;
               lastmodCount++;
-              return `<url><loc>${url}</loc><lastmod>${new Date(date).toISOString().split("T")[0]}</lastmod></url>`;
+              return `<url><loc>${url}</loc><lastmod>${date.slice(0, 10)}</lastmod></url>`;
             }
           );
           fs.writeFileSync(sitemapPath, modified);

@@ -140,6 +140,7 @@ for f in llms.txt llms-full.txt feed.xml og-image.png; do
 done
 
 # Generate robots.txt (mirrors publish-root-files CI logic)
+# /main/ is disallowed unless it IS the latest version (no releases yet fallback).
 {
   echo "User-agent: *"
   echo "Allow: /${LATEST_VERSION}/"

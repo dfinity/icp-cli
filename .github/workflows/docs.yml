@@ -117,7 +117,8 @@ jobs:
 
           echo "LATEST_VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
 
-          # Generate robots.txt — allow only the latest version, block old versions and /main/
+          # Generate robots.txt — allow only the latest version, block old versions.
+          # /main/ is disallowed unless it IS the latest version (no releases yet fallback).
           {
             echo "User-agent: *"
             echo "Allow: /${LATEST_VERSION}/"

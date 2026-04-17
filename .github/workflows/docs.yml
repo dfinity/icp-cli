@@ -136,16 +136,18 @@ jobs:
           } > root/robots.txt
           echo "✅ Generated robots.txt (latest: ${LATEST_VERSION})"
 
-          # Generate root sitemap.xml pointing to the latest version's sitemap
+          # Generate root sitemap.xml pointing directly to the latest version's sitemap.
+          # Points to sitemap-0.xml (not sitemap-index.xml) to stay spec-compliant:
+          # a sitemapindex must reference sitemaps, not other sitemapindex files.
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
             echo '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
             echo '  <sitemap>'
-            echo "    <loc>${PUBLIC_SITE}/${LATEST_VERSION}/sitemap-index.xml</loc>"
+            echo "    <loc>${PUBLIC_SITE}/${LATEST_VERSION}/sitemap-0.xml</loc>"
             echo '  </sitemap>'
             echo '</sitemapindex>'
           } > root/sitemap.xml
-          echo "✅ Generated sitemap.xml → /${LATEST_VERSION}/sitemap-index.xml"
+          echo "✅ Generated sitemap.xml → /${LATEST_VERSION}/sitemap-0.xml"
 
       - name: Copy files from latest version on docs-deployment branch
         run: |

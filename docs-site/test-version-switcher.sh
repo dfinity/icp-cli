@@ -159,7 +159,7 @@ echo "✓ robots.txt generated"
   echo '<?xml version="1.0" encoding="UTF-8"?>'
   echo '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
   echo '  <sitemap>'
-  echo "    <loc>http://localhost:${TEST_PORT}/${LATEST_VERSION}/sitemap-index.xml</loc>"
+  echo "    <loc>http://localhost:${TEST_PORT}/${LATEST_VERSION}/sitemap-0.xml</loc>"
   echo '  </sitemap>'
   echo '</sitemapindex>'
 } > "$TEST_DIR/sitemap.xml"

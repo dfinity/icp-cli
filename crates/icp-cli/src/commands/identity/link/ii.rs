@@ -15,12 +15,12 @@ use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
 use icp::{
     context::Context,
     fs::read_to_string,
-    identity::{delegation::DelegationChain, key},
+    identity::{delegation::DelegationChain, key, manifest::IdentityList},
     prelude::*,
     signal,
 };
 use indicatif::{ProgressBar, ProgressStyle};
-use snafu::{ResultExt, Snafu};
+use snafu::{ResultExt, Snafu, ensure};
 use tokio::{net::TcpListener, sync::oneshot};
 use tracing::{info, warn};
 use url::Url;
@@ -56,6 +56,18 @@ fn parse_host(s: &str) -> Result<Url, String> {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
+    ctx.dirs
+        .identity()?
+        .with_read(async |dirs| -> Result<(), IiError> {
+            let list = IdentityList::load_from(dirs).context(LoadIdentityListSnafu)?;
+            ensure!(
+                !list.identities.contains_key(&args.name),
+                NameTakenSnafu { name: &args.name }
+            );
+            Ok(())
+        })
+        .await??;
+
     let create_format = match args.storage {
         StorageMode::Plaintext => key::CreateFormat::Plaintext,
         StorageMode::Keyring => key::CreateFormat::Keyring,
@@ -120,6 +132,14 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
 
 #[derive(Debug, Snafu)]
 pub(crate) enum IiError {
+    #[snafu(display("identity `{name}` already exists"))]
+    NameTaken { name: String },
+
+    #[snafu(display("failed to load identity list"))]
+    LoadIdentityList {
+        source: icp::identity::manifest::LoadIdentityManifestError,
+    },
+
     #[snafu(display("failed to read storage password file"))]
     ReadStoragePasswordFile { source: icp::fs::IoError },
 

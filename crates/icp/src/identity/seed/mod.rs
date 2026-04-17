@@ -3,7 +3,7 @@ use bip39::{Mnemonic, Seed};
 
 use super::{key::IdentityKey, manifest::IdentityKeyAlgorithm};
 
-pub mod slip10;
+mod slip10;
 
 /// Standard ICP derivation path for secp256k1 and p256 (coin type 223).
 pub fn default_derivation_path() -> DerivationPath {

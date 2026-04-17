@@ -15,7 +15,7 @@ const SECP256K1_SEED_KEY: &[u8] = b"Bitcoin seed";
 const P256_SEED_KEY: &[u8] = b"Nist256p1 seed";
 const ED25519_SEED_KEY: &[u8] = b"ed25519 seed";
 
-pub fn derive_secp256k1(seed: &[u8], path: &DerivationPath) -> k256::SecretKey {
+pub(super) fn derive_secp256k1(seed: &[u8], path: &DerivationPath) -> k256::SecretKey {
     let key_bytes = slip10_derive(
         seed,
         path,
@@ -27,7 +27,7 @@ pub fn derive_secp256k1(seed: &[u8], path: &DerivationPath) -> k256::SecretKey {
         .expect("SLIP-0010 secp256k1 derivation produced a valid key")
 }
 
-pub fn derive_p256(seed: &[u8], path: &DerivationPath) -> p256::SecretKey {
+pub(super) fn derive_p256(seed: &[u8], path: &DerivationPath) -> p256::SecretKey {
     let key_bytes = slip10_derive(
         seed,
         path,
@@ -40,7 +40,7 @@ pub fn derive_p256(seed: &[u8], path: &DerivationPath) -> p256::SecretKey {
 }
 
 /// Panics if any path component is non-hardened; SLIP-0010 forbids it for Ed25519.
-pub fn derive_ed25519(seed: &[u8], path: &DerivationPath) -> ic_ed25519::PrivateKey {
+pub(super) fn derive_ed25519(seed: &[u8], path: &DerivationPath) -> ic_ed25519::PrivateKey {
     let key_bytes = slip10_derive(seed, path, ED25519_SEED_KEY, None, |_| unreachable!());
     ic_ed25519::PrivateKey::deserialize_raw(&*key_bytes)
         .expect("SLIP-0010 ed25519 derivation produced a valid key")

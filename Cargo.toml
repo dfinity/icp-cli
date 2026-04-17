@@ -38,6 +38,7 @@ dialoguer = "0.12.0"
 directories = "6.0.0"
 dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
+crypto-bigint = { version = "0.5.5", features = ["zeroize"] }
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
 fd-lock = "4.0.4"
 flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
@@ -45,6 +46,8 @@ futures = "0.3.31"
 glob = "0.3.2"
 handlebars = "6.3.2"
 hex = { version = "0.4.3", features = ["serde"] }
+hmac = { version = "0.13", features = ["zeroize"] }
+hybrid-array = { version = "0.4.10", features = ["zeroize"] }
 httptest = "0.16.3"
 ic-agent = { version = "0.47.0" }
 ic-asset = "0.29.0"
@@ -87,7 +90,7 @@ serial_test = { version = "3.2.0", features = ["file_locks"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9.34"
-sha2 = "0.10.9"
+sha2 = { version = "0.11.0", features = ["zeroize"] }
 shellwords = "1.1.0"
 slog = "2.7.0"
 snafu = "0.9.0"

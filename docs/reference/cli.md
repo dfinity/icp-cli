@@ -13,6 +13,9 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister call`↴](#icp-canister-call)
 * [`icp canister create`↴](#icp-canister-create)
 * [`icp canister delete`↴](#icp-canister-delete)
+* [`icp canister id`↴](#icp-canister-id)
+* [`icp canister id set`↴](#icp-canister-id-set)
+* [`icp canister id show`↴](#icp-canister-id-show)
 * [`icp canister install`↴](#icp-canister-install)
 * [`icp canister list`↴](#icp-canister-list)
 * [`icp canister logs`↴](#icp-canister-logs)
@@ -127,6 +130,7 @@ Perform canister operations against a network
 * `call` — Make a canister call
 * `create` — Create a canister on a network
 * `delete` — Delete a canister from a network
+* `id` — Commands to manage canister IDs
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
 * `logs` — Fetch and display canister logs
@@ -267,6 +271,56 @@ Delete a canister from a network
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
+
+
+
+## `icp canister id`
+
+Commands to manage canister IDs
+
+**Usage:** `icp canister id <COMMAND>`
+
+###### **Subcommands:**
+
+* `set` — Set the canister ID for a canister in an environment
+* `show` — Show the canister ID for a canister in an environment
+
+
+
+## `icp canister id set`
+
+Set the canister ID for a canister in an environment.
+
+Use this to register a pre-existing canister ID without creating a new canister on-chain. Fails if the canister already has an ID unless `--force` is given.
+
+**Usage:** `icp canister id set [OPTIONS] <CANISTER> <CANISTER_ID>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name of the canister as defined in icp.yaml
+* `<CANISTER_ID>` — The canister principal to set
+
+###### **Options:**
+
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-f`, `--force` — Overwrite the canister ID if one is already set
+
+
+
+## `icp canister id show`
+
+Show the canister ID for a canister in an environment
+
+**Usage:** `icp canister id show [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name of the canister as defined in icp.yaml
+
+###### **Options:**
+
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--json` — Output as JSON
 
 
 

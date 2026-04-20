@@ -1,5 +1,5 @@
 service : {
-  set_config : (text) -> ();
+  set_uploader : (principal) -> ();
   register : (text, text) -> ();
-  show : () -> (text, vec record { text; text }) query;
+  show : () -> (opt principal, vec record { text; text }) query;
 }

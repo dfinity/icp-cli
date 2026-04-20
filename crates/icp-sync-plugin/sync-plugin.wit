@@ -27,6 +27,11 @@ interface types {
         /// Files declared in the manifest step's `files` setting, read by
         /// the host and passed inline. The plugin decides how to use them.
         files: list<file-input>,
+        /// Textual principal of the signing identity used for canister calls.
+        identity-principal: string,
+        /// Textual principal of the proxy canister, if one was configured via
+        /// `--proxy`. None when no proxy is in use.
+        proxy-canister-id: option<string>,
     }
 
     /// A request to call a method on the target canister.

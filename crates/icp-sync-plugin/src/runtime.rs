@@ -139,6 +139,7 @@ pub fn run_plugin(
     target_canister_id: Principal,
     agent: Agent,
     proxy: Option<Principal>,
+    identity_principal: Principal,
     environment: String,
     stdio: Option<Sender<String>>,
 ) -> Result<(), RunPluginError> {
@@ -212,6 +213,8 @@ pub fn run_plugin(
             .into_iter()
             .map(|(name, content)| FileInput { name, content })
             .collect(),
+        identity_principal: identity_principal.to_text(),
+        proxy_canister_id: proxy.map(|p| p.to_text()),
     };
 
     let result = plugin

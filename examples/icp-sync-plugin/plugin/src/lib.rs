@@ -6,7 +6,7 @@ wit_bindgen::generate!({
 use std::fs;
 use std::path::Path;
 
-use candid::Encode;
+use candid::{Encode, Principal};
 
 struct Plugin;
 
@@ -17,20 +17,23 @@ impl Guest for Plugin {
             input.canister_id, input.environment
         );
 
-        // 1. Upload the config value — the first file the manifest declared.
-        if let Some(config) = input.files.first() {
-            let arg = Encode!(&config.content.trim())
-                .map_err(|e| format!("encode set_config arg: {e}"))?;
-            canister_call(&CanisterCallRequest {
-                method: "set_config".to_string(),
-                arg,
-                call_type: Some(icp::sync_plugin::types::CallType::Update),
-                direct: false,
-            })?;
-            println!("set_config from {}: ok", config.name);
-        }
+        // 1. Set the uploader to the current identity principal.
+        //    Routed through the proxy (direct: false) so the controller-gated
+        //    call is signed by the proxy canister, which is a controller.
+        let uploader = Principal::from_text(&input.identity_principal)
+            .map_err(|e| format!("invalid identity principal: {e}"))?;
+        let arg = Encode!(&uploader).map_err(|e| format!("encode set_uploader arg: {e}"))?;
+        canister_call(&CanisterCallRequest {
+            method: "set_uploader".to_string(),
+            arg,
+            call_type: Some(icp::sync_plugin::types::CallType::Update),
+            direct: false,
+        })?;
+        println!("set_uploader ({}): ok", input.identity_principal);
 
         // 2. Register every file found by traversing the preopened dirs.
+        //    Direct calls (direct: true) because register is gated on the
+        //    uploader principal, which is the current identity — not the proxy.
         let mut registered = 0u32;
         for dir in &input.dirs {
             registered += register_dir(Path::new(dir))?;
@@ -65,7 +68,7 @@ fn register_dir(dir: &Path) -> Result<u32, String> {
                 method: "register".to_string(),
                 arg,
                 call_type: Some(icp::sync_plugin::types::CallType::Update),
-                direct: false,
+                direct: true,
             })?;
             println!("{path_str}: ok");
             count += 1;

@@ -16,9 +16,7 @@ canisters:
       steps:
         - type: plugin
           # Path to the compiled PoC plugin wasm, relative to this directory.
-          # Build it first: cd plugin && cargo build --target wasm32-wasip2 --release
-          path: plugin/target/wasm32-wasip2/release/icp_sync_plugin_poc.wasm
+          # Build it first: cargo build -p plugin --target wasm32-wasip2 --release
+          path: target/wasm32-wasip2/release/plugin.wasm
           dirs:
             - seed-data
-          files:
-            - config.txt

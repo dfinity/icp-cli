@@ -47,6 +47,9 @@ pub enum PluginError {
     #[snafu(display("plugin wasm checksum mismatch, expected: {expected}, actual: {actual}"))]
     ChecksumMismatch { expected: String, actual: String },
 
+    #[snafu(display("failed to get identity principal: {err}"))]
+    GetIdentityPrincipal { err: String },
+
     #[snafu(display("failed to run plugin"))]
     Run { source: RunPluginError },
 
@@ -140,6 +143,10 @@ pub(super) async fn sync(
     }
 
     // 4. Run the plugin (blocking call — signal Tokio that this thread will block).
+    let identity_principal = agent
+        .get_principal()
+        .map_err(|err| PluginError::GetIdentityPrincipal { err })?;
+
     let wasm_path_buf = Utf8PathBuf::from(wasm_path.as_str());
     let agent_clone = agent.clone();
     let environment_owned = environment.to_owned();
@@ -154,6 +161,7 @@ pub(super) async fn sync(
             params.cid,
             agent_clone,
             proxy,
+            identity_principal,
             environment_owned,
             stdio_clone,
         )

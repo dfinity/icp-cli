@@ -3,6 +3,7 @@ use clap::Subcommand;
 pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;
+pub(crate) mod id;
 pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod logs;
@@ -22,6 +23,8 @@ pub(crate) enum Command {
     Call(call::CallArgs),
     Create(create::CreateArgs),
     Delete(delete::DeleteArgs),
+    #[command(subcommand)]
+    Id(id::Command),
     Install(install::InstallArgs),
     List(list::ListArgs),
     Logs(logs::LogsArgs),

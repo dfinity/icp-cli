@@ -205,6 +205,15 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::canister::delete::exec(ctx, &args).await?
             }
 
+            commands::canister::Command::Id(cmd) => match cmd {
+                commands::canister::id::Command::Set(args) => {
+                    commands::canister::id::set::exec(ctx, &args).await?
+                }
+                commands::canister::id::Command::Show(args) => {
+                    commands::canister::id::show::exec(ctx, &args).await?
+                }
+            },
+
             commands::canister::Command::Install(args) => {
                 commands::canister::install::exec(ctx, &args).await?
             }

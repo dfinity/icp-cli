@@ -1,3 +1,4 @@
+use candid::Principal;
 use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
@@ -14,6 +15,10 @@ use crate::{
 pub(crate) struct SyncArgs {
     /// Canister names (if empty, sync all canisters in environment)
     pub(crate) canisters: Vec<String>,
+
+    /// Principal of a proxy canister to route management canister calls through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
@@ -82,7 +87,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         agent,
         sync_canisters,
         environment_selection.name().to_owned(),
-        None,
+        args.proxy,
         ctx.debug,
     )
     .await?;

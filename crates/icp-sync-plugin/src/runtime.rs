@@ -1,6 +1,4 @@
 // Host-side Component Model runtime for sync plugins.
-// The WIT world is in sync-plugin/sync-plugin.wit.
-
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
@@ -13,7 +11,7 @@ use wasmtime_wasi::{DirPerms, FilePerms};
 
 wasmtime::component::bindgen!({
     world: "sync-plugin",
-    path: "../../sync-plugin/sync-plugin.wit",
+    path: "sync-plugin.wit",
 });
 
 use icp::sync_plugin::types::CallType;

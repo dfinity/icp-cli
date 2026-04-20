@@ -1,6 +1,6 @@
 wit_bindgen::generate!({
     world: "sync-plugin",
-    path: "../../sync-plugin/sync-plugin.wit",
+    path: "../../crates/icp-sync-plugin/sync-plugin.wit",
 });
 
 use std::fs;

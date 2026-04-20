@@ -2,7 +2,7 @@
 members = ["crates/*"]
 
 default-members = ["crates/icp-cli"]
-exclude = ["examples/icp-rust", "examples/icp-rust-recipe", "examples/icp-sync-plugin", "sync-plugin/poc"]
+exclude = ["examples/icp-rust", "examples/icp-rust-recipe", "examples/icp-sync-plugin"]
 resolver = "3"
 
 [workspace.package]

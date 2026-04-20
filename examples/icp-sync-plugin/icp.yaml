@@ -4,7 +4,7 @@ canisters:
       steps:
         - type: script
           commands:
-            - cargo build --target wasm32-unknown-unknown --release --locked
+            - cargo build --target wasm32-unknown-unknown --release --locked -p canister
             - mv target/wasm32-unknown-unknown/release/canister.wasm "$ICP_WASM_OUTPUT_PATH"
 
         - type: script
@@ -16,8 +16,8 @@ canisters:
       steps:
         - type: plugin
           # Path to the compiled PoC plugin wasm, relative to this directory.
-          # Build it first: cd ../../sync-plugin/poc && cargo build --target wasm32-wasip2 --release
-          path: ../../sync-plugin/poc/target/wasm32-wasip2/release/icp_sync_plugin_poc.wasm
+          # Build it first: cd plugin && cargo build --target wasm32-wasip2 --release
+          path: plugin/target/wasm32-wasip2/release/icp_sync_plugin_poc.wasm
           dirs:
             - seed-data
           files:

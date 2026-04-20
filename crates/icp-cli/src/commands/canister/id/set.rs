@@ -28,8 +28,17 @@ pub(crate) struct SetArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &SetArgs) -> Result<(), anyhow::Error> {
     let environment: EnvironmentSelection = args.environment.clone().into();
-    let selection = CanisterSelection::Named(args.canister.clone());
 
+    let env = ctx.get_environment(&environment).await?;
+    if !env.canisters.contains_key(&args.canister) {
+        bail!(
+            "canister '{}' not found in environment '{}'",
+            args.canister,
+            environment.name()
+        );
+    }
+
+    let selection = CanisterSelection::Named(args.canister.clone());
     if let Ok(existing) = ctx.get_canister_id_for_env(&selection, &environment).await {
         if !args.force {
             bail!(

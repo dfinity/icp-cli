@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::io::stdout;
 
 use clap::Args;
-use icp::context::{CanisterSelection, Context, EnvironmentSelection};
+use icp::context::{CanisterSelection, Context, EnvironmentSelection, GetCanisterIdForEnvError};
+use icp::store_id::LookupIdError;
 use serde::Serialize;
 
 use crate::options::EnvironmentOpt;
@@ -71,12 +72,17 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
         let mut entries: BTreeMap<String, Option<String>> = BTreeMap::new();
         for name in env.canisters.keys() {
             let sel = CanisterSelection::Named(name.clone());
-            let id = ctx
-                .get_canister_id_for_env(&sel, &environment)
-                .await
-                .ok()
-                .map(|p| p.to_string());
-            entries.insert(name.clone(), id);
+            match ctx.get_canister_id_for_env(&sel, &environment).await {
+                Ok(id) => {
+                    entries.insert(name.clone(), Some(id.to_string()));
+                }
+                Err(GetCanisterIdForEnvError::CanisterIdLookup { source, .. })
+                    if matches!(*source, LookupIdError::IdNotFound { .. }) =>
+                {
+                    entries.insert(name.clone(), None);
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
 
         if args.json {

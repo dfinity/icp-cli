@@ -56,8 +56,9 @@ world sync-plugin {
     /// message on failure. The plugin is responsible for decoding.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
 
-    /// Print a message to the CLI's progress output.
-    import log: func(message: string);
+    // The plugin's stdout and stderr are captured by the host and forwarded
+    // to the CLI's progress output, so plugins can simply print (e.g.
+    // Rust's `println!` / `eprintln!`) instead of calling a host import.
 
     // -------------------------------------------------------------------------
     // Plugin exports — implemented by the plugin, called by the host

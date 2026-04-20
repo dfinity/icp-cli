@@ -12,10 +12,10 @@ struct Plugin;
 
 impl Guest for Plugin {
     fn exec(input: SyncExecInput) -> Result<Option<String>, String> {
-        log(&format!(
+        println!(
             "sync plugin: starting for canister {} (environment: {})",
             input.canister_id, input.environment
-        ));
+        );
 
         // 1. Upload the config value — the first file the manifest declared.
         if let Some(config) = input.files.first() {
@@ -26,7 +26,7 @@ impl Guest for Plugin {
                 arg,
                 call_type: Some(icp::sync_plugin::types::CallType::Update),
             })?;
-            log(&format!("set_config from {}: ok", config.name));
+            println!("set_config from {}: ok", config.name);
         }
 
         // 2. Register every file found by traversing the preopened dirs.
@@ -65,7 +65,7 @@ fn register_dir(dir: &Path) -> Result<u32, String> {
                 arg,
                 call_type: Some(icp::sync_plugin::types::CallType::Update),
             })?;
-            log(&format!("{path_str}: ok"));
+            println!("{path_str}: ok");
             count += 1;
         }
     }

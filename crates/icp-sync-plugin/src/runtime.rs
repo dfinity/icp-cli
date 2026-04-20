@@ -8,6 +8,7 @@ use candid::Principal;
 use ic_agent::Agent;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
+use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{DirPerms, FilePerms};
 
 wasmtime::component::bindgen!({
@@ -21,7 +22,6 @@ use icp::sync_plugin::types::CallType;
 struct HostState {
     target_canister_id: Principal,
     agent: Arc<Agent>,
-    stdio: Option<Sender<String>>,
     // WASI context. Preopened directories in this context are the only
     // filesystem locations the plugin can access.
     wasi_ctx: wasmtime_wasi::WasiCtx,
@@ -59,12 +59,6 @@ impl SyncPluginImports for HostState {
                 }
             })
             .map_err(|e| format!("canister call failed: {e}"))
-    }
-
-    fn log(&mut self, message: String) {
-        if let Some(tx) = &self.stdio {
-            let _ = tx.blocking_send(message);
-        }
     }
 }
 
@@ -143,10 +137,17 @@ pub fn run_plugin(
             .context(PreopenDirSnafu { dir: host_path })?;
     }
 
+    let stdout_pipe = MemoryOutputPipe::new(usize::MAX);
+    let stderr_pipe = MemoryOutputPipe::new(usize::MAX);
+    if stdio.is_some() {
+        wasi_builder
+            .stdout(stdout_pipe.clone())
+            .stderr(stderr_pipe.clone());
+    }
+
     let host_state = HostState {
         target_canister_id,
         agent: Arc::new(agent),
-        stdio,
         wasi_ctx: wasi_builder.build(),
         wasi_table: wasmtime_wasi::ResourceTable::new(),
     };
@@ -182,7 +183,15 @@ pub fn run_plugin(
         .call_exec(&mut store, &input)
         .context(CallExecSnafu { path: wasm_path })?;
 
-    let stdio = store.into_data().stdio;
+    if let Some(tx) = &stdio {
+        for bytes in [stdout_pipe.contents(), stderr_pipe.contents()] {
+            if !bytes.is_empty() {
+                let s = String::from_utf8_lossy(&bytes).into_owned();
+                let _ = tx.blocking_send(s);
+            }
+        }
+    }
+
     match result {
         Ok(Some(msg)) => {
             if let Some(tx) = &stdio {

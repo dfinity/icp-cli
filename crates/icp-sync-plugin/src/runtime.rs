@@ -99,31 +99,31 @@ impl SyncPluginImports for HostState {
 pub enum RunPluginError {
     #[snafu(display("failed to create wasmtime engine for plugin at {path}"))]
     CreateEngine {
-        source: anyhow::Error,
+        source: wasmtime::Error,
         path: Utf8PathBuf,
     },
 
     #[snafu(display("failed to load wasm component from {path}"))]
     LoadComponent {
-        source: anyhow::Error,
+        source: wasmtime::Error,
         path: Utf8PathBuf,
     },
 
     #[snafu(display("failed to preopen directory '{dir}' for the plugin"))]
     PreopenDir {
-        source: anyhow::Error,
+        source: wasmtime::Error,
         dir: Utf8PathBuf,
     },
 
     #[snafu(display("failed to instantiate wasm component at {path}"))]
     Instantiate {
-        source: anyhow::Error,
+        source: wasmtime::Error,
         path: Utf8PathBuf,
     },
 
     #[snafu(display("failed to call exec() on plugin at {path}"))]
     CallExec {
-        source: anyhow::Error,
+        source: wasmtime::Error,
         path: Utf8PathBuf,
     },
 

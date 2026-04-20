@@ -1,7 +1,7 @@
 # Unreleased
 
 * feat: `icp canister id set` to register a pre-existing canister ID for a canister in an environment. Use `--force` or `-f` to overwrite an existing ID
-* feat: `icp canister id show` to display the stored canister ID for a canister in an environment. Supports `--json`
+* feat: `icp canister id show` to display the stored canister ID for a canister in an environment. When no canister name is given, lists all canisters with their ID or `(not set)`. Supports `--json`
 * feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
 

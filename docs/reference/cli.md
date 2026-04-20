@@ -283,7 +283,7 @@ Commands to manage canister IDs
 ###### **Subcommands:**
 
 * `set` — Set the canister ID for a canister in an environment
-* `show` — Show the canister ID for a canister in an environment
+* `show` — Show canister IDs in an environment
 
 
 
@@ -309,13 +309,15 @@ Use this to register a pre-existing canister ID without creating a new canister 
 
 ## `icp canister id show`
 
-Show the canister ID for a canister in an environment
+Show canister IDs in an environment.
 
-**Usage:** `icp canister id show [OPTIONS] <CANISTER>`
+When a canister name is given, prints its ID. Without a name, lists all canisters with their ID or "(not set)".
+
+**Usage:** `icp canister id show [OPTIONS] [CANISTER]`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name of the canister as defined in icp.yaml
+* `<CANISTER>` — Name of the canister as defined in icp.yaml. If omitted, lists all canisters with their ID or "(not set)"
 
 ###### **Options:**
 

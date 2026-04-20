@@ -38,6 +38,11 @@ interface types {
         arg: list<u8>,
         /// Defaults to update if omitted.
         call-type: option<call-type>,
+        /// When true, the call bypasses any proxy canister configured via
+        /// `--proxy`, going directly to the target canister. When false
+        /// (the default), the host routes the call through the proxy if one
+        /// is configured.
+        direct: bool,
     }
 }
 

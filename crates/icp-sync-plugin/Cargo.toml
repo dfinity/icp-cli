@@ -12,6 +12,7 @@ camino.workspace = true
 candid.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
+icp-canister-interfaces.workspace = true
 snafu.workspace = true
 tokio.workspace = true
 wasmtime.workspace = true

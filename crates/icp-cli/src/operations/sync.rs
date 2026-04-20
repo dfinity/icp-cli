@@ -1,5 +1,6 @@
+use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, export::Principal};
+use ic_agent::Agent;
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
@@ -33,6 +34,7 @@ async fn sync_canister(
     canister_id: Principal,
     canister_info: &Canister,
     environment: &str,
+    proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
 ) -> Result<(), SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
@@ -52,6 +54,7 @@ async fn sync_canister(
                     path: canister_path.clone(),
                     cid: canister_id,
                     environment: environment.to_owned(),
+                    proxy,
                 },
                 agent,
                 Some(tx),
@@ -73,6 +76,7 @@ pub(crate) async fn sync_many(
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     environment: String,
+    proxy: Option<Principal>,
     debug: bool,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
@@ -95,6 +99,7 @@ pub(crate) async fn sync_many(
                     cid,
                     &canister_info,
                     &environment,
+                    proxy,
                     &mut pb,
                 )
                 .await;

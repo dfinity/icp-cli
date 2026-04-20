@@ -82,6 +82,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         agent,
         sync_canisters,
         environment_selection.name().to_owned(),
+        None,
         ctx.debug,
     )
     .await?;

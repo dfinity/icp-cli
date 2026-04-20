@@ -367,6 +367,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             agent.clone(),
             sync_canisters,
             environment_selection.name().to_owned(),
+            args.proxy,
             ctx.debug,
         )
         .await?;

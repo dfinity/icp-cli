@@ -1,4 +1,5 @@
 use camino::Utf8PathBuf;
+use candid::Principal;
 use ic_agent::Agent;
 use icp_sync_plugin::{RunPluginError, run_plugin};
 use reqwest::{Client, Method, Request};
@@ -60,6 +61,7 @@ pub(super) async fn sync(
     params: &Params,
     agent: &Agent,
     environment: &str,
+    proxy: Option<Principal>,
     stdio: Option<Sender<String>>,
 ) -> Result<(), PluginError> {
     // 1. Acquire the wasm bytes — either from a local path or a remote URL.
@@ -151,6 +153,7 @@ pub(super) async fn sync(
             files,
             params.cid,
             agent_clone,
+            proxy,
             environment_owned,
             stdio_clone,
         )

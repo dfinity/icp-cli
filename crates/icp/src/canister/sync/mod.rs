@@ -17,6 +17,8 @@ pub struct Params {
     /// Name of the environment being synced (e.g. "local", "production").
     /// Passed to sync plugin steps via `SyncExecInput`.
     pub environment: String,
+    /// Proxy canister to route calls through, if `--proxy` was passed.
+    pub proxy: Option<Principal>,
 }
 
 #[derive(Debug, Snafu)]
@@ -56,12 +58,15 @@ impl Synchronize for Syncer {
         match step {
             SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
-            SyncStep::Plugin(adapter) => {
-                Ok(
-                    plugin::sync(adapter, params, agent, &params.environment.clone(), stdio)
-                        .await?,
-                )
-            }
+            SyncStep::Plugin(adapter) => Ok(plugin::sync(
+                adapter,
+                params,
+                agent,
+                &params.environment.clone(),
+                params.proxy,
+                stdio,
+            )
+            .await?),
         }
     }
 }

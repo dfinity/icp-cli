@@ -3832,6 +3832,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-agent",
+ "icp-canister-interfaces",
  "snafu",
  "tokio",
  "wasmtime",

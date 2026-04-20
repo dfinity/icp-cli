@@ -25,6 +25,7 @@ impl Guest for Plugin {
                 method: "set_config".to_string(),
                 arg,
                 call_type: Some(icp::sync_plugin::types::CallType::Update),
+                direct: false,
             })?;
             println!("set_config from {}: ok", config.name);
         }
@@ -64,6 +65,7 @@ fn register_dir(dir: &Path) -> Result<u32, String> {
                 method: "register".to_string(),
                 arg,
                 call_type: Some(icp::sync_plugin::types::CallType::Update),
+                direct: false,
             })?;
             println!("{path_str}: ok");
             count += 1;

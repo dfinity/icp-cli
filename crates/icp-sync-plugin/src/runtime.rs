@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use candid::Principal;
+use candid::{Encode, Principal};
 use ic_agent::Agent;
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
@@ -20,6 +20,8 @@ use icp::sync_plugin::types::CallType;
 struct HostState {
     target_canister_id: Principal,
     agent: Arc<Agent>,
+    /// Proxy canister to route update calls through, if configured.
+    proxy: Option<Principal>,
     // WASI context. Preopened directories in this context are the only
     // filesystem locations the plugin can access.
     wasi_ctx: wasmtime_wasi::WasiCtx,
@@ -40,23 +42,56 @@ impl icp::sync_plugin::types::Host for HostState {}
 
 impl SyncPluginImports for HostState {
     fn canister_call(&mut self, req: CanisterCallRequest) -> Result<Vec<u8>, String> {
-        let arg_bytes = req.arg;
+        use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 
+        let arg_bytes = req.arg;
         let cid = self.target_canister_id;
         let method = req.method.clone();
         let agent = Arc::clone(&self.agent);
         let call_type = req.call_type.unwrap_or(CallType::Update);
+        let proxy = if req.direct { None } else { self.proxy };
 
         // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
         // so blocking the thread here is safe.
-        tokio::runtime::Handle::current()
-            .block_on(async move {
-                match call_type {
-                    CallType::Update => agent.update(&cid, &method).with_arg(arg_bytes).await,
-                    CallType::Query => agent.query(&cid, &method).with_arg(arg_bytes).call().await,
+        tokio::runtime::Handle::current().block_on(async move {
+            match call_type {
+                CallType::Update => {
+                    if let Some(proxy_cid) = proxy {
+                        let proxy_args = ProxyArgs {
+                            canister_id: cid,
+                            method: method.clone(),
+                            args: arg_bytes,
+                            cycles: candid::Nat::from(0u64),
+                        };
+                        let encoded = Encode!(&proxy_args)
+                            .map_err(|e| format!("proxy encode failed: {e}"))?;
+                        let raw = agent
+                            .update(&proxy_cid, "proxy")
+                            .with_arg(encoded)
+                            .await
+                            .map_err(|e| format!("proxy call failed: {e}"))?;
+                        let (result,): (ProxyResult,) = candid::decode_args(&raw)
+                            .map_err(|e| format!("proxy decode failed: {e}"))?;
+                        match result {
+                            ProxyResult::Ok(ok) => Ok(ok.result),
+                            ProxyResult::Err(err) => Err(err.format_error()),
+                        }
+                    } else {
+                        agent
+                            .update(&cid, &method)
+                            .with_arg(arg_bytes)
+                            .await
+                            .map_err(|e| format!("canister call failed: {e}"))
+                    }
                 }
-            })
-            .map_err(|e| format!("canister call failed: {e}"))
+                CallType::Query => agent
+                    .query(&cid, &method)
+                    .with_arg(arg_bytes)
+                    .call()
+                    .await
+                    .map_err(|e| format!("canister call failed: {e}")),
+            }
+        })
     }
 }
 
@@ -103,6 +138,7 @@ pub fn run_plugin(
     files: Vec<(String, String)>,
     target_canister_id: Principal,
     agent: Agent,
+    proxy: Option<Principal>,
     environment: String,
     stdio: Option<Sender<String>>,
 ) -> Result<(), RunPluginError> {
@@ -146,6 +182,7 @@ pub fn run_plugin(
     let host_state = HostState {
         target_canister_id,
         agent: Arc::new(agent),
+        proxy,
         wasi_ctx: wasi_builder.build(),
         wasi_table: wasmtime_wasi::ResourceTable::new(),
     };

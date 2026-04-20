@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::stdout;
 
+use anyhow::bail;
 use clap::Args;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection, GetCanisterIdForEnvError};
 use icp::store_id::LookupIdError;
@@ -50,6 +51,15 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
     let environment: EnvironmentSelection = args.environment.clone().into();
 
     if let Some(canister) = &args.canister {
+        let env = ctx.get_environment(&environment).await?;
+        if !env.canisters.contains_key(canister) {
+            bail!(
+                "canister '{}' not found in environment '{}'",
+                canister,
+                environment.name()
+            );
+        }
+
         let selection = CanisterSelection::Named(canister.clone());
         let canister_id = ctx
             .get_canister_id_for_env(&selection, &environment)
@@ -77,7 +87,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
                     entries.insert(name.clone(), Some(id.to_string()));
                 }
                 Err(GetCanisterIdForEnvError::CanisterIdLookup { source, .. })
-                    if matches!(*source, LookupIdError::IdNotFound { .. }) =>
+                    if matches!(source.as_ref(), LookupIdError::IdNotFound { .. }) =>
                 {
                     entries.insert(name.clone(), None);
                 }

@@ -204,6 +204,19 @@ async fn canister_id_show_not_set() {
 }
 
 #[tokio::test]
+async fn canister_id_show_unknown_canister() {
+    let ctx = TestContext::new();
+    let project_dir = setup_project(&ctx);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "id", "show", "nonexistent"])
+        .assert()
+        .failure()
+        .stderr(contains("not found in environment"));
+}
+
+#[tokio::test]
 async fn canister_id_set_unknown_canister() {
     let ctx = TestContext::new();
     let project_dir = setup_project(&ctx);

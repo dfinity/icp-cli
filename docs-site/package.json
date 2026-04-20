@@ -7,7 +7,8 @@
     "dev": "npm run clean && astro dev",
     "build": "astro build",
     "preview": "npm run build && astro preview",
-    "clean": "rm -rf dist .astro"
+    "clean": "rm -rf dist .astro",
+    "test:versions": "./test-version-switcher.sh"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
@@ -17,6 +18,8 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
+    "@fontsource/inter": "^5.1.1",
+    "@resvg/resvg-js": "^2.6.2",
     "rehype-external-links": "^3.0.0",
     "typescript": "^5.7.3",
     "unist-util-visit": "^5.1.0"

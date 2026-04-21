@@ -246,10 +246,14 @@ pub(crate) async fn recv_delegation(
     let (chain_tx, chain_rx) = oneshot::channel::<DelegationChain>();
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
+    let allowed_origin =
+        HeaderValue::from_str(&host.origin().ascii_serialization()).expect("URL origin is valid");
+
     // chain_tx is wrapped in an Option so the handler can take ownership.
     let state = CallbackState {
         chain_tx: std::sync::Mutex::new(Some(chain_tx)),
         shutdown_tx: std::sync::Mutex::new(Some(shutdown_tx)),
+        allowed_origin,
     };
 
     let app = Router::new()
@@ -312,14 +316,12 @@ pub(crate) async fn recv_delegation(
 struct CallbackState {
     chain_tx: std::sync::Mutex<Option<oneshot::Sender<DelegationChain>>>,
     shutdown_tx: std::sync::Mutex<Option<oneshot::Sender<()>>>,
+    allowed_origin: HeaderValue,
 }
 
-fn cors_headers() -> HeaderMap {
+fn cors_headers(origin: &HeaderValue) -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
-    );
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin.clone());
     headers.insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
         HeaderValue::from_static("POST, OPTIONS"),
@@ -331,8 +333,8 @@ fn cors_headers() -> HeaderMap {
     headers
 }
 
-async fn handle_preflight() -> impl IntoResponse {
-    (StatusCode::NO_CONTENT, cors_headers())
+async fn handle_preflight(State(state): State<std::sync::Arc<CallbackState>>) -> impl IntoResponse {
+    (StatusCode::NO_CONTENT, cors_headers(&state.allowed_origin))
 }
 
 async fn handle_callback(
@@ -340,6 +342,19 @@ async fn handle_callback(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    let origin_ok = headers
+        .get(header::ORIGIN)
+        .map(|v| v == &state.allowed_origin)
+        .unwrap_or(false);
+    if !origin_ok {
+        return (
+            StatusCode::FORBIDDEN,
+            cors_headers(&state.allowed_origin),
+            "forbidden",
+        )
+            .into_response();
+    }
+
     // Only accept POST with JSON content.
     let content_type = headers
         .get(header::CONTENT_TYPE)
@@ -348,7 +363,7 @@ async fn handle_callback(
     if !content_type.starts_with("application/json") {
         return (
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            cors_headers(),
+            cors_headers(&state.allowed_origin),
             "expected application/json",
         )
             .into_response();
@@ -359,7 +374,7 @@ async fn handle_callback(
         Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,
-                cors_headers(),
+                cors_headers(&state.allowed_origin),
                 "invalid delegation chain",
             )
                 .into_response();
@@ -373,5 +388,5 @@ async fn handle_callback(
         let _ = tx.send(());
     }
 
-    (StatusCode::OK, cors_headers(), "").into_response()
+    (StatusCode::OK, cors_headers(&state.allowed_origin), "").into_response()
 }

@@ -7,6 +7,6 @@ pub(crate) mod ii;
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     Hsm(hsm::HsmArgs),
-    #[command(hide = true)]
+    #[command(hide = true)] // todo remove when II login is out of beta
     Ii(ii::IiArgs),
 }

@@ -90,6 +90,9 @@ jobs:
           # Copy custom domain file
           cp docs-site/public/.well-known/ic-domains root/.well-known/ic-domains
 
+          # Copy 404 page
+          cp docs-site/public/404.html root/404.html
+
           # Copy Matomo analytics script (site ID defined once here, not per-version)
           cp docs-site/matomo.js root/matomo.js
 

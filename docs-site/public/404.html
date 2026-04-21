@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Page not found — ICP CLI</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    :root {
+      --bg-start: #0e031f;
+      --bg-end: #281447;
+      --text: #f1eef5;
+      --muted: hsl(259, 4%, 56%);
+      --accent: #29abe2;
+      --font: "CircularXX", ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        sans-serif;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-start: #c0d9ff;
+        --bg-end: #f0b9e5;
+        --text: #181818;
+        --muted: hsl(259, 4%, 46%);
+        --accent: #3b00b9;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font);
+      background: linear-gradient(135deg, var(--bg-start), var(--bg-end));
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 28rem;
+    }
+
+    h1 {
+      font-size: 4rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    p {
+      margin-top: 0.75rem;
+      color: var(--muted);
+      font-size: 1.125rem;
+    }
+
+    a {
+      display: inline-block;
+      margin-top: 1.5rem;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>404</h1>
+    <p>The page you're looking for doesn't exist or has been moved.</p>
+    <a href="/">Go to documentation &rarr;</a>
+  </div>
+</body>
+
+</html>

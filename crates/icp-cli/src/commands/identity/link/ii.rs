@@ -344,7 +344,7 @@ async fn handle_callback(
 ) -> impl IntoResponse {
     let origin_ok = headers
         .get(header::ORIGIN)
-        .map(|v| v == &state.allowed_origin)
+        .map(|v| *v == state.allowed_origin)
         .unwrap_or(false);
     if !origin_ok {
         return (

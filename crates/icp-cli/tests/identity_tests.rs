@@ -1062,7 +1062,7 @@ async fn identity_link_hsm() {
         .arg(&pin_file)
         .assert()
         .success()
-        .stderr(contains("Identity \"hsm-identity\" linked to HSM"));
+        .stderr(contains("Identity `hsm-identity` linked to HSM"));
 
     // Verify the identity appears in the list
     ctx.icp()

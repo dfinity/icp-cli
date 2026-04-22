@@ -4,6 +4,7 @@ use ic_agent::export::Principal;
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use strum::{Display, EnumString};
+use url::Url;
 
 use crate::{
     fs::{
@@ -128,6 +129,16 @@ pub enum IdentitySpec {
         slot: usize,
         key_id: String,
     },
+    InternetIdentity {
+        algorithm: IdentityKeyAlgorithm,
+        /// The principal at the root of the delegation chain
+        /// (`Principal::self_authenticating(from_key)`), not the session key.
+        principal: Principal,
+        storage: IiKeyStorage,
+        /// The host used for II login, stored so `icp identity login` can
+        /// re-authenticate without requiring `--host` again.
+        host: Url,
+    },
 }
 
 impl IdentitySpec {
@@ -137,6 +148,7 @@ impl IdentitySpec {
             IdentitySpec::Anonymous => Principal::anonymous(),
             IdentitySpec::Keyring { principal, .. } => *principal,
             IdentitySpec::Hsm { principal, .. } => *principal,
+            IdentitySpec::InternetIdentity { principal, .. } => *principal,
         }
     }
 }
@@ -146,6 +158,13 @@ impl IdentitySpec {
 pub enum PemFormat {
     Plaintext,
     Pbes2,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum IiKeyStorage {
+    Keyring,
+    Pem { format: PemFormat },
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, EnumString, Display)]

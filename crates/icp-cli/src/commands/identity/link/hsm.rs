@@ -1,7 +1,11 @@
 use clap::Args;
 use dialoguer::Password;
-use icp::{context::Context, identity::key::link_hsm_identity, prelude::*};
-use snafu::{ResultExt, Snafu};
+use icp::{
+    context::Context,
+    identity::{key::link_hsm_identity, manifest::IdentityList},
+    prelude::*,
+};
+use snafu::{ResultExt, Snafu, ensure};
 use tracing::info;
 
 /// Link an HSM key to a new identity
@@ -28,6 +32,18 @@ pub(crate) struct HsmArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> {
+    ctx.dirs
+        .identity()?
+        .with_read(async |dirs| -> Result<(), HsmError> {
+            let list = IdentityList::load_from(dirs).context(LoadIdentityListSnafu)?;
+            ensure!(
+                !list.identities.contains_key(&args.name),
+                NameTakenSnafu { name: &args.name }
+            );
+            Ok(())
+        })
+        .await??;
+
     let pin_func: Box<dyn FnOnce() -> Result<String, String>> = match &args.pin_file {
         Some(path) => {
             let path = path.clone();
@@ -67,6 +83,14 @@ pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> 
 
 #[derive(Debug, Snafu)]
 pub(crate) enum HsmError {
+    #[snafu(display("identity `{name}` already exists"))]
+    NameTaken { name: String },
+
+    #[snafu(display("failed to load identity list"))]
+    LoadIdentityList {
+        source: icp::identity::manifest::LoadIdentityManifestError,
+    },
+
     #[snafu(transparent)]
     LockIdentityDir { source: icp::fs::lock::LockError },
 

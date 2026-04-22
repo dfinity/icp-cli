@@ -9,7 +9,7 @@ use icp::{
     fs::write_string,
     identity::{
         key::{CreateFormat, create_identity, validate_password},
-        manifest::IdentityKeyAlgorithm,
+        manifest::{IdentityKeyAlgorithm, IdentityList},
         seed::derive_key_from_seed_slip10,
     },
     prelude::*,
@@ -49,6 +49,19 @@ pub(crate) struct NewArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Error> {
+    ctx.dirs
+        .identity()?
+        .with_read(async |dirs| -> Result<(), anyhow::Error> {
+            let list = IdentityList::load_from(dirs).context("failed to load identity list")?;
+            anyhow::ensure!(
+                !list.identities.contains_key(&args.name),
+                "identity `{}` already exists",
+                args.name
+            );
+            Ok(())
+        })
+        .await??;
+
     let mnemonic = Mnemonic::new(
         MnemonicType::for_key_size(256).context("failed to get mnemonic type")?,
         Language::English,

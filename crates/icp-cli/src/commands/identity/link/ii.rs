@@ -17,10 +17,9 @@ use icp::{
     fs::read_to_string,
     identity::{delegation::DelegationChain, key, manifest::IdentityList},
     prelude::*,
-    signal,
 };
 use indicatif::{ProgressBar, ProgressStyle};
-use snafu::{ResultExt, Snafu, ensure};
+use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tokio::{net::TcpListener, sync::oneshot};
 use tracing::{info, warn};
 use url::Url;
@@ -182,6 +181,12 @@ pub(crate) enum IiRecvError {
 
     #[snafu(display("interrupted"))]
     Interrupted,
+
+    #[snafu(display("failed to open browser for II login"))]
+    OpenBrowser { source: std::io::Error },
+
+    #[snafu(display("failed to read confirmation from terminal"))]
+    TermConfirm,
 }
 
 /// Discovers the login path from `{host}/.well-known/ic-cli-login`, then opens
@@ -236,13 +241,6 @@ pub(crate) async fn recv_delegation(
     let mut login_url = host.join(login_path).expect("login_path is a valid path");
     login_url.set_fragment(Some(&fragment));
 
-    eprintln!();
-    eprintln!("  Press Enter to log in at {}", {
-        let mut display = login_url.clone();
-        display.set_fragment(None);
-        display
-    });
-
     let (chain_tx, chain_rx) = oneshot::channel::<DelegationChain>();
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
@@ -267,6 +265,12 @@ pub(crate) async fn recv_delegation(
             .expect("valid template"),
     );
 
+    eprintln!();
+    eprintln!("  Press Enter to log in at {}", {
+        let mut display = login_url.clone();
+        display.set_fragment(None);
+        display
+    });
     // Detached thread for stdin — tokio's async stdin keeps the runtime alive on drop.
     let (enter_tx, mut enter_rx) = tokio::sync::mpsc::channel::<()>(1);
     std::thread::spawn(move || {
@@ -274,37 +278,17 @@ pub(crate) async fn recv_delegation(
         let _ = std::io::stdin().read_line(&mut buf);
         let _ = enter_tx.blocking_send(());
     });
+    enter_rx.recv().await.context(TermConfirmSnafu)?;
 
     let serve = axum::serve(listener, app).with_graceful_shutdown(async move {
         let _ = shutdown_rx.await;
     });
-
-    let mut browser_opened = false;
-
+    open::that(login_url.as_str()).context(OpenBrowserSnafu)?;
     let result = tokio::select! {
-        _ = signal::stop_signal() => {
-            spinner.finish_and_clear();
-            return InterruptedSnafu.fail();
-        }
         res = serve.into_future() => {
             res.context(ServeServerSnafu)?;
-            // Server shut down before we got a chain — shouldn't happen.
-            return InterruptedSnafu.fail();
+            panic!("receiving server ended unexpectedly");
         }
-        _ = async {
-            loop {
-                tokio::select! {
-                    _ = enter_rx.recv(), if !browser_opened => {
-                        browser_opened = true;
-                        spinner.set_message("Waiting for Internet Identity authentication...");
-                        spinner.enable_steady_tick(std::time::Duration::from_millis(100));
-                        let _ = open::that(login_url.as_str());
-                    }
-                    // Yield so the other branches in the outer select! can fire.
-                    _ = tokio::task::yield_now() => {}
-                }
-            }
-        } => { unreachable!() }
         chain = chain_rx => chain,
     };
 

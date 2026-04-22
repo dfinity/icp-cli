@@ -130,7 +130,7 @@ echo "✓ index.html created"
 # Copy root-level files from latest version (mirrors publish-root-files CI logic)
 echo ""
 echo "Copying root-level files from $LATEST_VERSION/..."
-for f in llms.txt llms-full.txt feed.xml og-image.png; do
+for f in 404.html llms.txt llms-full.txt feed.xml og-image.png; do
   if [ -f "$TEST_DIR/$LATEST_VERSION/$f" ]; then
     cp "$TEST_DIR/$LATEST_VERSION/$f" "$TEST_DIR/$f"
     echo "✓ Copied $f from $LATEST_VERSION/"
@@ -239,6 +239,9 @@ else
     echo "  - http://localhost:${TEST_PORT}/0.2/ (version 0.2)"
     echo "  - http://localhost:${TEST_PORT}/0.1/ (version 0.1)"
     echo "  - http://localhost:${TEST_PORT}/main/ (main branch)"
+    echo "  - http://localhost:${TEST_PORT}/404.html (Starlight 404 from latest version)"
+    echo "  - http://localhost:${TEST_PORT}/0.2/does-not-exist (versioned 404 fallback)"
+    echo "  - http://localhost:${TEST_PORT}/does-not-exist (root 404 fallback)"
     echo "  - http://localhost:${TEST_PORT}/feed.xml (RSS feed, latest version)"
     echo "  - http://localhost:${TEST_PORT}/llms.txt (agent index, latest version)"
     echo "  - http://localhost:${TEST_PORT}/robots.txt (robots, latest version)"
@@ -260,7 +263,30 @@ else
     sleep 3
 
     cd "$TEST_DIR"
-    python3 -m http.server ${TEST_PORT} &
+    # Custom server: serves nearest 404.html up the path hierarchy, mimicking IC asset canister behaviour.
+    python3 - ${TEST_PORT} << 'PYEOF' &
+import sys, os
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
+
+class Handler(SimpleHTTPRequestHandler):
+    def send_error(self, code, message=None, explain=None):
+        if code == 404:
+            segments = self.path.split('?')[0].rstrip('/').split('/')
+            for i in range(len(segments), 0, -1):
+                candidate = Path('/'.join(segments[:i]).lstrip('/')) / '404.html'
+                if candidate.exists():
+                    self.send_response(404)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.end_headers()
+                    self.wfile.write(candidate.read_bytes())
+                    return
+        super().send_error(code, message, explain)
+    def log_message(self, fmt, *args):
+        pass  # suppress per-request noise
+
+HTTPServer(('', int(sys.argv[1])), Handler).serve_forever()
+PYEOF
     SERVER_PID=$!
 
     echo ""

@@ -8,8 +8,9 @@ use elliptic_curve::zeroize::Zeroizing;
 use icp::{
     fs::write_string,
     identity::{
-        key::{CreateFormat, IdentityKey, create_identity, validate_password},
-        seed::derive_default_key_from_seed,
+        key::{CreateFormat, create_identity, validate_password},
+        manifest::IdentityKeyAlgorithm,
+        seed::derive_key_from_seed_slip10,
     },
     prelude::*,
 };
@@ -81,7 +82,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
             create_identity(
                 dirs,
                 &args.name,
-                IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
+                derive_key_from_seed_slip10(&mnemonic, &IdentityKeyAlgorithm::Secp256k1),
                 format,
             )
         })

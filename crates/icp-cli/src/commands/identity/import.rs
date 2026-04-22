@@ -5,7 +5,7 @@ use elliptic_curve::zeroize::Zeroizing;
 use icp::identity::{
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
-    seed::derive_default_key_from_seed,
+    seed::derive_key_from_seed_slip10,
 };
 use icp::{fs::read_to_string, prelude::*};
 use itertools::Itertools;
@@ -26,7 +26,10 @@ use crate::commands::identity::StorageMode;
 
 /// Import a new identity
 #[derive(Debug, Args)]
-#[command(group(ArgGroup::new("import-from").required(true)))]
+#[command(
+    group(ArgGroup::new("import-from").required(true)),
+    group(ArgGroup::new("seed").required(false)),
+)]
 pub(crate) struct ImportArgs {
     /// Name for the imported identity
     name: String,
@@ -40,11 +43,11 @@ pub(crate) struct ImportArgs {
     from_pem: Option<PathBuf>,
 
     /// Read seed phrase interactively from the terminal
-    #[arg(long, group = "import-from")]
+    #[arg(long, group = "import-from", group = "seed")]
     read_seed_phrase: bool,
 
     /// Read seed phrase from a file
-    #[arg(long, value_name = "FILE", group = "import-from")]
+    #[arg(long, value_name = "FILE", group = "import-from", group = "seed")]
     from_seed_file: Option<PathBuf>,
 
     /// Read the PEM decryption password from a file instead of prompting
@@ -58,6 +61,10 @@ pub(crate) struct ImportArgs {
     /// Specify the key type when it cannot be detected from the PEM file (danger!)
     #[arg(long, value_enum)]
     assert_key_type: Option<IdentityKeyAlgorithm>,
+
+    /// Curve for SLIP-0010 key derivation from a seed phrase
+    #[arg(long, value_enum, default_value_t = IdentityKeyAlgorithm::Secp256k1, requires = "seed")]
+    seed_curve: IdentityKeyAlgorithm,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow::Error> {
@@ -94,14 +101,14 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
         .await?;
     } else if let Some(path) = &args.from_seed_file {
         let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase, format).await?;
+        import_from_seed_phrase(ctx, &args.name, &phrase, args.seed_curve.clone(), format).await?;
     } else if args.read_seed_phrase {
         let phrase = Password::new()
             .with_prompt("Enter seed phrase")
             .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase, format).await?;
+        import_from_seed_phrase(ctx, &args.name, &phrase, args.seed_curve.clone(), format).await?;
     } else {
         unreachable!();
     }
@@ -371,13 +378,14 @@ async fn import_from_seed_phrase(
     ctx: &Context,
     name: &str,
     phrase: &str,
+    algorithm: IdentityKeyAlgorithm,
     format: CreateFormat,
 ) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
-    let key = derive_default_key_from_seed(&mnemonic);
+    let key = derive_key_from_seed_slip10(&mnemonic, &algorithm);
     ctx.dirs
         .identity()?
-        .with_write(async |dirs| create_identity(dirs, name, IdentityKey::Secp256k1(key), format))
+        .with_write(async move |dirs| create_identity(dirs, name, key, format))
         .await??;
     Ok(())
 }

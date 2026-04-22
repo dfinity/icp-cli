@@ -57,6 +57,42 @@ fn identity_import_seed() {
 }
 
 #[test]
+fn identity_import_seed_curve() {
+    // Seed: "equip will roof matter pink blind book anxiety banner elbow sun young"
+    // p256:   SLIP-0010 "Nist256p1 seed", path m/44'/223'/0'/0/0
+    // ed25519: SLIP-0010 "ed25519 seed",  path m/44'/223'/0'/0'/0'
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(b"equip will roof matter pink blind book anxiety banner elbow sun young")
+        .unwrap();
+    let path = file.into_temp_path();
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "import", "alice_p256", "--from-seed-file"])
+        .arg(&path)
+        .args(["--seed-curve", "prime256v1"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice_p256"])
+        .assert()
+        .success()
+        .stdout(eq("gu6g3-gzs4p-fyjio-reppd-qk7ef-lhput-eg36s-ofyim-gi6y4-ce3qs-zqe").trim());
+
+    ctx.icp()
+        .args(["identity", "import", "alice_ed25519", "--from-seed-file"])
+        .arg(&path)
+        .args(["--seed-curve", "ed25519"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice_ed25519"])
+        .assert()
+        .success()
+        .stdout(eq("z2yk5-gbsi4-5eudl-y5q6u-qaqmf-37gjy-r66iy-oiqvb-d5nbr-5odxa-4qe").trim());
+}
+
+#[test]
 fn identity_import_pem() {
     // from plaintext sec1
     let ctx = TestContext::new();

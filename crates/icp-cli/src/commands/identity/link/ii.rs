@@ -15,7 +15,11 @@ use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
 use icp::{
     context::Context,
     fs::read_to_string,
-    identity::{delegation::DelegationChain, key, manifest::IdentityList},
+    identity::{
+        delegation::DelegationChain,
+        key::{self, validate_password},
+        manifest::IdentityList,
+    },
     prelude::*,
 };
 use indicatif::{ProgressBar, ProgressStyle};
@@ -79,6 +83,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
             } else {
                 Password::new()
                     .with_prompt("Enter password to encrypt identity")
+                    .validate_with(|s: &String| validate_password(s))
                     .with_confirmation("Confirm password", "Passwords do not match")
                     .interact()
                     .context(StoragePasswordTermReadSnafu)?
@@ -132,7 +137,9 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
 #[derive(Debug, Snafu)]
 pub(crate) enum IiError {
     #[snafu(display("identity `{name}` already exists"))]
-    NameTaken { name: String },
+    NameTaken {
+        name: String,
+    },
 
     #[snafu(display("failed to load identity list"))]
     LoadIdentityList {
@@ -140,22 +147,36 @@ pub(crate) enum IiError {
     },
 
     #[snafu(display("failed to read storage password file"))]
-    ReadStoragePasswordFile { source: icp::fs::IoError },
+    ReadStoragePasswordFile {
+        source: icp::fs::IoError,
+    },
 
     #[snafu(display("failed to read storage password from terminal"))]
-    StoragePasswordTermRead { source: dialoguer::Error },
+    StoragePasswordTermRead {
+        source: dialoguer::Error,
+    },
 
     #[snafu(display("failed during II authentication"))]
-    Poll { source: IiRecvError },
+    Poll {
+        source: IiRecvError,
+    },
 
     #[snafu(display("invalid public key in delegation chain"))]
-    DecodeFromKey { source: hex::FromHexError },
+    DecodeFromKey {
+        source: hex::FromHexError,
+    },
 
     #[snafu(transparent)]
-    LockIdentityDir { source: icp::fs::lock::LockError },
+    LockIdentityDir {
+        source: icp::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to link II identity"))]
-    Link { source: key::LinkIiIdentityError },
+    Link {
+        source: key::LinkIiIdentityError,
+    },
+
+    BadPassword {},
 }
 
 pub(crate) const DEFAULT_HOST: &str = "https://cli.id.ai";

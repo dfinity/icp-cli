@@ -2,6 +2,7 @@
 
 * feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
+* fix: Find icp.yaml even from within a symlinked folder.
 
 # v0.2.3
 

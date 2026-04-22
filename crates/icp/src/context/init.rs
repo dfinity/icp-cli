@@ -41,13 +41,28 @@ pub fn initialize(
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
 
-    // Project Root
+    // Project Root. On Unix, prefer $PWD (the logical path the user cd'd
+    // through) over getcwd(3), which resolves symlinks to the physical path
+    // and would break upward traversal when the user is inside a symlinked
+    // directory whose manifest sits above the symlink's location.
+    #[allow(clippy::disallowed_types)]
+    #[cfg(unix)]
+    let cwd_std: std::path::PathBuf = match std::env::var_os("PWD")
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute())
+    {
+        Some(p) => p,
+        None => current_dir().context(CwdSnafu)?,
+    };
+
+    #[allow(clippy::disallowed_types)]
+    #[cfg(not(unix))]
+    let cwd_std: std::path::PathBuf =
+        dunce::canonicalize(current_dir().context(CwdSnafu)?).context(CwdSnafu)?;
+
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        dunce::canonicalize(current_dir().context(CwdSnafu)?)
-            .context(CwdSnafu)?
-            .try_into()
-            .context(Utf8PathSnafu)?, // cwd
-        project_root_override, // dir
+        cwd_std.try_into().context(Utf8PathSnafu)?, // cwd
+        project_root_override,                      // dir
     ));
 
     // Canister ID Store

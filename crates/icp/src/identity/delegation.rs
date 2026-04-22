@@ -120,7 +120,10 @@ mod tests {
         assert_eq!(from_key, vec![0xa1, 0xb2, 0xc3, 0xd4]);
         assert_eq!(delegations.len(), 1);
         assert_eq!(delegations[0].signature, vec![0x0a, 0x0b, 0x0c]);
-        assert_eq!(delegations[0].delegation.pubkey, vec![0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(
+            delegations[0].delegation.pubkey,
+            vec![0x01, 0x02, 0x03, 0x04]
+        );
         assert_eq!(delegations[0].delegation.expiration, 0x1234);
         assert_eq!(
             delegations[0].delegation.targets.as_ref().expect("targets"),
@@ -165,14 +168,9 @@ mod tests {
             signed_delegation(format!("{:x}", 1_000_000_000_u64), None),
         ]);
 
-        let earliest = earliest_expiration(&chain)
-            .expect("expiration parsing should succeed")
-            .expect("expected an expiration");
+        let earliest = earliest_expiration(&chain).expect("expiration parsing should succeed");
 
-        assert_eq!(
-            earliest,
-            UNIX_EPOCH + std::time::Duration::from_nanos(1_000_000_000)
-        );
+        assert_eq!(earliest, 1_000_000_000);
     }
 
     #[test]
@@ -193,7 +191,7 @@ mod tests {
             None,
         )]);
 
-        assert!(is_expiring_soon(&chain).expect("expiration parsing should succeed"));
+        assert!(is_expiring_soon(&chain, 0).expect("expiration parsing should succeed"));
     }
 
     #[test]
@@ -203,18 +201,22 @@ mod tests {
             .expect("time went backwards")
             .as_nanos() as u64;
         let chain = chain_with_delegations(vec![signed_delegation(
-            format!("{:x}", now.saturating_add(365 * 24 * 60 * 60 * 1_000_000_000_u64)),
+            format!(
+                "{:x}",
+                now.saturating_add(365 * 24 * 60 * 60 * 1_000_000_000_u64)
+            ),
             None,
         )]);
 
-        assert!(!is_expiring_soon(&chain).expect("expiration parsing should succeed"));
+        assert!(!is_expiring_soon(&chain, 0).expect("expiration parsing should succeed"));
     }
 
     #[test]
     fn is_expiring_soon_rejects_invalid_expiration_hex() {
-        let chain = chain_with_delegations(vec![signed_delegation("bad-expiration".to_string(), None)]);
+        let chain =
+            chain_with_delegations(vec![signed_delegation("bad-expiration".to_string(), None)]);
 
-        assert!(is_expiring_soon(&chain).is_err());
+        assert!(is_expiring_soon(&chain, 0).is_err());
     }
 }
 

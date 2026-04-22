@@ -350,63 +350,17 @@ fn load_ii_identity(
     let (from_key, signed_delegations) =
         delegation::to_agent_types(&stored_chain).context(DelegationConversionSnafu)?;
 
-    let pem_format = match storage {
+    let inner: Arc<dyn Identity> = match storage {
         IiKeyStorage::Keyring
         | IiKeyStorage::Pem {
             format: PemFormat::Plaintext,
-        } => PemFormat::Plaintext,
+        } => load_plaintext_identity(&doc, algorithm, &origin)?,
         IiKeyStorage::Pem {
             format: PemFormat::Pbes2,
-        } => PemFormat::Pbes2,
+        } => load_pbes2_identity(&doc, algorithm, password_func, &origin)?,
     };
 
-    let inner: Box<dyn Identity> = match pem_format {
-        PemFormat::Plaintext => match algorithm {
-            IdentityKeyAlgorithm::Ed25519 => {
-                let key = ic_ed25519::PrivateKey::deserialize_pkcs8(doc.contents())
-                    .context(ParseEd25519KeySnafu { origin: &origin })?;
-                Box::new(BasicIdentity::from_raw_key(&key.serialize_raw()))
-            }
-            IdentityKeyAlgorithm::Secp256k1 => {
-                let key = k256::SecretKey::from_pkcs8_der(doc.contents())
-                    .context(ParsePkcs8Snafu { origin: &origin })?;
-                Box::new(Secp256k1Identity::from_private_key(key))
-            }
-            IdentityKeyAlgorithm::Prime256v1 => {
-                let key = p256::SecretKey::from_pkcs8_der(doc.contents())
-                    .context(ParsePkcs8Snafu { origin: &origin })?;
-                Box::new(Prime256v1Identity::from_private_key(key))
-            }
-        },
-        PemFormat::Pbes2 => {
-            let pw = password_func()
-                .map_err(|message| LoadIdentityError::GetPasswordError { message })?;
-            match algorithm {
-                IdentityKeyAlgorithm::Ed25519 => {
-                    let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
-                        .context(ParseDerSnafu { origin: &origin })?;
-                    let decrypted: SecretDocument = encrypted
-                        .decrypt(&pw)
-                        .context(ParsePkcs8Snafu { origin: &origin })?;
-                    let key = ic_ed25519::PrivateKey::deserialize_pkcs8(decrypted.as_bytes())
-                        .context(ParseEd25519KeySnafu { origin: &origin })?;
-                    Box::new(BasicIdentity::from_raw_key(&key.serialize_raw()))
-                }
-                IdentityKeyAlgorithm::Secp256k1 => {
-                    let key = k256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
-                        .context(ParsePkcs8Snafu { origin: &origin })?;
-                    Box::new(Secp256k1Identity::from_private_key(key))
-                }
-                IdentityKeyAlgorithm::Prime256v1 => {
-                    let key = p256::SecretKey::from_pkcs8_encrypted_der(doc.contents(), &pw)
-                        .context(ParsePkcs8Snafu { origin: &origin })?;
-                    Box::new(Prime256v1Identity::from_private_key(key))
-                }
-            }
-        }
-    };
-
-    let delegated = DelegatedIdentity::new(from_key, inner, signed_delegations)
+    let delegated = DelegatedIdentity::new(from_key, Box::new(inner), signed_delegations)
         .context(ValidateDelegationChainSnafu { path: &chain_path })?;
 
     Ok(Arc::new(delegated))

@@ -1261,6 +1261,7 @@ fn identity_link_hsm_rename() {
     assert_eq!(principal_before_str, principal_after_str);
 }
 
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn identity_delegation_whoami() {
     let ctx = TestContext::new();

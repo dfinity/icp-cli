@@ -63,7 +63,7 @@ impl TelemetryData {
     }
 }
 
-/// How an identity's private key is stored.
+/// What form of authentication mechanism an identity uses.
 #[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum IdentityStorageType {

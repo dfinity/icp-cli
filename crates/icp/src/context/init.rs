@@ -9,6 +9,8 @@ use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
+use std::time::Duration;
+
 use crate::{
     Lazy, ProjectLoadImpl, agent, identity, identity::PasswordFunc, manifest, network, store_id,
 };
@@ -37,6 +39,7 @@ pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
     password_func: PasswordFunc,
+    pem_session_duration: Option<Duration>,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
@@ -90,6 +93,7 @@ pub fn initialize(
     let idload = Arc::new(identity::Loader::new(
         dirs.identity().context(IdentityDirectorySnafu)?,
         password_func,
+        pem_session_duration,
         telemetry_data.clone(),
     ));
     if let Ok(mockdir) = std::env::var("ICP_CLI_KEYRING_MOCK_DIR") {

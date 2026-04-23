@@ -1465,3 +1465,46 @@ fn identity_link_hsm_delete() {
         .success()
         .stdout(contains("hsm-identity").not());
 }
+
+/// After unlocking a password-protected identity once, subsequent commands must succeed
+/// even when the password file is empty (i.e. the session delegation is reused).
+#[test]
+fn pem_session_delegation_avoids_second_password_prompt() {
+    let ctx = TestContext::new();
+
+    let mut password_file = NamedTempFile::new().unwrap();
+    password_file.write_all(b"test-password-xyz").unwrap();
+    let password_path = password_file.into_temp_path();
+
+    // Create a password-protected identity.
+    ctx.icp()
+        .args([
+            "identity",
+            "new",
+            "pw-session-test",
+            "--storage",
+            "password",
+        ])
+        .arg("--storage-password-file")
+        .arg(&password_path)
+        .assert()
+        .success();
+
+    // First use: unlocks the PEM and creates a session delegation.
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(&password_path)
+        .args(["identity", "principal", "--identity", "pw-session-test"])
+        .assert()
+        .success();
+
+    // Second use: password file is empty — decryption would fail if attempted.
+    // The session delegation must be used instead.
+    let empty_file = NamedTempFile::new().unwrap();
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(empty_file.path())
+        .args(["identity", "principal", "--identity", "pw-session-test"])
+        .assert()
+        .success();
+}

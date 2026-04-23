@@ -152,7 +152,12 @@ async fn main() -> Result<(), Error> {
                 .map_err(|e| e.to_string())
         }),
     };
-    let ctx = icp::context::initialize(cli.project_root_override, cli.debug, password_func)?;
+    let ctx = icp::context::initialize(
+        cli.project_root_override,
+        cli.debug,
+        password_func,
+        Some(std::time::Duration::from_secs(600)),
+    )?;
 
     let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
 

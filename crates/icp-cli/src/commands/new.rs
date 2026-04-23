@@ -34,15 +34,16 @@ fn validate_name(s: &str) -> Result<String, String> {
 /// Under the hood templates are generated with `cargo-generate`.
 /// See the cargo-generate docs for a guide on how to write your own templates:
 /// https://docs.rs/cargo-generate/0.23.7/cargo_generate/
-#[derive(Clone, Debug, Args)]
+#[derive(Clone, Debug, Default, Args)]
 pub struct IcpGenerateArgs {
     #[command(flatten)]
     pub template_path: IcpTemplatePath,
 
     /// Directory to create / project name; if the name isn't in kebab-case, it will be converted
     /// to kebab-case unless `--force` is given.
+    /// Optional when `--init` is used: defaults to the name of the current directory.
     #[arg(value_parser = validate_name)]
-    pub name: String,
+    pub name: Option<String>,
 
     /// Don't convert the project name to kebab-case before creating the directory. Note that
     /// `icp-cli` won't overwrite an existing directory, even if `--force` is given.
@@ -62,7 +63,7 @@ pub struct IcpGenerateArgs {
     /// template-defined defaults; generation fails if a required variable has no default.
     /// Combine with --define to supply values for variables that have no default in the template.
     /// Use for CI or automated/agent contexts.
-    #[arg(long, short, requires("name"), action)]
+    #[arg(long, short, action)]
     pub silent: bool,
 
     /// Specify the VCS used to initialize the generated template.
@@ -108,33 +109,11 @@ pub struct IcpGenerateArgs {
     pub skip_submodules: bool,
 }
 
-impl Default for IcpGenerateArgs {
-    fn default() -> Self {
-        Self {
-            template_path: IcpTemplatePath::default(),
-            name: "".to_string(), // name is a required arg
-            force: false,
-            quiet: false,
-            continue_on_error: false,
-            silent: false,
-            vcs: None,
-            ssh_identity: None,
-            gitconfig: None,
-            define: Vec::default(),
-            init: false,
-            destination: None,
-            force_git_init: false,
-            overwrite: false,
-            skip_submodules: false,
-        }
-    }
-}
-
 impl From<IcpGenerateArgs> for GenerateArgs {
     fn from(f: IcpGenerateArgs) -> Self {
         Self {
             template_path: f.template_path.into(),
-            name: Some(f.name),
+            name: f.name,
             force: f.force,
             quiet: f.quiet,
             continue_on_error: f.continue_on_error,
@@ -200,6 +179,29 @@ impl From<IcpTemplatePath> for TemplatePath {
     }
 }
 
+fn resolve_name(args: &IcpGenerateArgs) -> Result<Option<String>, anyhow::Error> {
+    if let Some(ref name) = args.name {
+        return Ok(Some(name.clone()));
+    }
+
+    if args.init {
+        let cwd = std::env::current_dir().context("Failed to get current directory")?;
+        let dir_name = cwd
+            .file_name()
+            .context("Current directory has no name")?
+            .to_str()
+            .context("Current directory name is not valid UTF-8")?;
+        let name = validate_name(dir_name).map_err(|e| {
+            anyhow::anyhow!("Current directory name '{dir_name}' is not a valid project name: {e}")
+        })?;
+        return Ok(Some(name));
+    }
+
+    anyhow::bail!(
+        "Project name is required (or use --init to default to the current directory name)"
+    )
+}
+
 pub(crate) async fn exec(
     ctx: &icp::context::Context,
     args: &IcpGenerateArgs,
@@ -210,8 +212,11 @@ pub(crate) async fn exec(
         anyhow::bail!("--quiet and --debug cannot be used together");
     }
 
-    let mut generate_args: GenerateArgs = args.clone().into();
-    generate_args.verbose = ctx.debug; // There is a global --debug flag
+    let mut args = args.clone();
+    args.name = resolve_name(&args)?;
+
+    let mut generate_args: GenerateArgs = args.into();
+    generate_args.verbose = ctx.debug;
     let generate_args = generate_args.clone();
 
     debug!("Generating project with {generate_args:#?}");

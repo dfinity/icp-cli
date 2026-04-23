@@ -20,9 +20,10 @@ pub(crate) struct LoginArgs {
     /// Name of the identity to re-authenticate
     name: String,
 
-    /// Session delegation duration (e.g. "30m", "8h", "1d").
+    /// Session delegation duration (e.g. "30m", "8h", "1d"). Note that 5m extra is
+    /// added when creating the delegation to account for clock drift.
     /// Required for PEM identities when session caching is disabled in settings.
-    /// Not applicable for Internet Identity.
+    /// Not applicable for Internet Identity (yet).
     #[arg(long)]
     duration: Option<DurationArg>,
 }
@@ -91,7 +92,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                         .await??;
                     settings
                         .session_length
-                        .map(|m| Duration::from_secs(u64::from(m + 5) * 60))
+                        .map(|m| Duration::from_secs((u64::from(m) + 5) * 60))
                         .context(DurationRequiredSnafu { name: &args.name })?
                 }
             };

@@ -1168,7 +1168,7 @@ Re-authenticate an Internet Identity delegation or create a PEM session delegati
 
 ###### **Options:**
 
-* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Required for PEM identities when session caching is disabled in settings. Not applicable for Internet Identity
+* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Note that 5m extra is added when creating the delegation to account for clock drift. Required for PEM identities when session caching is disabled in settings. Not applicable for Internet Identity (yet)
 
 
 

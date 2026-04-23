@@ -294,7 +294,7 @@ const SERVICE_NAME: &str = "icp-cli";
 
 /// Returns the keyring username for a delegation session key.
 ///
-/// The `delegate:` prefix discriminates session keys from regular identities —
+/// The `delegation:` prefix discriminates session keys from regular identities —
 /// no code path that operates on regular identity names can accidentally
 /// export these keys.
 fn dlg_keyring_key(name: &str) -> String {
@@ -390,11 +390,15 @@ fn create_pem_session_and_build_identity(
         .public_key()
         .expect("p256 always has a public key");
 
-    let now_nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before unix epoch")
-        .as_nanos() as u64;
-    let expiration = now_nanos.saturating_add(duration.as_nanos() as u64);
+    let now_nanos = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos(),
+    )
+    .expect("time wrapped around");
+    let expiration =
+        now_nanos.saturating_add(duration.as_nanos().try_into().expect("time wrapped around"));
 
     let agent_delegation = AgentDelegation {
         pubkey: session_pubkey.clone(),

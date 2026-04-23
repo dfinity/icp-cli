@@ -7,7 +7,7 @@ Mint and manage cycles
 ###### **Subcommands:**
 
 * [`balance`](cycles-balance.md) — Display the cycles balance
-* [`mint`](cycles-mint.md) — Convert icp to cycles
+* [`mint`](cycles-mint.md) — Convert ICP to cycles
 * [`transfer`](cycles-transfer.md) — Transfer cycles to another principal
 
 

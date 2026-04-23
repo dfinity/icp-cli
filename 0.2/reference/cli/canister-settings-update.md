@@ -22,19 +22,19 @@ Change a canister's settings to specified values
 * `--set-controller <SET_CONTROLLER>` — Replace the canister's controller list with the specified principals.
 
    Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
-* `--compute-allocation <COMPUTE_ALLOCATION>`
+* `--compute-allocation <COMPUTE_ALLOCATION>` — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
 * `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--wasm-memory-limit <WASM_MEMORY_LIMIT>` — Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>` — Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--log-memory-limit <LOG_MEMORY_LIMIT>` — Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value. Supports suffixes: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes
-* `--log-visibility <LOG_VISIBILITY>`
-* `--add-log-viewer <ADD_LOG_VIEWER>`
-* `--remove-log-viewer <REMOVE_LOG_VIEWER>`
-* `--set-log-viewer <SET_LOG_VIEWER>`
-* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
-* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+* `--log-visibility <LOG_VISIBILITY>` — Set log visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-log-viewer, --remove-log-viewer, and --set-log-viewer. Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead
+* `--add-log-viewer <ADD_LOG_VIEWER>` — Add a principal to the allowed log viewers list
+* `--remove-log-viewer <REMOVE_LOG_VIEWER>` — Remove a principal from the allowed log viewers list
+* `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
+* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>` — Add a canister environment variable in KEY=VALUE format
+* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>` — Remove a canister environment variable by key name
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 

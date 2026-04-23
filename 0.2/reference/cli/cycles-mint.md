@@ -1,6 +1,8 @@
 ﻿# icp cycles mint
 
-Convert icp to cycles
+Convert ICP to cycles.
+
+Exactly one of --icp or --cycles must be provided.
 
 **Usage:** `icp cycles mint [OPTIONS]`
 

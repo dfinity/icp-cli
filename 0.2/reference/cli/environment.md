@@ -6,7 +6,7 @@ Show information about the current project environments
 
 ###### **Subcommands:**
 
-* [`list`](environment-list.md) — Display a list of enviroments
+* [`list`](environment-list.md) — List the environments defined in this project, one per line
 
 
 

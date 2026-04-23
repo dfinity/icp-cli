@@ -1,6 +1,7 @@
 # Unreleased
 
-* feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
+* feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys
+* feat: `icp new --init` no longer requires specifying a project name. If non is provided, the containing folder's name is used as the project name
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
 
 # v0.2.3

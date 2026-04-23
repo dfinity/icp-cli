@@ -63,7 +63,7 @@ impl TelemetryData {
     }
 }
 
-/// How an identity's private key is stored.
+/// What form of authentication mechanism an identity uses.
 #[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum IdentityStorageType {
@@ -72,6 +72,8 @@ pub enum IdentityStorageType {
     Hsm,
     Anonymous,
     InternetIdentity,
+    PendingDelegation,
+    Delegation,
 }
 
 /// Whether the network accessed by the command is managed locally or a remote
@@ -91,6 +93,8 @@ impl From<&IdentitySpec> for IdentityStorageType {
             IdentitySpec::Hsm { .. } => Self::Hsm,
             IdentitySpec::Anonymous => Self::Anonymous,
             IdentitySpec::InternetIdentity { .. } => Self::InternetIdentity,
+            IdentitySpec::PendingDelegation { .. } => Self::PendingDelegation,
+            IdentitySpec::Delegation { .. } => Self::Delegation,
         }
     }
 }

@@ -95,6 +95,7 @@ impl TestContext {
         #[cfg(unix)]
         cmd.env("HOME", self.home_path())
             .env_remove("ICP_HOME")
+            .env_remove("PWD")  // don't inherit the tester's shell
             // Also set XDG directories to ensure isolation on Linux
             .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
             .env("XDG_DATA_HOME", self.home_path().join(".local/share"))

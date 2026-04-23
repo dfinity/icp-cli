@@ -1,5 +1,7 @@
 # Unreleased
 
+* fix: `icp canister call --json` no longer produces blank output.
+
 # v0.2.4
 
 * feat: `icp identity delegation request/sign/use` now permit creating and importing identity delegations

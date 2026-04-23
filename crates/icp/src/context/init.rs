@@ -89,8 +89,6 @@ pub fn initialize(
     // Telemetry data bag (written by subsystems, read at session finish)
     let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());
 
-    let password_func: identity::PasswordFunc = Arc::from(password_func);
-
     // Identity loader
     let idload = Arc::new(identity::Loader::new(
         dirs.identity().context(IdentityDirectorySnafu)?,

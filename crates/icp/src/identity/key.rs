@@ -273,6 +273,10 @@ fn ii_keyring_key(name: &str) -> String {
     format!("ii:{name}")
 }
 
+fn dlg_keyring_key(name: &str) -> String {
+    format!("dlg:{name}")
+}
+
 fn load_keyring_identity(
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
@@ -839,12 +843,12 @@ pub fn rename_identity(
         }
         IdentitySpec::PendingDelegation { storage, .. } => match storage {
             DelegationKeyStorage::Keyring => {
-                let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                let old_entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(old_name))
                     .context(LoadKeyringEntrySnafu { name: old_name })?;
                 let password = old_entry
                     .get_password()
                     .context(ReadKeyringEntrySnafu { name: old_name })?;
-                let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                let new_entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(new_name))
                     .context(CreateKeyringEntrySnafu { new_name })?;
                 new_entry
                     .set_password(&password)
@@ -869,12 +873,12 @@ pub fn rename_identity(
 
             match storage {
                 DelegationKeyStorage::Keyring => {
-                    let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                    let old_entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(old_name))
                         .context(LoadKeyringEntrySnafu { name: old_name })?;
                     let password = old_entry
                         .get_password()
                         .context(ReadKeyringEntrySnafu { name: old_name })?;
-                    let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                    let new_entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(new_name))
                         .context(CreateKeyringEntrySnafu { new_name })?;
                     new_entry
                         .set_password(&password)
@@ -1040,7 +1044,7 @@ pub fn delete_identity(
         }
         IdentitySpec::PendingDelegation { storage, .. } => match storage {
             DelegationKeyStorage::Keyring => {
-                let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                     .context(LoadKeyringEntryForDeleteSnafu { name })?;
                 entry
                     .delete_credential()
@@ -1054,7 +1058,7 @@ pub fn delete_identity(
         IdentitySpec::Delegation { storage, .. } => {
             match storage {
                 DelegationKeyStorage::Keyring => {
-                    let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                    let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                         .context(LoadKeyringEntryForDeleteSnafu { name })?;
                     entry
                         .delete_credential()
@@ -1336,7 +1340,7 @@ pub fn create_pending_delegation(
             let pem = doc
                 .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
-            let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+            let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                 .context(DlgCreateKeyringEntrySnafu)?;
             let res = entry.set_password(&pem);
             #[cfg(target_os = "linux")]

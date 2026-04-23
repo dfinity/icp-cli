@@ -70,6 +70,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp settings update-check`↴](#icp-settings-update-check)
+* [`icp settings session-length`↴](#icp-settings-session-length)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -1485,6 +1486,7 @@ Configure user settings
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
 * `telemetry` — Enable or disable anonymous usage telemetry
 * `update-check` — Enable or disable the CLI update check
+* `session-length` — Set the session length for password-protected PEM identities
 
 
 
@@ -1530,6 +1532,20 @@ Enable or disable the CLI update check
 
   Possible values: `releases`, `betas`, `disabled`
 
+
+
+
+## `icp settings session-length`
+
+Set the session length for password-protected PEM identities
+
+**Usage:** `icp settings session-length [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to `<N>m` (e.g. `5m`) or `disabled`. If omitted, prints the current value.
+
+   Note that due to clock drift, 5 minutes are added to the given value, so `5m` produces a 10-minute-expiry delegation. `disabled` turns off session caching entirely.
 
 
 

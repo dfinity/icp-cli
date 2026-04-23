@@ -1,7 +1,7 @@
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
-use icp::prelude::*;
+use icp::{directories::Access, prelude::*};
 use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
@@ -152,11 +152,21 @@ async fn main() -> Result<(), Error> {
                 .map_err(|e| e.to_string())
         }),
     };
+    let pem_session_duration = {
+        let dirs = icp::directories::Directories::new()?;
+        let settings_dirs = dirs.settings()?;
+        let settings = settings_dirs
+            .with_read(async |dirs| icp::settings::Settings::load_from(dirs))
+            .await??;
+        settings
+            .session_length
+            .map(|m| std::time::Duration::from_secs(u64::from(m + 5) * 60))
+    };
     let ctx = icp::context::initialize(
         cli.project_root_override,
         cli.debug,
         password_func,
-        Some(std::time::Duration::from_secs(600)),
+        pem_session_duration,
     )?;
 
     let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;

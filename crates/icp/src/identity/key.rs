@@ -264,17 +264,13 @@ fn load_plaintext_identity(
 
 const SERVICE_NAME: &str = "icp-cli";
 
-/// Returns the keyring username for an II session key.
+/// Returns the keyring username for a delegation session key.
 ///
-/// The `ii:` prefix discriminates II session keys from regular identities —
+/// The `delegate:` prefix discriminates session keys from regular identities —
 /// no code path that operates on regular identity names can accidentally
-/// access or export these keys.
-fn ii_keyring_key(name: &str) -> String {
-    format!("ii:{name}")
-}
-
+/// export these keys.
 fn dlg_keyring_key(name: &str) -> String {
-    format!("dlg:{name}")
+    format!("delegation:{name}")
 }
 
 fn load_keyring_identity(
@@ -415,7 +411,7 @@ fn load_ii_session_pem(
 ) -> Result<(Pem, PemOrigin), LoadIdentityError> {
     match storage {
         DelegationKeyStorage::Keyring => {
-            let username = ii_keyring_key(name);
+            let username = dlg_keyring_key(name);
             let entry = Entry::new(SERVICE_NAME, &username).context(LoadEntrySnafu)?;
             let pem_str = entry.get_password().context(LoadPasswordFromEntrySnafu)?;
             let origin = PemOrigin::Keyring {
@@ -813,12 +809,12 @@ pub fn rename_identity(
 
             match storage {
                 DelegationKeyStorage::Keyring => {
-                    let old_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(old_name))
+                    let old_entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(old_name))
                         .context(LoadKeyringEntrySnafu { name: old_name })?;
                     let password = old_entry
                         .get_password()
                         .context(ReadKeyringEntrySnafu { name: old_name })?;
-                    let new_entry = Entry::new(SERVICE_NAME, &ii_keyring_key(new_name))
+                    let new_entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(new_name))
                         .context(CreateKeyringEntrySnafu { new_name })?;
                     new_entry
                         .set_password(&password)
@@ -1022,7 +1018,7 @@ pub fn delete_identity(
         IdentitySpec::InternetIdentity { storage, .. } => {
             match storage {
                 DelegationKeyStorage::Keyring => {
-                    let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+                    let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                         .context(LoadKeyringEntryForDeleteSnafu { name })?;
                     entry
                         .delete_credential()
@@ -1207,7 +1203,7 @@ pub fn link_ii_identity(
             let pem = doc
                 .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
-            let entry = Entry::new(SERVICE_NAME, &ii_keyring_key(name))
+            let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                 .context(DlgCreateKeyringEntrySnafu)?;
             let res = entry.set_password(&pem);
             #[cfg(target_os = "linux")]

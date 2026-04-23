@@ -40,6 +40,10 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity`↴](#icp-identity)
 * [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
+* [`icp identity delegation`↴](#icp-identity-delegation)
+* [`icp identity delegation request`↴](#icp-identity-delegation-request)
+* [`icp identity delegation sign`↴](#icp-identity-delegation-sign)
+* [`icp identity delegation use`↴](#icp-identity-delegation-use)
 * [`icp identity delete`↴](#icp-identity-delete)
 * [`icp identity export`↴](#icp-identity-export)
 * [`icp identity import`↴](#icp-identity-import)
@@ -915,6 +919,7 @@ Manage your identities
 
 * `account-id` — Display the ICP ledger or ICRC-1 account identifier for the current identity
 * `default` — Display or set the currently selected identity
+* `delegation` — Manage delegations for identities
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
 * `import` — Import a new identity
@@ -959,6 +964,77 @@ Display or set the currently selected identity
 ###### **Arguments:**
 
 * `<NAME>` — Identity to set as default. If omitted, prints the current default
+
+
+
+## `icp identity delegation`
+
+Manage delegations for identities
+
+**Usage:** `icp identity delegation <COMMAND>`
+
+###### **Subcommands:**
+
+* `request` — Create a pending delegation identity with a new P256 session key
+* `sign` — Sign a delegation from the selected identity to a target key
+* `use` — Complete a pending delegation identity by providing a signed delegation chain
+
+
+
+## `icp identity delegation request`
+
+Create a pending delegation identity with a new P256 session key
+
+Prints the session public key as a PEM-encoded SPKI to stdout. Pass this to `icp identity delegation sign --key-pem` on another machine to obtain a delegation chain, then complete the identity with `icp identity delegation use`.
+
+**Usage:** `icp identity delegation request [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name for the new identity
+
+###### **Options:**
+
+* `--storage <STORAGE>` — Where to store the session private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`, `password`
+
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
+
+
+
+## `icp identity delegation sign`
+
+Sign a delegation from the selected identity to a target key
+
+**Usage:** `icp identity delegation sign [OPTIONS] --key-pem <FILE> --duration <DURATION>`
+
+###### **Options:**
+
+* `--key-pem <FILE>` — Public key PEM file of the key to delegate to
+* `--duration <DURATION>` — Delegation validity duration (e.g. "30d", "24h", "3600s", or plain seconds)
+* `--canisters <CANISTERS>` — Canister principals to restrict the delegation to (comma-separated)
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp identity delegation use`
+
+Complete a pending delegation identity by providing a signed delegation chain
+
+Reads the JSON output of `icp identity delegation sign` from a file and attaches it to the named identity, making it usable for signing.
+
+**Usage:** `icp identity delegation use --from-json <FILE> <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the pending delegation identity to complete
+
+###### **Options:**
+
+* `--from-json <FILE>` — Path to the delegation chain JSON file (output of `icp identity delegation sign`)
 
 
 

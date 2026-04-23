@@ -56,10 +56,9 @@ pub fn initialize(
     };
 
     #[cfg(not(unix))]
-    let cwd: PathBuf = PathBuf::try_from(
-        dunce::canonicalize(current_dir().context(CwdSnafu)?).context(CwdSnafu)?,
-    )
-    .context(Utf8PathSnafu)?;
+    let cwd: PathBuf =
+        PathBuf::try_from(dunce::canonicalize(current_dir().context(CwdSnafu)?).context(CwdSnafu)?)
+            .context(Utf8PathSnafu)?;
 
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
         cwd,

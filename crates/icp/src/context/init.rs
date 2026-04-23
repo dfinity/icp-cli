@@ -45,24 +45,25 @@ pub fn initialize(
     // through) over getcwd(3), which resolves symlinks to the physical path
     // and would break upward traversal when the user is inside a symlinked
     // directory whose manifest sits above the symlink's location.
-    #[allow(clippy::disallowed_types)]
     #[cfg(unix)]
-    let cwd_std: std::path::PathBuf = match std::env::var_os("PWD")
-        .map(std::path::PathBuf::from)
+    let cwd: PathBuf = match std::env::var("PWD")
+        .ok()
+        .map(PathBuf::from)
         .filter(|p| p.is_absolute())
     {
         Some(p) => p,
-        None => current_dir().context(CwdSnafu)?,
+        None => PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?,
     };
 
-    #[allow(clippy::disallowed_types)]
     #[cfg(not(unix))]
-    let cwd_std: std::path::PathBuf =
-        dunce::canonicalize(current_dir().context(CwdSnafu)?).context(CwdSnafu)?;
+    let cwd: PathBuf = PathBuf::try_from(
+        dunce::canonicalize(current_dir().context(CwdSnafu)?).context(CwdSnafu)?,
+    )
+    .context(Utf8PathSnafu)?;
 
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        cwd_std.try_into().context(Utf8PathSnafu)?, // cwd
-        project_root_override,                      // dir
+        cwd,
+        project_root_override,
     ));
 
     // Canister ID Store

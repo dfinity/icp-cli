@@ -90,7 +90,6 @@ async fn network_same_port() {
             "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
             dunce::canonicalize(&project_dir_a).unwrap().display()
         )));
-
 }
 
 #[tokio::test]

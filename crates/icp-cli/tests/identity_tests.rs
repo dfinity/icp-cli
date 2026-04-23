@@ -1508,3 +1508,96 @@ fn pem_session_delegation_avoids_second_password_prompt() {
         .assert()
         .success();
 }
+
+/// `icp identity login --duration` explicitly creates a PEM session, allowing subsequent
+/// commands to succeed without a password even when automatic session caching is disabled.
+#[test]
+fn pem_explicit_login_creates_session() {
+    let ctx = TestContext::new();
+
+    // Disable automatic session caching.
+    ctx.icp()
+        .args(["settings", "session-length", "disabled"])
+        .assert()
+        .success();
+
+    let mut password_file = NamedTempFile::new().unwrap();
+    password_file.write_all(b"test-password-xyz").unwrap();
+    let password_path = password_file.into_temp_path();
+
+    ctx.icp()
+        .args([
+            "identity",
+            "new",
+            "explicit-session-test",
+            "--storage",
+            "password",
+        ])
+        .arg("--storage-password-file")
+        .arg(&password_path)
+        .assert()
+        .success();
+
+    // Explicit login creates the session delegation.
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(&password_path)
+        .args([
+            "identity",
+            "login",
+            "explicit-session-test",
+            "--duration",
+            "10m",
+        ])
+        .assert()
+        .success();
+
+    // Session is now cached; subsequent commands succeed without a password.
+    let empty_file = NamedTempFile::new().unwrap();
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(empty_file.path())
+        .args([
+            "identity",
+            "principal",
+            "--identity",
+            "explicit-session-test",
+        ])
+        .assert()
+        .success();
+}
+
+/// When automatic session caching is disabled and `--duration` is omitted,
+/// `icp identity login` must fail with a clear error for PEM identities.
+#[test]
+fn pem_login_requires_duration_when_sessions_disabled() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["settings", "session-length", "disabled"])
+        .assert()
+        .success();
+
+    let mut password_file = NamedTempFile::new().unwrap();
+    password_file.write_all(b"test-password-xyz").unwrap();
+    let password_path = password_file.into_temp_path();
+
+    ctx.icp()
+        .args([
+            "identity",
+            "new",
+            "no-duration-test",
+            "--storage",
+            "password",
+        ])
+        .arg("--storage-password-file")
+        .arg(&password_path)
+        .assert()
+        .success();
+
+    ctx.icp()
+        .args(["identity", "login", "no-duration-test"])
+        .assert()
+        .failure()
+        .stderr(contains("--duration"));
+}

@@ -53,6 +53,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity link`↴](#icp-identity-link)
 * [`icp identity link hsm`↴](#icp-identity-link-hsm)
 * [`icp identity list`↴](#icp-identity-list)
+* [`icp identity login`↴](#icp-identity-login)
 * [`icp identity new`↴](#icp-identity-new)
 * [`icp identity principal`↴](#icp-identity-principal)
 * [`icp identity rename`↴](#icp-identity-rename)
@@ -929,6 +930,7 @@ Manage your identities
 * `import` — Import a new identity
 * `link` — Link an external key to a new identity
 * `list` — List the identities
+* `login` — Re-authenticate an Internet Identity delegation or create a PEM session delegation
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
 * `rename` — Rename an identity
@@ -1151,6 +1153,22 @@ List the identities
 
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only identity names
+
+
+
+## `icp identity login`
+
+Re-authenticate an Internet Identity delegation or create a PEM session delegation
+
+**Usage:** `icp identity login [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the identity to re-authenticate
+
+###### **Options:**
+
+* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Required for PEM identities when session caching is disabled in settings. Not applicable for Internet Identity
 
 
 

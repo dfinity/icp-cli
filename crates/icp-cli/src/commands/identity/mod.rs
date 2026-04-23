@@ -26,7 +26,6 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Link(link::Command),
     List(list::ListArgs),
-    #[command(hide = true)] // todo remove when II login is out of beta
     Login(login::LoginArgs),
     New(new::NewArgs),
     Principal(principal::PrincipalArgs),

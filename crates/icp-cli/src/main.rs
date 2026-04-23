@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
@@ -140,12 +142,12 @@ async fn main() -> Result<(), Error> {
     );
 
     let password_func: icp::identity::PasswordFunc = match cli.identity_password_file {
-        Some(path) => Box::new(move || {
+        Some(path) => Arc::new(move || {
             icp::fs::read_to_string(&path)
                 .map(|s| s.trim().to_string())
                 .map_err(|e| e.to_string())
         }),
-        None => Box::new(|| {
+        None => Arc::new(|| {
             dialoguer::Password::new()
                 .with_prompt("Enter identity password")
                 .interact()

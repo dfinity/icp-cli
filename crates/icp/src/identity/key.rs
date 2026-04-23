@@ -190,7 +190,6 @@ fn load_pem_identity(
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     // For password-protected PEMs, check for a valid cached session delegation first.
     if *format == PemFormat::Pbes2
-        && pem_session_duration.is_some()
         && let Some(id) = try_load_pem_session(dirs, name)
     {
         return Ok(id);
@@ -213,7 +212,7 @@ fn load_pem_identity(
     // After unlocking a Pbes2 PEM, create and cache a short-lived session delegation.
     if *format == PemFormat::Pbes2
         && let Some(duration) = pem_session_duration
-        && let Some(delegated) =
+        && let Ok(delegated) =
             create_pem_session_and_build_identity(dirs, name, &*identity, duration)
     {
         return Ok(delegated);
@@ -333,17 +332,54 @@ fn try_load_pem_session(dirs: LRead<&IdentityPaths>, name: &str) -> Option<Arc<d
         .map(|id| Arc::new(id) as Arc<dyn Identity>)
 }
 
+#[derive(Debug, Snafu)]
+pub enum CreateExplicitPemSessionError {
+    #[snafu(transparent)]
+    ReadFile { source: crate::fs::IoError },
+
+    #[snafu(display("failed to parse PEM from `{path}`"))]
+    ParsePemForSession {
+        path: PathBuf,
+        #[snafu(source(from(pem::PemError, Box::new)))]
+        source: Box<pem::PemError>,
+    },
+
+    #[snafu(transparent)]
+    DecryptPem { source: LoadIdentityError },
+
+    #[snafu(display("failed to sign session delegation: {message}"))]
+    SignDelegation { message: String },
+
+    #[snafu(display("failed to create keyring entry for session key"))]
+    CreateSessionKeyringEntry { source: keyring::Error },
+
+    #[snafu(display("failed to store session key in keyring"))]
+    SetSessionKeyringPassword { source: keyring::Error },
+
+    #[snafu(display("failed to create session delegation directory"))]
+    EnsureSessionDelegationDir { source: crate::fs::IoError },
+
+    #[snafu(display("failed to save session delegation chain to `{path}`"))]
+    SaveSessionDelegation {
+        path: PathBuf,
+        source: delegation::SaveError,
+    },
+}
+
 /// Creates a short-lived P256 session delegation signed by `identity`, stores the session
 /// key in the keyring and the chain on disk, and returns a `DelegatedIdentity`.
 ///
-/// Returns `None` if any step fails; callers fall back to using `identity` directly.
+/// Returns an error if any step fails. Automatic callers silence errors via `let Ok(...) =`;
+/// explicit callers propagate them.
 fn create_pem_session_and_build_identity(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     identity: &dyn Identity,
     duration: std::time::Duration,
-) -> Option<Arc<dyn Identity>> {
-    let signer_pubkey = identity.public_key()?;
+) -> Result<Arc<dyn Identity>, CreateExplicitPemSessionError> {
+    let signer_pubkey = identity
+        .public_key()
+        .expect("called only with non-anonymous identity");
 
     let mut key_bytes = Zeroizing::new([0u8; 32]);
     rand::rng().fill_bytes(key_bytes.as_mut());
@@ -366,8 +402,12 @@ fn create_pem_session_and_build_identity(
         targets: None,
     };
 
-    let sig = identity.sign_delegation(&agent_delegation).ok()?;
-    let signature_bytes = sig.signature?;
+    let sig = identity
+        .sign_delegation(&agent_delegation)
+        .map_err(|message| CreateExplicitPemSessionError::SignDelegation { message })?;
+    let signature_bytes = sig
+        .signature
+        .expect("non-anonymous identity always produces a signature");
 
     // Walk any existing delegation chain (e.g. if `identity` is already delegated),
     // then append the new delegation to the session key.
@@ -403,33 +443,66 @@ fn create_pem_session_and_build_identity(
         delegations: wire_delegations,
     };
 
-    // Store session key in keyring; bail out if unavailable.
+    // Store session key in keyring.
     let doc = session_key.to_pkcs8_der().expect("infallible PKI encoding");
     let pem_str: Zeroizing<String> = doc
         .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
         .expect("infallible PKI encoding");
-    let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name)).ok()?;
-    entry.set_password(&pem_str).ok()?;
+    let entry =
+        Entry::new(SERVICE_NAME, &dlg_keyring_key(name)).context(CreateSessionKeyringEntrySnafu)?;
+    entry
+        .set_password(&pem_str)
+        .context(SetSessionKeyringPasswordSnafu)?;
 
-    // Store chain on disk; on failure undo the keyring entry and bail.
-    let chain_path = match (*dirs).ensure_delegation_chain_path(name) {
-        Ok(p) => p,
-        Err(_) => {
+    // Store chain on disk; on failure undo the keyring entry.
+    let chain_path = (*dirs)
+        .ensure_delegation_chain_path(name)
+        .map_err(|source| {
             let _ = entry.delete_credential();
-            return None;
-        }
-    };
-    if delegation::save(&chain_path, &chain).is_err() {
+            CreateExplicitPemSessionError::EnsureSessionDelegationDir { source }
+        })?;
+    delegation::save(&chain_path, &chain).map_err(|source| {
         let _ = entry.delete_credential();
-        return None;
-    }
+        CreateExplicitPemSessionError::SaveSessionDelegation {
+            path: chain_path.clone(),
+            source,
+        }
+    })?;
 
     // Build identity directly from in-memory data — no read-back needed.
-    let (from_key, signed_delegations) = delegation::to_agent_types(&chain).ok()?;
+    let (from_key, signed_delegations) =
+        delegation::to_agent_types(&chain).expect("freshly created chain is always valid");
     let session_arc: Arc<dyn Identity> = Arc::new(session_identity);
-    DelegatedIdentity::new(from_key, Box::new(session_arc), signed_delegations)
-        .ok()
-        .map(|id| Arc::new(id) as Arc<dyn Identity>)
+    let delegated = DelegatedIdentity::new(from_key, Box::new(session_arc), signed_delegations)
+        .expect("freshly created chain is always valid");
+    Ok(Arc::new(delegated) as Arc<dyn Identity>)
+}
+
+/// Creates a PEM session delegation explicitly, prompting for the password and storing
+/// the new session key and chain.
+///
+/// Unlike the automatic path (which silences errors), this propagates them.
+/// The `duration` should already include the 5-minute clock-drift boost.
+pub fn create_explicit_pem_session(
+    dirs: LRead<&IdentityPaths>,
+    name: &str,
+    algorithm: &IdentityKeyAlgorithm,
+    password_func: impl FnOnce() -> Result<String, String>,
+    duration: Duration,
+) -> Result<(), CreateExplicitPemSessionError> {
+    let pem_path = dirs.key_pem_path(name);
+    let origin = PemOrigin::File {
+        path: pem_path.clone(),
+    };
+
+    let doc = fs::read_to_string(&pem_path)?
+        .parse::<Pem>()
+        .context(ParsePemForSessionSnafu { path: &pem_path })?;
+
+    let identity = load_pbes2_identity(&doc, algorithm, password_func, &origin)?;
+
+    create_pem_session_and_build_identity(dirs, name, &*identity, duration)?;
+    Ok(())
 }
 
 fn load_keyring_identity(

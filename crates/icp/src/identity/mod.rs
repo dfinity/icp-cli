@@ -118,7 +118,7 @@ pub trait Load: Sync + Send {
 }
 
 /// A function that prompts for a password and returns it, or an error message.
-pub type PasswordFunc = Box<dyn Fn() -> Result<String, String> + Send + Sync>;
+pub type PasswordFunc = Arc<dyn Fn() -> Result<String, String> + Send + Sync>;
 
 pub struct Loader {
     dir: IdentityDirectories,
@@ -156,7 +156,7 @@ impl Load for Loader {
             return Ok(Arc::clone(cached));
         }
 
-        let password_func = &self.password_func;
+        let password_func = self.password_func.clone();
         let pem_session_duration = self.pem_session_duration;
         let (identity, storage_type) = match &id {
             IdentitySelection::Default => {
@@ -168,7 +168,7 @@ impl Load for Loader {
                             dirs,
                             &list,
                             &default_name,
-                            password_func,
+                            || password_func(),
                             pem_session_duration,
                         )?;
                         let storage_type =
@@ -199,8 +199,13 @@ impl Load for Loader {
                 self.dir
                     .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         let list = IdentityList::load_from(dirs)?;
-                        let identity =
-                            load_identity(dirs, &list, name, password_func, pem_session_duration)?;
+                        let identity = load_identity(
+                            dirs,
+                            &list,
+                            name,
+                            || password_func(),
+                            pem_session_duration,
+                        )?;
                         let storage_type = list.identities.get(name).map(|spec| spec.into());
                         Ok((identity, storage_type))
                     })
@@ -304,7 +309,7 @@ mod tests {
         .unwrap();
         let loader = Loader::new(
             dirs,
-            Box::new(|| unimplemented!()),
+            Arc::new(|| unimplemented!()),
             None,
             Arc::new(TelemetryData::default()),
         );

@@ -68,6 +68,8 @@ async fn network_same_port() {
     ctx.ping_until_healthy(&project_dir_a, "sameport-network");
 
     eprintln!("second network start attempt in another project");
+
+    #[cfg(unix)]
     ctx.icp()
         .current_dir(&project_dir_b)
         .args(["network", "start", "sameport-network"])
@@ -77,6 +79,18 @@ async fn network_same_port() {
             "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
             project_dir_a
         )));
+
+    #[cfg(not(unix))]
+    ctx.icp()
+        .current_dir(&project_dir_b)
+        .args(["network", "start", "sameport-network"])
+        .assert()
+        .failure()
+        .stderr(contains(format!(
+            "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
+            dunce::canonicalize(&project_dir_a).unwrap().display()
+        )));
+
 }
 
 #[tokio::test]

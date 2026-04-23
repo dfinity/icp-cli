@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.2.4
+
 * feat: `icp identity delegation request/sign/use` now permit creating and importing identity delegations
 * feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name

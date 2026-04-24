@@ -263,17 +263,7 @@
               "type": "null"
             }
           ],
-          "default": {
-            "compute_allocation": null,
-            "environment_variables": null,
-            "freezing_threshold": null,
-            "log_memory_limit": null,
-            "log_visibility": null,
-            "memory_allocation": null,
-            "reserved_cycles_limit": null,
-            "wasm_memory_limit": null,
-            "wasm_memory_threshold": null
-          },
+          "default": {},
           "description": "The configuration specifying the various settings when creating the canister."
         }
       },
@@ -921,7 +911,6 @@
               "type": "null"
             }
           ],
-          "default": null,
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
@@ -1030,6 +1019,7 @@
   "description": "Schema for ProjectManifest",
   "properties": {
     "canisters": {
+      "default": [],
       "items": {
         "$ref": "#/$defs/Item"
       },
@@ -1039,6 +1029,7 @@
       ]
     },
     "environments": {
+      "default": [],
       "items": {
         "$ref": "#/$defs/Item3"
       },
@@ -1048,6 +1039,7 @@
       ]
     },
     "networks": {
+      "default": [],
       "items": {
         "$ref": "#/$defs/Item2"
       },

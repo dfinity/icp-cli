@@ -1,11 +1,11 @@
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::manifest::{
     Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
 };
 
-#[derive(Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(default)]

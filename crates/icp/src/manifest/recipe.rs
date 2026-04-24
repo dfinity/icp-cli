@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize, de::Error as _};
 
 /// Represents the accepted values for a recipe type in
 /// the canister manifest
-#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema)]
 #[schemars(from = "String")]
 pub enum RecipeType {
     /// path to a locally defined recipe
@@ -91,7 +91,13 @@ impl From<RecipeType> for String {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+impl Serialize for RecipeType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        String::from(self.clone()).serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 pub struct Recipe {
     /// An identifier for a recipe, it can have one of the following formats:
     ///

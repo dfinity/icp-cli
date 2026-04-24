@@ -4,11 +4,11 @@ Create a new ICP project from a template
 
 Under the hood templates are generated with `cargo-generate`. See the cargo-generate docs for a guide on how to write your own templates: https://docs.rs/cargo-generate/0.23.7/cargo_generate/
 
-**Usage:** `icp new [OPTIONS] <NAME>`
+**Usage:** `icp new [OPTIONS] [NAME]`
 
 ###### **Arguments:**
 
-* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given
+* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given. Optional when `--init` is used: defaults to the name of the current directory
 
 ###### **Options:**
 

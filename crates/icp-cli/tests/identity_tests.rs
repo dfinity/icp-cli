@@ -1601,3 +1601,57 @@ fn pem_login_requires_duration_when_sessions_disabled() {
         .failure()
         .stderr(contains("--duration"));
 }
+
+/// Renaming a password-protected identity migrates its session delegation so that
+/// subsequent commands using the new name succeed without a password.
+#[test]
+fn pem_session_migrated_on_rename() {
+    let ctx = TestContext::new();
+
+    let mut password_file = NamedTempFile::new().unwrap();
+    password_file.write_all(b"rename-session-pw").unwrap();
+    let password_path = password_file.into_temp_path();
+
+    // Create a password-protected identity.
+    ctx.icp()
+        .args([
+            "identity",
+            "new",
+            "rename-session-src",
+            "--storage",
+            "password",
+        ])
+        .arg("--storage-password-file")
+        .arg(&password_path)
+        .assert()
+        .success();
+
+    // First use: creates a session delegation under the original name.
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(&password_path)
+        .args(["identity", "principal", "--identity", "rename-session-src"])
+        .assert()
+        .success();
+
+    // Rename the identity — session delegation must be migrated to the new name.
+    ctx.icp()
+        .args([
+            "identity",
+            "rename",
+            "rename-session-src",
+            "rename-session-dst",
+        ])
+        .assert()
+        .success();
+
+    // Use new name with an empty password file: session delegation must be reused,
+    // proving the migration happened and decryption was not attempted.
+    let empty_file = NamedTempFile::new().unwrap();
+    ctx.icp()
+        .arg("--identity-password-file")
+        .arg(empty_file.path())
+        .args(["identity", "principal", "--identity", "rename-session-dst"])
+        .assert()
+        .success();
+}

@@ -1561,7 +1561,7 @@ Set the session length for password-protected PEM identities
 
 ###### **Arguments:**
 
-* `<VALUE>` — Set to `<N>m` (e.g. `5m`) or `disabled`. If omitted, prints the current value.
+* `<VALUE>` — Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
 
    Note that due to clock drift, 5 minutes are added to the given value, so `5m` produces a 10-minute-expiry delegation. `disabled` turns off session caching entirely.
 

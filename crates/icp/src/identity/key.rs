@@ -23,6 +23,7 @@ use rand::Rng;
 use scrypt::Params;
 use sec1::{der::Decode, pem::PemLabel};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
+use tracing::debug;
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -212,10 +213,11 @@ fn load_pem_identity(
     // After unlocking a Pbes2 PEM, create and cache a short-lived session delegation.
     if *format == PemFormat::Pbes2
         && let Some(duration) = pem_session_duration
-        && let Ok(delegated) =
-            create_pem_session_and_build_identity(dirs, name, &*identity, duration)
     {
-        return Ok(delegated);
+        match create_pem_session_and_build_identity(dirs, name, &*identity, duration) {
+            Ok(delegated) => return Ok(delegated),
+            Err(e) => debug!(identity = name, "failed to create session delegation: {e}"),
+        }
     }
 
     Ok(identity)
@@ -308,26 +310,68 @@ fn dlg_keyring_key(name: &str) -> String {
 fn try_load_pem_session(dirs: LRead<&IdentityPaths>, name: &str) -> Option<Arc<dyn Identity>> {
     // Load chain from disk; missing file is the common case on first use.
     let chain_path = dirs.delegation_chain_path(name);
-    let chain = delegation::load(&chain_path).ok()?;
+    let chain = delegation::load(&chain_path)
+        .inspect_err(|e| debug!(identity = name, "no cached session chain: {e}"))
+        .ok()?;
 
-    if delegation::is_expiring_soon(&chain, FIVE_MINUTES_NANOS).ok()? {
+    if delegation::is_expiring_soon(&chain, FIVE_MINUTES_NANOS)
+        .inspect_err(|e| debug!(identity = name, "failed to check session expiry: {e}"))
+        .ok()?
+    {
+        debug!(
+            identity = name,
+            "cached session is expiring soon; will re-authenticate"
+        );
         return None;
     }
 
     // Load session key from keyring.
     let username = dlg_keyring_key(name);
-    let entry = Entry::new(SERVICE_NAME, &username).ok()?;
-    let pem_str = entry.get_password().ok()?;
+    let entry = Entry::new(SERVICE_NAME, &username)
+        .inspect_err(|e| {
+            debug!(
+                identity = name,
+                "failed to open keyring entry for session key: {e}"
+            )
+        })
+        .ok()?;
+    let pem_str = entry
+        .get_password()
+        .inspect_err(|e| {
+            debug!(
+                identity = name,
+                "failed to read session key from keyring: {e}"
+            )
+        })
+        .ok()?;
     let origin = PemOrigin::Keyring {
         service: SERVICE_NAME.to_string(),
         username,
     };
-    let pem = pem_str.parse::<Pem>().ok()?;
+    let pem = pem_str
+        .parse::<Pem>()
+        .inspect_err(|e| debug!(identity = name, "failed to parse session key PEM: {e}"))
+        .ok()?;
     let session_identity =
-        load_plaintext_identity(&pem, &IdentityKeyAlgorithm::Prime256v1, &origin).ok()?;
+        load_plaintext_identity(&pem, &IdentityKeyAlgorithm::Prime256v1, &origin)
+            .inspect_err(|e| debug!(identity = name, "failed to load session identity: {e}"))
+            .ok()?;
 
-    let (from_key, signed_delegations) = delegation::to_agent_types(&chain).ok()?;
+    let (from_key, signed_delegations) = delegation::to_agent_types(&chain)
+        .inspect_err(|e| {
+            debug!(
+                identity = name,
+                "failed to convert session delegation chain: {e}"
+            )
+        })
+        .ok()?;
     DelegatedIdentity::new(from_key, Box::new(session_identity), signed_delegations)
+        .inspect_err(|e| {
+            debug!(
+                identity = name,
+                "failed to construct delegated identity: {e}"
+            )
+        })
         .ok()
         .map(|id| Arc::new(id) as Arc<dyn Identity>)
 }

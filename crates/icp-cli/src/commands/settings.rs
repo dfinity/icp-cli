@@ -55,7 +55,7 @@ struct UpdateCheckArgs {
 
 #[derive(Debug, Args)]
 struct SessionLengthArgs {
-    /// Set to `<N>m` (e.g. `5m`) or `disabled`. If omitted, prints the current value.
+    /// Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
     ///
     /// Note that due to clock drift, 5 minutes are added to the given value,
     /// so `5m` produces a 10-minute-expiry delegation. `disabled` turns off
@@ -63,7 +63,7 @@ struct SessionLengthArgs {
     value: Option<SessionLengthValue>,
 }
 
-/// A session-length value: either `<N>m` (whole minutes) or `disabled`.
+/// A session-length value: a duration with suffix (`m`, `h`, `d`) or `disabled`.
 #[derive(Debug, Clone)]
 pub struct SessionLengthValue(pub Option<u32>);
 
@@ -74,13 +74,27 @@ impl FromStr for SessionLengthValue {
         if s == "disabled" {
             return Ok(Self(None));
         }
-        let digits = s
-            .strip_suffix('m')
-            .ok_or_else(|| format!("expected `<N>m` or `disabled`, got `{s}`"))?;
-        let n: u32 = digits
+        let (digits, unit_secs) = if let Some(d) = s.strip_suffix('m') {
+            (d, 60u64)
+        } else if let Some(d) = s.strip_suffix('h') {
+            (d, 3600)
+        } else if let Some(d) = s.strip_suffix('d') {
+            (d, 86400)
+        } else {
+            return Err(format!(
+                "expected a duration like `5m`, `1h`, `2d`, or `disabled`; got `{s}`"
+            ));
+        };
+        let n: u64 = digits
             .parse()
-            .map_err(|_| format!("expected a whole number before `m`, got `{digits}`"))?;
-        Ok(Self(Some(n)))
+            .map_err(|_| format!("expected a whole number before the suffix, got `{digits}`"))?;
+        let total_secs = n
+            .checked_mul(unit_secs)
+            .ok_or_else(|| "duration too large".to_string())?;
+        // Round up to whole minutes.
+        let minutes = total_secs.div_ceil(60);
+        let minutes = u32::try_from(minutes).map_err(|_| "duration too large".to_string())?;
+        Ok(Self(Some(minutes)))
     }
 }
 

@@ -424,6 +424,72 @@ async fn canister_call_output_modes() {
 }
 
 #[tokio::test]
+async fn canister_call_json_output() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("write manifest");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let out = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--json",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .output()
+        .expect("run call");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Regression: stdout was blank because the buffered term was never flushed.
+    assert!(
+        !out.stdout.is_empty(),
+        "stdout must not be blank with --json"
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout must be valid JSON");
+    // Candid encoding of ("Hello, world!") — didc encode '("Hello, world!")'
+    assert_eq!(
+        json["response_bytes"],
+        "4449444c0001710d48656c6c6f2c20776f726c6421"
+    );
+    assert_eq!(json["response_candid"], "(\"Hello, world!\")");
+    assert!(json["response_text"].is_null());
+}
+
+#[tokio::test]
 async fn canister_call_query_conflicts_with_proxy() {
     let ctx = TestContext::new();
 

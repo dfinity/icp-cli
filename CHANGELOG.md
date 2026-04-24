@@ -1,10 +1,15 @@
 # Unreleased
 
 * feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity login <NAME> [--duration <DURATION>]`.
+* fix: `icp canister call --json` no longer produces blank output.
+
+# v0.2.4
+
 * feat: `icp identity delegation request/sign/use` now permit creating and importing identity delegations
 * feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
 * fix: Fail early when attempting to create an identity with an already existing name.
+* fix: Find icp.yaml even from within a symlinked folder.
 
 # v0.2.3
 

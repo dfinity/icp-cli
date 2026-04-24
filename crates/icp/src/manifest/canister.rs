@@ -61,7 +61,7 @@ pub enum ManifestInitArgs {
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
@@ -72,6 +72,7 @@ pub struct CanisterManifest {
     pub settings: Settings,
 
     /// Initialization arguments passed to the canister during installation.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub init_args: Option<ManifestInitArgs>,
 
     #[serde(flatten)]
@@ -236,7 +237,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Instructions {
     Recipe {
@@ -249,6 +250,7 @@ pub enum Instructions {
         build: BuildSteps,
 
         /// The configuration specifying how to sync the canister
+        #[serde(skip_serializing_if = "Option::is_none")]
         sync: Option<SyncSteps>,
     },
 }

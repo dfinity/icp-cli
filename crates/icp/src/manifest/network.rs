@@ -1,11 +1,11 @@
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::network::SubnetKind;
 
 /// A network definition for the project
-#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 pub struct NetworkManifest {
     pub name: String,
 
@@ -13,20 +13,20 @@ pub struct NetworkManifest {
     pub configuration: Mode,
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase", tag = "mode")]
 pub enum Mode {
     Managed(Managed),
     Connected(Connected),
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Managed {
     #[serde(flatten)]
     pub mode: Box<ManagedMode>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 #[serde(untagged, rename_all_fields = "kebab-case")]
 #[allow(clippy::large_enum_variant)]
 pub enum ManagedMode {
@@ -36,46 +36,68 @@ pub enum ManagedMode {
         /// Port mappings in the format "host_port:container_port"
         port_mapping: Vec<String>,
         /// Whether to delete the container when the network stops
+        #[serde(skip_serializing_if = "Option::is_none")]
         rm_on_exit: Option<bool>,
         /// Command line arguments to pass to the container's entrypoint
-        #[serde(alias = "cmd", alias = "command")]
+        #[serde(
+            alias = "cmd",
+            alias = "command",
+            skip_serializing_if = "Option::is_none"
+        )]
         args: Option<Vec<String>>,
         /// Entrypoint to use for the container
+        #[serde(skip_serializing_if = "Option::is_none")]
         entrypoint: Option<Vec<String>>,
         /// Environment variables to set in the container in VAR=VALUE format (or VAR to inherit from host)
+        #[serde(skip_serializing_if = "Option::is_none")]
         environment: Option<Vec<String>>,
         /// Volumes to mount into the container in the format name:container_path[:options]
+        #[serde(skip_serializing_if = "Option::is_none")]
         volumes: Option<Vec<String>>,
         /// The platform to use for the container (e.g. linux/amd64)
+        #[serde(skip_serializing_if = "Option::is_none")]
         platform: Option<String>,
         /// The user to run the container as in the format user[:group]
+        #[serde(skip_serializing_if = "Option::is_none")]
         user: Option<String>,
         /// The size of /dev/shm in bytes
+        #[serde(skip_serializing_if = "Option::is_none")]
         shm_size: Option<i64>,
         /// The status directory inside the container. Defaults to /app/status
+        #[serde(skip_serializing_if = "Option::is_none")]
         status_dir: Option<String>,
         /// Bind mounts to add to the container in the format relative_host_path:container_path[:options]
+        #[serde(skip_serializing_if = "Option::is_none")]
         mounts: Option<Vec<String>>,
         /// Extra hosts entries for Docker networking (e.g. "host.docker.internal:host-gateway")
+        #[serde(skip_serializing_if = "Option::is_none")]
         extra_hosts: Option<Vec<String>>,
     },
     Launcher {
         /// HTTP gateway configuration
+        #[serde(skip_serializing_if = "Option::is_none")]
         gateway: Option<Gateway>,
         /// Artificial delay to add to every update call
+        #[serde(skip_serializing_if = "Option::is_none")]
         artificial_delay_ms: Option<u64>,
         /// Set up the Internet Identity canister. Makes internet identity available at
         /// id.ai.localhost:<port>
+        #[serde(skip_serializing_if = "Option::is_none")]
         ii: Option<bool>,
         /// Set up the NNS
+        #[serde(skip_serializing_if = "Option::is_none")]
         nns: Option<bool>,
         /// Configure the list of subnets (one application subnet by default)
+        #[serde(skip_serializing_if = "Option::is_none")]
         subnets: Option<Vec<SubnetKind>>,
         /// Bitcoin P2P node addresses to connect to (e.g. "127.0.0.1:18444")
+        #[serde(skip_serializing_if = "Option::is_none")]
         bitcoind_addr: Option<Vec<String>>,
         /// Dogecoin P2P node addresses to connect to
+        #[serde(skip_serializing_if = "Option::is_none")]
         dogecoind_addr: Option<Vec<String>>,
         /// The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.
+        #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<String>,
     },
 }
@@ -95,18 +117,19 @@ impl Default for ManagedMode {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
     #[serde(flatten)]
     pub endpoints: Endpoints,
 
     /// The root key of this network
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>", regex(pattern = "^[0-9a-f]{266}$"))]
     pub root_key: Option<RootKey>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[serde(untagged, rename_all_fields = "kebab-case")]
 pub enum Endpoints {
     Explicit {
@@ -114,6 +137,7 @@ pub enum Endpoints {
         /// otherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.
         ///
         /// If no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.
+        #[serde(skip_serializing_if = "Option::is_none")]
         http_gateway_url: Option<Url>,
         /// The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).
         api_url: Url,
@@ -126,7 +150,7 @@ pub enum Endpoints {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(try_from = "String", into = "String")]
 pub struct RootKey(pub Vec<u8>);
 
@@ -145,13 +169,16 @@ impl From<RootKey> for String {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 pub struct Gateway {
     /// Network interface for the gateway. Defaults to 127.0.0.1
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind: Option<String>,
     /// Domains the gateway should respond to. Automatically includes localhost if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub domains: Option<Vec<String>>,
     /// Port for the gateway to listen on. Defaults to 8000
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
 }
 

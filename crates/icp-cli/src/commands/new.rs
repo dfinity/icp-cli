@@ -42,7 +42,7 @@ pub struct IcpGenerateArgs {
     /// Directory to create / project name; if the name isn't in kebab-case, it will be converted
     /// to kebab-case unless `--force` is given.
     /// Optional when `--init` is used: defaults to the name of the current directory.
-    #[arg(value_parser = validate_name)]
+    #[arg(value_parser = validate_name, required_unless_present = "init")]
     pub name: Option<String>,
 
     /// Don't convert the project name to kebab-case before creating the directory. Note that
@@ -180,26 +180,20 @@ impl From<IcpTemplatePath> for TemplatePath {
 }
 
 fn resolve_name(args: &IcpGenerateArgs) -> Result<Option<String>, anyhow::Error> {
-    if let Some(ref name) = args.name {
-        return Ok(Some(name.clone()));
+    if args.name.is_some() {
+        return Ok(args.name.clone());
     }
 
-    if args.init {
-        let cwd = std::env::current_dir().context("Failed to get current directory")?;
-        let dir_name = cwd
-            .file_name()
-            .context("Current directory has no name")?
-            .to_str()
-            .context("Current directory name is not valid UTF-8")?;
-        let name = validate_name(dir_name).map_err(|e| {
-            anyhow::anyhow!("Current directory name '{dir_name}' is not a valid project name: {e}")
-        })?;
-        return Ok(Some(name));
-    }
-
-    anyhow::bail!(
-        "Project name is required (or use --init to default to the current directory name)"
-    )
+    let cwd = std::env::current_dir().context("Failed to get current directory")?;
+    let dir_name = cwd
+        .file_name()
+        .context("Current directory has no name")?
+        .to_str()
+        .context("Current directory name is not valid UTF-8")?;
+    let name = validate_name(dir_name).map_err(|e| {
+        anyhow::anyhow!("Current directory name '{dir_name}' is not a valid project name: {e}")
+    })?;
+    Ok(Some(name))
 }
 
 pub(crate) async fn exec(

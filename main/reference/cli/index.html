@@ -1319,10 +1319,10 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <h2 id="icp-new"><code>icp new</code></h2>
 <p>Create a new ICP project from a template</p>
 <p>Under the hood templates are generated with <code>cargo-generate</code>. See the cargo-generate docs for a guide on how to write your own templates: <a href="https://docs.rs/cargo-generate/0.23.7/cargo_generate/" rel="noopener noreferrer" target="_blank">https://docs.rs/cargo-generate/0.23.7/cargo_generate/</a></p>
-<p><strong>Usage:</strong> <code>icp new [OPTIONS] &#x3C;NAME></code></p>
+<p><strong>Usage:</strong> <code>icp new [OPTIONS] [NAME]</code></p>
 <h6 id="arguments-36"><strong>Arguments:</strong></h6>
 <ul>
-<li><code>&#x3C;NAME></code> — Directory to create / project name; if the name isn’t in kebab-case, it will be converted to kebab-case unless <code>--force</code> is given</li>
+<li><code>&#x3C;NAME></code> — Directory to create / project name; if the name isn’t in kebab-case, it will be converted to kebab-case unless <code>--force</code> is given. Optional when <code>--init</code> is used: defaults to the name of the current directory</li>
 </ul>
 <h6 id="options-41"><strong>Options:</strong></h6>
 <ul>

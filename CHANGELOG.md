@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.2.5
+
 * feat: `icp new --init` no longer requires specifying a project name. If non is provided, the containing folder's name is used as the project name
 * fix: `icp canister call --json` no longer produces blank output.
 

@@ -6,14 +6,14 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 17 Apr 2026 20:38:32 GMT</lastBuildDate>
-    <pubDate>Fri, 17 Apr 2026 20:37:20 GMT</pubDate>
+    <lastBuildDate>Thu, 23 Apr 2026 17:48:28 GMT</lastBuildDate>
+    <pubDate>Thu, 23 Apr 2026 15:23:29 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/0.2/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Fri, 17 Apr 2026 20:37:20 GMT</pubDate>
+      <pubDate>Thu, 23 Apr 2026 15:23:29 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -21,7 +21,7 @@
       <title>Configuration Reference</title>
       <link>https://cli.internetcomputer.org/0.2/reference/configuration/</link>
       <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Mon, 30 Mar 2026 10:48:22 GMT</pubDate>
+      <pubDate>Fri, 27 Mar 2026 21:01:53 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/reference/configuration/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -29,7 +29,7 @@
       <title>Environments and Networks</title>
       <link>https://cli.internetcomputer.org/0.2/concepts/environments/</link>
       <description>Learn how networks and environments relate to control where and how canisters are deployed.</description>
-      <pubDate>Mon, 30 Mar 2026 10:48:22 GMT</pubDate>
+      <pubDate>Fri, 27 Mar 2026 21:01:53 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/concepts/environments/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -37,7 +37,7 @@
       <title>Local Development</title>
       <link>https://cli.internetcomputer.org/0.2/guides/local-development/</link>
       <description>Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.</description>
-      <pubDate>Sat, 21 Mar 2026 23:39:20 GMT</pubDate>
+      <pubDate>Sat, 21 Mar 2026 23:24:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/guides/local-development/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -45,7 +45,7 @@
       <title>Using Containerized Networks</title>
       <link>https://cli.internetcomputer.org/0.2/guides/containerized-networks/</link>
       <description>Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.</description>
-      <pubDate>Thu, 19 Mar 2026 16:16:49 GMT</pubDate>
+      <pubDate>Wed, 18 Mar 2026 17:24:54 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/guides/containerized-networks/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -53,7 +53,7 @@
       <title>Project Model</title>
       <link>https://cli.internetcomputer.org/0.2/concepts/project-model/</link>
       <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
-      <pubDate>Thu, 19 Mar 2026 16:16:49 GMT</pubDate>
+      <pubDate>Wed, 18 Mar 2026 17:24:54 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/concepts/project-model/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -61,7 +61,7 @@
       <title>icp-cli Documentation</title>
       <link>https://cli.internetcomputer.org/0.2/</link>
       <description>Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.</description>
-      <pubDate>Wed, 18 Mar 2026 10:40:36 GMT</pubDate>
+      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.2/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>

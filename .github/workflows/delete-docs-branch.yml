@@ -1,0 +1,45 @@
+name: Delete docs branch after release
+
+# When a release tag is pushed, delete the docs/vX.Y branch (if it exists).
+# This prevents stale branches from re-deploying outdated docs if someone
+# accidentally pushes to them. The branch is short-lived by design: it is
+# created only when a docs-only fix needs immediate deployment between releases,
+# and cleaned up automatically here on the next release.
+#
+# If a docs-only fix is needed after this runs, create a fresh docs/vX.Y branch
+# from the new release tag — see .claude/docs-guidelines.md.
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '!v*-*'    # exclude pre-release tags (e.g. v0.2.0-beta.0)
+
+permissions:
+  contents: write
+
+jobs:
+  delete-docs-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Extract version info
+        run: |
+          TAG=${GITHUB_REF_NAME}          # e.g. v0.2.3
+          PATCH=${TAG#v}                  # e.g. 0.2.3
+          MINOR=${PATCH%.*}              # e.g. 0.2
+          echo "DOCS_BRANCH=docs/v${MINOR}" >> $GITHUB_ENV
+
+      - name: Delete docs branch if it exists
+        run: |
+          git fetch origin
+          if git ls-remote --exit-code --heads origin "refs/heads/${DOCS_BRANCH}" > /dev/null 2>&1; then
+            git push origin --delete "${DOCS_BRANCH}"
+            echo "Deleted ${DOCS_BRANCH}"
+          else
+            echo "${DOCS_BRANCH} does not exist, nothing to delete"
+          fi

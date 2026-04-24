@@ -1,8 +1,15 @@
 # Unreleased
 
-* feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys
 * feat: `icp new --init` no longer requires specifying a project name. If non is provided, the containing folder's name is used as the project name
+* fix: `icp canister call --json` no longer produces blank output.
+
+# v0.2.4
+
+* feat: `icp identity delegation request/sign/use` now permit creating and importing identity delegations
+* feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
+* fix: Fail early when attempting to create an identity with an already existing name.
+* fix: Find icp.yaml even from within a symlinked folder.
 
 # v0.2.3
 

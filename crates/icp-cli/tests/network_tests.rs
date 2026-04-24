@@ -68,6 +68,7 @@ async fn network_same_port() {
     ctx.ping_until_healthy(&project_dir_a, "sameport-network");
 
     eprintln!("second network start attempt in another project");
+
     ctx.icp()
         .current_dir(&project_dir_b)
         .args(["network", "start", "sameport-network"])
@@ -75,7 +76,7 @@ async fn network_same_port() {
         .failure()
         .stderr(contains(format!(
             "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
-            dunce::canonicalize(&project_dir_a).unwrap().display()
+            project_dir_a
         )));
 }
 

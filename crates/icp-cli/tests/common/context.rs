@@ -95,6 +95,7 @@ impl TestContext {
         #[cfg(unix)]
         cmd.env("HOME", self.home_path())
             .env_remove("ICP_HOME")
+            .env_remove("PWD") // don't inherit from the tester's shell
             // Also set XDG directories to ensure isolation on Linux
             .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
             .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
@@ -239,7 +240,8 @@ impl TestContext {
                 // Also set XDG directories to ensure isolation on Linux
                 .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
                 .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
-                .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
+                .env("XDG_CACHE_HOME", self.home_path().join(".cache"))
+                .env("PWD", project_dir);
         }
         // run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]

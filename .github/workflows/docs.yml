@@ -90,9 +90,6 @@ jobs:
           # Copy custom domain file
           cp docs-site/public/.well-known/ic-domains root/.well-known/ic-domains
 
-          # Copy 404 page
-          cp docs-site/public/404.html root/404.html
-
           # Copy Matomo analytics script (site ID defined once here, not per-version)
           cp docs-site/matomo.js root/matomo.js
 
@@ -179,6 +176,15 @@ jobs:
           else
             echo "⚠️  No og-image.png found at /${LATEST_VERSION}/og-image.png on docs-deployment — skipping"
             rm -f root/og-image.png
+          fi
+
+          # 404.html — use Starlight-generated page from latest version so it matches the docs design;
+          # asset paths (/_astro/…) are absolute to that version folder which is kept permanently.
+          if git show "origin/docs-deployment:${LATEST_VERSION}/404.html" > root/404.html 2>/dev/null; then
+            echo "✅ Copied 404.html from /${LATEST_VERSION}/404.html to root"
+          else
+            echo "⚠️  No 404.html found at /${LATEST_VERSION}/404.html on docs-deployment — skipping"
+            rm -f root/404.html
           fi
 
           # feed.xml — RSS feed

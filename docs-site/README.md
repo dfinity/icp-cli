@@ -119,8 +119,16 @@ The site is hosted on an IC asset canister and served at `https://cli.internetco
 ### Triggers
 
 - **Push to `main`**: Rebuilds `/main/` docs and root files (`index.html`, `versions.json`, `robots.txt`, `sitemap.xml`, IC config). Also copies `og-image.png`, `llms.txt`, `llms-full.txt`, and `feed.xml` from the latest versioned deployment to the root.
-- **Tags (`v*`)**: Builds versioned docs (e.g., `v0.2.0` → `/0.2/`)
-- **Branches (`docs/v*`)**: Updates versioned docs (e.g., `docs/v0.1` → `/0.1/`)
+- **Release tags (`v*`)**: Builds and deploys versioned docs (e.g., `v0.2.0` → `/0.2/`). Also triggers `delete-docs-branch.yml` which automatically deletes the `docs/v0.2` branch if one exists — preventing stale branches from re-deploying outdated content on accidental pushes.
+- **Docs-override branches (`docs/v*`)**: Redeploys versioned docs for a specific minor version without cutting a new code release (e.g., `docs/v0.2` → `/0.2/`). These branches are short-lived by design — created only for an immediate docs fix, then deleted automatically on the next release.
+
+  To trigger a re-deploy, create a fresh branch from the latest release tag and push your fix:
+  ```bash
+  git fetch origin
+  git checkout -b docs/v0.2 v0.2.3   # start from the release tag, not stale state
+  git cherry-pick <commit-sha>        # commit must already be merged to main
+  git push origin docs/v0.2
+  ```
 
 ### Root-level files
 

@@ -20,6 +20,8 @@ fn main() {
     println!("cargo:rerun-if-changed=artifacts/mod.rs");
     println!("cargo:rerun-if-changed=artifacts/source.json");
 
-    define_git_sha();
+    if option_env!("GIT_SHA").is_none() {
+        define_git_sha();
+    }
     artifacts::bundle_artifacts();
 }

@@ -255,14 +255,7 @@
           "type": "string"
         },
         "settings": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Settings"
-            },
-            {
-              "type": "null"
-            }
-          ],
+          "$ref": "#/$defs/Settings",
           "default": {},
           "description": "The configuration specifying the various settings when creating the canister."
         }

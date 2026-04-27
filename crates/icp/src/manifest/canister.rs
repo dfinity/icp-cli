@@ -68,7 +68,6 @@ pub struct CanisterManifest {
 
     /// The configuration specifying the various settings when creating the canister.
     #[serde(default)]
-    #[schemars(with = "Option<Settings>")]
     pub settings: Settings,
 
     /// Initialization arguments passed to the canister during installation.

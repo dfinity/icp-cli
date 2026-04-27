@@ -176,3 +176,68 @@ where
     })?;
     Ok(m)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino_tempfile::Utf8TempDir;
+
+    fn write_manifest(dir: &Path) {
+        std::fs::write(dir.join(PROJECT_MANIFEST), "").unwrap();
+    }
+
+    #[test]
+    fn locate_returns_cwd_when_manifest_present() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write_manifest(tmp.path());
+
+        let locator = ProjectRootLocateImpl::new(tmp.path().to_path_buf(), None);
+        assert_eq!(locator.locate().unwrap(), tmp.path());
+    }
+
+    #[test]
+    fn locate_walks_up_to_manifest() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write_manifest(tmp.path());
+
+        let nested = tmp.path().join("a/b/c");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let locator = ProjectRootLocateImpl::new(nested, None);
+        assert_eq!(locator.locate().unwrap(), tmp.path());
+    }
+
+    #[test]
+    fn locate_returns_not_found_when_no_manifest_anywhere() {
+        let tmp = Utf8TempDir::new().unwrap();
+        let nested = tmp.path().join("a/b");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        // Host filesystem contains no icp.yaml above the tempdir (assumed in CI).
+        let locator = ProjectRootLocateImpl::new(nested, None);
+        assert!(matches!(
+            locator.locate(),
+            Err(ProjectRootLocateError::NotFound { .. })
+        ));
+    }
+
+    // When cwd is a symlinked directory, locate() walks up via the symlink's
+    // lexical parents
+    #[cfg(unix)]
+    #[test]
+    fn locate_walks_up_through_symlink() {
+        // target/ has no manifest anywhere above it within the test's scope.
+        let target = Utf8TempDir::new().unwrap();
+
+        // project/ contains the manifest; `project/link` is a symlink to target/.
+        let project = Utf8TempDir::new().unwrap();
+        write_manifest(project.path());
+        let link = project.path().join("link");
+        std::os::unix::fs::symlink(target.path().as_std_path(), link.as_std_path()).unwrap();
+
+        // cwd is the symlink path; its lexical parent is `project`,
+        // which contains the manifest.
+        let locator = ProjectRootLocateImpl::new(link, None);
+        assert_eq!(locator.locate().unwrap(), project.path());
+    }
+}

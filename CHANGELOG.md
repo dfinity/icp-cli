@@ -1,7 +1,19 @@
 # Unreleased
 
+* fix: `icp canister call` now serializes arguments built via the interactive Candid assist prompt against the method's declared signature, matching the behavior of arguments passed on the command line. Previously, narrower values (e.g. a variant case from a multi-case variant) were encoded with a type table inferred only from the value, which the target canister rejected with errors like "Variant index N larger than length 1".
+
+# v0.2.5
+
+* feat: `icp new --init` no longer requires specifying a project name. If non is provided, the containing folder's name is used as the project name
+* fix: `icp canister call --json` no longer produces blank output.
+
+# v0.2.4
+
+* feat: `icp identity delegation request/sign/use` now permit creating and importing identity delegations
 * feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
 * fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
+* fix: Fail early when attempting to create an identity with an already existing name.
+* fix: Find icp.yaml even from within a symlinked folder.
 
 # v0.2.3
 

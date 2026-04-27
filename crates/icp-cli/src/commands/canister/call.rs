@@ -190,8 +190,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                 return Ok(());
             }
             arguments
-                .to_bytes()
-                .context("failed to serialize candid arguments")?
+                .to_bytes_with_types(type_env, &func.args)
+                .context("failed to serialize candid arguments with specific types")?
         }
         (Some(_), Some(ResolvedArgs::Bytes(bytes))) => bytes,
         (Some((type_env, func)), Some(ResolvedArgs::Candid(arguments))) => arguments
@@ -236,7 +236,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
     };
 
     // catch errors, because the json result should be printed regardless of errors
-    let res = (|| {
+    let res: Result<(), anyhow::Error> = (|| {
         match args.output {
             CallOutputMode::Auto => {
                 if let Ok(ret) = try_decode_candid(&res, declared_method.as_ref()) {
@@ -251,11 +251,9 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                         json_response.response_text = Some(s.to_string());
                     } else {
                         writeln!(term, "{s}")?;
-                        term.flush()?;
                     }
                 } else if !args.json {
                     writeln!(term, "{}", hex::encode(&res))?;
-                    term.flush()?;
                 }
             }
             CallOutputMode::Candid => {
@@ -276,18 +274,16 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                     json_response.response_text = Some(s.to_string());
                 } else {
                     writeln!(term, "{s}")?;
-                    term.flush()?;
                 }
             }
             CallOutputMode::Hex => {
                 writeln!(term, "{}", hex::encode(&res))?;
-                term.flush()?;
             }
         };
         anyhow::Ok(())
     })();
     if args.json {
-        let write_result = serde_json::to_writer(term, &json_response);
+        let write_result = serde_json::to_writer(&term, &json_response);
         if let Err(write_err) = write_result {
             if let Err(decode_err) = res {
                 error!("failed to write JSON response: {write_err}");
@@ -298,6 +294,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         }
     }
     res?;
+    // term is buffered; this single flush covers all output paths (json and non-json).
+    term.flush()?;
 
     Ok(())
 }
@@ -337,7 +335,6 @@ pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Resu
     } else {
         writeln!(term, "{args}")?;
     }
-    term.flush()?;
     Ok(())
 }
 

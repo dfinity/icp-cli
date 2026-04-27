@@ -122,12 +122,16 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         })
         .await??;
 
-    let all_identities: Vec<Principal> = ids.identities.values().map(|id| id.principal()).collect();
+    let all_identities: Vec<Principal> = ids
+        .identities
+        .values()
+        .filter_map(|id| id.principal())
+        .collect();
 
     let default_identity = ids
         .identities
         .get(&defaults.default)
-        .map(|id| id.principal());
+        .and_then(|id| id.principal());
 
     debug!("Project root: {pdir}");
     debug!("Network root: {}", nd.network_root);

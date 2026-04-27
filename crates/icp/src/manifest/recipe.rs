@@ -115,7 +115,7 @@ pub struct Recipe {
     pub recipe_type: RecipeType,
 
     #[serde(default)]
-    #[schemars(with = "Option<HashMap<String, serde_json::Value>>")]
+    #[schemars(with = "HashMap<String, serde_json::Value>")]
     pub configuration: HashMap<String, serde_yaml::Value>,
 
     /// Optional sha256 checksum for the recipe template.

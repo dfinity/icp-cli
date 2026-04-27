@@ -285,10 +285,7 @@
         "configuration": {
           "additionalProperties": true,
           "default": {},
-          "type": [
-            "object",
-            "null"
-          ]
+          "type": "object"
         },
         "sha256": {
           "description": "Optional sha256 checksum for the recipe template.\nIf provided, the integrity of the recipe will be verified against this hash",

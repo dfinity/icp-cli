@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: `icp token/cycles balance` now accept `--of-principal`
 * fix: `icp canister call` now serializes arguments built via the interactive Candid assist prompt against the method's declared signature, matching the behavior of arguments passed on the command line. Previously, narrower values (e.g. a variant case from a multi-case variant) were encoded with a type table inferred only from the value, which the target canister rejected with errors like "Variant index N larger than length 1".
 
 # v0.2.5

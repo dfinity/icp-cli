@@ -121,10 +121,9 @@ pub async fn resolve(
 
     let bytes = fetch(source, base_dir, sha256, stdio).await?;
 
-    if matches!(source, SourceField::Remote(_)) {
-        let cksum = hex::encode(Sha256::digest(&bytes));
+    if let (SourceField::Remote(_), Some(expected)) = (source, sha256) {
         pkg_cache
-            .with_write(async |w| cache_wasm(w, &cksum, &bytes).context(CacheFileSnafu))
+            .with_write(async |w| cache_wasm(w, expected, &bytes).context(CacheFileSnafu))
             .await
             .context(LockCacheSnafu)??;
     }

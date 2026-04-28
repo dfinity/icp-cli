@@ -17,5 +17,8 @@ tokio.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 
+[build-dependencies]
+camino.workspace = true
+
 [lints]
 workspace = true

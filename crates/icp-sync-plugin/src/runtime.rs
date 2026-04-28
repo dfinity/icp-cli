@@ -242,3 +242,137 @@ pub fn run_plugin(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use candid::Principal;
+    use ic_agent::Agent;
+
+    fn dummy_agent() -> Agent {
+        Agent::builder()
+            .with_url("http://127.0.0.1:4943")
+            .build()
+            .expect("build test agent")
+    }
+
+    fn anon() -> Principal {
+        Principal::anonymous()
+    }
+
+    // -------------------------------------------------------------------------
+    // Error-path tests — no fixture WASM needed
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn load_component_error_on_missing_file() {
+        let result = run_plugin(
+            "nonexistent.wasm".into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "test".to_string(),
+            None,
+        );
+        assert!(matches!(result, Err(RunPluginError::LoadComponent { .. })));
+    }
+
+    // -------------------------------------------------------------------------
+    // Fixture-dependent tests — skipped when TEST_PLUGIN_WASM is not set
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn preopen_dir_error_on_missing_dir() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
+            return;
+        };
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec!["nonexistent_dir".to_string()],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "test".to_string(),
+            None,
+        );
+        assert!(matches!(result, Err(RunPluginError::PreopenDir { .. })));
+    }
+
+    #[test]
+    fn plugin_success_returns_ok() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
+            return;
+        };
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "ok".to_string(),
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn plugin_failure_maps_to_run_plugin_error() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
+            return;
+        };
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "error".to_string(),
+            None,
+        );
+        assert!(matches!(
+            result,
+            Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate failure"
+        ));
+    }
+
+    #[test]
+    fn plugin_stdout_forwarded_through_stdio_channel() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
+            return;
+        };
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "print".to_string(),
+            Some(tx),
+        );
+        assert!(result.is_ok());
+        let msg = rx.try_recv().expect("expected stdout message on channel");
+        assert!(msg.contains("stdout from plugin"), "got: {msg}");
+    }
+}

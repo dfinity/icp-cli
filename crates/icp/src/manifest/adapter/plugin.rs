@@ -1,5 +1,5 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::prebuilt::SourceField;
 
@@ -11,23 +11,30 @@ use super::prebuilt::SourceField;
 /// the contents of any files listed in `files` (read by the host and passed
 /// inline to the plugin).
 ///
-/// Example:
+/// Example (local path):
 /// ```yaml
 /// - type: plugin
 ///   path: ./plugins/populate-data.wasm
-///   sha256: e3b0c44298fc1c149afb...   # optional but recommended
+///   sha256: e3b0c44298fc1c149afb...   # optional for path
 ///   dirs:                               # directories preopened read-only
 ///     - assets/seed-data
 ///   files:                              # files read by the host and passed inline
 ///     - config.txt
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+///
+/// Example (remote URL — `sha256` is required):
+/// ```yaml
+/// - type: plugin
+///   url: https://example.com/plugins/populate-data.wasm
+///   sha256: e3b0c44298fc1c149afb...   # required for url
+/// ```
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub struct Adapter {
     #[serde(flatten)]
     pub source: SourceField,
 
     /// Optional sha256 checksum of the wasm file.
-    /// Required when `url` is used; optional (but recommended) for `path`.
+    /// Optional for `path`; required for `url`.
     pub sha256: Option<String>,
 
     /// Directories (relative to canister directory) the plugin may read from.
@@ -38,6 +45,32 @@ pub struct Adapter {
     /// Files (relative to canister directory) the host reads and passes to
     /// the plugin as part of `sync-exec-input.files`.
     pub files: Option<Vec<String>>,
+}
+
+impl<'de> Deserialize<'de> for Adapter {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct AdapterHelper {
+            #[serde(flatten)]
+            source: SourceField,
+            sha256: Option<String>,
+            dirs: Option<Vec<String>>,
+            files: Option<Vec<String>>,
+        }
+
+        let h = AdapterHelper::deserialize(d)?;
+        if matches!(h.source, SourceField::Remote(_)) && h.sha256.is_none() {
+            return Err(serde::de::Error::custom(
+                "plugin with `url` requires `sha256` for integrity verification",
+            ));
+        }
+        Ok(Self {
+            source: h.source,
+            sha256: h.sha256,
+            dirs: h.dirs,
+            files: h.files,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -88,6 +121,21 @@ mod tests {
                 dirs: Some(vec!["assets/seed-data".to_string(), "config".to_string()]),
                 files: Some(vec!["config.txt".to_string()]),
             },
+        );
+    }
+
+    #[test]
+    fn remote_url_without_sha256_is_rejected() {
+        let err = serde_yaml::from_str::<Adapter>(
+            r#"
+            url: https://example.com/plugins/migrate-v2.wasm
+            "#,
+        )
+        .expect_err("expected error for remote url without sha256");
+        assert!(
+            err.to_string()
+                .contains("plugin with `url` requires `sha256`"),
+            "unexpected error: {err}"
         );
     }
 

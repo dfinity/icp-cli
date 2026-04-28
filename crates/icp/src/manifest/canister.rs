@@ -821,6 +821,22 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "plugin with `url` requires `sha256`")]
+    fn sync_steps_plugin_remote_without_sha256_is_rejected() {
+        validate_canister_yaml(indoc! {r#"
+            name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: dosomething.sh
+            sync:
+              steps:
+                - type: plugin
+                  url: https://example.com/plugins/migrate-v2.wasm
+        "#});
+    }
+
+    #[test]
     fn sync_steps() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"

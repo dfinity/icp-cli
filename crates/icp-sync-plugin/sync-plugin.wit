@@ -41,8 +41,8 @@ interface types {
         /// Candid-encoded argument bytes. The plugin is responsible for
         /// encoding; the host forwards these bytes unchanged.
         arg: list<u8>,
-        /// Defaults to update if omitted.
-        call-type: option<call-type>,
+        /// Whether to perform an `update` or `query` call.
+        call-type: call-type,
         /// When true, the call bypasses any proxy canister configured via
         /// `--proxy`, going directly to the target canister. When false
         /// (the default), update calls are routed through the proxy if one

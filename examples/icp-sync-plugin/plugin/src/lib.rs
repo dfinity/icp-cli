@@ -26,7 +26,7 @@ impl Guest for Plugin {
         canister_call(&CanisterCallRequest {
             method: "set_uploader".to_string(),
             arg,
-            call_type: Some(icp::sync_plugin::types::CallType::Update),
+            call_type: icp::sync_plugin::types::CallType::Update,
             direct: false,
         })?;
         println!("set_uploader ({}): ok", input.identity_principal);
@@ -67,7 +67,7 @@ fn register_dir(dir: &Path) -> Result<u32, String> {
             canister_call(&CanisterCallRequest {
                 method: "register".to_string(),
                 arg,
-                call_type: Some(icp::sync_plugin::types::CallType::Update),
+                call_type: icp::sync_plugin::types::CallType::Update,
                 direct: true,
             })?;
             println!("{path_str}: ok");

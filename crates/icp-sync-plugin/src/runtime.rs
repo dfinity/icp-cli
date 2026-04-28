@@ -50,13 +50,12 @@ impl SyncPluginImports for HostState {
         let cid = self.target_canister_id;
         let method = req.method.clone();
         let agent = Arc::clone(&self.agent);
-        let call_type = req.call_type.unwrap_or(CallType::Update);
         let proxy = if req.direct { None } else { self.proxy };
 
         // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
         // so blocking the thread here is safe.
         tokio::runtime::Handle::current().block_on(async move {
-            match call_type {
+            match req.call_type {
                 CallType::Update => {
                     if let Some(proxy_cid) = proxy {
                         let proxy_args = ProxyArgs {

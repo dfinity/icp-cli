@@ -61,11 +61,13 @@ async fn fetch(
         SourceField::Local(s) => {
             let path = base_dir.join(&s.path);
             if let Some(tx) = stdio {
-                tx.send(format!("Reading wasm: {path}"))
+                tx.send(format!("Reading wasm: {}", s.path))
                     .await
                     .context(LogSnafu)?;
             }
-            read(&path).context(ReadLocalSnafu { path })?
+            read(&path).context(ReadLocalSnafu {
+                path: s.path.clone(),
+            })?
         }
         SourceField::Remote(s) => {
             let url = Url::parse(&s.url).context(ParseUrlSnafu)?;

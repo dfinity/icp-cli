@@ -4,6 +4,7 @@ use ic_agent::Agent;
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
+    package::PackageCache,
     prelude::PathBuf,
 };
 use snafu::prelude::*;
@@ -36,6 +37,7 @@ async fn sync_canister(
     environment: &str,
     proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
 
@@ -58,6 +60,7 @@ async fn sync_canister(
                 },
                 agent,
                 Some(tx),
+                pkg_cache,
             )
             .await;
 
@@ -78,6 +81,7 @@ pub(crate) async fn sync_many(
     environment: String,
     proxy: Option<Principal>,
     debug: bool,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -101,6 +105,7 @@ pub(crate) async fn sync_many(
                     &environment,
                     proxy,
                     &mut pb,
+                    pkg_cache,
                 )
                 .await;
 

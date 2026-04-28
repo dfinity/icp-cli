@@ -5,6 +5,7 @@ use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::SyncStep;
+use crate::package::PackageCache;
 use crate::prelude::*;
 
 mod assets;
@@ -41,6 +42,7 @@ pub trait Synchronize: Sync + Send {
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
+        pkg_cache: &PackageCache,
     ) -> Result<(), SynchronizeError>;
 }
 
@@ -54,6 +56,7 @@ impl Synchronize for Syncer {
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
+        pkg_cache: &PackageCache,
     ) -> Result<(), SynchronizeError> {
         match step {
             SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
@@ -65,6 +68,7 @@ impl Synchronize for Syncer {
                 &params.environment.clone(),
                 params.proxy,
                 stdio,
+                pkg_cache,
             )
             .await?),
         }
@@ -85,6 +89,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _params: &Params,
         _agent: &Agent,
         _stdio: Option<Sender<String>>,
+        _pkg_cache: &PackageCache,
     ) -> Result<(), SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
     }

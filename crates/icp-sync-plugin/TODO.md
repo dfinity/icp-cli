@@ -1,11 +1,5 @@
 # Sync Plugin TODO
 
-## Wasm caching
-
-Cache remote plugin wasm files in `.icp/cache/` so they are not re-downloaded
-on every sync. Key the cache entry on the sha256 checksum. When a remote step
-has a sha256 and the cached file matches, skip the HTTP fetch entirely.
-
 ## Plugin timeout
 
 Add `timeout_seconds: Option<u64>` to `manifest::adapter::plugin::Adapter`

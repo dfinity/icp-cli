@@ -16,6 +16,11 @@ use super::Params;
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {
+    #[snafu(display(
+        "plugin file path '{name}' is not a safe relative path (no absolute paths or '..' allowed)"
+    ))]
+    UnsafeFilePath { name: String },
+
     #[snafu(display("failed to read plugin input file at '{path}'"))]
     ReadFile {
         source: crate::fs::IoError,
@@ -95,6 +100,14 @@ pub(super) async fn sync(
 
     let mut files: Vec<(String, String)> = Vec::new();
     for name in adapter.files.as_deref().unwrap_or(&[]) {
+        let p = Utf8PathBuf::from(name);
+        ensure!(
+            !p.is_absolute()
+                && !p
+                    .components()
+                    .any(|c| c == camino::Utf8Component::ParentDir),
+            UnsafeFilePathSnafu { name }
+        );
         let abs = params.path.join(name);
         let content = read_to_string(abs.as_ref()).context(ReadFileSnafu { path: abs })?;
         files.push((name.clone(), content));
@@ -109,7 +122,7 @@ pub(super) async fn sync(
     let environment_owned = environment.to_owned();
     let stdio_clone = stdio.clone();
 
-    tokio::task::block_in_place(|| {
+    let result = tokio::task::block_in_place(|| {
         run_plugin(
             wasm_path.clone(),
             base_dir,
@@ -123,12 +136,12 @@ pub(super) async fn sync(
             stdio_clone,
         )
     })
-    .context(RunSnafu)?;
+    .context(RunSnafu);
 
-    // Clean up temp file if we downloaded from a remote URL with no sha256.
+    // Clean up temp file regardless of plugin success/failure.
     if is_temp {
         let _ = std::fs::remove_file(wasm_path.as_std_path());
     }
 
-    Ok(())
+    result
 }

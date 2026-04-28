@@ -65,7 +65,7 @@ impl Synchronize for Syncer {
                 adapter,
                 params,
                 agent,
-                &params.environment.clone(),
+                &params.environment,
                 params.proxy,
                 stdio,
                 pkg_cache,

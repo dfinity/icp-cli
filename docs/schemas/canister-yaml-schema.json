@@ -498,7 +498,7 @@
         },
         {
           "$ref": "#/$defs/Adapter4",
-          "description": "Represents a sync step executed by a WebAssembly plugin running inside\nthe Extism sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
+          "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
           "properties": {
             "type": {
               "const": "plugin",

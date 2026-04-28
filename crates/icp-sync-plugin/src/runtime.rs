@@ -1,7 +1,9 @@
 // Host-side Component Model runtime for sync plugins.
 use std::sync::Arc;
 
-use camino::Utf8PathBuf;
+const MAX_PLUGIN_OUTPUT: usize = 1024 * 1024; // 1 MiB per stream
+
+use camino::{Utf8Component, Utf8PathBuf};
 use candid::{Encode, Principal};
 use ic_agent::Agent;
 use snafu::prelude::*;
@@ -109,6 +111,11 @@ pub enum RunPluginError {
         path: Utf8PathBuf,
     },
 
+    #[snafu(display(
+        "plugin dir '{dir}' is not a safe relative path (no absolute paths or '..' allowed)"
+    ))]
+    UnsafeDir { dir: String },
+
     #[snafu(display("failed to preopen directory '{dir}' for the plugin"))]
     PreopenDir {
         source: wasmtime::Error,
@@ -161,6 +168,11 @@ pub fn run_plugin(
     // same relative path it used in the manifest.
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
     for dir in &dirs {
+        let p = Utf8PathBuf::from(dir);
+        ensure!(
+            !p.is_absolute() && !p.components().any(|c| c == Utf8Component::ParentDir),
+            UnsafeDirSnafu { dir }
+        );
         let host_path = base_dir.join(dir);
         wasi_builder
             .preopened_dir(
@@ -172,8 +184,8 @@ pub fn run_plugin(
             .context(PreopenDirSnafu { dir: host_path })?;
     }
 
-    let stdout_pipe = MemoryOutputPipe::new(usize::MAX);
-    let stderr_pipe = MemoryOutputPipe::new(usize::MAX);
+    let stdout_pipe = MemoryOutputPipe::new(MAX_PLUGIN_OUTPUT);
+    let stderr_pipe = MemoryOutputPipe::new(MAX_PLUGIN_OUTPUT);
     if stdio.is_some() {
         wasi_builder
             .stdout(stdout_pipe.clone())

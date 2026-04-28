@@ -187,6 +187,8 @@ pub fn run_plugin(
     files: Vec<(String, String)>,
     target_canister_id: Principal,
     agent: Agent,
+    proxy: Option<Principal>,
+    identity_principal: Principal,
     environment: String,
     stdio: Option<Sender<String>>,
 ) -> Result<(), RunPluginError>
@@ -207,6 +209,7 @@ wasmtime::component::bindgen!({
 struct HostState {
     target_canister_id: Principal,
     agent: Arc<Agent>,
+    proxy: Option<Principal>,
     wasi_ctx: wasmtime_wasi::WasiCtx,
     wasi_table: wasmtime_wasi::ResourceTable,
 }

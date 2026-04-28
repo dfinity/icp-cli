@@ -16,7 +16,7 @@ pub(crate) struct SyncArgs {
     /// Canister names (if empty, sync all canisters in environment)
     pub(crate) canisters: Vec<String>,
 
-    /// Principal of a proxy canister to route management canister calls through.
+    /// Principal of a proxy canister to route sync plugin calls to the target canister through.
     #[arg(long)]
     pub(crate) proxy: Option<Principal>,
 

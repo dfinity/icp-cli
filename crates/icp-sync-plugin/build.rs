@@ -22,6 +22,7 @@ fn build_test_fixture() {
             "--target",
             "wasm32-wasip2",
             "--release",
+            "--locked",
             "--manifest-path",
             fixture_manifest.as_str(),
             "--target-dir",

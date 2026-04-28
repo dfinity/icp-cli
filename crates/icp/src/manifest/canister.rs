@@ -318,7 +318,7 @@ pub enum SyncStep {
     Assets(adapter::assets::Adapter),
 
     /// Represents a sync step executed by a WebAssembly plugin running inside
-    /// the Extism sandbox.  The plugin can call canister methods on exactly
+    /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
     /// the canister being synced and read files from the declared `dirs`.
     Plugin(adapter::plugin::Adapter),
 }

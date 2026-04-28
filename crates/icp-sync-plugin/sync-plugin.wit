@@ -45,8 +45,9 @@ interface types {
         call-type: option<call-type>,
         /// When true, the call bypasses any proxy canister configured via
         /// `--proxy`, going directly to the target canister. When false
-        /// (the default), the host routes the call through the proxy if one
-        /// is configured.
+        /// (the default), update calls are routed through the proxy if one
+        /// is configured; query calls always go directly to the target
+        /// canister regardless of this flag.
         direct: bool,
     }
 }

@@ -34,11 +34,6 @@ pub enum WasmError {
     #[snafu(display("checksum mismatch, expected: {expected}, actual: {actual}"))]
     ChecksumMismatch { expected: String, actual: String },
 
-    #[snafu(display("failed to send log message"))]
-    Log {
-        source: tokio::sync::mpsc::error::SendError<String>,
-    },
-
     #[snafu(display("failed to read cached wasm file"))]
     ReadCache { source: crate::fs::IoError },
 
@@ -61,9 +56,7 @@ async fn fetch(
         SourceField::Local(s) => {
             let path = base_dir.join(&s.path);
             if let Some(tx) = stdio {
-                tx.send(format!("Reading wasm: {}", s.path))
-                    .await
-                    .context(LogSnafu)?;
+                let _ = tx.send(format!("Reading wasm: {}", s.path)).await;
             }
             read(&path).context(ReadLocalSnafu {
                 path: s.path.clone(),
@@ -72,9 +65,7 @@ async fn fetch(
         SourceField::Remote(s) => {
             let url = Url::parse(&s.url).context(ParseUrlSnafu)?;
             if let Some(tx) = stdio {
-                tx.send(format!("Fetching wasm: {url}"))
-                    .await
-                    .context(LogSnafu)?;
+                let _ = tx.send(format!("Fetching wasm: {url}")).await;
             }
             let resp = Client::new()
                 .execute(Request::new(Method::GET, url))
@@ -90,9 +81,7 @@ async fn fetch(
 
     if let Some(expected) = sha256 {
         if let Some(tx) = stdio {
-            tx.send("Verifying checksum".to_string())
-                .await
-                .context(LogSnafu)?;
+            let _ = tx.send("Verifying checksum".to_string()).await;
         }
         let actual = hex::encode(Sha256::digest(&bytes));
         ensure!(
@@ -124,9 +113,7 @@ pub async fn resolve(
             .context(LockCacheSnafu)?;
         if let Some(cached) = maybe_cached? {
             if let Some(tx) = stdio {
-                tx.send("Using cached file".to_string())
-                    .await
-                    .context(LogSnafu)?;
+                let _ = tx.send("Using cached file".to_string()).await;
             }
             return Ok(cached);
         }

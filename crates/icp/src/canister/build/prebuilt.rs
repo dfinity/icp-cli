@@ -9,11 +9,6 @@ use super::Params;
 
 #[derive(Debug, Snafu)]
 pub enum PrebuiltError {
-    #[snafu(display("failed to send log message"))]
-    Log {
-        source: tokio::sync::mpsc::error::SendError<String>,
-    },
-
     #[snafu(transparent)]
     Wasm { source: wasm::WasmError },
 
@@ -37,9 +32,7 @@ pub(super) async fn build(
     .await?;
 
     if let Some(tx) = &stdio {
-        tx.send(format!("Writing WASM file: {}", params.output))
-            .await
-            .context(LogSnafu)?;
+        let _ = tx.send(format!("Writing WASM file: {}", params.output)).await;
     }
     write(&params.output, &wasm_bytes).context(WriteFileSnafu)?;
 

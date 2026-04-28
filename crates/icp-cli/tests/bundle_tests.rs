@@ -207,6 +207,81 @@ async fn bundle_and_deploy() {
     );
 }
 
+/// Bundle a project whose canister has a call sync step.
+/// Verifies that the call step is preserved verbatim in the bundled manifest.
+#[test]
+fn bundle_preserves_call_sync_step() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+          - name: frontend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: call
+                  canister: backend
+                  method: greet
+                  args: '("world")'
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+    let mut manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+    }
+
+    assert!(!manifest_yaml.is_empty(), "icp.yaml not found in bundle");
+    assert!(
+        manifest_yaml.contains("type: call"),
+        "bundled manifest should preserve call sync step"
+    );
+    assert!(
+        manifest_yaml.contains("canister: backend"),
+        "bundled manifest should preserve call target canister"
+    );
+    assert!(
+        manifest_yaml.contains("method: greet"),
+        "bundled manifest should preserve call method name"
+    );
+}
+
 /// Projects with script sync steps must be rejected with a clear error.
 #[test]
 fn bundle_rejects_script_sync_step() {

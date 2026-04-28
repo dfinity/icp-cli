@@ -89,6 +89,35 @@
       ],
       "type": "object"
     },
+    "Adapter4": {
+      "description": "Configuration for a canister call sync step.",
+      "properties": {
+        "args": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ManifestInitArgs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Arguments to pass to the method call."
+        },
+        "canister": {
+          "description": "Name of the canister in the current project to call.",
+          "type": "string"
+        },
+        "method": {
+          "description": "Name of the canister method to invoke.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canister",
+        "method"
+      ],
+      "type": "object"
+    },
     "ArgsFormat": {
       "description": "Format specifier for canister call/install args content.",
       "oneOf": [
@@ -920,6 +949,20 @@
           "properties": {
             "type": {
               "const": "assets",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Adapter4",
+          "description": "Performs a canister call as part of the sync process.",
+          "properties": {
+            "type": {
+              "const": "call",
               "type": "string"
             }
           },

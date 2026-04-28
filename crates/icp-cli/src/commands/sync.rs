@@ -2,6 +2,7 @@ use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
+use icp::network::Configuration as NetworkConfiguration;
 use tracing::info;
 
 use crate::{
@@ -77,7 +78,14 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
 
     info!("Syncing canisters:");
 
-    sync_many(ctx.syncer.clone(), agent, sync_canisters, ctx.debug).await?;
+    let is_cache = matches!(env.network.configuration, NetworkConfiguration::Managed { .. });
+    let canister_ids = ctx
+        .ids
+        .lookup_by_environment(is_cache, &env.name)
+        .map(|m| m.into_iter().collect())
+        .unwrap_or_default();
+
+    sync_many(ctx.syncer.clone(), agent, sync_canisters, canister_ids, ctx.debug).await?;
 
     Ok(())
 }

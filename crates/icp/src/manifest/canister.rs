@@ -317,6 +317,9 @@ pub enum SyncStep {
 
     /// Represents syncing of an assets canister
     Assets(adapter::assets::Adapter),
+
+    /// Performs a canister call as part of the sync process.
+    Call(adapter::call::Adapter),
 }
 
 impl fmt::Display for SyncStep {
@@ -327,6 +330,7 @@ impl fmt::Display for SyncStep {
             match self {
                 SyncStep::Script(v) => format!("script {v}"),
                 SyncStep::Assets(v) => format!("assets {v}"),
+                SyncStep::Call(v) => format!("call {v}"),
             }
         )
     }
@@ -348,6 +352,7 @@ mod tests {
         manifest::{
             adapter::{
                 assets,
+                call,
                 prebuilt::{self, RemoteSource, SourceField},
                 script,
             },
@@ -750,6 +755,81 @@ mod tests {
                     sync: Some(SyncSteps {
                         steps: vec![SyncStep::Assets(assets::Adapter {
                             dir: assets::DirField::Dir("dist".to_string()),
+                        })]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn call_sync_step() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: call
+                      canister: other-canister
+                      method: initialize
+                      args: "(42)"
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Call(call::Adapter {
+                            canister: "other-canister".to_string(),
+                            method: "initialize".to_string(),
+                            args: Some(ManifestInitArgs::String("(42)".to_string())),
+                        })]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn call_sync_step_no_args() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: call
+                      canister: other-canister
+                      method: initialize
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Call(call::Adapter {
+                            canister: "other-canister".to_string(),
+                            method: "initialize".to_string(),
+                            args: None,
                         })]
                     }),
                 },

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
@@ -8,11 +10,13 @@ use crate::manifest::canister::SyncStep;
 use crate::prelude::*;
 
 mod assets;
+mod call;
 mod script;
 
 pub struct Params {
     pub path: PathBuf,
     pub cid: Principal,
+    pub canister_ids: HashMap<String, Principal>,
 }
 
 #[derive(Debug, Snafu)]
@@ -22,6 +26,9 @@ pub enum SynchronizeError {
 
     #[snafu(transparent)]
     Assets { source: assets::AssetsError },
+
+    #[snafu(transparent)]
+    Call { source: call::CallError },
 }
 
 #[async_trait]
@@ -49,6 +56,7 @@ impl Synchronize for Syncer {
         match step {
             SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
+            SyncStep::Call(adapter) => Ok(call::sync(adapter, params, agent).await?),
         }
     }
 }

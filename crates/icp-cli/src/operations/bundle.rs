@@ -139,6 +139,9 @@ pub(crate) async fn create_bundle(
                         dir: new_dir,
                     }));
                 }
+                SyncStep::Call(adapter) => {
+                    bundle_sync_steps.push(SyncStep::Call(adapter.clone()));
+                }
             }
         }
 

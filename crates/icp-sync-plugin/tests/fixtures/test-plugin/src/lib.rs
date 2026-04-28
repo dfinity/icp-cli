@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 wit_bindgen::generate!({
     world: "sync-plugin",
     path: "../../../sync-plugin.wit",

@@ -28,16 +28,12 @@ fn build_test_fixture() {
             "--target-dir",
             fixture_target_dir.as_str(),
         ])
-        .status();
-
-    match status {
-        Ok(s) if s.success() => {
-            let wasm = fixture_target_dir.join("wasm32-wasip2/release/test_plugin.wasm");
-            println!("cargo:rustc-env=TEST_PLUGIN_WASM={wasm}");
-        }
-        _ => {
-            // wasm32-wasip2 target not installed or build failed; fixture-dependent
-            // tests will be skipped via option_env!("TEST_PLUGIN_WASM").
-        }
-    }
+        .status()
+        .expect("failed to spawn cargo build for test fixture");
+    assert!(
+        status.success(),
+        "cargo build --target wasm32-wasip2 failed for test fixture"
+    );
+    let wasm = fixture_target_dir.join("wasm32-wasip2/release/test_plugin.wasm");
+    println!("cargo:rustc-env=TEST_PLUGIN_WASM={wasm}");
 }

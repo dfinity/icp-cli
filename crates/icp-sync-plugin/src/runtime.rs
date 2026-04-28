@@ -295,15 +295,12 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Fixture-dependent tests — skipped when TEST_PLUGIN_WASM is not set
+    // Fixture-dependent tests
     // -------------------------------------------------------------------------
 
     #[test]
     fn preopen_dir_error_on_missing_dir() {
-        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
-            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
-            return;
-        };
+        let wasm_path = env!("TEST_PLUGIN_WASM");
         let result = run_plugin(
             wasm_path.into(),
             ".".into(),
@@ -321,10 +318,7 @@ mod tests {
 
     #[test]
     fn plugin_success_returns_ok() {
-        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
-            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
-            return;
-        };
+        let wasm_path = env!("TEST_PLUGIN_WASM");
         let result = run_plugin(
             wasm_path.into(),
             ".".into(),
@@ -342,10 +336,7 @@ mod tests {
 
     #[test]
     fn plugin_failure_maps_to_run_plugin_error() {
-        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
-            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
-            return;
-        };
+        let wasm_path = env!("TEST_PLUGIN_WASM");
         let result = run_plugin(
             wasm_path.into(),
             ".".into(),
@@ -366,10 +357,7 @@ mod tests {
 
     #[test]
     fn plugin_stdout_forwarded_through_stdio_channel() {
-        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
-            eprintln!("skipping: TEST_PLUGIN_WASM not set (install wasm32-wasip2 target)");
-            return;
-        };
+        let wasm_path = env!("TEST_PLUGIN_WASM");
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
         let result = run_plugin(
             wasm_path.into(),

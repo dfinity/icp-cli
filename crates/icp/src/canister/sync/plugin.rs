@@ -7,7 +7,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{
     canister::wasm,
-    fs::{read_to_string, write},
+    fs::read_to_string,
     manifest::adapter::{plugin::Adapter, prebuilt::SourceField},
     package::PackageCache,
 };
@@ -26,9 +26,6 @@ pub enum PluginError {
         source: crate::fs::IoError,
         path: Utf8PathBuf,
     },
-
-    #[snafu(display("failed to write downloaded plugin wasm to temp file"))]
-    WriteTempWasm { source: crate::fs::IoError },
 
     #[snafu(transparent)]
     Wasm { source: wasm::WasmError },
@@ -54,43 +51,27 @@ pub(super) async fn sync(
 ) -> Result<(), PluginError> {
     // 1. Determine the on-disk path for the wasm. run_plugin needs a path, not raw bytes.
     //    - Local: use the manifest path directly.
-    //    - Remote + sha256 known: resolve via cache (download once, reuse thereafter);
-    //      the stable cache path avoids a temp file.
-    //    - Remote + no sha256: download and write to a temp file (cleaned up after).
-    let (wasm_path, is_temp) = match &adapter.source {
-        SourceField::Local(s) => (params.path.join(&s.path), false),
-        SourceField::Remote(_) => match &adapter.sha256 {
-            Some(sha) => {
-                wasm::resolve(
-                    &adapter.source,
-                    &params.path,
-                    Some(sha),
-                    stdio.as_ref(),
-                    pkg_cache,
-                )
-                .await?;
-                let path = wasm::cached_path(pkg_cache, sha)
-                    .await
-                    .context(LockCacheSnafu)?;
-                (path, false)
-            }
-            None => {
-                let wasm_bytes = wasm::resolve(
-                    &adapter.source,
-                    &params.path,
-                    None,
-                    stdio.as_ref(),
-                    pkg_cache,
-                )
-                .await?;
-                let tmp = params.path.join(format!(
-                    ".icp-plugin-{}.wasm",
-                    hex::encode(&wasm_bytes[..std::cmp::min(8, wasm_bytes.len())])
-                ));
-                write(tmp.as_ref(), &wasm_bytes).context(WriteTempWasmSnafu)?;
-                (tmp, true)
-            }
-        },
+    //    - Remote: resolve via cache (sha256 is required for remote, enforced at parse time),
+    //      so the stable cache path is always available — no temp file needed.
+    let wasm_path = match &adapter.source {
+        SourceField::Local(s) => params.path.join(&s.path),
+        SourceField::Remote(_) => {
+            let sha = adapter
+                .sha256
+                .as_deref()
+                .expect("remote plugin source requires sha256 — enforced at manifest parse time");
+            wasm::resolve(
+                &adapter.source,
+                &params.path,
+                Some(sha),
+                stdio.as_ref(),
+                pkg_cache,
+            )
+            .await?;
+            wasm::cached_path(pkg_cache, sha)
+                .await
+                .context(LockCacheSnafu)?
+        }
     };
 
     // 2. Collect inputs: `dirs` stays as manifest strings (runtime preopens them),
@@ -122,9 +103,9 @@ pub(super) async fn sync(
     let environment_owned = environment.to_owned();
     let stdio_clone = stdio.clone();
 
-    let result = tokio::task::block_in_place(|| {
+    tokio::task::block_in_place(|| {
         run_plugin(
-            wasm_path.clone(),
+            wasm_path,
             base_dir,
             dirs,
             files,
@@ -136,12 +117,5 @@ pub(super) async fn sync(
             stdio_clone,
         )
     })
-    .context(RunSnafu);
-
-    // Clean up temp file regardless of plugin success/failure.
-    if is_temp {
-        let _ = std::fs::remove_file(wasm_path.as_std_path());
-    }
-
-    result
+    .context(RunSnafu)
 }

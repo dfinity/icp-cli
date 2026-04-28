@@ -49,6 +49,11 @@ interface types {
         /// is configured; query calls always go directly to the target
         /// canister regardless of this flag.
         direct: bool,
+        /// Cycles to attach to a proxied update call. Only meaningful when
+        /// `direct` is `false`, a proxy canister is configured, and
+        /// `call-type` is `update`; silently ignored for direct calls and
+        /// for query calls.
+        cycles: u64,
     }
 }
 

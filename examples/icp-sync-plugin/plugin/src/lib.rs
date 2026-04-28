@@ -28,6 +28,7 @@ impl Guest for Plugin {
             arg,
             call_type: icp::sync_plugin::types::CallType::Update,
             direct: false,
+            cycles: 0,
         })?;
         println!("set_uploader ({}): ok", input.identity_principal);
 
@@ -69,6 +70,7 @@ fn register_dir(dir: &Path) -> Result<u32, String> {
                 arg,
                 call_type: icp::sync_plugin::types::CallType::Update,
                 direct: true,
+                cycles: 0,
             })?;
             println!("{path_str}: ok");
             count += 1;

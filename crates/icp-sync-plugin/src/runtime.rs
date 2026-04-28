@@ -62,7 +62,7 @@ impl SyncPluginImports for HostState {
                             canister_id: cid,
                             method: method.clone(),
                             args: arg_bytes,
-                            cycles: candid::Nat::from(0u64),
+                            cycles: candid::Nat::from(req.cycles),
                         };
                         let encoded = Encode!(&proxy_args)
                             .map_err(|e| format!("proxy encode failed: {e}"))?;

@@ -278,7 +278,9 @@ impl Guest for Plugin {
             canister_call(&CanisterCallRequest {
                 method: "set_config".to_string(),
                 arg,
-                call_type: Some(icp::sync_plugin::types::CallType::Update),
+                call_type: icp::sync_plugin::types::CallType::Update,
+                direct: false,
+                cycles: 0,
             })?;
         }
 

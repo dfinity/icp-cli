@@ -355,22 +355,24 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn plugin_stdout_forwarded_through_stdio_channel() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn plugin_stdout_forwarded_through_stdio_channel() {
         let wasm_path = env!("TEST_PLUGIN_WASM");
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "print".to_string(),
-            Some(tx),
-        );
+        let result = tokio::task::block_in_place(|| {
+            run_plugin(
+                wasm_path.into(),
+                ".".into(),
+                vec![],
+                vec![],
+                anon(),
+                dummy_agent(),
+                None,
+                anon(),
+                "print".to_string(),
+                Some(tx),
+            )
+        });
         assert!(result.is_ok());
         let msg = rx.try_recv().expect("expected stdout message on channel");
         assert!(msg.contains("stdout from plugin"), "got: {msg}");

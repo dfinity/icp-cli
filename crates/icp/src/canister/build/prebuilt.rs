@@ -32,7 +32,9 @@ pub(super) async fn build(
     .await?;
 
     if let Some(tx) = &stdio {
-        let _ = tx.send(format!("Writing WASM file: {}", params.output)).await;
+        let _ = tx
+            .send(format!("Writing WASM file: {}", params.output))
+            .await;
     }
     write(&params.output, &wasm_bytes).context(WriteFileSnafu)?;
 

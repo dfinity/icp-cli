@@ -146,6 +146,20 @@ The effective capability surface is:
   returns, stdout is forwarded to the CLI progress output first, then stderr.
   Invalid UTF-8 is replaced with U+FFFD.
 
+### Resource limits
+
+| Resource | Limit |
+|----------|-------|
+| Wasm call-stack depth | 512 KiB |
+| Pure compute time | 60 seconds |
+| Linear memory | wasm32 address space (≤ 4 GiB) |
+| stdout / stderr per stream | 1 MiB |
+
+**Compute time** counts only wasm instruction execution. Time spent waiting for
+a `canister-call` to return over the network is excluded — the host grants that
+time back to the budget when the call completes. A plugin that exceeds 60 seconds
+of actual computation will be interrupted with an error.
+
 ### What this means for plugin authors
 
 You can:
@@ -153,12 +167,16 @@ You can:
 - Access inline file content from `sync-exec-input.files`.
 - Use clocks, RNG, and standard language features.
 - Panic or exit — the host surfaces the error and continues.
+- Make as many canister calls as needed; their network latency is not charged
+  against the compute time limit.
 
 You cannot:
 - Open network connections or resolve DNS.
 - Write to disk, spawn subprocesses, or read environment variables.
 - Call canisters other than the one being synced.
 - Escape a preopen via `..` or symlinks.
+- Use more than 512 KiB of wasm call stack or run for more than 60 seconds of
+  pure computation.
 
 ---
 

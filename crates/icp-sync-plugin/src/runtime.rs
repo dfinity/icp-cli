@@ -1,7 +1,13 @@
 // Host-side Component Model runtime for sync plugins.
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 const MAX_PLUGIN_OUTPUT: usize = 1024 * 1024; // 1 MiB per stream
+// Maximum wasm call-stack depth (in bytes).
+const MAX_WASM_STACK: usize = 512 * 1024;
+// How many seconds of pure wasm compute a plugin may use (host-call latency is excluded).
+const PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
 
 use camino::{Utf8Component, Utf8PathBuf};
 use candid::{Encode, Principal};
@@ -28,6 +34,11 @@ struct HostState {
     // filesystem locations the plugin can access.
     wasi_ctx: wasmtime_wasi::WasiCtx,
     wasi_table: wasmtime_wasi::ResourceTable,
+    // Accumulated epoch ticks to grant back after a host call returns, so that
+    // canister call latency doesn't consume the wasm compute budget. AtomicU64
+    // (rather than Mutex<u64>) is required because the epoch_deadline_callback
+    // closure must be Send + 'static, which Arc<Cell<u64>> does not satisfy.
+    epoch_extension: Arc<AtomicU64>,
 }
 
 impl wasmtime_wasi::WasiView for HostState {
@@ -54,7 +65,8 @@ impl SyncPluginImports for HostState {
 
         // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
         // so blocking the thread here is safe.
-        tokio::runtime::Handle::current().block_on(async move {
+        let start = Instant::now();
+        let result = tokio::runtime::Handle::current().block_on(async move {
             match req.call_type {
                 CallType::Update => {
                     if let Some(proxy_cid) = proxy {
@@ -92,9 +104,22 @@ impl SyncPluginImports for HostState {
                     .await
                     .map_err(|e| format!("canister call failed: {e}")),
             }
-        })
+        });
+        // Return the time spent in the host call to the compute budget so
+        // canister network latency doesn't count against the plugin's limit.
+        let elapsed_ticks = start.elapsed().as_secs() + 1;
+        self.epoch_extension
+            .fetch_add(elapsed_ticks, Ordering::Relaxed);
+        result
     }
 }
+
+// Used as the error payload inside the epoch_deadline_callback closure, which
+// must return wasmtime::Error (= anyhow::Error). Snafu derives std::error::Error
+// so .into() converts it via anyhow's blanket From<impl StdError + Send + Sync>.
+#[derive(Debug, Snafu)]
+#[snafu(display("plugin exceeded the {PLUGIN_COMPUTE_LIMIT_SECS}s compute time limit"))]
+struct ComputeTimeLimitExceeded;
 
 #[derive(Debug, Snafu)]
 pub enum RunPluginError {
@@ -154,9 +179,37 @@ pub fn run_plugin(
 
     let mut config = Config::new();
     config.wasm_component_model(true);
+    config.max_wasm_stack(MAX_WASM_STACK);
+    // Linear memory is implicitly bounded by the wasm32 address space (4 GiB).
+    // If wasm64 support is ever added, set Config::memory_maximum() explicitly.
+    config.epoch_interruption(true);
     let engine = Engine::new(&config).context(CreateEngineSnafu {
         path: wasm_path.clone(),
     })?;
+
+    // Increment the engine epoch every second from a background thread.
+    // The store deadline is set below; the ticker stops when this guard is dropped.
+    // AtomicBool is sufficient here — it's a one-way stop signal between two threads.
+    let ticker_stop = Arc::new(AtomicBool::new(false));
+    let _ticker_guard = {
+        let engine_ticker = engine.clone();
+        let stop = ticker_stop.clone();
+        let handle = std::thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_secs(1));
+                engine_ticker.increment_epoch();
+            }
+        });
+        let _ = handle; // detached; exits within 1 s once stop is set
+        // RAII guard: signals the ticker thread to stop when dropped.
+        struct TickerGuard(Arc<AtomicBool>);
+        impl Drop for TickerGuard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        TickerGuard(ticker_stop)
+    };
 
     let component =
         Component::from_file(&engine, wasm_path.as_std_path()).context(LoadComponentSnafu {
@@ -191,12 +244,14 @@ pub fn run_plugin(
             .stderr(stderr_pipe.clone());
     }
 
+    let epoch_extension = Arc::new(AtomicU64::new(0));
     let host_state = HostState {
         target_canister_id,
         agent: Arc::new(agent),
         proxy,
         wasi_ctx: wasi_builder.build(),
         wasi_table: wasmtime_wasi::ResourceTable::new(),
+        epoch_extension: epoch_extension.clone(),
     };
 
     let mut linker: Linker<HostState> = Linker::new(&engine);
@@ -210,6 +265,15 @@ pub fn run_plugin(
     )?;
 
     let mut store = Store::new(&engine, host_state);
+    store.set_epoch_deadline(PLUGIN_COMPUTE_LIMIT_SECS);
+    store.epoch_deadline_callback(move |_| {
+        let extra = epoch_extension.swap(0, Ordering::Relaxed);
+        if extra > 0 {
+            Ok(wasmtime::UpdateDeadline::Continue(extra))
+        } else {
+            Err(ComputeTimeLimitExceeded.into())
+        }
+    });
 
     let plugin =
         SyncPlugin::instantiate(&mut store, &component, &linker).context(InstantiateSnafu {

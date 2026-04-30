@@ -3907,6 +3907,7 @@ version = "0.2.5"
 dependencies = [
  "camino",
  "candid",
+ "console 0.16.3",
  "hex",
  "ic-agent",
  "icp-canister-interfaces",

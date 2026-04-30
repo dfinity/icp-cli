@@ -299,7 +299,7 @@ pub fn run_plugin(
     if let Some(tx) = &stdio {
         for bytes in [stdout_pipe.contents(), stderr_pipe.contents()] {
             if !bytes.is_empty() {
-                let s = String::from_utf8_lossy(&bytes).into_owned();
+                let s = console::strip_ansi_codes(&String::from_utf8_lossy(&bytes)).into_owned();
                 let _ = tx.blocking_send(s);
             }
         }
@@ -308,7 +308,7 @@ pub fn run_plugin(
     match result {
         Ok(Some(msg)) => {
             if let Some(tx) = &stdio {
-                let _ = tx.blocking_send(msg);
+                let _ = tx.blocking_send(console::strip_ansi_codes(&msg).into_owned());
             }
         }
         Ok(None) => {}

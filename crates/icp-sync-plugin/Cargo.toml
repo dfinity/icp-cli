@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 camino.workspace = true
 candid.workspace = true
+console.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
 icp-canister-interfaces.workspace = true

@@ -46,15 +46,12 @@ pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow
             &selections.environment,
         )
         .await?;
+    let owner = args
+        .of_principal
+        .unwrap_or_else(|| agent.get_principal().unwrap());
 
     // Get the balance from the ledger
-    let cycles = get_raw_balance(
-        &agent,
-        CYCLES_LEDGER_PRINCIPAL,
-        args.subaccount,
-        args.of_principal,
-    )
-    .await?;
+    let cycles = get_raw_balance(&agent, CYCLES_LEDGER_PRINCIPAL, owner, args.subaccount).await?;
     let cycles_amount = TokenAmount {
         amount: BigDecimal::from_biguint(cycles.0, 0),
         symbol: "cycles".to_string(),

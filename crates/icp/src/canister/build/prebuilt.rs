@@ -1,9 +1,7 @@
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{
-    canister::wasm, fs::write, manifest::adapter::prebuilt::Adapter, package::PackageCache,
-};
+use crate::{canister::wasm, fs, manifest::adapter::prebuilt::Adapter, package::PackageCache};
 
 use super::Params;
 
@@ -12,8 +10,8 @@ pub enum PrebuiltError {
     #[snafu(transparent)]
     Wasm { source: wasm::WasmError },
 
-    #[snafu(display("failed to write wasm output file"))]
-    WriteFile { source: crate::fs::IoError },
+    #[snafu(display("failed to copy wasm to output file"))]
+    CopyFile { source: crate::fs::CopyError },
 }
 
 pub(super) async fn build(
@@ -22,7 +20,7 @@ pub(super) async fn build(
     stdio: Option<Sender<String>>,
     pkg_cache: &PackageCache,
 ) -> Result<(), PrebuiltError> {
-    let wasm_bytes = wasm::resolve(
+    let src = wasm::resolve(
         &adapter.source,
         &params.path,
         adapter.sha256.as_deref(),
@@ -36,7 +34,7 @@ pub(super) async fn build(
             .send(format!("Writing WASM file: {}", params.output))
             .await;
     }
-    write(&params.output, &wasm_bytes).context(WriteFileSnafu)?;
+    fs::copy(&src, &params.output).context(CopyFileSnafu)?;
 
     Ok(())
 }

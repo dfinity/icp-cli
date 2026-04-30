@@ -6,10 +6,7 @@ use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    canister::wasm,
-    fs::read_to_string,
-    manifest::adapter::{plugin::Adapter, prebuilt::SourceField},
-    package::PackageCache,
+    canister::wasm, fs::read_to_string, manifest::adapter::plugin::Adapter, package::PackageCache,
 };
 
 use super::Params;
@@ -33,9 +30,6 @@ pub enum PluginError {
     #[snafu(display("failed to get identity principal: {err}"))]
     GetIdentityPrincipal { err: String },
 
-    #[snafu(display("failed to acquire lock on package cache"))]
-    LockCache { source: crate::fs::lock::LockError },
-
     #[snafu(display("failed to run plugin"))]
     Run { source: RunPluginError },
 }
@@ -50,29 +44,17 @@ pub(super) async fn sync(
     pkg_cache: &PackageCache,
 ) -> Result<(), PluginError> {
     // 1. Determine the on-disk path for the wasm. run_plugin needs a path, not raw bytes.
-    //    - Local: use the manifest path directly.
-    //    - Remote: resolve via cache (sha256 is required for remote, enforced at parse time),
-    //      so the stable cache path is always available — no temp file needed.
-    let wasm_path = match &adapter.source {
-        SourceField::Local(s) => params.path.join(&s.path),
-        SourceField::Remote(_) => {
-            let sha = adapter
-                .sha256
-                .as_deref()
-                .expect("remote plugin source requires sha256 — enforced at manifest parse time");
-            wasm::resolve(
-                &adapter.source,
-                &params.path,
-                Some(sha),
-                stdio.as_ref(),
-                pkg_cache,
-            )
-            .await?;
-            wasm::cached_path(pkg_cache, sha)
-                .await
-                .context(LockCacheSnafu)?
-        }
-    };
+    //    - Local: sha256 is verified if present, then the original path is returned.
+    //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
+    //      stable cache path is returned — no temp file needed.
+    let wasm_path = wasm::resolve(
+        &adapter.source,
+        &params.path,
+        adapter.sha256.as_deref(),
+        stdio.as_ref(),
+        pkg_cache,
+    )
+    .await?;
 
     // 2. Collect inputs: `dirs` stays as manifest strings (runtime preopens them),
     //    `files` are read on the host and passed inline.

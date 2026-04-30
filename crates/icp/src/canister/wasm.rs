@@ -8,7 +8,7 @@ use url::Url;
 use crate::{
     fs::read,
     manifest::adapter::prebuilt::SourceField,
-    package::{PackageCache, cache_wasm, read_cached_wasm},
+    package::{PackageCache, cache_wasm},
 };
 
 #[derive(Debug, Snafu)]
@@ -34,9 +34,6 @@ pub enum WasmError {
     #[snafu(display("checksum mismatch, expected: {expected}, actual: {actual}"))]
     ChecksumMismatch { expected: String, actual: String },
 
-    #[snafu(display("failed to read cached wasm file"))]
-    ReadCache { source: crate::fs::IoError },
-
     #[snafu(display("failed to cache wasm file"))]
     CacheFile { source: crate::fs::IoError },
 
@@ -44,25 +41,66 @@ pub enum WasmError {
     LockCache { source: crate::fs::lock::LockError },
 }
 
-/// Fetch wasm bytes from a `SourceField` (local path or remote URL), optionally verifying
-/// the sha256 checksum. Does not interact with the cache.
-async fn fetch(
+/// Resolve a wasm source to a local filesystem path, optionally verifying the sha256 checksum.
+///
+/// - Local: verifies sha256 if provided, returns the local path.
+/// - Remote with sha256: checks the cache first; downloads, verifies, and caches on miss.
+/// - Remote without sha256: always downloads, computes sha256, caches by the computed sha256.
+pub async fn resolve(
     source: &SourceField,
     base_dir: &Utf8Path,
     sha256: Option<&str>,
     stdio: Option<&Sender<String>>,
-) -> Result<Vec<u8>, WasmError> {
-    let bytes = match source {
+    pkg_cache: &PackageCache,
+) -> Result<crate::prelude::PathBuf, WasmError> {
+    match source {
         SourceField::Local(s) => {
             let path = base_dir.join(&s.path);
-            if let Some(tx) = stdio {
-                let _ = tx.send(format!("Reading wasm: {}", s.path)).await;
+            if let Some(expected) = sha256 {
+                if let Some(tx) = stdio {
+                    let _ = tx.send(format!("Reading wasm: {}", s.path)).await;
+                }
+                let bytes = read(&path).context(ReadLocalSnafu {
+                    path: s.path.clone(),
+                })?;
+                if let Some(tx) = stdio {
+                    let _ = tx.send("Verifying checksum".to_string()).await;
+                }
+                let actual = hex::encode(Sha256::digest(&bytes));
+                ensure!(
+                    actual == expected,
+                    ChecksumMismatchSnafu {
+                        expected: expected.to_owned(),
+                        actual,
+                    }
+                );
             }
-            read(&path).context(ReadLocalSnafu {
-                path: s.path.clone(),
-            })?
+            Ok(path)
         }
         SourceField::Remote(s) => {
+            // Pre-download cache check is only possible when sha256 is known.
+            if let Some(expected) = sha256 {
+                let cached = pkg_cache
+                    .with_read(async |r| {
+                        let wasm_cache = r.wasm_sha(expected);
+                        let path = wasm_cache.wasm();
+                        if path.exists() {
+                            _ = crate::fs::write(&wasm_cache.atime(), b"");
+                            Some(path)
+                        } else {
+                            None
+                        }
+                    })
+                    .await
+                    .context(LockCacheSnafu)?;
+                if let Some(path) = cached {
+                    if let Some(tx) = stdio {
+                        let _ = tx.send("Using cached file".to_string()).await;
+                    }
+                    return Ok(path);
+                }
+            }
+
             let url = Url::parse(&s.url).context(ParseUrlSnafu)?;
             if let Some(tx) = stdio {
                 let _ = tx.send(format!("Fetching wasm: {url}")).await;
@@ -75,66 +113,36 @@ async fn fetch(
             if !status.is_success() {
                 return HttpStatusSnafu { status }.fail();
             }
-            resp.bytes().await.context(HttpResponseSnafu)?.to_vec()
-        }
-    };
+            let bytes = resp.bytes().await.context(HttpResponseSnafu)?.to_vec();
 
-    if let Some(expected) = sha256 {
-        if let Some(tx) = stdio {
-            let _ = tx.send("Verifying checksum".to_string()).await;
-        }
-        let actual = hex::encode(Sha256::digest(&bytes));
-        ensure!(
-            actual == expected,
-            ChecksumMismatchSnafu {
-                expected: expected.to_owned(),
-                actual,
-            }
-        );
-    }
+            // Use provided sha256 as cache key (after verifying), or compute from bytes.
+            let cache_sha = match sha256 {
+                Some(expected) => {
+                    if let Some(tx) = stdio {
+                        let _ = tx.send("Verifying checksum".to_string()).await;
+                    }
+                    let actual = hex::encode(Sha256::digest(&bytes));
+                    ensure!(
+                        actual == expected,
+                        ChecksumMismatchSnafu {
+                            expected: expected.to_owned(),
+                            actual,
+                        }
+                    );
+                    actual
+                }
+                None => hex::encode(Sha256::digest(&bytes)),
+            };
 
-    Ok(bytes)
-}
+            pkg_cache
+                .with_write(async |w| cache_wasm(w, &cache_sha, &bytes).context(CacheFileSnafu))
+                .await
+                .context(LockCacheSnafu)??;
 
-/// Resolve wasm bytes from a `SourceField` (local path or remote URL), optionally verifying
-/// the sha256 checksum. For remote sources, checks the local cache before downloading and
-/// stores the result afterwards.
-pub async fn resolve(
-    source: &SourceField,
-    base_dir: &Utf8Path,
-    sha256: Option<&str>,
-    stdio: Option<&Sender<String>>,
-    pkg_cache: &PackageCache,
-) -> Result<Vec<u8>, WasmError> {
-    if let (SourceField::Remote(_), Some(expected)) = (source, sha256) {
-        let maybe_cached = pkg_cache
-            .with_read(async |r| read_cached_wasm(r, expected).context(ReadCacheSnafu))
-            .await
-            .context(LockCacheSnafu)?;
-        if let Some(cached) = maybe_cached? {
-            if let Some(tx) = stdio {
-                let _ = tx.send("Using cached file".to_string()).await;
-            }
-            return Ok(cached);
+            pkg_cache
+                .with_read(async |r| r.wasm_sha(&cache_sha).wasm())
+                .await
+                .context(LockCacheSnafu)
         }
     }
-
-    let bytes = fetch(source, base_dir, sha256, stdio).await?;
-
-    if let (SourceField::Remote(_), Some(expected)) = (source, sha256) {
-        pkg_cache
-            .with_write(async |w| cache_wasm(w, expected, &bytes).context(CacheFileSnafu))
-            .await
-            .context(LockCacheSnafu)??;
-    }
-
-    Ok(bytes)
-}
-
-/// Returns the stable on-disk path for a cached wasm by sha256.
-pub async fn cached_path(
-    pkg_cache: &PackageCache,
-    sha: &str,
-) -> Result<crate::prelude::PathBuf, crate::fs::lock::LockError> {
-    pkg_cache.with_read(async |r| r.wasm_sha(sha).wasm()).await
 }

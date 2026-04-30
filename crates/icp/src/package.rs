@@ -78,21 +78,6 @@ impl RecipeCache {
     }
 }
 
-pub fn read_cached_wasm(
-    cache: LRead<&PackageCachePaths>,
-    sha: &str,
-) -> Result<Option<Vec<u8>>, crate::fs::IoError> {
-    let cache_path = cache.wasm_sha(sha);
-    let cache_wasm_path = cache_path.wasm();
-    if cache_wasm_path.exists() {
-        let wasm = crate::fs::read(&cache_wasm_path)?;
-        _ = crate::fs::write(&cache_path.atime(), b"");
-        Ok(Some(wasm))
-    } else {
-        Ok(None)
-    }
-}
-
 pub fn cache_wasm(
     cache: LWrite<&PackageCachePaths>,
     sha: &str,

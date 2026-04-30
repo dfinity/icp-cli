@@ -3838,6 +3838,7 @@ dependencies = [
  "bigdecimal",
  "bip32",
  "byte-unit",
+ "camino",
  "camino-tempfile",
  "candid",
  "candid_parser",

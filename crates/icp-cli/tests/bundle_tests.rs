@@ -207,6 +207,241 @@ async fn bundle_and_deploy() {
     );
 }
 
+/// Bundle a canister whose environment override uses an external init_args file.
+/// The file must be copied into the archive at a normalized path and the manifest
+/// reference rewritten to match.
+#[test]
+fn bundle_inlines_external_init_args_file() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    write_string(&project_dir.join("args.idl"), "(\"world\")").expect("failed to write args file");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+
+        environments:
+          - name: random-environment
+            network: random-network
+            init_args:
+              my-canister:
+                path: ./args.idl
+                format: candid
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut found_args_file = false;
+    let mut manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+
+        match path.as_str() {
+            "icp.yaml" => {
+                entry
+                    .read_to_string(&mut manifest_yaml)
+                    .expect("failed to read icp.yaml");
+            }
+            "init-args/my-canister/args.idl" => {
+                found_args_file = true;
+            }
+            _ => {}
+        }
+    }
+
+    assert!(
+        found_args_file,
+        "init-args/my-canister/args.idl not found in bundle"
+    );
+    assert!(
+        manifest_yaml.contains("init-args/my-canister/args.idl"),
+        "bundle manifest should reference the relocated init_args file"
+    );
+    assert!(
+        !manifest_yaml.contains("./args.idl"),
+        "bundle manifest should not contain the original relative path"
+    );
+}
+
+/// Canister names with characters invalid in file paths (spaces, `!`, `/`, etc.)
+/// must be sanitized for archive entry names while the manifest preserves the
+/// original name.
+#[test]
+fn bundle_sanitizes_canister_name_for_paths() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: "my canister!"
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut found_wasm = false;
+    let mut manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+
+        match path.as_str() {
+            "icp.yaml" => {
+                entry
+                    .read_to_string(&mut manifest_yaml)
+                    .expect("failed to read icp.yaml");
+            }
+            "my_canister_.wasm" => {
+                found_wasm = true;
+            }
+            _ => {}
+        }
+    }
+
+    assert!(found_wasm, "my_canister_.wasm not found in bundle");
+    assert!(
+        manifest_yaml.contains("my_canister_.wasm"),
+        "bundle manifest should reference sanitized wasm filename"
+    );
+    assert!(
+        manifest_yaml.contains("my canister!"),
+        "bundle manifest should preserve original canister name"
+    );
+}
+
+/// An asset sync step whose `dir` starts with `..` must be normalized when
+/// written into the archive — no literal `..` components in entry names.
+#[test]
+fn bundle_normalizes_dotdot_asset_path() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    // Assets live outside the project dir, one level up in a sibling directory.
+    let assets_dir = project_dir
+        .parent()
+        .expect("project dir has no parent")
+        .join("shared-assets");
+    create_dir_all(&assets_dir).expect("failed to create sibling assets dir");
+    write_string(&assets_dir.join("index.html"), "hello").expect("failed to write asset");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: assets
+                  dir: ../shared-assets
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut found_asset = false;
+    let mut manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+
+        if path.contains("..") {
+            panic!("archive entry '{path}' contains '..' component");
+        }
+
+        match path.as_str() {
+            "icp.yaml" => {
+                entry
+                    .read_to_string(&mut manifest_yaml)
+                    .expect("failed to read icp.yaml");
+            }
+            p if p.starts_with("my-canister/shared-assets/") => {
+                found_asset = true;
+            }
+            _ => {}
+        }
+    }
+
+    assert!(
+        found_asset,
+        "asset not found under my-canister/shared-assets/ in bundle"
+    );
+    assert!(
+        manifest_yaml.contains("my-canister/shared-assets"),
+        "bundle manifest sync dir should use normalized path"
+    );
+    assert!(
+        !manifest_yaml.contains(".."),
+        "bundle manifest should not contain '..' in any path"
+    );
+}
+
 /// Projects with script sync steps must be rejected with a clear error.
 #[test]
 fn bundle_rejects_script_sync_step() {

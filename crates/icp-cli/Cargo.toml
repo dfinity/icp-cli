@@ -21,6 +21,7 @@ base64.workspace = true
 bigdecimal.workspace = true
 bip32.workspace = true
 byte-unit.workspace = true
+camino.workspace = true
 camino-tempfile.workspace = true
 candid_parser = { workspace = true, features = ["assist"] }
 candid.workspace = true

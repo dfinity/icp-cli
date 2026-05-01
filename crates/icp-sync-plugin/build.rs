@@ -6,9 +6,22 @@ fn main() {
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin/src/lib.rs");
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin/Cargo.toml");
 
-    if std::env::var("CARGO_CFG_TEST").is_ok() {
+    if wasm32_wasip2_is_installed() {
         build_test_fixture();
     }
+}
+
+fn wasm32_wasip2_is_installed() -> bool {
+    let Ok(output) = Command::new("rustc").args(["--print", "sysroot"]).output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let sysroot = String::from_utf8_lossy(&output.stdout);
+    std::path::Path::new(sysroot.trim())
+        .join("lib/rustlib/wasm32-wasip2")
+        .exists()
 }
 
 fn build_test_fixture() {

@@ -12,6 +12,11 @@ examples/*/.icp/
 pocket-ic
 icp-cli-network-launcher
 
+# Lock files in examples (not needed for reproducibility; avoiding dependabot noise)
+examples/**/package-lock.json
+examples/**/yarn.lock
+examples/**/pnpm-lock.yaml
+
 # Documentation build artifacts
 docs-site/.astro/
 docs-site/dist/

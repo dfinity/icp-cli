@@ -19,7 +19,7 @@ fn wasm32_wasip2_is_installed() -> bool {
         return false;
     }
     let sysroot = String::from_utf8_lossy(&output.stdout);
-    std::path::Path::new(sysroot.trim())
+    Utf8PathBuf::from(sysroot.trim())
         .join("lib/rustlib/wasm32-wasip2")
         .exists()
 }

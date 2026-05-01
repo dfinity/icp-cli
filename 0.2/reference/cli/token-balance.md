@@ -11,6 +11,7 @@ Display the token balance on the ledger (default token: icp)
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--of-principal <OF_PRINCIPAL>` — Check the balance of this principal instead of the current identity
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the balance
 

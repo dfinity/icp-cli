@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::Args;
@@ -16,6 +18,8 @@ use icp::{
     settings::Settings,
 };
 use tracing::{debug, info, warn};
+
+use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
@@ -149,6 +153,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     let autocontainerize = cfg!(windows) || settings.autocontainerize;
 
     // Acquire network launcher path, downloading it if necessary
+    let debug = ctx.debug;
     let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
         // The user is overriding the launcher
         debug!("Network launcher path overridden by ICP_CLI_NETWORK_LAUNCHER_PATH={var}");
@@ -172,7 +177,27 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
                 } else {
                     // The version is not fresh or not cached, download it
                     debug!("Downloading icp-cli-network-launcher version `{version}`");
-                    let (_, path) = download_launcher_version(pkg, version, &client).await?;
+                    let progress_manager =
+                        ProgressManager::new(ProgressManagerSettings { hidden: debug });
+                    let pb = progress_manager.create_independent_progress_bar();
+                    pb.set_message(format!("Downloading icp-cli-network-launcher {version}..."));
+                    let version_slot: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
+                    let version_capture = version_slot.clone();
+                    let path = ProgressManager::execute_with_progress(
+                        &pb,
+                        async {
+                            let (ver, path) =
+                                download_launcher_version(pkg, version, &client).await?;
+                            let _ = version_capture.set(ver);
+                            anyhow::Ok(path)
+                        },
+                        move || {
+                            let ver = version_slot.get().map(String::as_str).unwrap();
+                            format!("Downloaded icp-cli-network-launcher {ver}")
+                        },
+                        |err| format!("Failed to download icp-cli-network-launcher: {err}"),
+                    )
+                    .await?;
                     Ok(Some(path))
                 }
             })

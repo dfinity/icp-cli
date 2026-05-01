@@ -1,0 +1,12 @@
+[package]
+name = "plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = "0.10.19"
+wit-bindgen = { version = "0.56", features = ["realloc"] }

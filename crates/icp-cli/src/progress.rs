@@ -93,6 +93,12 @@ impl ProgressManager {
 
     /// Create a new progress bar with standard configuration
     pub(crate) fn create_progress_bar(&self, canister_name: &str) -> SimpleProgressBar {
+        let pb = self.create_independent_progress_bar();
+        pb.set_prefix(format!("[{canister_name}]"));
+        pb
+    }
+
+    pub(crate) fn create_independent_progress_bar(&self) -> SimpleProgressBar {
         let pb = self
             .multi_progress
             .add(SimpleProgressBar::new_spinner().with_style(make_style(
@@ -102,9 +108,6 @@ impl ProgressManager {
 
         // Auto-tick spinner
         pb.enable_steady_tick(Duration::from_millis(120));
-
-        // Set the progress bar prefix to display the canister name in brackets
-        pb.set_prefix(format!("[{canister_name}]"));
 
         pb
     }

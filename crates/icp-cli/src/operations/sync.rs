@@ -1,8 +1,10 @@
+use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, export::Principal};
+use ic_agent::Agent;
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
+    package::PackageCache,
     prelude::PathBuf,
 };
 use snafu::prelude::*;
@@ -32,7 +34,10 @@ async fn sync_canister(
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
+    environment: &str,
+    proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
 
@@ -50,9 +55,12 @@ async fn sync_canister(
                 &Params {
                     path: canister_path.clone(),
                     cid: canister_id,
+                    environment: environment.to_owned(),
+                    proxy,
                 },
                 agent,
                 Some(tx),
+                pkg_cache,
             )
             .await;
 
@@ -70,7 +78,10 @@ pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
+    environment: String,
+    proxy: Option<Principal>,
     debug: bool,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -81,12 +92,22 @@ pub(crate) async fn sync_many(
         let fut = {
             let agent = agent.clone();
             let syncer = syncer.clone();
+            let environment = environment.clone();
 
             async move {
                 // Define the sync logic
-                let sync_result =
-                    sync_canister(&syncer, &agent, canister_path, cid, &canister_info, &mut pb)
-                        .await;
+                let sync_result = sync_canister(
+                    &syncer,
+                    &agent,
+                    canister_path,
+                    cid,
+                    &canister_info,
+                    &environment,
+                    proxy,
+                    &mut pb,
+                    pkg_cache,
+                )
+                .await;
 
                 // Execute with progress tracking for final state
                 let result = ProgressManager::execute_with_progress(
@@ -126,6 +147,14 @@ pub(crate) async fn sync_many(
                 failure.canister_name, failure.canister_id,
             );
             error!("'{}'", failure.error);
+            {
+                use std::error::Error;
+                let mut cause = failure.error.source();
+                while let Some(err) = cause {
+                    error!("  caused by: {err}");
+                    cause = err.source();
+                }
+            }
             for line in &failure.progress_output {
                 error!("{line}");
             }

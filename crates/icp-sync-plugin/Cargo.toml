@@ -1,0 +1,25 @@
+[package]
+name = "icp-sync-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+camino.workspace = true
+candid.workspace = true
+console.workspace = true
+hex.workspace = true
+ic-agent.workspace = true
+icp-canister-interfaces.workspace = true
+snafu.workspace = true
+tokio.workspace = true
+wasmtime.workspace = true
+wasmtime-wasi.workspace = true
+
+[build-dependencies]
+camino.workspace = true
+
+[lints]
+workspace = true

@@ -22,15 +22,15 @@ impl PackageCachePaths {
     pub fn project_templates_dir(&self) -> PathBuf {
         self.root.join("project-templates")
     }
-    pub fn canisters_dir(&self) -> PathBuf {
-        self.root.join("canisters")
+    pub fn wasms_dir(&self) -> PathBuf {
+        self.root.join("wasms")
     }
     pub fn launcher_version(&self, version: &str) -> PathBuf {
         self.launcher_dir().join(version)
     }
-    pub fn canister_sha(&self, sha: &str) -> CanisterCache {
-        CanisterCache {
-            dir: self.canisters_dir().join(sha),
+    pub fn wasm_sha(&self, sha: &str) -> WasmCache {
+        WasmCache {
+            dir: self.wasms_dir().join(sha),
         }
     }
     pub fn recipe_sha(&self, sha: &str) -> RecipeCache {
@@ -46,16 +46,16 @@ impl PackageCachePaths {
     }
 }
 
-pub struct CanisterCache {
+pub struct WasmCache {
     dir: PathBuf,
 }
 
-impl CanisterCache {
+impl WasmCache {
     pub fn dir(&self) -> &Path {
         &self.dir
     }
     pub fn wasm(&self) -> PathBuf {
-        self.dir.join("canister.wasm")
+        self.dir.join("module.wasm")
     }
     pub fn atime(&self) -> PathBuf {
         self.dir.join(".atime")
@@ -78,27 +78,12 @@ impl RecipeCache {
     }
 }
 
-pub fn read_cached_prebuilt(
-    cache: LRead<&PackageCachePaths>,
-    sha: &str,
-) -> Result<Option<Vec<u8>>, crate::fs::IoError> {
-    let cache_path = cache.canister_sha(sha);
-    let cache_wasm_path = cache_path.wasm();
-    if cache_wasm_path.exists() {
-        let wasm = crate::fs::read(&cache_wasm_path)?;
-        _ = crate::fs::write(&cache_path.atime(), b"");
-        Ok(Some(wasm))
-    } else {
-        Ok(None)
-    }
-}
-
-pub fn cache_prebuilt(
+pub fn cache_wasm(
     cache: LWrite<&PackageCachePaths>,
     sha: &str,
     wasm: &[u8],
 ) -> Result<(), crate::fs::IoError> {
-    let cache_path = cache.canister_sha(sha);
+    let cache_path = cache.wasm_sha(sha);
     let cache_wasm_path = cache_path.wasm();
     if !cache_wasm_path.exists() {
         crate::fs::create_dir_all(cache_path.dir())?;

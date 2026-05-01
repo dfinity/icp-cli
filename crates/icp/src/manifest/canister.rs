@@ -316,6 +316,11 @@ pub enum SyncStep {
 
     /// Represents syncing of an assets canister
     Assets(adapter::assets::Adapter),
+
+    /// Represents a sync step executed by a WebAssembly plugin running inside
+    /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
+    /// the canister being synced and read files from the declared `dirs`.
+    Plugin(adapter::plugin::Adapter),
 }
 
 impl fmt::Display for SyncStep {
@@ -326,6 +331,13 @@ impl fmt::Display for SyncStep {
             match self {
                 SyncStep::Script(v) => format!("script {v}"),
                 SyncStep::Assets(v) => format!("assets {v}"),
+                SyncStep::Plugin(v) => {
+                    let src = match &v.source {
+                        adapter::prebuilt::SourceField::Local(l) => format!("path: {}", l.path),
+                        adapter::prebuilt::SourceField::Remote(r) => format!("url: {}", r.url),
+                    };
+                    format!("plugin {src}")
+                }
             }
         )
     }
@@ -720,6 +732,108 @@ mod tests {
                 }
             }
         };
+    }
+
+    #[test]
+    fn sync_steps_plugin_local() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: plugin
+                      path: ./plugins/my-sync.wasm
+                      dirs:
+                        - assets/seed-data/
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Plugin(
+                            crate::manifest::adapter::plugin::Adapter {
+                                source: prebuilt::SourceField::Local(prebuilt::LocalSource {
+                                    path: "./plugins/my-sync.wasm".into(),
+                                }),
+                                sha256: None,
+                                dirs: Some(vec!["assets/seed-data/".to_string()]),
+                                files: None,
+                            }
+                        )]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn sync_steps_plugin_remote() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: plugin
+                      url: https://example.com/plugins/migrate-v2.wasm
+                      sha256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Plugin(crate::manifest::adapter::plugin::Adapter {
+                            source: prebuilt::SourceField::Remote(prebuilt::RemoteSource {
+                                url: "https://example.com/plugins/migrate-v2.wasm".to_string(),
+                            }),
+                            sha256: Some(
+                                "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+                                    .to_string()
+                            ),
+                            dirs: None,
+                            files: None,
+                        })]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "plugin with `url` requires `sha256`")]
+    fn sync_steps_plugin_remote_without_sha256_is_rejected() {
+        validate_canister_yaml(indoc! {r#"
+            name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: dosomething.sh
+            sync:
+              steps:
+                - type: plugin
+                  url: https://example.com/plugins/migrate-v2.wasm
+        "#});
     }
 
     #[test]

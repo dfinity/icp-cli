@@ -12,6 +12,7 @@ pub mod recipe;
 pub mod sync;
 
 mod script;
+mod wasm;
 
 /// Controls who can read canister logs.
 /// Supports both string format ("controllers", "public") and object format ({ allowed_viewers: [...] }).

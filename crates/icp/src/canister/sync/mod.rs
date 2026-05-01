@@ -5,14 +5,21 @@ use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::SyncStep;
+use crate::package::PackageCache;
 use crate::prelude::*;
 
 mod assets;
+mod plugin;
 mod script;
 
 pub struct Params {
     pub path: PathBuf,
     pub cid: Principal,
+    /// Name of the environment being synced (e.g. "local", "production").
+    /// Passed to sync plugin steps via `SyncExecInput`.
+    pub environment: String,
+    /// Proxy canister to route calls through, if `--proxy` was passed.
+    pub proxy: Option<Principal>,
 }
 
 #[derive(Debug, Snafu)]
@@ -22,6 +29,9 @@ pub enum SynchronizeError {
 
     #[snafu(transparent)]
     Assets { source: assets::AssetsError },
+
+    #[snafu(transparent)]
+    Plugin { source: plugin::PluginError },
 }
 
 #[async_trait]
@@ -32,6 +42,7 @@ pub trait Synchronize: Sync + Send {
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
+        pkg_cache: &PackageCache,
     ) -> Result<(), SynchronizeError>;
 }
 
@@ -45,10 +56,21 @@ impl Synchronize for Syncer {
         params: &Params,
         agent: &Agent,
         stdio: Option<Sender<String>>,
+        pkg_cache: &PackageCache,
     ) -> Result<(), SynchronizeError> {
         match step {
             SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
+            SyncStep::Plugin(adapter) => Ok(plugin::sync(
+                adapter,
+                params,
+                agent,
+                &params.environment,
+                params.proxy,
+                stdio,
+                pkg_cache,
+            )
+            .await?),
         }
     }
 }
@@ -67,6 +89,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _params: &Params,
         _agent: &Agent,
         _stdio: Option<Sender<String>>,
+        _pkg_cache: &PackageCache,
     ) -> Result<(), SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
     }

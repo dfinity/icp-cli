@@ -6,14 +6,14 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 01 May 2026 15:33:10 GMT</lastBuildDate>
-    <pubDate>Fri, 01 May 2026 13:00:52 GMT</pubDate>
+    <lastBuildDate>Fri, 01 May 2026 16:17:06 GMT</lastBuildDate>
+    <pubDate>Fri, 01 May 2026 16:16:03 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Fri, 01 May 2026 13:00:52 GMT</pubDate>
+      <pubDate>Fri, 01 May 2026 16:16:03 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>

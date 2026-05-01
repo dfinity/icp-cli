@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: `icp token/cycles balance` now accept `--of-principal`
 * fix: The local wasm cache has moved from `.icp/cache/canisters/` to `.icp/cache/wasms/`. Existing cached files will be re-downloaded automatically on the next run.
 * feat: Canister manifests now support a `plugin` sync step type. Plugins are WebAssembly components that run in a sandboxed environment and can drive arbitrary post-deployment logic against the canister being synced. See `crates/icp-sync-plugin/DESIGN.md` for details.
 * feat: `icp sync` now accepts `--proxy` to route sync plugin calls to the target canister through a proxy canister.

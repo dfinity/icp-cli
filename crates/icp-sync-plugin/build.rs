@@ -28,12 +28,29 @@ fn build_test_fixture() {
             "--target-dir",
             fixture_target_dir.as_str(),
         ])
-        .status()
-        .expect("failed to spawn cargo build for test fixture");
-    assert!(
-        status.success(),
-        "cargo build --target wasm32-wasip2 failed for test fixture"
-    );
+        .status();
+
+    // Building the wasm test fixture requires the `wasm32-wasip2` target to be
+    // installed. Distribution toolchains (Homebrew, distro packagers — see
+    // dfinity/icp-cli#543) do not always include it, and the fixture is only
+    // referenced by `#[test]` functions in `runtime.rs`. Emit a warning and
+    // leave `TEST_PLUGIN_WASM` empty rather than panicking the whole build;
+    // any test that actually depends on the fixture will surface a clearer
+    // "fixture not built" error when the empty path is used.
+    let succeeded = matches!(&status, Ok(s) if s.success());
+    if !succeeded {
+        match status {
+            Err(e) => println!(
+                "cargo:warning=icp-sync-plugin: failed to spawn `cargo build --target wasm32-wasip2` for the test fixture: {e}; tests requiring TEST_PLUGIN_WASM will fail."
+            ),
+            Ok(_) => println!(
+                "cargo:warning=icp-sync-plugin: `cargo build --target wasm32-wasip2` failed for the test fixture (target probably not installed); tests requiring TEST_PLUGIN_WASM will fail."
+            ),
+        }
+        println!("cargo:rustc-env=TEST_PLUGIN_WASM=");
+        return;
+    }
+
     let wasm = fixture_target_dir.join("wasm32-wasip2/release/test_plugin.wasm");
     println!("cargo:rustc-env=TEST_PLUGIN_WASM={wasm}");
 }

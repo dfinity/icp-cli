@@ -4,6 +4,7 @@ pub(crate) mod bundle;
 pub(crate) mod candid_compat;
 pub(crate) mod canister_migration;
 pub(crate) mod create;
+pub(crate) mod customize;
 pub(crate) mod install;
 pub(crate) mod proxy;
 pub(crate) mod proxy_management;

@@ -1,4 +1,4 @@
-if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+if (!location.hostname.endsWith("localhost") && location.hostname !== "127.0.0.1") {
   var _paq = (window._paq = window._paq || []);
   _paq.push(["disableCookies"]);
   _paq.push(["enableLinkTracking"]);

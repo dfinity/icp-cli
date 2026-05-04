@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail};
-use candid::Principal;
+use candid::{IDLArgs, Principal};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
@@ -14,7 +14,8 @@ use icp::{
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use itertools::Itertools;
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
@@ -26,6 +27,7 @@ use crate::{
         build::build_many_with_progress_bar,
         candid_compat::check_candid_compatibility_many,
         create::{CreateFunding, CreateOperation, CreateTarget},
+        customize,
         install::{install_many, resolve_install_mode_and_status},
         proxy_management,
         settings::{sync_controller_dependents, sync_settings_many},
@@ -178,6 +180,38 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             .map(|name| ctx.get_canister_and_path_for_env(name, &environment_selection)),
     )
     .await?;
+
+    // Collect interactive init arg customizations before the build so the user
+    // fills in all prompts upfront, uninterrupted by build output.
+    let customize_overrides: Arc<HashMap<String, IDLArgs>> = {
+        let project = ctx.project.load().await.map_err(|e| anyhow!(e))?;
+        let customize_path = project.dir.join(customize::CUSTOMIZE_FILE);
+        match customize::load_customize_manifest(&project.dir).map_err(|e| anyhow!(e))? {
+            None => Arc::new(HashMap::new()),
+            Some(manifest) => {
+                let init_args: HashMap<String, Option<icp::InitArgs>> = cnames
+                    .iter()
+                    .map(|name| {
+                        let ia = env
+                            .get_canister_info(name)
+                            .ok()
+                            .and_then(|(_, info)| info.init_args.clone());
+                        (name.clone(), ia)
+                    })
+                    .collect();
+                Arc::new(
+                    customize::prompt_customizations(
+                        &manifest,
+                        &cnames,
+                        &init_args,
+                        args.yes,
+                        &customize_path,
+                    )
+                    .map_err(|e| anyhow!(e))?,
+                )
+            }
+        }
+    };
 
     // Build the selected canisters
     info!("Building canisters:");
@@ -345,6 +379,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
         let agent = agent.clone();
+        let co = customize_overrides.clone();
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
@@ -361,9 +396,15 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             let (_canister_path, canister_info) =
                 env.get_canister_info(name).map_err(|e| anyhow!(e))?;
 
-            // CLI --args/--args-file take priority over manifest init_args
+            // Priority: CLI --args/--args-file > icp_customize.yaml prompts > manifest init_args
             let init_args_bytes = if args.args_opt.is_some() {
                 args.args_opt.resolve_bytes()?
+            } else if let Some(customized) = co.get(name) {
+                Some(
+                    customized
+                        .to_bytes()
+                        .map_err(|e| anyhow!("failed to serialize customized init args: {e}"))?,
+                )
             } else {
                 canister_info
                     .init_args

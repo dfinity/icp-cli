@@ -11,6 +11,7 @@ pub(crate) mod network;
 pub(crate) mod new;
 pub(crate) mod parsers;
 pub(crate) mod project;
+pub(crate) mod serve_bundle;
 pub(crate) mod settings;
 pub(crate) mod sync;
 pub(crate) mod token;
@@ -31,6 +32,7 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Network(network::Command),
     New(new::IcpGenerateArgs),
+    ServeBundle(serve_bundle::ServeBundleArgs),
     #[command(subcommand)]
     Project(project::Command),
     Settings(settings::SettingsArgs),

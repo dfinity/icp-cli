@@ -411,6 +411,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
             }
         },
 
+        // Serve Bundle
+        Command::ServeBundle(args) => commands::serve_bundle::exec(ctx, &args).await?,
+
         // Settings
         Command::Settings(args) => commands::settings::exec(ctx, &args).await?,
 

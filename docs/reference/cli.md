@@ -64,6 +64,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp network stop`↴](#icp-network-stop)
 * [`icp network update`↴](#icp-network-update)
 * [`icp new`↴](#icp-new)
+* [`icp serve-bundle`↴](#icp-serve-bundle)
 * [`icp project`↴](#icp-project)
 * [`icp project show`↴](#icp-project-show)
 * [`icp project bundle`↴](#icp-project-bundle)
@@ -90,6 +91,7 @@ This document contains the help content for the `icp` command-line program.
 * `identity` — Manage your identities
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
+* `serve-bundle` — Extract a project bundle, start a local network, deploy, and print URLs
 * `project` — Manage the current project
 * `settings` — Configure user settings
 * `sync` — Synchronize canisters
@@ -1445,6 +1447,33 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 * `--force-git-init` — Will enforce a fresh git init on the generated project
 * `-o`, `--overwrite` — Allow the template to overwrite existing files in the destination
 * `--skip-submodules` — Skip downloading git submodules (if there are any)
+
+
+
+## `icp serve-bundle`
+
+Extract a project bundle, start a local network, deploy, and print URLs.
+
+Extracts the bundle to a temporary directory, starts a local managed network, deploys all canisters (including processing `icp_customize.yaml` if present), and prints the URLs. Shuts down and removes the temporary directory on Ctrl-C.
+
+**Usage:** `icp serve-bundle [OPTIONS] <BUNDLE>`
+
+Examples:
+
+    # Serve a bundle interactively
+    icp serve-bundle mybundle.tar.gz
+
+    # Skip icp_customize.yaml prompts
+    icp serve-bundle mybundle.tar.gz --yes
+
+
+###### **Arguments:**
+
+* `<BUNDLE>` — Path to the bundle archive (.tar.gz)
+
+###### **Options:**
+
+* `-y`, `--yes` — Skip confirmation prompts, including icp_customize.yaml prompts
 
 
 

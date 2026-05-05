@@ -138,3 +138,51 @@ pub fn initialize(
         telemetry_data,
     })
 }
+
+/// Creates a new context identical to `base` but with a different project root.
+///
+/// Rebinds all project-root-dependent stores (IDs, artifacts, project loader, network
+/// accessor) to `project_root`. Shares identity, dirs, agent, builder, syncer, and
+/// telemetry with the original context.
+pub fn with_project_root_override(
+    base: &Context,
+    project_root: PathBuf,
+) -> Result<Context, ContextInitError> {
+    let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
+        project_root.clone(),
+        Some(project_root),
+    ));
+
+    let ids = Arc::new(store_id::AccessImpl::new(project_root_locate.clone()));
+    let artifacts = Arc::new(ArtifactStore::new(project_root_locate.clone()));
+
+    let http_client = reqwest::Client::new();
+    let pkg_cache = base.dirs.package_cache().context(PackageCacheSnafu)?;
+
+    let recipe = Arc::new(Handlebars { http_client, pkg_cache });
+
+    let pload = crate::ProjectLoadImpl {
+        project_root_locate: project_root_locate.clone(),
+        recipe,
+    };
+    let pload = Arc::new(crate::Lazy::new(pload));
+
+    let netaccess = Arc::new(network::Accessor {
+        project_root_locate,
+        descriptors: base.dirs.port_descriptor(),
+    });
+
+    Ok(Context {
+        dirs: base.dirs.clone(),
+        ids,
+        artifacts,
+        project: pload,
+        identity: base.identity.clone(),
+        network: netaccess,
+        agent: base.agent.clone(),
+        builder: base.builder.clone(),
+        syncer: base.syncer.clone(),
+        debug: base.debug,
+        telemetry_data: base.telemetry_data.clone(),
+    })
+}

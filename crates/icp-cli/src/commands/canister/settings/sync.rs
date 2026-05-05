@@ -2,6 +2,7 @@ use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use icp::context::{CanisterSelection, Context};
+use tracing::warn;
 
 use crate::commands::args::CanisterCommandArgs;
 
@@ -40,7 +41,19 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
             &selections.environment,
         )
         .await?;
+    let ids = ctx
+        .ids_by_environment(&selections.environment)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
 
-    crate::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister).await?;
+    let unresolved =
+        crate::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister, &ids)
+            .await?;
+    for controller_name in &unresolved {
+        warn!(
+            "Controller canister '{controller_name}' for '{name}' has not been created yet; \
+             it will be set as a controller once created."
+        );
+    }
     Ok(())
 }

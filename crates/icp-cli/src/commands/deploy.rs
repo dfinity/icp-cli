@@ -24,7 +24,7 @@ use crate::{
         create::{CreateOperation, CreateTarget},
         customize,
         install::{install_many, resolve_install_mode_and_status},
-        settings::sync_settings_many,
+        settings::{sync_controller_dependents, sync_settings_many},
         sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
@@ -237,6 +237,17 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                     ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
                         .await
                         .map_err(|e| anyhow!(e))?;
+                    // Apply controller settings for any already-created canister that was
+                    // waiting for this one to exist (e.g. created via `icp canister create`).
+                    sync_controller_dependents(
+                        ctx,
+                        &agent,
+                        args.proxy,
+                        canister_name,
+                        &environment_selection,
+                    )
+                    .await
+                    .map_err(|e| anyhow!(e))?;
                 }
                 Err(err) => {
                     error = Some(err.into());
@@ -286,15 +297,21 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.proxy,
         &env.name,
         target_canisters.clone(),
-        canister_list,
+        canister_list.clone(),
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), args.proxy, target_canisters, ctx.debug)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    sync_settings_many(
+        agent.clone(),
+        args.proxy,
+        target_canisters,
+        canister_list,
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
 

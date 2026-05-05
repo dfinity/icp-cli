@@ -6,9 +6,11 @@ use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::context::Context;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
+use icp::canister::resolve_controllers;
+use icp::store_id::IdMapping;
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use serde::Serialize;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     commands::args,
@@ -112,22 +114,32 @@ pub(crate) struct CreateArgs {
 }
 
 impl CreateArgs {
+    /// Merge CLI settings with manifest defaults. Returns the merged `CanisterSettings`
+    /// and any controller canister names that could not be resolved (not yet created).
     pub(crate) fn canister_settings_with_default(
         &self,
         default: &Canister,
-    ) -> MgmtCanisterSettings {
-        MgmtCanisterSettings {
+        ids: &IdMapping,
+    ) -> (MgmtCanisterSettings, Vec<String>) {
+        // CLI --controller flags take precedence over manifest controllers.
+        let (controllers, unresolved): (Option<Vec<Principal>>, Vec<String>) =
+            if !self.controller.is_empty() {
+                (Some(self.controller.clone()), vec![])
+            } else if let Some(crefs) = &default.settings.controllers {
+                let (resolved, unresolved) = resolve_controllers(crefs, ids);
+                (Some(resolved), unresolved)
+            } else {
+                (None, vec![])
+            };
+
+        let settings = MgmtCanisterSettings {
             freezing_threshold: self
                 .settings
                 .freezing_threshold
                 .clone()
                 .or(default.settings.freezing_threshold.clone())
                 .map(|d| Nat::from(d.get())),
-            controllers: if self.controller.is_empty() {
-                None
-            } else {
-                Some(self.controller.clone())
-            },
+            controllers,
             reserved_cycles_limit: self
                 .settings
                 .reserved_cycles_limit
@@ -148,7 +160,8 @@ impl CreateArgs {
                 .or(default.settings.compute_allocation)
                 .map(Nat::from),
             ..Default::default()
-        }
+        };
+        (settings, unresolved)
     }
 
     fn create_target(&self) -> CreateTarget {
@@ -270,25 +283,41 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
     let agent = ctx
         .get_agent_for_env(&selections.identity, &selections.environment)
         .await?;
-    let existing_canisters = ctx
+    let ids = ctx
         .ids_by_environment(&selections.environment)
         .await
-        .map_err(|e| anyhow!(e))?
-        .into_values()
-        .collect();
+        .map_err(|e| anyhow!(e))?;
 
     let create_operation = CreateOperation::new(
-        agent,
+        agent.clone(),
         args.create_target(),
         args.cycles.get(),
-        existing_canisters,
+        ids.values().copied().collect(),
     );
 
-    let canister_settings = args.canister_settings_with_default(&canister_info);
+    let (canister_settings, unresolved) = args.canister_settings_with_default(&canister_info, &ids);
+    for name in &unresolved {
+        warn!(
+            "Controller canister '{name}' for '{canister}' does not exist yet; \
+             it will be set as a controller once created."
+        );
+    }
+
     let id = create_operation.create(&canister_settings).await?;
 
     ctx.set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
+
+    crate::operations::settings::sync_controller_dependents(
+        ctx,
+        &agent,
+        args.proxy,
+        &canister,
+        &selections.environment,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
+
     ctx.update_custom_domains(&selections.environment).await;
 
     if args.quiet {

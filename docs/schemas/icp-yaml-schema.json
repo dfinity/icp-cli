@@ -256,7 +256,9 @@
         },
         "settings": {
           "$ref": "#/$defs/Settings",
-          "default": {},
+          "default": {
+            "controllers": null
+          },
           "description": "The configuration specifying the various settings when creating the canister."
         }
       },
@@ -313,6 +315,10 @@
         }
       },
       "type": "object"
+    },
+    "ControllerRef": {
+      "description": "A controller: either a principal text (e.g. '2vxsx-fae') or a canister name in this project (e.g. 'my_canister')",
+      "type": "string"
     },
     "CyclesAmount": {
       "anyOf": [
@@ -835,6 +841,17 @@
           "minimum": 0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "controllers": {
+          "default": null,
+          "description": "Controllers for this canister. Each entry is either a principal text\n(e.g. \"2vxsx-fae\") or the name of another canister in this project.\nNamed canisters that do not yet exist will be set as controllers once created.",
+          "items": {
+            "$ref": "#/$defs/ControllerRef"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },

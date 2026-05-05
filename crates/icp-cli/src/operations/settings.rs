@@ -124,12 +124,20 @@ pub(crate) async fn sync_settings(
             None
         };
 
-    // Resolve controller references. Unresolved canister names are returned to the caller
-    // as warnings; already-resolved principals are applied immediately.
+    // Resolve controller references. Append-only: union resolved principals with the current
+    // list so existing controllers are never removed. Unresolved canister names are returned
+    // to the caller as warnings.
     let (controllers_setting, unresolved_names): (Option<Vec<Principal>>, Vec<String>) =
         if let Some(crefs) = controllers {
             let (resolved, unresolved) = resolve_controllers(crefs, ids);
-            (Some(resolved), unresolved)
+            // Start from the existing controller list and add any new principals.
+            let mut merged = current_settings.controllers.clone();
+            for p in resolved {
+                if !merged.contains(&p) {
+                    merged.push(p);
+                }
+            }
+            (Some(merged), unresolved)
         } else {
             (None, vec![])
         };

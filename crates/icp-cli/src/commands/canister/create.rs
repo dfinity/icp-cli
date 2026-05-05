@@ -116,17 +116,25 @@ pub(crate) struct CreateArgs {
 impl CreateArgs {
     /// Merge CLI settings with manifest defaults. Returns the merged `CanisterSettings`
     /// and any controller canister names that could not be resolved (not yet created).
+    ///
+    /// `caller` is always injected into manifest-derived controller lists so the active identity
+    /// retains access after creation (ic00 `controllers: Some([])` would lock out the caller).
     pub(crate) fn canister_settings_with_default(
         &self,
         default: &Canister,
         ids: &IdMapping,
+        caller: Principal,
     ) -> (MgmtCanisterSettings, Vec<String>) {
         // CLI --controller flags take precedence over manifest controllers.
         let (controllers, unresolved): (Option<Vec<Principal>>, Vec<String>) =
             if !self.controller.is_empty() {
                 (Some(self.controller.clone()), vec![])
             } else if let Some(crefs) = &default.settings.controllers {
-                let (resolved, unresolved) = resolve_controllers(crefs, ids);
+                let (mut resolved, unresolved) = resolve_controllers(crefs, ids);
+                // The active identity must always be included so it retains access.
+                if !resolved.contains(&caller) {
+                    resolved.push(caller);
+                }
                 (Some(resolved), unresolved)
             } else {
                 (None, vec![])
@@ -280,6 +288,10 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         return Ok(());
     }
 
+    let identity = ctx.get_identity(&selections.identity).await?;
+    let caller = identity
+        .sender()
+        .map_err(|e| anyhow!("failed to get caller principal: {e}"))?;
     let agent = ctx
         .get_agent_for_env(&selections.identity, &selections.environment)
         .await?;
@@ -295,7 +307,8 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         ids.values().copied().collect(),
     );
 
-    let (canister_settings, unresolved) = args.canister_settings_with_default(&canister_info, &ids);
+    let (canister_settings, unresolved) =
+        args.canister_settings_with_default(&canister_info, &ids, caller);
     for name in &unresolved {
         warn!(
             "Controller canister '{name}' for '{canister}' does not exist yet; \

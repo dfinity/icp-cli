@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
@@ -223,6 +226,7 @@ pub(crate) async fn sync_settings_many(
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
+    let ids = Arc::new(ids);
 
     for (cid, info) in target_canisters {
         let pb = progress_manager.create_progress_bar(&info.name);

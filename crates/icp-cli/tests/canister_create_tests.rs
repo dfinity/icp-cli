@@ -707,7 +707,13 @@ async fn canister_create_with_resolved_canister_controller() {
     // Create "b" first so that when "a" is created the controller reference resolves immediately.
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "b", "--environment", "random-environment"])
+        .args([
+            "canister",
+            "create",
+            "b",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .success();
 
@@ -716,7 +722,13 @@ async fn canister_create_with_resolved_canister_controller() {
     // Creating "a" should produce no warning: "b" is already on-chain.
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "a", "--environment", "random-environment"])
+        .args([
+            "canister",
+            "create",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .success()
         .stderr(contains("does not exist yet").not());
@@ -778,7 +790,13 @@ async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
     // Create "a" before "b" — "b" is unresolved, so a warning must be emitted.
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "a", "--environment", "random-environment"])
+        .args([
+            "canister",
+            "create",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .success()
         .stderr(contains(
@@ -803,7 +821,13 @@ async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
     // Creating "b" triggers sync_controller_dependents, which updates "a"'s controller list.
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["canister", "create", "b", "--environment", "random-environment"])
+        .args([
+            "canister",
+            "create",
+            "b",
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .success();
 

@@ -6,11 +6,16 @@ use ic_agent::Agent;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
 };
-use icp::{Canister, canister::Settings};
+use icp::{
+    Canister,
+    canister::{Settings, resolve_controllers},
+    context::{Context, EnvironmentSelection},
+    store_id::IdMapping,
+};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
@@ -68,12 +73,16 @@ fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]
     map_a == map_b
 }
 
+/// Syncs the manifest settings to the canister. Returns names of any controller canister
+/// references that could not be resolved because the referenced canister has not been created
+/// yet. Resolved controllers are always applied immediately.
 pub(crate) async fn sync_settings(
     agent: &Agent,
     proxy: Option<Principal>,
     cid: &Principal,
     canister: &Canister,
-) -> Result<(), SyncSettingsOperationError> {
+    ids: &IdMapping,
+) -> Result<Vec<String>, SyncSettingsOperationError> {
     let status =
         proxy_management::canister_status(agent, proxy, CanisterIdRecord { canister_id: *cid })
             .await
@@ -88,6 +97,7 @@ pub(crate) async fn sync_settings(
         ref wasm_memory_threshold,
         ref log_memory_limit,
         ref environment_variables,
+        ref controllers,
     } = &canister.settings;
     let current_settings = status.settings;
 
@@ -113,6 +123,25 @@ pub(crate) async fn sync_settings(
         } else {
             None
         };
+
+    // Resolve controller references. Unresolved canister names are returned to the caller
+    // as warnings; already-resolved principals are applied immediately.
+    let (controllers_setting, unresolved_names): (Option<Vec<Principal>>, Vec<String>) =
+        if let Some(crefs) = controllers {
+            let (resolved, unresolved) = resolve_controllers(crefs, ids);
+            (Some(resolved), unresolved)
+        } else {
+            (None, vec![])
+        };
+
+    let controllers_need_update = controllers_setting.as_ref().is_some_and(|desired| {
+        let mut desired_sorted = desired.clone();
+        desired_sorted.sort();
+        let mut current_sorted = current_settings.controllers.clone();
+        current_sorted.sort();
+        desired_sorted != current_sorted
+    });
+
     if log_visibility_setting
         .as_ref()
         .is_none_or(|s| log_visibility_eq(s, &current_settings.log_visibility))
@@ -143,9 +172,10 @@ pub(crate) async fn sync_settings(
         && environment_variable_setting
             .as_ref()
             .is_none_or(|s| environment_variables_eq(s, &current_settings.environment_variables))
+        && !controllers_need_update
     {
         // No changes needed
-        return Ok(());
+        return Ok(unresolved_names);
     }
 
     let settings = CanisterSettings {
@@ -158,7 +188,7 @@ pub(crate) async fn sync_settings(
         wasm_memory_threshold: wasm_memory_threshold.as_ref().map(|m| Nat::from(m.get())),
         log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         environment_variables: environment_variable_setting,
-        ..Default::default()
+        controllers: controllers_setting,
     };
 
     proxy_management::update_settings(
@@ -173,13 +203,14 @@ pub(crate) async fn sync_settings(
     .await
     .context(UpdateSettingsSnafu { canister: *cid })?;
 
-    Ok(())
+    Ok(unresolved_names)
 }
 
 pub(crate) async fn sync_settings_many(
     agent: Agent,
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
+    ids: IdMapping,
     debug: bool,
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
@@ -188,6 +219,7 @@ pub(crate) async fn sync_settings_many(
     for (cid, info) in target_canisters {
         let pb = progress_manager.create_progress_bar(&info.name);
         let canister_name = info.name.clone();
+        let ids = ids.clone();
 
         let settings_fn = {
             let agent = agent.clone();
@@ -195,7 +227,15 @@ pub(crate) async fn sync_settings_many(
 
             async move {
                 pb.set_message("Updating canister settings...");
-                sync_settings(&agent, proxy, &cid, &info).await
+                let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
+                for name in &unresolved {
+                    warn!(
+                        "Controller canister '{name}' for '{}' has not been created yet; \
+                         it will be set as a controller once created.",
+                        info.name
+                    );
+                }
+                Ok::<_, SyncSettingsOperationError>(())
             }
         };
 
@@ -242,6 +282,68 @@ pub(crate) async fn sync_settings_many(
                 .collect::<Vec<String>>(),
         }
         .fail();
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+pub(crate) enum SyncControllerDependentsError {
+    #[snafu(display("failed to load environment for controller dependent sync"))]
+    GetEnvironment {
+        source: icp::context::GetEnvironmentError,
+    },
+
+    #[snafu(display("failed to load canister IDs for controller dependent sync"))]
+    GetIds {
+        source: icp::context::GetIdsByEnvironmentError,
+    },
+}
+
+/// After `newly_created_name` is registered, scan the project manifest for all other canisters
+/// that list `newly_created_name` as a controller and already have a stored ID. Calls
+/// `sync_settings` for each so the controller is applied now that it can be resolved.
+pub(crate) async fn sync_controller_dependents(
+    ctx: &Context,
+    agent: &Agent,
+    proxy: Option<Principal>,
+    newly_created_name: &str,
+    env: &EnvironmentSelection,
+) -> Result<(), SyncControllerDependentsError> {
+    let env_data = ctx
+        .get_environment(env)
+        .await
+        .context(GetEnvironmentSnafu)?;
+    let ids = ctx.ids_by_environment(env).await.context(GetIdsSnafu)?;
+
+    for (name, (_, canister)) in &env_data.canisters {
+        if name == newly_created_name {
+            continue;
+        }
+        let references_new = canister.settings.controllers.as_ref().is_some_and(|crefs| {
+            crefs
+                .iter()
+                .any(|c| c.canister_name() == Some(newly_created_name))
+        });
+        if !references_new {
+            continue;
+        }
+        let Some(&cid) = ids.get(name) else {
+            continue;
+        };
+        match sync_settings(agent, proxy, &cid, canister, &ids).await {
+            Ok(unresolved) => {
+                for still_unresolved in &unresolved {
+                    warn!(
+                        "Controller canister '{still_unresolved}' for '{name}' has not been \
+                         created yet; it will be set as a controller once created."
+                    );
+                }
+            }
+            Err(e) => {
+                warn!("Failed to apply pending controller update for canister '{name}': {e}");
+            }
+        }
     }
 
     Ok(())

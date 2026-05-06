@@ -1168,7 +1168,7 @@ Re-authenticate an Internet Identity delegation or create a PEM session delegati
 
 ###### **Options:**
 
-* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Note that 5m extra is added when creating the delegation to account for clock drift. Required for PEM identities when session caching is disabled in settings. Not applicable for Internet Identity (yet)
+* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is added when creating the delegation to account for clock drift. Required for PEM identities when session caching is disabled in settings. Not applicable for Internet Identity (yet)
 
 
 
@@ -1563,7 +1563,7 @@ Set the session length for password-protected PEM identities
 
 * `<VALUE>` — Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
 
-   Note that due to clock drift, 5 minutes are added to the given value, so `5m` produces a 10-minute-expiry delegation. `disabled` turns off session caching entirely.
+   Note that due to clock drift, 2 minutes are added to the given value, so `5m` produces a 7-minute-expiry delegation. `disabled` turns off session caching entirely.
 
 
 

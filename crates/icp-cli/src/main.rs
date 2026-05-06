@@ -162,7 +162,7 @@ async fn main() -> Result<(), Error> {
             .await??;
         settings
             .session_length
-            .map(|m| std::time::Duration::from_secs((u64::from(m) + 5) * 60))
+            .map(|m| std::time::Duration::from_secs((u64::from(m) + 2) * 60))
     };
     let ctx = icp::context::initialize(
         cli.project_root_override,

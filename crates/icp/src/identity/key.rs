@@ -125,7 +125,7 @@ pub enum LoadIdentityError {
     },
 
     #[snafu(display(
-        "delegation for identity `{name}` has expired or will expire within 5 minutes; \
+        "delegation for identity `{name}` has expired or will expire within 2 minutes; \
          run `icp identity login {name}` to re-authenticate"
     ))]
     DelegationExpired { name: String },
@@ -314,7 +314,7 @@ fn try_load_pem_session(dirs: LRead<&IdentityPaths>, name: &str) -> Option<Arc<d
         .inspect_err(|e| debug!(identity = name, "no cached session chain: {e}"))
         .ok()?;
 
-    if delegation::is_expiring_soon(&chain, FIVE_MINUTES_NANOS)
+    if delegation::is_expiring_soon(&chain, TWO_MINUTES_NANOS)
         .inspect_err(|e| debug!(identity = name, "failed to check session expiry: {e}"))
         .ok()?
     {
@@ -530,7 +530,7 @@ fn create_pem_session_and_build_identity(
 /// the new session key and chain.
 ///
 /// Unlike the automatic path (which silences errors), this propagates them.
-/// The `duration` should already include the 5-minute clock-drift boost.
+/// The `duration` should already include the 2-minute clock-drift boost.
 pub fn create_explicit_pem_session(
     dirs: LRead<&IdentityPaths>,
     name: &str,
@@ -613,7 +613,7 @@ fn load_hsm_identity(
     Ok(Arc::new(identity))
 }
 
-const FIVE_MINUTES_NANOS: u64 = 5 * 60 * 1_000_000_000;
+const TWO_MINUTES_NANOS: u64 = 2 * 60 * 1_000_000_000;
 
 fn load_ii_identity(
     dirs: LRead<&IdentityPaths>,
@@ -629,8 +629,8 @@ fn load_ii_identity(
     let stored_chain =
         delegation::load(&chain_path).context(LoadDelegationChainSnafu { path: &chain_path })?;
 
-    // Check expiry (5 minutes grace)
-    if delegation::is_expiring_soon(&stored_chain, FIVE_MINUTES_NANOS)
+    // Check expiry (2 minutes grace)
+    if delegation::is_expiring_soon(&stored_chain, TWO_MINUTES_NANOS)
         .context(DelegationConversionSnafu)?
     {
         return DelegationExpiredSnafu { name }.fail();

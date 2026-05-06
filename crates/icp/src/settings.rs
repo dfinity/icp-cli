@@ -68,8 +68,8 @@ pub struct Settings {
 
     /// Session length in minutes for password-protected PEM identities.
     ///
-    /// Five minutes are added to this value at use time, so the default of
-    /// `Some(5)` produces a 10-minute session. `None` disables session caching.
+    /// Two minutes are added to this value at use time, so the default of
+    /// `Some(5)` produces a 7-minute session. `None` disables session caching.
     #[serde(default = "default_session_length")]
     pub session_length: Option<u32>,
 }

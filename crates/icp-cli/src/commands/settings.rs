@@ -57,8 +57,8 @@ struct UpdateCheckArgs {
 struct SessionLengthArgs {
     /// Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
     ///
-    /// Note that due to clock drift, 5 minutes are added to the given value,
-    /// so `5m` produces a 10-minute-expiry delegation. `disabled` turns off
+    /// Note that due to clock drift, 2 minutes are added to the given value,
+    /// so `5m` produces a 7-minute-expiry delegation. `disabled` turns off
     /// session caching entirely.
     value: Option<SessionLengthValue>,
 }

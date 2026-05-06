@@ -11,12 +11,15 @@ use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
 use icp::{
     Canister, InitArgs,
-    canister::build::Build,
+    canister::{build::Build, wasm},
     fs,
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, EnvironmentManifest, Instructions,
         Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
-        ProjectManifest, SyncStep, SyncSteps, assets::DirField, load_manifest_from_path, prebuilt,
+        ProjectManifest, SyncStep, SyncSteps,
+        assets::DirField,
+        load_manifest_from_path, plugin, prebuilt,
+        prebuilt::{LocalSource, SourceField},
     },
     package::PackageCache,
     prelude::*,
@@ -78,6 +81,25 @@ pub enum BundleError {
 
     #[snafu(display("failed to finalize bundle archive"))]
     FlushArchive { source: std::io::Error },
+
+    #[snafu(display("failed to resolve plugin wasm for canister '{canister}'"))]
+    ResolvePlugin {
+        canister: String,
+        source: wasm::WasmError,
+    },
+
+    #[snafu(display("failed to read plugin wasm for canister '{canister}'"))]
+    ReadPlugin {
+        canister: String,
+        source: fs::IoError,
+    },
+
+    #[snafu(display("failed to read plugin file '{file}' for canister '{canister}'"))]
+    ReadPluginFile {
+        canister: String,
+        file: String,
+        source: fs::IoError,
+    },
 }
 
 pub(crate) async fn create_bundle(
@@ -119,6 +141,12 @@ pub(crate) async fn create_bundle(
     let mut canister_wasms: Vec<(String, Vec<u8>)> = Vec::new();
     // (canister_path, canister_name, asset_dirs)
     let mut asset_dirs: Vec<(PathBuf, String, Vec<String>)> = Vec::new();
+    // (archive_path, bytes)
+    let mut plugin_wasms: Vec<(String, Vec<u8>)> = Vec::new();
+    // (src_path, archive_prefix) — appended with append_dir_all
+    let mut plugin_dirs: Vec<(PathBuf, String)> = Vec::new();
+    // (src_path, archive_path, canister_name, orig_file) — appended as individual files
+    let mut plugin_files: Vec<(PathBuf, String, String, String)> = Vec::new();
 
     for (canister_path, canister) in &canisters {
         let wasm = artifacts
@@ -135,6 +163,7 @@ pub(crate) async fn create_bundle(
         // Collect asset dirs and rewrite their paths for the bundle.
         let mut bundle_sync_steps = Vec::new();
         let mut raw_asset_dirs = Vec::new();
+        let mut plugin_idx: usize = 0;
 
         for step in &canister.sync.steps {
             match step {
@@ -156,6 +185,68 @@ pub(crate) async fn create_bundle(
 
                     bundle_sync_steps.push(SyncStep::Assets(icp::manifest::assets::Adapter {
                         dir: new_dir,
+                    }));
+                }
+                SyncStep::Plugin(adapter) => {
+                    let idx = plugin_idx;
+                    plugin_idx += 1;
+                    let plugin_wasm_path = format!("plugins/{path_name}/{idx}.wasm");
+
+                    let resolved = wasm::resolve(
+                        &adapter.source,
+                        canister_path,
+                        adapter.sha256.as_deref(),
+                        None,
+                        pkg_cache,
+                    )
+                    .await
+                    .context(ResolvePluginSnafu {
+                        canister: canister.name.clone(),
+                    })?;
+
+                    let plugin_bytes = fs::read(&resolved).context(ReadPluginSnafu {
+                        canister: canister.name.clone(),
+                    })?;
+                    let plugin_sha256 = hex::encode(Sha256::digest(&plugin_bytes));
+                    plugin_wasms.push((plugin_wasm_path.clone(), plugin_bytes));
+
+                    let bundle_dirs: Option<Vec<String>> = adapter.dirs.as_ref().map(|dirs| {
+                        dirs.iter()
+                            .map(|d| {
+                                let normalized = normalize_archive_dir(d);
+                                let archive_prefix =
+                                    format!("plugins/{path_name}/{idx}/{normalized}");
+                                plugin_dirs.push((canister_path.join(d), archive_prefix.clone()));
+                                archive_prefix
+                            })
+                            .collect()
+                    });
+
+                    let bundle_files: Option<Vec<String>> = adapter.files.as_ref().map(|files| {
+                        files
+                            .iter()
+                            .map(|f| {
+                                let normalized = normalize_archive_dir(f);
+                                let archive_path =
+                                    format!("plugins/{path_name}/{idx}/files/{normalized}");
+                                plugin_files.push((
+                                    canister_path.join(f),
+                                    archive_path.clone(),
+                                    canister.name.clone(),
+                                    f.clone(),
+                                ));
+                                archive_path
+                            })
+                            .collect()
+                    });
+
+                    bundle_sync_steps.push(SyncStep::Plugin(plugin::Adapter {
+                        source: SourceField::Local(LocalSource {
+                            path: plugin_wasm_path.as_str().into(),
+                        }),
+                        sha256: Some(plugin_sha256),
+                        dirs: bundle_dirs,
+                        files: bundle_files,
                     }));
                 }
             }
@@ -331,6 +422,45 @@ pub(crate) async fn create_bundle(
                     path: PathBuf::from(&archive_prefix),
                 })?;
         }
+    }
+
+    // Plugin WASM files
+    for (archive_path, bytes) in &plugin_wasms {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, archive_path, Cursor::new(bytes))
+            .context(WriteArchiveEntrySnafu {
+                path: PathBuf::from(archive_path),
+            })?;
+    }
+
+    // Plugin preopened directories
+    for (src_path, archive_prefix) in &plugin_dirs {
+        archive
+            .append_dir_all(archive_prefix, src_path.as_std_path())
+            .context(WriteArchiveEntrySnafu {
+                path: PathBuf::from(archive_prefix),
+            })?;
+    }
+
+    // Plugin input files
+    for (src_path, archive_path, canister_name, orig_file) in &plugin_files {
+        let data = fs::read(src_path).context(ReadPluginFileSnafu {
+            canister: canister_name.clone(),
+            file: orig_file.clone(),
+        })?;
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, archive_path, Cursor::new(data))
+            .context(WriteArchiveEntrySnafu {
+                path: PathBuf::from(archive_path),
+            })?;
     }
 
     let gz = archive.into_inner().context(FlushArchiveSnafu)?;

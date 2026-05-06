@@ -607,6 +607,317 @@ async fn canister_create_through_proxy() {
     );
 }
 
+#[tokio::test]
+async fn canister_create_with_fixed_controller_principals() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // "aaaaa-aa" is the management canister principal — a convenient fixed value.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - "aaaaa-aa"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The controller list must include both the declared principal and the active identity
+    // (2vxsx-fae = anonymous principal). The greenfield injection ensures the caller retains
+    // access even when manifest controllers are set.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains("aaaaa-aa"))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn canister_create_with_resolved_canister_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Canister "a" lists "b" as a controller by name.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - b
+          - name: b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    // Create "b" first so that when "a" is created the controller reference resolves immediately.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "b",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let b_principal = client.get_canister_id("b").to_string();
+
+    // Creating "a" should produce no warning: "b" is already on-chain.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("does not exist yet").not());
+
+    // "a"'s controllers must include "b"'s principal and the active identity (2vxsx-fae).
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(b_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Canister "a" lists "b" as a controller by name.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - b
+          - name: b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    // Create "a" before "b" — "b" is unresolved, so a warning must be emitted.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains(
+            "Controller canister 'b' for 'a' does not exist yet",
+        ));
+
+    // At this point "a" is only controlled by the active identity; "b" is not yet a controller.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Controllers: 2vxsx-fae"));
+
+    // Creating "b" triggers sync_controller_dependents, which updates "a"'s controller list.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "b",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let b_principal = client.get_canister_id("b").to_string();
+
+    // After "b" is created, "a"'s controllers must include "b"'s principal.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(b_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn canister_create_with_self_as_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // A canister that lists itself as a controller. The ID is unknown at create time,
+    // so the reference is unresolved initially and resolved by sync_controller_dependents
+    // once the ID is registered.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - my-canister
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let canister_principal = client.get_canister_id("my-canister").to_string();
+
+    // The canister must appear in its own controller list alongside the active identity.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(canister_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
 #[tag(docker)]
 #[tokio::test]
 async fn canister_create_cloud_engine() {

@@ -1038,3 +1038,138 @@ async fn deploy_through_proxy() {
         .success()
         .stdout(contains("Status: Running").and(contains(&proxy_cid)));
 }
+
+#[tokio::test]
+async fn deploy_with_fixed_controller_principals() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // "aaaaa-aa" is the management canister principal — a convenient fixed value.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              controllers:
+                - "aaaaa-aa"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The controller list must include both the declared principal and the active identity
+    // (2vxsx-fae = anonymous principal). Greenfield injection ensures the caller retains access.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains("aaaaa-aa"))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn deploy_with_canister_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Canister "a" lists "b" as a controller by name. Both are deployed together, so all
+    // references are resolved by sync_settings_many after creation.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              controllers:
+                - b
+          - name: b
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let b_principal = client.get_canister_id("b").to_string();
+
+    // "a"'s controllers must include "b"'s principal and the active identity (2vxsx-fae).
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(b_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}

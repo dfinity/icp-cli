@@ -16,7 +16,7 @@ use crate::commands::identity::{delegation::sign::DurationArg, link::ii};
 
 /// Re-authenticate an Internet Identity delegation or create a PEM session delegation
 #[derive(Debug, Args)]
-pub(crate) struct LoginArgs {
+pub(crate) struct ReauthArgs {
     /// Name of the identity to re-authenticate
     name: String,
 
@@ -28,7 +28,7 @@ pub(crate) struct LoginArgs {
     duration: Option<DurationArg>,
 }
 
-pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
+pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginError> {
     let spec = ctx
         .dirs
         .identity()?

@@ -8,9 +8,9 @@ pub(crate) mod export;
 pub(crate) mod import;
 pub(crate) mod link;
 pub(crate) mod list;
-pub(crate) mod login;
 pub(crate) mod new;
 pub(crate) mod principal;
+pub(crate) mod reauth;
 pub(crate) mod rename;
 
 /// Manage your identities
@@ -26,7 +26,7 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Link(link::Command),
     List(list::ListArgs),
-    Login(login::LoginArgs),
+    Reauth(reauth::ReauthArgs),
     New(new::NewArgs),
     Principal(principal::PrincipalArgs),
     Rename(rename::RenameArgs),

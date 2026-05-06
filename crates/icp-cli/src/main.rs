@@ -379,8 +379,8 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::principal::exec(ctx, &args).await?
             }
 
-            commands::identity::Command::Login(args) => {
-                commands::identity::login::exec(ctx, &args).await?
+            commands::identity::Command::Reauth(args) => {
+                commands::identity::reauth::exec(ctx, &args).await?
             }
 
             commands::identity::Command::Rename(args) => {

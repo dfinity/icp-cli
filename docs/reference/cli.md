@@ -53,7 +53,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity link`↴](#icp-identity-link)
 * [`icp identity link hsm`↴](#icp-identity-link-hsm)
 * [`icp identity list`↴](#icp-identity-list)
-* [`icp identity login`↴](#icp-identity-login)
+* [`icp identity reauth`↴](#icp-identity-reauth)
 * [`icp identity new`↴](#icp-identity-new)
 * [`icp identity principal`↴](#icp-identity-principal)
 * [`icp identity rename`↴](#icp-identity-rename)
@@ -930,7 +930,7 @@ Manage your identities
 * `import` — Import a new identity
 * `link` — Link an external key to a new identity
 * `list` — List the identities
-* `login` — Re-authenticate an Internet Identity delegation or create a PEM session delegation
+* `reauth` — Re-authenticate an Internet Identity delegation or create a PEM session delegation
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
 * `rename` — Rename an identity
@@ -1156,11 +1156,11 @@ List the identities
 
 
 
-## `icp identity login`
+## `icp identity reauth`
 
 Re-authenticate an Internet Identity delegation or create a PEM session delegation
 
-**Usage:** `icp identity login [OPTIONS] <NAME>`
+**Usage:** `icp identity reauth [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 

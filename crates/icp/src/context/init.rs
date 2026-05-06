@@ -48,8 +48,9 @@ pub fn initialize(
     //
     // Guard with an inode check: if $PWD was inherited from a parent process
     // that used chdir(2) without updating $PWD, the two paths point to
-    // different inodes and we fall back to getcwd(). A symlink and its target
-    // share the same inode, so the symlink case still works.
+    // different inodes and we fall back to getcwd(). Because `metadata()`
+    // follows symlinks, a symlinked $PWD still resolves to the same inode as
+    // getcwd(), so the symlink case still works.
     #[cfg(unix)]
     let cwd: PathBuf = {
         let real = PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
@@ -160,19 +161,24 @@ fn same_inode(a: &Path, b: &Path) -> bool {
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
+    use std::sync::Mutex;
+
     use camino_tempfile::Utf8TempDir;
 
     use super::*;
 
+    // Serializes tests that mutate $PWD, since cargo test runs tests in parallel.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
     #[test]
     fn stale_pwd_is_ignored() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
         let stale = Utf8TempDir::new().unwrap();
         let real = PathBuf::try_from(std::env::current_dir().unwrap()).unwrap();
 
         let old_pwd = std::env::var("PWD").ok();
-        // SAFETY: this test is the only writer; cargo test runs each test
-        // binary single-threaded unless --test-threads>1, and no other test
-        // in this module touches $PWD.
+        // SAFETY: ENV_MUTEX serializes all tests that mutate $PWD.
         unsafe { std::env::set_var("PWD", stale.path()) };
 
         let resolved = match std::env::var("PWD")

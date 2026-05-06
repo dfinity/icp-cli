@@ -1,23 +1,20 @@
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::manifest::{
     Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
 };
 
-#[derive(Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(default)]
-    #[schemars(with = "Option<Vec<Item<CanisterManifest>>>")]
     pub canisters: Vec<Item<CanisterManifest>>,
 
     #[serde(default)]
-    #[schemars(with = "Option<Vec<Item<NetworkManifest>>>")]
     pub networks: Vec<Item<NetworkManifest>>,
 
     #[serde(default)]
-    #[schemars(with = "Option<Vec<Item<EnvironmentManifest>>>")]
     pub environments: Vec<Item<EnvironmentManifest>>,
 }
 

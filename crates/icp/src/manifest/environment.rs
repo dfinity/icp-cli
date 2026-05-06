@@ -1,18 +1,22 @@
 use std::collections::HashMap;
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{canister::Settings, prelude::LOCAL};
 
 use super::canister::ManifestInitArgs;
 
-#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 pub struct EnvironmentInner {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub canisters: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<HashMap<String, Settings>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub init_args: Option<HashMap<String, ManifestInitArgs>>,
 }
 
@@ -97,6 +101,36 @@ impl<'de> Deserialize<'de> for EnvironmentManifest {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let inner: EnvironmentInner = Deserialize::deserialize(d)?;
         Ok(inner.into())
+    }
+}
+
+impl From<&EnvironmentManifest> for EnvironmentInner {
+    fn from(env: &EnvironmentManifest) -> Self {
+        let network = if env.network == LOCAL {
+            None
+        } else {
+            Some(env.network.clone())
+        };
+
+        let canisters = match &env.canisters {
+            CanisterSelection::Everything => None,
+            CanisterSelection::Named(names) => Some(names.clone()),
+            CanisterSelection::None => Some(vec![]),
+        };
+
+        EnvironmentInner {
+            name: env.name.clone(),
+            network,
+            canisters,
+            settings: env.settings.clone(),
+            init_args: env.init_args.clone(),
+        }
+    }
+}
+
+impl Serialize for EnvironmentManifest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        EnvironmentInner::from(self).serialize(serializer)
     }
 }
 

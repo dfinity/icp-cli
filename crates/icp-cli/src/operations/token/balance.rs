@@ -56,8 +56,9 @@ pub enum GetBalanceError {
 ///
 pub async fn get_balance(
     agent: &Agent,
-    subaccount: Option<[u8; 32]>,
     token: &str,
+    owner: Principal,
+    subaccount: Option<[u8; 32]>,
 ) -> Result<TokenAmount, GetBalanceError> {
     // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
@@ -78,7 +79,7 @@ pub async fn get_balance(
     let (balance, decimals, symbol) = tokio::join!(
         //
         // Obtain token balance
-        get_raw_balance(agent, cid, subaccount),
+        get_raw_balance(agent, cid, owner, subaccount),
         //
         // Obtain the number of decimals the token uses
         async {
@@ -119,11 +120,9 @@ pub async fn get_balance(
 pub async fn get_raw_balance(
     agent: &Agent,
     ledger: Principal,
+    owner: Principal,
     subaccount: Option<[u8; 32]>,
 ) -> Result<Nat, GetBalanceError> {
-    let owner = agent
-        .get_principal()
-        .map_err(|err| GetBalanceError::GetPrincipal { err })?;
     // Perform query
     let resp = agent
         .query(&ledger, "icrc1_balance_of")

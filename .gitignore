@@ -1,4 +1,4 @@
-/target
+target/
 .DS_Store
 .cursor
 
@@ -11,6 +11,11 @@ examples/*/.icp/
 # often-used binaries
 pocket-ic
 icp-cli-network-launcher
+
+# Lock files in examples (not needed for reproducibility; avoiding dependabot noise)
+examples/**/package-lock.json
+examples/**/yarn.lock
+examples/**/pnpm-lock.yaml
 
 # Documentation build artifacts
 docs-site/.astro/

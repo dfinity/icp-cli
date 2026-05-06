@@ -190,8 +190,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                 return Ok(());
             }
             arguments
-                .to_bytes()
-                .context("failed to serialize candid arguments")?
+                .to_bytes_with_types(type_env, &func.args)
+                .context("failed to serialize candid arguments with specific types")?
         }
         (Some(_), Some(ResolvedArgs::Bytes(bytes))) => bytes,
         (Some((type_env, func)), Some(ResolvedArgs::Candid(arguments))) => arguments

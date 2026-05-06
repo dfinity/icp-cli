@@ -1,6 +1,18 @@
 # Unreleased
 
 * feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity login <NAME> [--duration <DURATION>]`.
+
+# v0.2.6
+
+* feat: `icp token/cycles balance` now accept `--of-principal`
+* fix: The local wasm cache has moved from `.icp/cache/canisters/` to `.icp/cache/wasms/`. Existing cached files will be re-downloaded automatically on the next run.
+* feat: Canister manifests now support a `plugin` sync step type. Plugins are WebAssembly components that run in a sandboxed environment and can drive arbitrary post-deployment logic against the canister being synced. See `crates/icp-sync-plugin/DESIGN.md` for details.
+* feat: `icp sync` now accepts `--proxy` to route sync plugin calls to the target canister through a proxy canister.
+* fix: `icp canister call` now serializes arguments built via the interactive Candid assist prompt against the method's declared signature, matching the behavior of arguments passed on the command line. Previously, narrower values (e.g. a variant case from a multi-case variant) were encoded with a type table inferred only from the value, which the target canister rejected with errors like "Variant index N larger than length 1".
+
+# v0.2.5
+
+* feat: `icp new --init` no longer requires specifying a project name. If non is provided, the containing folder's name is used as the project name
 * fix: `icp canister call --json` no longer produces blank output.
 
 # v0.2.4

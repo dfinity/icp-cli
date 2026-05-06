@@ -783,6 +783,7 @@ Display the cycles balance
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--of-principal <OF_PRINCIPAL>` — Check the balance of this principal instead of the current identity
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
@@ -1433,11 +1434,11 @@ Create a new ICP project from a template
 
 Under the hood templates are generated with `cargo-generate`. See the cargo-generate docs for a guide on how to write your own templates: https://docs.rs/cargo-generate/0.23.7/cargo_generate/
 
-**Usage:** `icp new [OPTIONS] <NAME>`
+**Usage:** `icp new [OPTIONS] [NAME]`
 
 ###### **Arguments:**
 
-* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given
+* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given. Optional when `--init` is used: defaults to the name of the current directory
 
 ###### **Options:**
 
@@ -1579,6 +1580,7 @@ Synchronize canisters
 
 ###### **Options:**
 
+* `--proxy <PROXY>` — Principal of a proxy canister to route sync plugin calls to the target canister through
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -1616,6 +1618,7 @@ Display the token balance on the ledger (default token: icp)
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--of-principal <OF_PRINCIPAL>` — Check the balance of this principal instead of the current identity
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the balance
 

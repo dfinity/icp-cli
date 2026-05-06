@@ -1,0 +1,5 @@
+service : {
+  set_uploader : (principal) -> ();
+  register : (text, text) -> ();
+  show : () -> (opt principal, vec record { text; text }) query;
+}

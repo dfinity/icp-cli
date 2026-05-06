@@ -220,11 +220,11 @@ fn build_adapter_display_failing_prebuilt_output() {
     // Invoke build
     let expected_output = indoc! {r#"
         ERR ----- Failed to build canister 'my-canister' -----
-        ERR 'failed to read prebuilt canister file'
+        ERR 'failed to read wasm file at '/nonexistent/path/to/wasm.wasm''
         ERR [my-canister] Build output:
         ERR [my-canister] Building: step 2 of 2 (pre-built):
         ERR [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
-        ERR [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
+        ERR [my-canister] > Reading wasm: /nonexistent/path/to/wasm.wasm
     "#};
 
     ctx.icp()

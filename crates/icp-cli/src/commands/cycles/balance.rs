@@ -1,6 +1,7 @@
 use std::io::stdout;
 
 use bigdecimal::BigDecimal;
+use candid::Principal;
 use clap::Args;
 use icp::context::Context;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
@@ -20,6 +21,10 @@ pub(crate) struct BalanceArgs {
     /// The subaccount to check the balance for
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) subaccount: Option<[u8; 32]>,
+
+    /// Check the balance of this principal instead of the current identity
+    #[arg(long)]
+    pub(crate) of_principal: Option<Principal>,
 
     /// Output command results as JSON
     #[arg(long, conflicts_with = "quiet")]
@@ -41,9 +46,12 @@ pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow
             &selections.environment,
         )
         .await?;
+    let owner = args
+        .of_principal
+        .unwrap_or_else(|| agent.get_principal().unwrap());
 
     // Get the balance from the ledger
-    let cycles = get_raw_balance(&agent, CYCLES_LEDGER_PRINCIPAL, args.subaccount).await?;
+    let cycles = get_raw_balance(&agent, CYCLES_LEDGER_PRINCIPAL, owner, args.subaccount).await?;
     let cycles_amount = TokenAmount {
         amount: BigDecimal::from_biguint(cycles.0, 0),
         symbol: "cycles".to_string(),

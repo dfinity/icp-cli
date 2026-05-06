@@ -1,5 +1,6 @@
 use std::io::stdout;
 
+use candid::Principal;
 use clap::Args;
 use icp::context::Context;
 use serde::Serialize;
@@ -18,6 +19,10 @@ pub(crate) struct BalanceArgs {
     /// The subaccount to check the balance for
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) subaccount: Option<[u8; 32]>,
+
+    /// Check the balance of this principal instead of the current identity
+    #[arg(long)]
+    pub(crate) of_principal: Option<Principal>,
 
     /// Output command results as JSON
     #[arg(long, conflicts_with = "quiet")]
@@ -48,9 +53,12 @@ pub(crate) async fn exec(
             &selections.environment,
         )
         .await?;
+    let owner = args
+        .of_principal
+        .unwrap_or_else(|| agent.get_principal().unwrap());
 
     // Get the balance from the ledger
-    let balance = get_balance(&agent, args.subaccount, token).await?;
+    let balance = get_balance(&agent, token, owner, args.subaccount).await?;
 
     if args.json {
         serde_json::to_writer(

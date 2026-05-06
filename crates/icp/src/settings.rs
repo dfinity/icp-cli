@@ -65,6 +65,13 @@ pub struct Settings {
     /// Whether the CLI update check is enabled.
     #[serde(default)]
     pub update_check: UpdateCheck,
+
+    /// Session length in minutes for password-protected PEM identities.
+    ///
+    /// Two minutes are added to this value at use time, so the default of
+    /// `Some(5)` produces a 7-minute session. `None` disables session caching.
+    #[serde(default = "default_session_length")]
+    pub session_length: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, strum::Display, PartialEq, Eq)]
@@ -84,6 +91,10 @@ fn default_telemetry_enabled() -> bool {
     true
 }
 
+fn default_session_length() -> Option<u32> {
+    Some(5)
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -91,6 +102,7 @@ impl Default for Settings {
             autocontainerize: false,
             telemetry_enabled: true,
             update_check: UpdateCheck::default(),
+            session_length: default_session_length(),
         }
     }
 }

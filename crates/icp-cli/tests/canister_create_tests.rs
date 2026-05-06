@@ -853,6 +853,71 @@ async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
         );
 }
 
+#[tokio::test]
+async fn canister_create_with_self_as_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // A canister that lists itself as a controller. The ID is unknown at create time,
+    // so the reference is unresolved initially and resolved by sync_controller_dependents
+    // once the ID is registered.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - my-canister
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let canister_principal = client.get_canister_id("my-canister").to_string();
+
+    // The canister must appear in its own controller list alongside the active identity.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(canister_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
 #[tag(docker)]
 #[tokio::test]
 async fn canister_create_cloud_engine() {

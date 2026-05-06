@@ -329,9 +329,6 @@ pub(crate) async fn sync_controller_dependents(
     let ids = ctx.ids_by_environment(env).await.context(GetIdsSnafu)?;
 
     for (name, (_, canister)) in &env_data.canisters {
-        if name == newly_created_name {
-            continue;
-        }
         let references_new = canister.settings.controllers.as_ref().is_some_and(|crefs| {
             crefs
                 .iter()

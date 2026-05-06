@@ -45,14 +45,23 @@ pub fn initialize(
     // through) over getcwd(3), which resolves symlinks to the physical path
     // and would break upward traversal when the user is inside a symlinked
     // directory whose manifest sits above the symlink's location.
+    //
+    // Guard with an inode check: if $PWD was inherited from a parent process
+    // that used chdir(2) without updating $PWD, the two paths point to
+    // different inodes and we fall back to getcwd(). A symlink and its target
+    // share the same inode, so the symlink case still works.
     #[cfg(unix)]
-    let cwd: PathBuf = match std::env::var("PWD")
-        .ok()
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-    {
-        Some(p) => p,
-        None => PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?,
+    let cwd: PathBuf = {
+        let real = PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
+        match std::env::var("PWD")
+            .ok()
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .filter(|p| same_inode(p.as_path(), real.as_path()))
+        {
+            Some(logical) => logical,
+            None => real,
+        }
     };
 
     #[cfg(not(unix))]
@@ -137,4 +146,53 @@ pub fn initialize(
         debug,
         telemetry_data,
     })
+}
+
+#[cfg(unix)]
+fn same_inode(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(ma), Ok(mb)) => ma.dev() == mb.dev() && ma.ino() == mb.ino(),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests {
+    use camino_tempfile::Utf8TempDir;
+
+    use super::*;
+
+    #[test]
+    fn stale_pwd_is_ignored() {
+        let stale = Utf8TempDir::new().unwrap();
+        let real = PathBuf::try_from(std::env::current_dir().unwrap()).unwrap();
+
+        let old_pwd = std::env::var("PWD").ok();
+        // SAFETY: this test is the only writer; cargo test runs each test
+        // binary single-threaded unless --test-threads>1, and no other test
+        // in this module touches $PWD.
+        unsafe { std::env::set_var("PWD", stale.path()) };
+
+        let resolved = match std::env::var("PWD")
+            .ok()
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .filter(|p| same_inode(p.as_path(), real.as_path()))
+        {
+            Some(logical) => logical,
+            None => real.clone(),
+        };
+
+        match old_pwd {
+            Some(v) => unsafe { std::env::set_var("PWD", v) },
+            None => unsafe { std::env::remove_var("PWD") },
+        }
+
+        assert_eq!(
+            resolved, real,
+            "stale $PWD should be ignored in favour of getcwd()"
+        );
+    }
 }

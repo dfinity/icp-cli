@@ -123,53 +123,6 @@ impl TestContext {
         cmd
     }
 
-    #[cfg(unix)]
-    pub(crate) async fn launcher_path(&self) -> PathBuf {
-        use icp::directories::{Access, Directories};
-        if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
-            PathBuf::from(var)
-        } else {
-            // replicate the command's logic to only perform it if needed, and perform it in the user home instead of the test home
-            let cache = Directories::new()
-                .unwrap()
-                .package_cache()
-                .unwrap()
-                .into_write()
-                .await
-                .unwrap();
-            let version = concat!("v", env!("TEST_NETWORK_LAUNCHER_VERSION"));
-            if let Some((_, path)) =
-                icp::network::managed::cache::get_cached_launcher_version_if_fresh(
-                    cache.as_ref().read(),
-                    version,
-                )
-                .unwrap()
-            {
-                path
-            } else {
-                let (_ver, path) = icp::network::managed::cache::download_launcher_version(
-                    cache.as_ref(),
-                    version,
-                    &reqwest::Client::new(),
-                )
-                .await
-                .unwrap();
-                path
-            }
-        }
-    }
-
-    pub(crate) async fn launcher_path_or_nothing(&self) -> PathBuf {
-        #[cfg(unix)]
-        {
-            self.launcher_path().await
-        }
-        #[cfg(windows)]
-        {
-            PathBuf::new()
-        }
-    }
-
     fn build_os_path(bin_dir: &Path) -> OsString {
         let old_path = env::var_os("PATH").unwrap_or_default();
         let mut new_path = bin_dir.as_os_str().to_owned();
@@ -249,10 +202,10 @@ impl TestContext {
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.arg("network").arg("start").arg(name);
         #[cfg(unix)]
-        {
-            let launcher_path = self.launcher_path().await;
-            cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
-        }
+        cmd.env(
+            "ICP_CLI_NETWORK_LAUNCHER_PATH",
+            env!("ICP_CLI_NETWORK_LAUNCHER_PATH"),
+        );
 
         eprintln!("Running network in {project_dir}");
 

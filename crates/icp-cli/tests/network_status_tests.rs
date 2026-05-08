@@ -4,11 +4,10 @@ use predicates::str::{PredicateStrExt, contains};
 mod common;
 use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 
-#[tokio::test]
-async fn status_when_network_running() {
+#[test]
+fn status_when_network_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path_or_nothing().await;
 
     // Project manifest
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
@@ -18,7 +17,10 @@ async fn status_when_network_running() {
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "start", "random-network", "--background"])
-        .env("ICP_CLI_NETWORK_LAUNCHER_PATH", &launcher_path)
+        .env(
+            "ICP_CLI_NETWORK_LAUNCHER_PATH",
+            option_env!("ICP_CLI_NETWORK_LAUNCHER_PATH").unwrap_or_default(),
+        )
         .assert()
         .success()
         .stderr(contains("Network started on port"));
@@ -44,11 +46,10 @@ async fn status_when_network_running() {
         .success();
 }
 
-#[tokio::test]
-async fn status_with_json() {
+#[test]
+fn status_with_json() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path_or_nothing().await;
 
     // Project manifest
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
@@ -58,7 +59,10 @@ async fn status_with_json() {
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "start", "random-network", "--background"])
-        .env("ICP_CLI_NETWORK_LAUNCHER_PATH", &launcher_path)
+        .env(
+            "ICP_CLI_NETWORK_LAUNCHER_PATH",
+            option_env!("ICP_CLI_NETWORK_LAUNCHER_PATH").unwrap_or_default(),
+        )
         .assert()
         .success()
         .stderr(contains("Network started on port"));
@@ -94,11 +98,10 @@ async fn status_with_json() {
         .success();
 }
 
-#[tokio::test]
-async fn status_fixed_port() {
+#[test]
+fn status_fixed_port() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path_or_nothing().await;
 
     // Project manifest with fixed port
     write_string(
@@ -117,7 +120,10 @@ networks:
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "start", "fixed-network", "--background"])
-        .env("ICP_CLI_NETWORK_LAUNCHER_PATH", &launcher_path)
+        .env(
+            "ICP_CLI_NETWORK_LAUNCHER_PATH",
+            option_env!("ICP_CLI_NETWORK_LAUNCHER_PATH").unwrap_or_default(),
+        )
         .assert()
         .success();
 

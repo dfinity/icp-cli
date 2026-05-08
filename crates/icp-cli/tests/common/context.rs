@@ -137,10 +137,11 @@ impl TestContext {
                 .into_write()
                 .await
                 .unwrap();
+            let version = concat!("v", env!("TEST_NETWORK_LAUNCHER_VERSION"));
             if let Some((_, path)) =
                 icp::network::managed::cache::get_cached_launcher_version_if_fresh(
                     cache.as_ref().read(),
-                    "latest",
+                    version,
                 )
                 .unwrap()
             {
@@ -148,7 +149,7 @@ impl TestContext {
             } else {
                 let (_ver, path) = icp::network::managed::cache::download_launcher_version(
                     cache.as_ref(),
-                    "latest",
+                    version,
                     &reqwest::Client::new(),
                 )
                 .await
@@ -464,11 +465,18 @@ impl TestContext {
     }
 
     pub(crate) fn docker_pull_network(&self) {
-        self.docker_pull_image("ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0");
+        self.docker_pull_image(concat!(
+            "ghcr.io/dfinity/icp-cli-network-launcher:",
+            env!("TEST_NETWORK_LAUNCHER_VERSION")
+        ));
     }
 
     pub(crate) fn docker_pull_engine_network(&self) {
-        self.docker_pull_image("ghcr.io/dfinity/icp-cli-network-launcher:engine-beta");
+        self.docker_pull_image(concat!(
+            "ghcr.io/dfinity/icp-cli-network-launcher:",
+            env!("TEST_NETWORK_LAUNCHER_VERSION"),
+            "-engine"
+        ));
     }
 
     fn docker_pull_image(&self, image: &str) {

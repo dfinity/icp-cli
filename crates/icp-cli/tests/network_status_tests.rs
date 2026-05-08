@@ -19,7 +19,7 @@ fn status_when_network_running() {
         .args(["network", "start", "random-network", "--background"])
         .env(
             "ICP_CLI_NETWORK_LAUNCHER_PATH",
-            option_env!("ICP_CLI_NETWORK_LAUNCHER_PATH").unwrap_or_default(),
+            common::test_network_launcher_path(),
         )
         .assert()
         .success()
@@ -61,7 +61,7 @@ fn status_with_json() {
         .args(["network", "start", "random-network", "--background"])
         .env(
             "ICP_CLI_NETWORK_LAUNCHER_PATH",
-            option_env!("ICP_CLI_NETWORK_LAUNCHER_PATH").unwrap_or_default(),
+            common::test_network_launcher_path(),
         )
         .assert()
         .success()
@@ -122,7 +122,7 @@ networks:
         .args(["network", "start", "fixed-network", "--background"])
         .env(
             "ICP_CLI_NETWORK_LAUNCHER_PATH",
-            option_env!("ICP_CLI_NETWORK_LAUNCHER_PATH").unwrap_or_default(),
+            common::test_network_launcher_path(),
         )
         .assert()
         .success();

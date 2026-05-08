@@ -204,7 +204,7 @@ impl TestContext {
         #[cfg(unix)]
         cmd.env(
             "ICP_CLI_NETWORK_LAUNCHER_PATH",
-            env!("ICP_CLI_NETWORK_LAUNCHER_PATH"),
+            crate::common::test_network_launcher_path(),
         );
 
         eprintln!("Running network in {project_dir}");

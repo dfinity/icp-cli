@@ -204,7 +204,7 @@ impl TestContext {
         #[cfg(unix)]
         cmd.env(
             "ICP_CLI_NETWORK_LAUNCHER_PATH",
-            crate::common::test_network_launcher_path(),
+            test_network_launcher_path(),
         );
 
         eprintln!("Running network in {project_dir}");
@@ -443,4 +443,24 @@ impl TestContext {
             .assert()
             .success();
     }
+}
+
+/// Returns the path to the pre-downloaded test network launcher binary.
+///
+/// Panics with a clear message if the launcher has not been downloaded yet.
+/// Run `scripts/download_test_network_launcher.sh` from the repository root first.
+fn test_network_launcher_path() -> PathBuf {
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("CARGO_MANIFEST_DIR has unexpected structure");
+    let path = workspace_root.join("target/test-fixture/icp-cli-network-launcher");
+    #[cfg(unix)]
+    assert!(
+        path.exists(),
+        "Test network launcher not found at `{}`.\n\
+         Run `scripts/download_test_network_launcher.sh` from the repository root before running integration tests.",
+        path
+    );
+    path
 }

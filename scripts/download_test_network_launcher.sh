@@ -11,7 +11,8 @@ VERSION_CACHE="$TARGET_DIR/network-launcher-version"
 VERSION=$(tr -d '[:space:]' < "$VERSION_FILE" | sed 's/^v//')
 PKG_VERSION="v$VERSION"
 
-cached_version=$(tr -d '[:space:]' < "$VERSION_CACHE" 2>/dev/null || true)
+cached_version=""
+[ -f "$VERSION_CACHE" ] && cached_version=$(tr -d '[:space:]' < "$VERSION_CACHE")
 if [ "$cached_version" = "$VERSION" ] \
     && [ -f "$TARGET_DIR/icp-cli-network-launcher" ] \
     && [ -f "$TARGET_DIR/pocket-ic" ]; then

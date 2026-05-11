@@ -28,7 +28,10 @@ use icp::{
 use snafu::{ResultExt, Snafu};
 use tar::Builder;
 
-use crate::operations::build::{BuildManyError, build_many_with_progress_bar};
+use crate::operations::{
+    build::{BuildManyError, build_many_with_progress_bar},
+    customize::CUSTOMIZE_FILE,
+};
 
 #[derive(Debug, Snafu)]
 pub enum BundleError {
@@ -63,6 +66,9 @@ pub enum BundleError {
 
     #[snafu(display("failed to read init_args file '{path}'"))]
     ReadInitArgs { path: PathBuf, source: fs::IoError },
+
+    #[snafu(display("failed to read '{path}'"))]
+    ReadCustomize { path: PathBuf, source: fs::IoError },
 
     #[snafu(display("failed to serialize bundle manifest"))]
     SerializeManifest { source: serde_yaml::Error },
@@ -381,6 +387,27 @@ pub(crate) async fn create_bundle(
         .context(WriteArchiveEntrySnafu {
             path: PathBuf::from("icp.yaml"),
         })?;
+
+    // icp_customize.yaml (optional)
+    let customize_path = project_dir.join(CUSTOMIZE_FILE);
+    if customize_path.exists() {
+        let customize_bytes = fs::read(&customize_path).context(ReadCustomizeSnafu {
+            path: customize_path.clone(),
+        })?;
+        let mut header = tar::Header::new_gnu();
+        header.set_size(customize_bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(
+                &mut header,
+                CUSTOMIZE_FILE,
+                Cursor::new(customize_bytes),
+            )
+            .context(WriteArchiveEntrySnafu {
+                path: PathBuf::from(CUSTOMIZE_FILE),
+            })?;
+    }
 
     // WASM files
     for (filename, wasm) in &canister_wasms {

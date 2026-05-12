@@ -155,6 +155,10 @@ jobs:
           which wasm-tools
           wasm-tools --version
 
+      - name: Download test network launcher
+        if: ${{ !contains(matrix.os, 'windows') }}
+        run: ./scripts/download_test_network_launcher.sh
+
       - name: Run ${{ matrix.test }}
         # the macos runners do not support Docker
         run: cargo test --test ${{ matrix.test }} -- ${{ contains(matrix.os, 'macos') && '--skip :docker:' || '' }}

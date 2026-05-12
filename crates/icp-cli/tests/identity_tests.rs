@@ -1544,7 +1544,7 @@ fn pem_explicit_login_creates_session() {
         .arg(&password_path)
         .args([
             "identity",
-            "login",
+            "reauth",
             "explicit-session-test",
             "--duration",
             "10m",
@@ -1596,7 +1596,7 @@ fn pem_login_requires_duration_when_sessions_disabled() {
         .success();
 
     ctx.icp()
-        .args(["identity", "login", "no-duration-test"])
+        .args(["identity", "reauth", "no-duration-test"])
         .assert()
         .failure()
         .stderr(contains("--duration"));

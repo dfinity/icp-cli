@@ -53,6 +53,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity link`↴](#icp-identity-link)
 * [`icp identity link hsm`↴](#icp-identity-link-hsm)
 * [`icp identity list`↴](#icp-identity-list)
+* [`icp identity reauth`↴](#icp-identity-reauth)
 * [`icp identity new`↴](#icp-identity-new)
 * [`icp identity principal`↴](#icp-identity-principal)
 * [`icp identity rename`↴](#icp-identity-rename)
@@ -70,6 +71,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp settings update-check`↴](#icp-settings-update-check)
+* [`icp settings session-length`↴](#icp-settings-session-length)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -929,6 +931,7 @@ Manage your identities
 * `import` — Import a new identity
 * `link` — Link an external key to a new identity
 * `list` — List the identities
+* `reauth` — Re-authenticate an Internet Identity delegation or create a PEM session delegation
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
 * `rename` — Rename an identity
@@ -1151,6 +1154,22 @@ List the identities
 
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only identity names
+
+
+
+## `icp identity reauth`
+
+Re-authenticate an Internet Identity delegation or create a PEM session delegation
+
+**Usage:** `icp identity reauth [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the identity to re-authenticate
+
+###### **Options:**
+
+* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is added when creating the delegation to account for clock drift. Required for PEM identities when session caching is disabled in settings. Not applicable for Internet Identity (yet)
 
 
 
@@ -1486,6 +1505,7 @@ Configure user settings
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
 * `telemetry` — Enable or disable anonymous usage telemetry
 * `update-check` — Enable or disable the CLI update check
+* `session-length` — Set the session length for password-protected PEM identities
 
 
 
@@ -1531,6 +1551,20 @@ Enable or disable the CLI update check
 
   Possible values: `releases`, `betas`, `disabled`
 
+
+
+
+## `icp settings session-length`
+
+Set the session length for password-protected PEM identities
+
+**Usage:** `icp settings session-length [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
+
+   Note that due to clock drift, 2 minutes are added to the given value, so `5m` produces a 7-minute-expiry delegation. `disabled` turns off session caching entirely.
 
 
 

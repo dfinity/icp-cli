@@ -1,5 +1,6 @@
 # Unreleased
 
+* feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity login <NAME> [--duration <DURATION>]`.
 * fix: `icp` no longer picks up a stale inherited `$PWD` when launched as a subprocess via `chdir(2)` + `execve` (e.g. from a test harness). The logical `$PWD` path is now validated against `getcwd()` by inode before use, preserving symlink-aware project root discovery while ignoring stale values.
 
 # v0.2.6

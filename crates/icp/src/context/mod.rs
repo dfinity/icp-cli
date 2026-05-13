@@ -103,6 +103,9 @@ pub struct Context {
 
     /// Telemetry data collected during command execution
     pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
+
+    /// Password reader for identity decryption; shared with the identity loader.
+    pub password_func: Arc<dyn Fn() -> Result<String, String> + Send + Sync>,
 }
 
 impl Context {
@@ -576,6 +579,7 @@ impl Context {
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
             telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
+            password_func: Arc::new(|| Err("no password available in mock context".to_string())),
         }
     }
 }

@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
-use icp::prelude::*;
+use icp::{directories::Access, prelude::*};
 use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
@@ -140,19 +142,34 @@ async fn main() -> Result<(), Error> {
     );
 
     let password_func: icp::identity::PasswordFunc = match cli.identity_password_file {
-        Some(path) => Box::new(move || {
+        Some(path) => Arc::new(move || {
             icp::fs::read_to_string(&path)
                 .map(|s| s.trim().to_string())
                 .map_err(|e| e.to_string())
         }),
-        None => Box::new(|| {
+        None => Arc::new(|| {
             dialoguer::Password::new()
                 .with_prompt("Enter identity password")
                 .interact()
                 .map_err(|e| e.to_string())
         }),
     };
-    let ctx = icp::context::initialize(cli.project_root_override, cli.debug, password_func)?;
+    let pem_session_duration = {
+        let dirs = icp::directories::Directories::new()?;
+        let settings_dirs = dirs.settings()?;
+        let settings = settings_dirs
+            .with_read(async |dirs| icp::settings::Settings::load_from(dirs))
+            .await??;
+        settings
+            .session_length
+            .map(|m| std::time::Duration::from_secs((u64::from(m) + 2) * 60))
+    };
+    let ctx = icp::context::initialize(
+        cli.project_root_override,
+        cli.debug,
+        password_func,
+        pem_session_duration,
+    )?;
 
     let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
 
@@ -362,8 +379,8 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::principal::exec(ctx, &args).await?
             }
 
-            commands::identity::Command::Login(args) => {
-                commands::identity::login::exec(ctx, &args).await?
+            commands::identity::Command::Reauth(args) => {
+                commands::identity::reauth::exec(ctx, &args).await?
             }
 
             commands::identity::Command::Rename(args) => {

@@ -45,7 +45,7 @@ The canister ID (principal) of the canister being synced.
 
 ### `ICP_CLI_CID_<NAME>`
 
-The canister ID (principal) of every canister in the project, one variable per canister. `<NAME>` is the canister name uppercased with `-`, `.`, and spaces replaced by `_`.
+The canister ID (principal) of every canister with a registered ID in the current environment, one variable per canister. `<NAME>` is the canister name uppercased with any non-alphanumeric character replaced by `_`.
 
 For example, a project with canisters `backend` and `my-frontend` produces:
 

@@ -159,7 +159,7 @@ Recipe scripts have access to runtime environment variables set by icp-cli.
 - `ICP_CLI_ENVIRONMENT` — The current environment name (e.g. `local`, `staging`)
 - `ICP_CLI_NETWORK` — The current network name (e.g. `local`, `ic`)
 - `ICP_CLI_CID` — The canister ID of the canister being synced
-- `ICP_CLI_CID_<NAME>` — The canister ID of every canister in the project
+- `ICP_CLI_CID_<NAME>` — The canister ID of every canister with a registered ID in the current environment
 
 See [Environment Variables Reference](../reference/environment-variables.md) for full details.
 

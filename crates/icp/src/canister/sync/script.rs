@@ -19,7 +19,10 @@ pub(super) async fn sync(
     for (name, id) in &params.canister_ids {
         let key = format!(
             "ICP_CLI_CID_{}",
-            name.to_uppercase().replace(['-', '.', ' '], "_")
+            name.to_uppercase()
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .collect::<String>()
         );
         envs.push((key, id.to_text()));
     }

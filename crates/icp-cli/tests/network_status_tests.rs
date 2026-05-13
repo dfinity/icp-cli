@@ -8,24 +8,12 @@ use crate::common::{NETWORK_RANDOM_PORT, TestContext};
 async fn status_when_network_running() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path_or_nothing().await;
 
-    // Project manifest
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
         .expect("failed to write project manifest");
 
-    // Start network using CLI
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "start", "random-network", "--background"])
-        .env("ICP_CLI_NETWORK_LAUNCHER_PATH", &launcher_path)
-        .assert()
-        .success()
-        .stderr(contains("Network started on port"));
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
 
-    ctx.wait_for_network_descriptor(&project_dir, "random-network");
-
-    // Test the status command shows all fields
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "status", "random-network"])
@@ -35,37 +23,18 @@ async fn status_when_network_running() {
         .stdout(contains("Root Key:"))
         .stdout(contains("Candid UI Principal:"))
         .stdout(contains("Proxy Canister Principal:"));
-
-    // Stop network
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "stop", "random-network"])
-        .assert()
-        .success();
 }
 
 #[tokio::test]
 async fn status_with_json() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path_or_nothing().await;
 
-    // Project manifest
     write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
         .expect("failed to write project manifest");
 
-    // Start network using CLI
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "start", "random-network", "--background"])
-        .env("ICP_CLI_NETWORK_LAUNCHER_PATH", &launcher_path)
-        .assert()
-        .success()
-        .stderr(contains("Network started on port"));
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
 
-    ctx.wait_for_network_descriptor(&project_dir, "random-network");
-
-    // Test the status command with JSON output
     let output = ctx
         .icp()
         .current_dir(&project_dir)
@@ -85,22 +54,13 @@ async fn status_with_json() {
     assert!(json.get("root_key").is_some());
     assert!(json.get("candid_ui_principal").is_some());
     assert!(json.get("proxy_canister_principal").is_some());
-
-    // Stop network
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "stop", "random-network"])
-        .assert()
-        .success();
 }
 
 #[tokio::test]
 async fn status_fixed_port() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
-    let launcher_path = ctx.launcher_path_or_nothing().await;
 
-    // Project manifest with fixed port
     write_string(
         &project_dir.join("icp.yaml"),
         r#"
@@ -113,30 +73,14 @@ networks:
     )
     .expect("failed to write project manifest");
 
-    // Start network using CLI
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "start", "fixed-network", "--background"])
-        .env("ICP_CLI_NETWORK_LAUNCHER_PATH", &launcher_path)
-        .assert()
-        .success();
+    let _guard = ctx.start_network_in(&project_dir, "fixed-network").await;
 
-    ctx.wait_for_network_descriptor(&project_dir, "fixed-network");
-
-    // Test the status command shows the fixed port
     ctx.icp()
         .current_dir(&project_dir)
         .args(["network", "status", "fixed-network"])
         .assert()
         .success()
         .stdout(contains("Url: http://localhost:8123"));
-
-    // Stop network
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["network", "stop", "fixed-network"])
-        .assert()
-        .success();
 }
 
 #[test]

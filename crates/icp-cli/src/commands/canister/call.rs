@@ -277,7 +277,9 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                 }
             }
             CallOutputMode::Hex => {
-                writeln!(term, "{}", hex::encode(&res))?;
+                if !args.json {
+                    writeln!(term, "{}", hex::encode(&res))?;
+                }
             }
         };
         anyhow::Ok(())

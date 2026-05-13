@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
@@ -18,6 +20,10 @@ pub struct Params {
     /// Name of the environment being synced (e.g. "local", "production").
     /// Passed to sync plugin steps via `SyncExecInput`.
     pub environment: String,
+    /// Name of the network (e.g. "local", "ic").
+    pub network: String,
+    /// IDs of all named canisters in the project for this environment.
+    pub canister_ids: BTreeMap<String, Principal>,
     /// Proxy canister to route calls through, if `--proxy` was passed.
     pub proxy: Option<Principal>,
 }

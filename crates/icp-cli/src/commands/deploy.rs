@@ -11,6 +11,7 @@ use icp::{
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use tracing::info;
 
 use crate::{
@@ -362,12 +363,20 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         // method to permit the user identity to upload assets directly before syncing.
         info!("Syncing canisters:");
 
+        let canister_ids: BTreeMap<String, Principal> = ctx
+            .ids_by_environment(&environment_selection)
+            .await?
+            .into_iter()
+            .collect();
+
         let pkg_cache = ctx.dirs.package_cache()?;
         sync_many(
             ctx.syncer.clone(),
             agent.clone(),
             sync_canisters,
             environment_selection.name().to_owned(),
+            env.network.name.clone(),
+            canister_ids,
             args.proxy,
             ctx.debug,
             &pkg_cache,

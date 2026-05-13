@@ -8,6 +8,7 @@ use icp::{
     prelude::PathBuf,
 };
 use snafu::prelude::*;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tracing::error;
 
@@ -35,6 +36,8 @@ async fn sync_canister(
     canister_id: Principal,
     canister_info: &Canister,
     environment: &str,
+    network: &str,
+    canister_ids: &BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
     pkg_cache: &PackageCache,
@@ -56,6 +59,8 @@ async fn sync_canister(
                     path: canister_path.clone(),
                     cid: canister_id,
                     environment: environment.to_owned(),
+                    network: network.to_owned(),
+                    canister_ids: canister_ids.clone(),
                     proxy,
                 },
                 agent,
@@ -79,6 +84,8 @@ pub(crate) async fn sync_many(
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     environment: String,
+    network: String,
+    canister_ids: BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     debug: bool,
     pkg_cache: &PackageCache,
@@ -93,6 +100,8 @@ pub(crate) async fn sync_many(
             let agent = agent.clone();
             let syncer = syncer.clone();
             let environment = environment.clone();
+            let network = network.clone();
+            let canister_ids = canister_ids.clone();
 
             async move {
                 // Define the sync logic
@@ -103,6 +112,8 @@ pub(crate) async fn sync_many(
                     cid,
                     &canister_info,
                     &environment,
+                    &network,
+                    &canister_ids,
                     proxy,
                     &mut pb,
                     pkg_cache,

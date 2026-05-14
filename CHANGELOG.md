@@ -1,5 +1,6 @@
 # Unreleased
 
+* fix: `icp canister call` with both `--json` and `-o hex` no longer prints both kinds of output at once.
 * fix: `icp` no longer picks up a stale inherited `$PWD` when launched as a subprocess via `chdir(2)` + `execve` (e.g. from a test harness). The logical `$PWD` path is now validated against `getcwd()` by inode before use, preserving symlink-aware project root discovery while ignoring stale values.
 
 # v0.2.6

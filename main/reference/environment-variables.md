@@ -24,6 +24,45 @@ build:
 
 The script also runs with the **canister directory as the current working directory**, so relative paths in your build commands resolve from there.
 
+## Sync Script Variables
+
+During `script` sync steps, icp-cli sets the following environment variables:
+
+### `ICP_CLI_ENVIRONMENT`
+
+The name of the current environment (e.g. `local`, `staging`, `production`).
+
+### `ICP_CLI_NETWORK`
+
+The name of the current network (e.g. `local`, `ic`).
+
+### `ICP_CLI_CID`
+
+The canister ID (principal) of the canister being synced.
+
+### `ICP_CLI_CID_<NAME>`
+
+The canister ID (principal) of every canister with a registered ID in the current environment, one variable per canister. `<NAME>` is the canister name uppercased with any non-alphanumeric character replaced by `_`.
+
+For example, a project with canisters `backend` and `my-frontend` produces:
+
+```
+ICP_CLI_CID_BACKEND=bkyz2-fmaaa-aaaaa-qaaaq-cai
+ICP_CLI_CID_MY_FRONTEND=bd3sg-teaaa-aaaaa-qaaba-cai
+```
+
+**Example:**
+```yaml
+sync:
+  steps:
+    - type: script
+      commands:
+        - echo "Syncing canister $ICP_CLI_CID on $ICP_CLI_NETWORK"
+        - my-tool upload --canister "$ICP_CLI_CID" --backend "$ICP_CLI_CID_BACKEND"
+```
+
+Like build scripts, sync scripts run with the **canister directory as the current working directory**.
+
 ## CLI Configuration Variables
 
 ### `ICP_ENVIRONMENT`

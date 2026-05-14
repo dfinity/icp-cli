@@ -6,9 +6,33 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Wed, 13 May 2026 13:30:30 GMT</lastBuildDate>
-    <pubDate>Fri, 01 May 2026 16:16:03 GMT</pubDate>
+    <lastBuildDate>Thu, 14 May 2026 17:53:44 GMT</lastBuildDate>
+    <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Environment Variables Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
+      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
+      <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Creating Recipes</title>
+      <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
+      <description>Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.</description>
+      <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-recipes/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Build, Deploy, Sync</title>
+      <link>https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</link>
+      <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
+      <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
@@ -98,14 +122,6 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Environment Variables Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
-      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/</link>
       <description>Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.</description>
@@ -135,14 +151,6 @@
       <description>Back up, transfer, and restore full canister state using snapshots.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/canister-snapshots/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Creating Recipes</title>
-      <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
-      <description>Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -223,14 +231,6 @@
       <description>Generate type-safe client code from Candid interface files to call canister methods with full type checking.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/binding-generation/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Build, Deploy, Sync</title>
-      <link>https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</link>
-      <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

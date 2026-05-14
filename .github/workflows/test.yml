@@ -34,7 +34,7 @@ jobs:
         with:
           # With 'every', a changed file is matched only when it satisfies
           # ALL rules: the positive pattern AND every negated pattern.
-          predicate-quantifier: 'every'
+          predicate-quantifier: "every"
           filters: |
             src:
               - '**'
@@ -72,6 +72,10 @@ jobs:
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
+
+      - name: Setup image (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: ./.github/scripts/provision-macos-test.sh
 
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:

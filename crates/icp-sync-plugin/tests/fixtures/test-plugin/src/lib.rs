@@ -8,15 +8,18 @@ wit_bindgen::generate!({
 struct TestPlugin;
 
 impl Guest for TestPlugin {
-    fn exec(input: SyncExecInput) -> Result<Option<String>, String> {
+    fn exec(input: SyncExecInput) -> Result<(), String> {
         match input.environment.as_str() {
             "error" => Err("deliberate failure".to_string()),
-            "hello" => Ok(Some("hello".to_string())),
+            "hello" => {
+                eprintln!("hello");
+                Ok(())
+            }
             "print" => {
                 println!("stdout from plugin");
-                Ok(None)
+                Ok(())
             }
-            _ => Ok(None),
+            _ => Ok(()),
         }
     }
 }

@@ -49,7 +49,7 @@ pub trait Synchronize: Sync + Send {
         agent: &Agent,
         stdio: Option<Sender<String>>,
         pkg_cache: &PackageCache,
-    ) -> Result<(), SynchronizeError>;
+    ) -> Result<Vec<String>, SynchronizeError>;
 }
 
 pub struct Syncer;
@@ -63,7 +63,7 @@ impl Synchronize for Syncer {
         agent: &Agent,
         stdio: Option<Sender<String>>,
         pkg_cache: &PackageCache,
-    ) -> Result<(), SynchronizeError> {
+    ) -> Result<Vec<String>, SynchronizeError> {
         match step {
             SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
@@ -96,7 +96,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _agent: &Agent,
         _stdio: Option<Sender<String>>,
         _pkg_cache: &PackageCache,
-    ) -> Result<(), SynchronizeError> {
+    ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
     }
 }

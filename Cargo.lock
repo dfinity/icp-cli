@@ -3905,6 +3905,8 @@ dependencies = [
 name = "icp-sync-plugin"
 version = "0.2.6"
 dependencies = [
+ "async-trait",
+ "bytes",
  "camino",
  "candid",
  "console 0.16.3",

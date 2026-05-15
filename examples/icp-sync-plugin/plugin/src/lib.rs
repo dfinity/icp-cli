@@ -11,7 +11,7 @@ use candid::{Encode, Principal};
 struct Plugin;
 
 impl Guest for Plugin {
-    fn exec(input: SyncExecInput) -> Result<Option<String>, String> {
+    fn exec(input: SyncExecInput) -> Result<(), String> {
         println!(
             "sync plugin: starting for canister {} (environment: {})",
             input.canister_id, input.environment
@@ -40,10 +40,12 @@ impl Guest for Plugin {
             registered += register_dir(Path::new(dir))?;
         }
 
-        Ok(Some(format!(
+        // Persisted after the step completes; use stderr.
+        eprintln!(
             "registered {} item(s) in canister {} (environment: {})",
             registered, input.canister_id, input.environment
-        )))
+        );
+        Ok(())
     }
 }
 

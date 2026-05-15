@@ -76,7 +76,9 @@ world sync-plugin {
     // the rolling step view of icp-cli; it is discarded when the step ends.
     //
     // The plugin's stderr is captured and shown in the rolling step view AND
-    // printed persistently after the step completes (on success or failure).
+    // printed persistently after the step completes successfully. (On
+    // failure, the error message and the rolling-view dump already surface
+    // stderr, so it is not reprinted.)
     //
     // Use stdout for in-flight progress chatter the user doesn't need to see
     // once the step is done. Use stderr for messages the user must still see

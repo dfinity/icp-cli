@@ -28,5 +28,7 @@ pub(super) async fn sync(
     }
     let env_refs: Vec<(&str, &str)> = envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
     execute(adapter, params.path.as_ref(), &env_refs, stdio).await?;
+    // Persistent stderr is a sync-plugin feature only; script steps don't
+    // currently retain any output past the rolling step view.
     Ok(vec![])
 }

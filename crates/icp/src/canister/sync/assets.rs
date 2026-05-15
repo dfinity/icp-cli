@@ -74,5 +74,7 @@ pub(super) async fn sync(
     .await
     .context(SyncSnafu)?;
 
+    // Persistent stderr is a sync-plugin feature only; assets steps don't
+    // currently retain any output past the rolling step view.
     Ok(vec![])
 }

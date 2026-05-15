@@ -541,6 +541,89 @@ async fn sync_plugin_registers_seed_data() {
 }
 
 #[tokio::test]
+async fn sync_script_icp_env_vars() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // canister-a verifies all four env vars; canister-b verifies cross-canister CID visibility.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "ENV=$ICP_CLI_ENVIRONMENT NET=$ICP_CLI_NETWORK CID=$ICP_CLI_CID B_CID=$ICP_CLI_CID_CANISTER_B"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "B_SEES_A=$ICP_CLI_CID_CANISTER_A"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let id_mapping: IdMapping = icp::fs::json::load(
+        &project_dir
+            .join(".icp")
+            .join("cache")
+            .join("mappings")
+            .join("random-environment.ids.json"),
+    )
+    .expect("failed to read ID mapping");
+
+    let cid_a = id_mapping
+        .get("canister-a")
+        .expect("canister-a ID not found")
+        .to_text();
+
+    let cid_b = id_mapping
+        .get("canister-b")
+        .expect("canister-b ID not found")
+        .to_text();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["--debug", "sync", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stderr(contains("ENV=random-environment"))
+        .stderr(contains("NET=random-network"))
+        .stderr(contains(format!("CID={cid_a}")))
+        .stderr(contains(format!("B_CID={cid_b}")))
+        .stderr(contains(format!("B_SEES_A={cid_a}")));
+}
+
+#[tokio::test]
 async fn sync_plugin_routes_through_proxy() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");

@@ -34,7 +34,7 @@ jobs:
         with:
           # With 'every', a changed file is matched only when it satisfies
           # ALL rules: the positive pattern AND every negated pattern.
-          predicate-quantifier: 'every'
+          predicate-quantifier: "every"
           filters: |
             src:
               - '**'
@@ -73,6 +73,10 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
 
+      - name: Setup image (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: ./.github/scripts/provision-macos-test.sh
+
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
           cache-shared-key: ${{ runner.os }}-test
@@ -98,10 +102,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
-        with:
-          cache-shared-key: ${{ runner.os }}-test
-
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh && ./.github/scripts/provision-linux-test.sh
@@ -114,6 +114,10 @@ jobs:
         if: ${{ contains(matrix.os, 'windows') }}
         run: .github/scripts/provision-windows-test.ps1
         shell: pwsh
+
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
+        with:
+          cache-shared-key: ${{ runner.os }}-test
 
       - name: Setup WSL2 (Windows)
         if: ${{ contains(matrix.os, 'windows') }}

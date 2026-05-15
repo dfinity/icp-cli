@@ -5,6 +5,7 @@ use icp::{context::Context, identity::IdentitySelection};
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::info;
+use url::Url;
 
 use super::args::NetworkOrEnvironmentArgs;
 
@@ -15,19 +16,22 @@ Examples:
 
     # Ping default 'local' network
     icp network ping
-  
+
     # Ping explicit network
     icp network ping mynetwork
-  
+
+    # Ping by URL (no project required)
+    icp network ping http://localhost:4943
+
     # Ping using environment flag
     icp network ping -e staging
-  
+
     # Ping using ICP_ENVIRONMENT variable
     ICP_ENVIRONMENT=staging icp network ping
-  
+
     # Name overrides ICP_ENVIRONMENT
     ICP_ENVIRONMENT=staging icp network ping local
-  
+
     # Wait until healthy
     icp network ping --wait-healthy
 ")]
@@ -41,24 +45,31 @@ pub(crate) struct PingArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::Error> {
-    // Load project
-    let _ = ctx.project.load().await?;
+    let agent = if let Some(ref name) = args.network_selection.name
+        && let Ok(url) = Url::parse(name)
+        && (url.scheme() == "http" || url.scheme() == "https")
+    {
+        // URL supplied directly: skip project loading
+        ctx.get_agent_for_url(&IdentitySelection::Anonymous, &url)
+            .await?
+    } else {
+        // Load project
+        let _ = ctx.project.load().await?;
 
-    // Convert args to selection and get network
-    let selection: Result<_, _> = args.network_selection.clone().into();
-    let network = ctx.get_network_or_environment(&selection?).await?;
+        // Convert args to selection and get network
+        let selection: Result<_, _> = args.network_selection.clone().into();
+        let network = ctx.get_network_or_environment(&selection?).await?;
 
-    // NetworkAccess
-    let access = ctx.network.access(&network).await?;
-
-    // Agent
-    // TODO We might want to expose the ctx.create_agent function that takes a NetworkAccess
-    // instead of doing this
-    let agent = ctx
-        .get_agent_for_url(&IdentitySelection::Anonymous, &access.api_url)
-        .await?;
-
-    agent.set_root_key(access.root_key);
+        // NetworkAccess
+        // TODO We might want to expose the ctx.create_agent function that takes a NetworkAccess
+        // instead of doing this
+        let access = ctx.network.access(&network).await?;
+        let agent = ctx
+            .get_agent_for_url(&IdentitySelection::Anonymous, &access.api_url)
+            .await?;
+        agent.set_root_key(access.root_key);
+        agent
+    };
 
     // Query
     let status = match args.wait_healthy {

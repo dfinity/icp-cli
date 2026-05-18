@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+# v0.2.7
+
 * feat: `script` sync steps now receive `ICP_CLI_ENVIRONMENT`, `ICP_CLI_NETWORK`, `ICP_CLI_CID` (the current canister's principal), and `ICP_CLI_CID_<NAME>` (every canister's principal) as environment variables.
 * fix: `icp canister call` with both `--json` and `-o hex` no longer prints both kinds of output at once.
 * fix: `icp` no longer picks up a stale inherited `$PWD` when launched as a subprocess via `chdir(2)` + `execve` (e.g. from a test harness). The logical `$PWD` path is now validated against `getcwd()` by inode before use, preserving symlink-aware project root discovery while ignoring stale values.

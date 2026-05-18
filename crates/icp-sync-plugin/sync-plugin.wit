@@ -72,15 +72,23 @@ world sync-plugin {
     /// message on failure. The plugin is responsible for decoding.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
 
-    // The plugin's stdout and stderr are captured by the host and forwarded
-    // to the CLI's progress output, so plugins can simply print (e.g.
-    // Rust's `println!` / `eprintln!`) instead of calling a host import.
+    // The plugin's stdout is captured and shown as transient progress in
+    // the rolling step view of icp-cli; it is discarded when the step ends.
+    //
+    // The plugin's stderr is captured and shown in the rolling step view AND
+    // printed persistently after the step completes successfully. (On
+    // failure, the error message and the rolling-view dump already surface
+    // stderr, so it is not reprinted.)
+    //
+    // Use stdout for in-flight progress chatter the user doesn't need to see
+    // once the step is done. Use stderr for messages the user must still see
+    // after the step completes — warnings, summaries, deprecation notices.
 
     // -------------------------------------------------------------------------
     // Plugin exports — implemented by the plugin, called by the host
     // -------------------------------------------------------------------------
 
-    /// Execute the sync plugin for the canister being synced.
-    /// Returns optional output text on success or an error message on failure.
-    export exec: func(input: sync-exec-input) -> result<option<string>, string>;
+    /// Execute the sync plugin for the canister being synced. Returns an
+    /// error message on failure.
+    export exec: func(input: sync-exec-input) -> result<_, string>;
 }

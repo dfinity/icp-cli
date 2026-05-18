@@ -10,7 +10,7 @@ pub(super) async fn sync(
     adapter: &Adapter,
     params: &Params,
     stdio: Option<Sender<String>>,
-) -> Result<(), ScriptError> {
+) -> Result<Vec<String>, ScriptError> {
     let mut envs: Vec<(String, String)> = vec![
         ("ICP_CLI_ENVIRONMENT".to_owned(), params.environment.clone()),
         ("ICP_CLI_NETWORK".to_owned(), params.network.clone()),
@@ -27,5 +27,8 @@ pub(super) async fn sync(
         envs.push((key, id.to_text()));
     }
     let env_refs: Vec<(&str, &str)> = envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-    execute(adapter, params.path.as_ref(), &env_refs, stdio).await
+    execute(adapter, params.path.as_ref(), &env_refs, stdio).await?;
+    // Persistent stderr is a sync-plugin feature only; script steps don't
+    // currently retain any output past the rolling step view.
+    Ok(vec![])
 }
